@@ -1,0 +1,245 @@
+// Single JSON database. Lives in localStorage for speed/offline, and is mirrored to a
+// file you pick inside any cloud-synced folder (Google Drive, Dropbox, OneDrive, iCloud Drive...)
+// using the File System Access API where available. Export/Import covers everything else.
+import { uid } from './util.js';
+
+const KEY = 'logi-db-v1';
+const blank = () => ({
+  version: 1, updatedAt: 0,
+  profile: { name: '', business: '', title: '', phone: '', email: '', website: '', location: '', currency: '$', bio: '' },
+  bookings: [], crew: [], gear: [], insurance: [],
+});
+
+function load() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(KEY));
+    if (raw && typeof raw === 'object') return normalise(raw);
+  } catch { /* fall through */ }
+  return blank();
+}
+
+function normalise(raw) {
+  const b = blank();
+  return {
+    ...b, ...raw,
+    profile: { ...b.profile, ...(raw.profile || {}) },
+    bookings: Array.isArray(raw.bookings) ? raw.bookings : [],
+    crew: Array.isArray(raw.crew) ? raw.crew : [],
+    gear: Array.isArray(raw.gear) ? raw.gear : [],
+    insurance: Array.isArray(raw.insurance) ? raw.insurance : [],
+  };
+}
+
+export let db = load();
+const subs = new Set();
+export const subscribe = fn => { subs.add(fn); return () => subs.delete(fn); };
+const emit = () => subs.forEach(fn => fn());
+
+function persistLocal() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { console.warn('localStorage full?', e); }
+}
+
+// Mutate the db inside fn, then save + sync.
+export function update(fn) {
+  fn(db);
+  db.updatedAt = Date.now();
+  persistLocal();
+  emit();
+  schedulePush();
+}
+
+export function upsert(list, item) {
+  update(d => {
+    const arr = d[list];
+    const i = arr.findIndex(x => x.id === item.id);
+    if (i >= 0) arr[i] = item; else arr.push({ ...item, id: item.id || uid() });
+  });
+}
+
+export function remove(list, id) {
+  update(d => {
+    d[list] = d[list].filter(x => x.id !== id);
+    if (list === 'gear') d.bookings.forEach(b => b.gear = (b.gear || []).filter(g => g !== id));
+    if (list === 'crew') d.bookings.forEach(b => b.crew = (b.crew || []).filter(c => c !== id));
+  });
+}
+
+export const byId = (list, id) => db[list].find(x => x.id === id);
+
+export const bookingsOn = date =>
+  db.bookings.filter(b => b.date === date).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+
+export const activeBookings = () => db.bookings.filter(b => b.status !== 'Cancelled');
+
+export const gearBookings = id =>
+  activeBookings().filter(b => (b.gear || []).includes(id)).sort((a, b) => a.date.localeCompare(b.date));
+
+export const crewBookings = id =>
+  activeBookings().filter(b => (b.crew || []).includes(id)).sort((a, b) => a.date.localeCompare(b.date));
+
+// Other active bookings that use this gear on the same day.
+export const gearClash = (booking, gearId) =>
+  activeBookings().filter(b => b.id !== booking.id && b.date === booking.date && (b.gear || []).includes(gearId));
+
+export function replaceAll(data) {
+  db = normalise(data);
+  db.updatedAt = Date.now();
+  persistLocal();
+  emit();
+  schedulePush();
+}
+
+export function exportJSON() { return JSON.stringify(db, null, 2); }
+
+export function loadSample() {
+  const d = new Date(); const iso = (off) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + off); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  const g = (name, category, value, serial = '') => ({ id: uid(), name, category, value, serial, notes: '' });
+  const gear = [
+    g('Sony FX6 body', 'Camera', 6000, 'FX6-120934'), g('Sony FE 24-70mm f/2.8 GM II', 'Lens', 2300),
+    g('Sigma 18-35mm f/1.8', 'Lens', 800), g('Aputure 600d Pro', 'Lighting', 1900), g('Aputure MC (x4)', 'Lighting', 500),
+    g('Sennheiser MKH 416', 'Audio', 1000), g('Sound Devices MixPre-6 II', 'Audio', 900), g('Sachtler Flowtech 75 tripod', 'Support', 1400),
+    g('DJI Mavic 3 Pro', 'Drone', 2200), g('Atomos Ninja V+', 'Monitoring', 900),
+  ];
+  const crew = [
+    { id: uid(), name: 'Sam Rivera', role: 'Sound Recordist', phone: '+1 555 0101', email: 'sam@example.com', link: 'https://example.com/sam', rate: '$450/day', notes: '' },
+    { id: uid(), name: 'Jo Chen', role: '1st AC', phone: '+1 555 0102', email: 'jo@example.com', link: 'https://example.com/jo', rate: '$400/day', notes: '' },
+    { id: uid(), name: 'Mika Dahl', role: 'Gaffer', phone: '+1 555 0103', email: '', link: 'https://example.com/mika', rate: '$425/day', notes: '' },
+    { id: uid(), name: 'Priya Nair', role: 'Editor', phone: '', email: 'priya@example.com', link: 'https://example.com/priya', rate: '$55/hr', notes: '' },
+  ];
+  db = normalise({
+    ...db,
+    gear, crew,
+    bookings: [
+      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', date: iso(2), start: '07:30', end: '17:00', status: 'Confirmed', address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[5].id, gear[6].id], notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
+      { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', date: iso(2), start: '19:00', end: '21:00', status: 'Enquiry', address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[5].id], notes: '' },
+      { id: uid(), title: 'Wedding highlights', client: 'Lee & Marcus', date: iso(9), start: '10:00', end: '22:00', status: 'Confirmed', address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
+      { id: uid(), title: 'Product shots', client: 'Kiln & Co', date: iso(-4), start: '09:00', end: '15:00', status: 'Delivered', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
+    ],
+    insurance: [
+      { id: uid(), type: 'Equipment', provider: 'ProShield Mutual', policy: 'EQ-448120', cover: 12000, premium: 640, renewal: iso(21), phone: '+1 555 0900', claims: '+1 555 0901', link: '', notes: 'Covers kit on location & in transit.' },
+      { id: uid(), type: 'Public Liability', provider: 'ProShield Mutual', policy: 'PL-991302', cover: 2000000, premium: 210, renewal: iso(200), phone: '+1 555 0900', claims: '', link: '', notes: '' },
+    ],
+    profile: { ...db.profile, name: db.profile.name || 'Your Name', business: db.profile.business || 'Your Studio', title: 'Videographer / DOP', phone: db.profile.phone || '+1 555 0100', email: db.profile.email || 'you@example.com', website: db.profile.website || 'https://example.com' },
+  });
+  db.updatedAt = Date.now();
+  persistLocal(); emit(); schedulePush();
+}
+
+/* ------------------------------ cloud file sync ------------------------------ */
+
+export const cloud = {
+  supported: typeof window.showSaveFilePicker === 'function',
+  handle: null,
+  status: 'off', // off | synced | saving | needs-permission | error
+  name: '',
+  error: '',
+};
+
+const idb = () => new Promise((res, rej) => {
+  const r = indexedDB.open('logi', 1);
+  r.onupgradeneeded = () => r.result.createObjectStore('kv');
+  r.onsuccess = () => res(r.result);
+  r.onerror = () => rej(r.error);
+});
+const kv = async (mode, fn) => {
+  const d = await idb();
+  return new Promise((res, rej) => {
+    const t = d.transaction('kv', mode); const q = fn(t.objectStore('kv'));
+    t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error);
+  });
+};
+
+function setStatus(status, error = '') { cloud.status = status; cloud.error = error; emit(); }
+
+export async function initCloud() {
+  if (!cloud.supported) return;
+  try {
+    const handle = await kv('readonly', s => s.get('fileHandle'));
+    if (!handle) return;
+    cloud.handle = handle; cloud.name = handle.name;
+    if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') await sync();
+    else setStatus('needs-permission');
+  } catch (e) { setStatus('error', e.message); }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && cloud.handle && cloud.status === 'synced') sync(); });
+}
+
+async function readFile() {
+  const text = await (await cloud.handle.getFile()).text();
+  if (!text.trim()) return null;
+  const data = JSON.parse(text);
+  if (!data || typeof data !== 'object' || !Array.isArray(data.bookings || [])) throw new Error('Not a Logi database file');
+  return data;
+}
+
+// Newest copy wins: pull the file if it is newer, otherwise push local.
+export async function sync() {
+  if (!cloud.handle) return;
+  try {
+    setStatus('saving');
+    const remote = await readFile();
+    if (remote && (remote.updatedAt || 0) > db.updatedAt) {
+      db = normalise(remote); persistLocal();
+      setStatus('synced');
+    } else {
+      await push();
+    }
+  } catch (e) { setStatus('error', e.message); }
+}
+
+async function push() {
+  if (!cloud.handle) return;
+  try {
+    setStatus('saving');
+    const w = await cloud.handle.createWritable();
+    await w.write(exportJSON());
+    await w.close();
+    setStatus('synced');
+  } catch (e) {
+    setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message);
+  }
+}
+
+let timer;
+function schedulePush() {
+  if (!cloud.handle || cloud.status === 'needs-permission') return;
+  clearTimeout(timer);
+  timer = setTimeout(push, 800);
+}
+
+export async function reconnect() {
+  if (!cloud.handle) return;
+  if ((await cloud.handle.requestPermission({ mode: 'readwrite' })) === 'granted') await sync();
+  else setStatus('needs-permission');
+}
+
+async function adopt(handle, preferFile) {
+  cloud.handle = handle; cloud.name = handle.name;
+  await kv('readwrite', s => s.put(handle, 'fileHandle'));
+  if (preferFile) {
+    const remote = await readFile();
+    if (remote) { db = normalise(remote); persistLocal(); setStatus('synced'); return; }
+  }
+  await push();
+}
+
+export async function createCloudFile() {
+  const handle = await window.showSaveFilePicker({
+    suggestedName: 'logi-production-db.json',
+    types: [{ description: 'Logi database', accept: { 'application/json': ['.json'] } }],
+  });
+  await adopt(handle, false);
+}
+
+export async function openCloudFile() {
+  const [handle] = await window.showOpenFilePicker({
+    types: [{ description: 'Logi database', accept: { 'application/json': ['.json'] } }],
+  });
+  if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new Error('Permission denied');
+  await adopt(handle, true);
+}
+
+export async function unlinkCloud() {
+  cloud.handle = null; cloud.name = '';
+  await kv('readwrite', s => s.delete('fileHandle'));
+  setStatus('off');
+}

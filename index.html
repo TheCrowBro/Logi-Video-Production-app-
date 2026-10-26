@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14110f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Logi Production Deck</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand"><span class="dot"></span>LOGI <small>production deck</small></div>
+    <button id="cloudBtn" class="cloud" aria-label="Storage and sync"><span class="cloud-ico">☁</span><span id="cloudLabel">Local</span></button>
+  </header>
+  <nav id="rolodex" class="rolodex" aria-label="Sections"></nav>
+  <main id="page" class="page" tabindex="-1"></main>
+</div>
+<noscript>This app needs JavaScript.</noscript>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
