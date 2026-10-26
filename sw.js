@@ -1,7 +1,7 @@
-const CACHE = 'logi-v2';
+const CACHE = 'logi-v3';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest', 'icons/icon.svg', 'vendor/qrcode.js',
-  'js/app.js', 'js/util.js', 'js/store.js', 'js/providers.js', 'js/rolodex.js', 'js/form.js', 'js/suncalc.js',
+  'js/app.js', 'js/util.js', 'js/store.js', 'js/a11y.js', 'js/providers.js', 'js/rolodex.js', 'js/form.js', 'js/suncalc.js',
   'js/pages/bookings.js', 'js/pages/crew.js', 'js/pages/gear.js', 'js/pages/insurance.js',
   'js/pages/me.js', 'js/pages/field.js',
 ];

@@ -69,10 +69,10 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     }
 
     form.append(h('div', { class: 'field' + (f.type === 'checks' || f.type === 'rows' ? ' wide' : '') },
-      h('label', { for: id }, f.label), control, f.hint && h('small', { class: 'muted' }, f.hint)));
+      h('label', { for: id }, f.label, f.required && h('span', { class: 'req', 'aria-hidden': 'true' }, ' *')), control, f.hint && h('small', { class: 'muted' }, f.hint)));
   });
 
-  const { close } = sheet(title, form);
+  const { close } = sheet(title, form, { dismissOnBackdrop: false });
   const actions = h('div', { class: 'form-actions' },
     onDelete && h('button', { type: 'button', class: 'btn danger', onclick: () => { if (confirm('Delete this permanently?')) { close(); onDelete(); } } }, 'Delete'),
     h('span', { class: 'spacer' }),

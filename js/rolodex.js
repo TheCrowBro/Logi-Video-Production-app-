@@ -1,5 +1,6 @@
 // 3D rotating drum of tabs. Next tab sits below, previous above; cycling rolls the drum.
-import { h } from './util.js';
+import { h, announce } from './util.js';
+import { haptic } from './a11y.js';
 
 const ITEM_H = 54;
 
@@ -13,7 +14,7 @@ export function createRolodex(root, tabs, { onSelect, start = 0 }) {
   const ring = h('div', { class: 'ring' });
   const items = tabs.map((t, i) => {
     const el = h('button', {
-      class: 'tab', type: 'button', 'aria-label': t.label,
+      class: 'tab', type: 'button', role: 'tab', 'aria-label': `${t.label}, section ${i + 1} of ${n}`,
       style: `transform: rotateX(${-i * step}deg) translateZ(${radius}px)`,
       onclick: () => go(i),
     }, h('span', { class: 'tab-ico', 'aria-hidden': 'true' }, t.icon), h('span', { class: 'tab-name' }, t.label), h('span', { class: 'tab-no' }, String(i + 1).padStart(2, '0')));
@@ -21,9 +22,9 @@ export function createRolodex(root, tabs, { onSelect, start = 0 }) {
     return el;
   });
 
-  const up = h('button', { class: 'drum-btn up', type: 'button', 'aria-label': 'Previous section', onclick: () => go(index - 1) }, '▲');
-  const down = h('button', { class: 'drum-btn down', type: 'button', 'aria-label': 'Next section', onclick: () => go(index + 1) }, '▼');
-  const drum = h('div', { class: 'drum' }, ring);
+  const up = h('button', { class: 'drum-btn up', type: 'button', 'aria-label': 'Previous section', title: 'Previous section', onclick: () => go(index - 1) }, '▲');
+  const down = h('button', { class: 'drum-btn down', type: 'button', 'aria-label': 'Next section', title: 'Next section', onclick: () => go(index + 1) }, '▼');
+  const drum = h('div', { class: 'drum', role: 'tablist', 'aria-label': 'Sections' }, ring);
   root.append(h('div', { class: 'binder' }, drum, up, down));
 
   function paint() {
@@ -32,7 +33,7 @@ export function createRolodex(root, tabs, { onSelect, start = 0 }) {
       let d = Math.abs(((i - index) % n + n) % n);
       d = Math.min(d, n - d);
       el.dataset.d = d;
-      el.setAttribute('aria-current', d === 0 ? 'page' : 'false');
+      el.setAttribute('aria-selected', d === 0 ? 'true' : 'false');
       el.tabIndex = d === 0 ? 0 : -1;
     });
   }
@@ -46,7 +47,7 @@ export function createRolodex(root, tabs, { onSelect, start = 0 }) {
     const dir = delta >= 0 ? 1 : -1;
     index = to;
     paint();
-    if (!silent) onSelect(index, dir);
+    if (!silent) { haptic(); announce(tabs[index].label); onSelect(index, dir); }
   }
 
   // Drag / swipe on the drum cycles tabs.

@@ -36,8 +36,8 @@ export const crew = {
         h('div', { class: 'page-head' }, h('h1', null, 'Trusted crew'), h('button', { class: 'btn primary', onclick: () => edit() }, '+ Add')),
         db.crew.length > 3 && h('input', { class: 'search', type: 'search', placeholder: 'Search crew…', value: S.q, 'aria-label': 'Search crew', oninput: e => { S.q = e.target.value; draw(); const i = root.querySelector('.search'); i.focus(); i.setSelectionRange(S.q.length, S.q.length); } }),
         roles.length > 1 && h('div', { class: 'chips' },
-          h('button', { class: 'chip' + (!S.role ? ' on' : ''), onclick: () => { S.role = ''; draw(); } }, 'All'),
-          roles.map(r => h('button', { class: 'chip' + (S.role === r ? ' on' : ''), onclick: () => { S.role = S.role === r ? '' : r; draw(); } }, r))),
+          h('button', { class: 'chip' + (!S.role ? ' on' : ''), 'aria-pressed': !S.role, onclick: () => { S.role = ''; draw(); } }, 'All'),
+          roles.map(r => h('button', { class: 'chip' + (S.role === r ? ' on' : ''), 'aria-pressed': S.role === r, onclick: () => { S.role = S.role === r ? '' : r; draw(); } }, r))),
         list.length
           ? h('div', { class: 'list' }, list.map(card))
           : empty(db.crew.length ? 'No matches.' : 'Add the freelancers you trust — sound, AC, gaffer, editor — with a link to their work.', db.crew.length ? null : h('button', { class: 'btn primary', onclick: () => edit() }, 'Add crew member'))));

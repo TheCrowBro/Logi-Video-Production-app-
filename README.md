@@ -53,3 +53,9 @@ js/suncalc.js    sun + Polaris maths
 js/pages/*.js    one file per section
 vendor/qrcode.js qrcode-generator (MIT)
 ```
+
+## Accessibility
+
+- Every button, chip, tab and checkbox is at least 44 px (48 px on touch screens), with a visible focus ring.
+- **Aa** button: text size, extra-large buttons, high contrast, reduced animation, vibration feedback. The app also follows the device's own reduce-motion setting.
+- Dialogs trap focus and return it on close, the page behind is hidden from screen readers while one is open, and section changes are announced. Forms never close by accident when tapping outside them.

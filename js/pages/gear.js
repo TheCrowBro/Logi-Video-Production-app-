@@ -81,8 +81,8 @@ export const gear = {
           stat(db.gear.length, 'items'), stat(money(total, sym), 'total value'), stat(out, 'booked ahead')),
         db.gear.length > 5 && h('input', { class: 'search', type: 'search', placeholder: 'Search kit or serial…', value: S.q, 'aria-label': 'Search equipment', oninput: e => { S.q = e.target.value; draw(); const i = root.querySelector('.search'); i.focus(); i.setSelectionRange(S.q.length, S.q.length); } }),
         cats.length > 1 && h('div', { class: 'chips' },
-          h('button', { class: 'chip' + (!S.cat ? ' on' : ''), onclick: () => { S.cat = ''; draw(); } }, 'All'),
-          cats.map(c => h('button', { class: 'chip' + (S.cat === c ? ' on' : ''), onclick: () => { S.cat = S.cat === c ? '' : c; draw(); } }, c))),
+          h('button', { class: 'chip' + (!S.cat ? ' on' : ''), 'aria-pressed': !S.cat, onclick: () => { S.cat = ''; draw(); } }, 'All'),
+          cats.map(c => h('button', { class: 'chip' + (S.cat === c ? ' on' : ''), 'aria-pressed': S.cat === c, onclick: () => { S.cat = S.cat === c ? '' : c; draw(); } }, c))),
         groups.length
           ? groups.map(([cat, items]) => h('section', { class: 'block' }, h('h3', null, cat),
             h('div', { class: 'list' }, items.sort((a, b) => a.name.localeCompare(b.name)).map(item => card(item, today, sym)))))

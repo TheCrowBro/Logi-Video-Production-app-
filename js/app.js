@@ -2,6 +2,10 @@ import { h, sheet, toast } from './util.js';
 import { createRolodex } from './rolodex.js';
 import * as store from './store.js';
 import * as providers from './providers.js';
+import { applyPrefs, openDisplaySettings } from './a11y.js';
+
+applyPrefs();
+document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);
 import { bookings } from './pages/bookings.js';
 import { crew } from './pages/crew.js';
 import { gear } from './pages/gear.js';

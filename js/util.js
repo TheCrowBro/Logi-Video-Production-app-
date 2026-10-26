@@ -53,18 +53,48 @@ export function toast(msg) {
   setTimeout(() => t.remove(), 2700);
 }
 
-// Generic bottom-sheet / dialog. Returns { el, close }.
-export function sheet(title, body, { onClose } = {}) {
+// Screen-reader announcements.
+export function announce(msg) {
+  let r = document.getElementById('sr-live');
+  if (!r) { r = h('div', { id: 'sr-live', class: 'sr-only', role: 'status', 'aria-live': 'polite' }); document.body.append(r); }
+  r.textContent = '';
+  setTimeout(() => { r.textContent = msg; }, 50);
+}
+
+let openSheets = 0;
+const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"])';
+
+// Modal bottom sheet: traps focus, restores it on close, hides the page from assistive tech while open.
+export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
+  const opener = document.activeElement;
+  const app = document.getElementById('app');
   const back = h('div', { class: 'sheet-back' });
-  const close = () => { back.remove(); document.removeEventListener('keydown', esc); onClose && onClose(); };
-  const esc = e => { if (e.key === 'Escape') close(); };
+  let closed = false;
+  const close = () => {
+    if (closed) return; closed = true;
+    back.remove(); document.removeEventListener('keydown', keys);
+    if (--openSheets === 0 && app) app.inert = false;
+    opener && opener.isConnected && opener.focus();
+    onClose && onClose();
+  };
+  const keys = e => {
+    if (e.key === 'Escape') return close();
+    if (e.key !== 'Tab') return;
+    const items = [...box.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
+    if (!items.length) return;
+    const first = items[0], last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  };
   const box = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
     h('div', { class: 'sheet-head' }, h('h2', null, title), h('button', { class: 'icon-btn', 'aria-label': 'Close', onclick: close }, '✕')),
     h('div', { class: 'sheet-body' }, body));
   back.append(box);
-  back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
-  document.addEventListener('keydown', esc);
+  if (dismissOnBackdrop) back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
+  document.addEventListener('keydown', keys);
   document.body.append(back);
+  openSheets++;
+  if (app) app.inert = true;
   return { el: box, close };
 }
 
