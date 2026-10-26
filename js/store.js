@@ -8,7 +8,7 @@ const KEY = 'logi-db-v1';
 const blank = () => ({
   version: 1, updatedAt: 0,
   profile: { name: '', business: '', title: '', phone: '', email: '', website: '', location: '', currency: '$', bio: '' },
-  bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [],
+  bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [], logs: [],
 });
 
 function load() {
@@ -30,6 +30,7 @@ function normalise(raw) {
     insurance: Array.isArray(raw.insurance) ? raw.insurance : [],
     kits: Array.isArray(raw.kits) ? raw.kits : [],
     venues: Array.isArray(raw.venues) ? raw.venues : [],
+    logs: Array.isArray(raw.logs) ? raw.logs.map(l => ({ ...l, notes: Array.isArray(l.notes) ? l.notes : [] })) : [],
   };
 }
 
@@ -63,6 +64,7 @@ export function remove(list, id) {
   update(d => {
     d[list] = d[list].filter(x => x.id !== id);
     if (list === 'gear') { d.bookings.forEach(b => { b.gear = (b.gear || []).filter(g => g !== id); if (b.gearQty) delete b.gearQty[id]; }); d.kits.forEach(k => { if (k.gearQty) delete k.gearQty[id]; }); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
+    if (list === 'bookings') d.logs.forEach(l => { if (l.bookingId === id) delete l.bookingId; });
     if (list === 'venues') d.bookings.forEach(b => { if (b.venueId === id) delete b.venueId; });
     if (list === 'kits') d.bookings.forEach(b => b.kits = (b.kits || []).filter(k => k !== id));
     if (list === 'crew') d.bookings.forEach(b => b.crew = (b.crew || []).filter(c => c !== id));

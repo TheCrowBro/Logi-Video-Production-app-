@@ -12,6 +12,8 @@ An installable (PWA) app for freelance videographers and small video businesses.
 | 6 | **Me** | Your details, a **QR code** (vCard contact card, or a link to your website), share as `.vcf`. |
 | 7 | **Field** | Sun planner (rise/set, golden & blue hour, bearings, time scrubber), Polaris finder, white-balance reader (camera), noise meter (microphone). |
 
+| 8 | **TC Notes** | Timecode-stamped shoot notes. Pick the camera's frame rate (23.976, 24, 25, 29.97 NDF/DF, 30, 50, 59.94 NDF/DF, 60), sync once by typing the camera's timecode or scanning its display with the phone camera, then every note is stamped with the running camera timecode the moment you start typing. "Mark now" drops a stamp to fill in later. Export as .txt or .csv for the edit. |
+
 ## Run it
 
 It's a static site with no build step — serve the folder over HTTP:
@@ -35,6 +37,13 @@ All data is one JSON document, kept on the device and mirrored to **one** storag
 
 Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can return to the app. The keys/IDs are public identifiers, not secrets; they and the sign-in tokens are stored only in this browser. Sync is whole-file last-writer-wins, so avoid editing on two devices at once while offline.
 
+## Timecode notes
+
+- Set the camera to **free-run** timecode so it keeps counting between takes; the app assumes the camera's clock runs continuously from the sync moment.
+- The sync moment is the instant you tap Sync (typed) or Scan (camera); a slow OCR read doesn't put you out. Re-sync if the camera's clock is reset.
+- Camera scanning uses Tesseract OCR loaded from a CDN on first use (needs a connection once; the reader is then cached by the browser). Glare, tilt and tiny displays defeat it — typing the value is always available.
+- Phone clocks drift about a second a day against a camera's crystal, so re-sync on long days.
+
 ## Field-tool accuracy
 
 - **Sun / Polaris** use standard astronomical formulas (checked against known solstice values). Times display in the device's time zone. Compass aiming uses the phone's magnetic compass; enter your local declination for true north.
@@ -53,6 +62,7 @@ js/form.js       schema-driven edit forms
 js/suncalc.js    sun + Polaris maths
 js/pages/*.js    one file per section
 js/map.js        map preview, directions links, address lookup
+js/timecode.js   SMPTE timecode maths (drop-frame aware)
 vendor/qrcode.js qrcode-generator (MIT)
 ```
 

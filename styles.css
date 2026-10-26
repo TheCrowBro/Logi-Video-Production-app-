@@ -210,3 +210,22 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .pin { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -100%); font-size: 2rem; filter: drop-shadow(0 2px 2px #0006); }
 .attrib { position: absolute; right: 0; bottom: 0; font-size: .65rem; background: #ffffffcc; color: #333; padding: 1px 5px; }
 .v { margin-left: 8px; text-align: right; }
+
+/* timecode notes */
+.tc-mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; letter-spacing: .04em; }
+.tc-clock { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; font-size: clamp(2.2rem, 11vw, 3.4rem); font-weight: 700; letter-spacing: .06em; text-align: center; margin: 10px 0 2px; color: var(--accent); }
+.tc-clock.unsynced { color: var(--muted); }
+.tc-head .muted.small { text-align: center; }
+.tc-composer { display: grid; gap: 8px; }
+.tc-compose { min-height: 3.2rem; resize: vertical; }
+.tc-stamp { color: var(--accent); font-weight: 700; }
+.tc-notes { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.tc-note { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 8px 8px 10px; }
+.tc-badge { background: var(--bg2); border: 1px solid var(--line); color: var(--accent); font-weight: 700; border-radius: 8px; padding: 6px 8px; font-size: .9rem; cursor: pointer; min-height: var(--hit); }
+.tc-text { min-height: var(--hit); padding: 8px 4px; outline: none; border-radius: 6px; white-space: pre-wrap; word-break: break-word; } .tc-text:focus { background: var(--bg2); box-shadow: 0 0 0 2px var(--focus); }
+.tc-input { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-size: 1.3rem; letter-spacing: .08em; text-align: center; }
+.tc-live { text-align: center; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.tc-cam { aspect-ratio: 16/9; }
+.tc-reticle { position: absolute; left: 10%; top: 41%; width: 80%; height: 18%; border: 2px solid #fff; border-radius: 6px; box-shadow: 0 0 0 9999px #0005; }
+.tc-scan-result { margin-top: 8px; }
+.export-preview { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 10px; font-size: .8rem; white-space: pre-wrap; max-height: 40vh; overflow: auto; }
