@@ -8,7 +8,7 @@ const KEY = 'logi-db-v1';
 const blank = () => ({
   version: 1, updatedAt: 0,
   profile: { name: '', business: '', title: '', phone: '', email: '', website: '', location: '', currency: '$', bio: '' },
-  bookings: [], crew: [], gear: [], insurance: [], kits: [],
+  bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [],
 });
 
 function load() {
@@ -29,6 +29,7 @@ function normalise(raw) {
     gear: Array.isArray(raw.gear) ? raw.gear : [],
     insurance: Array.isArray(raw.insurance) ? raw.insurance : [],
     kits: Array.isArray(raw.kits) ? raw.kits : [],
+    venues: Array.isArray(raw.venues) ? raw.venues : [],
   };
 }
 
@@ -62,6 +63,7 @@ export function remove(list, id) {
   update(d => {
     d[list] = d[list].filter(x => x.id !== id);
     if (list === 'gear') { d.bookings.forEach(b => { b.gear = (b.gear || []).filter(g => g !== id); if (b.gearQty) delete b.gearQty[id]; }); d.kits.forEach(k => { if (k.gearQty) delete k.gearQty[id]; }); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
+    if (list === 'venues') d.bookings.forEach(b => { if (b.venueId === id) delete b.venueId; });
     if (list === 'kits') d.bookings.forEach(b => b.kits = (b.kits || []).filter(k => k !== id));
     if (list === 'crew') d.bookings.forEach(b => b.crew = (b.crew || []).filter(c => c !== id));
   });
@@ -112,6 +114,7 @@ export function exportJSON() { return JSON.stringify(db, null, 2); }
 
 export function loadSample() {
   const d = new Date(); const iso = (off) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + off); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
+  const venueA = uid();
   const g = (name, category, value, serial = '', qty = 1) => ({ id: uid(), name, category, value, serial, qty, notes: '' });
   const gear = [
     g('Sony FX6 body', 'Camera', 6000, 'FX6-120934'), g('Sony FE 24-70mm f/2.8 GM II', 'Lens', 2300),
@@ -129,10 +132,14 @@ export function loadSample() {
     ...db,
     gear, crew,
     bookings: [
-      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', date: iso(2), start: '07:30', end: '17:00', status: 'Confirmed', address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id], gearQty: { [gear[4].id]: 2 }, notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
+      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', date: iso(2), start: '07:30', end: '17:00', status: 'Confirmed', venueId: venueA, address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id], gearQty: { [gear[4].id]: 2 }, notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
       { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', date: iso(2), start: '19:00', end: '21:00', status: 'Enquiry', address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[4].id, gear[5].id], gearQty: { [gear[4].id]: 2 }, notes: '' },
       { id: uid(), title: 'Wedding weekend', client: 'Lee & Marcus', date: iso(9), endDate: iso(11), start: '10:00', end: '22:00', status: 'Confirmed', address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
       { id: uid(), title: 'Product shots', client: 'Kiln & Co', date: iso(-4), start: '09:00', end: '15:00', status: 'Delivered', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
+    ],
+    venues: [
+      { id: venueA, name: 'Harbour Brewing Co. taproom', type: 'Retail / restaurant', address: '12 Dock Road, Portside', geo: { lat: 51.5033, lon: -0.1195 }, contact: 'Ana Ruiz', phone: '+1 555 0199', email: '', perms: { tripods: 'allowed', lighting: 'allowed', flash: 'ask', haze: 'no', drones: 'ask', generators: 'no', dollies: 'allowed', audio: 'allowed', pyro: 'no' }, rules: 'No filming of customers without a release.\nKeep the fire exit by the bar clear.\nStaff may ask you to pause during deliveries.', permit: 'Not needed', permitNotes: 'Certificate of public liability on file, minimum $2m.', access: 'Load-in 7am via the loading bay. Taproom opens at 12.', parking: 'Loading bay for 30 min, then street parking', power: 'Standard sockets, 2 x 16A at the bar', checked: iso(-20), notes: '' },
+      { id: uid(), name: 'Northline Legal, level 9', type: 'Office / corporate', address: '88 King Street, Level 9', geo: { lat: 51.5136, lon: -0.0899 }, contact: 'Dee Okafor', phone: '+1 555 0144', email: 'dee@example.com', perms: { tripods: 'allowed', lighting: 'ask', flash: 'no', haze: 'no', drones: 'no', generators: 'no', dollies: 'ask', audio: 'ask', pyro: 'no' }, rules: 'Book the goods lift 48 hours ahead.\nNo equipment in the main lobby; use the service entrance.', permit: 'Required', permitNotes: 'Building manager needs your certificate 7 days ahead.', access: 'Service entrance on Mill Lane, from 6pm.', parking: 'Nearest car park is 5 min walk', power: '', checked: iso(-200), notes: '' },
     ],
     kits: [
       { id: uid(), name: 'Interview set', description: 'Two-light sit-down interview, clean dialogue', gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id, gear[7].id], gearQty: { [gear[4].id]: 2 }, notes: 'Add a reflector and grey card.' },

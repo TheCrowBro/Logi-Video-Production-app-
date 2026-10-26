@@ -7,9 +7,10 @@ An installable (PWA) app for freelance videographers and small video businesses.
 | 1 | **Bookings** | Month calendar (multi-day shoots span their days) → tap a day → all bookings that day → tap a booking for address, stakeholders (tap-to-call), crew, notes and the **equipment list pulled from your gear inventory**. Warns when kit is double-booked on the same day. Shows sunrise/sunset/golden hour for the day once you've set a location. |
 | 2 | **Crew** | Trusted crew by role, with call/text/email buttons, a "View work" link to their portfolio, and their upcoming bookings. |
 | 3 | **Equipment** | Everything you own by category with serials, values and quantities (own 4 of the same light? set Quantity owned to 4; bookings and kits record how many units they use, and a clash is only flagged when overlapping jobs need more units than you own), and which upcoming projects each item is booked on. A **Kits** tab holds reusable gear sets per shoot type (interview, car shoot…); tick a kit on a booking to add its gear, or save a booking's gear as a new kit. |
-| 4 | **Insurance** | Policies, claims lines, renewal countdown, and a warning if equipment cover is below the value of your logged kit. |
-| 5 | **Me** | Your details, a **QR code** (vCard contact card, or a link to your website), share as `.vcf`. |
-| 6 | **Field** | Sun planner (rise/set, golden & blue hour, bearings, time scrubber), Polaris finder, white-balance reader (camera), noise meter (microphone). |
+| 4 | **Venues** | Saved places with a map pin, directions (Google / Apple Maps), contact, access and parking notes, a rules list (tripods, lighting, haze, drones, generators… each *allowed / needs approval / not allowed*), permit and insurance requirements, and a "rules last confirmed" date. Choose a venue on a booking and the app warns if your booked gear breaks its rules. |
+| 5 | **Insurance** | Policies, claims lines, renewal countdown, and a warning if equipment cover is below the value of your logged kit. |
+| 6 | **Me** | Your details, a **QR code** (vCard contact card, or a link to your website), share as `.vcf`. |
+| 7 | **Field** | Sun planner (rise/set, golden & blue hour, bearings, time scrubber), Polaris finder, white-balance reader (camera), noise meter (microphone). |
 
 ## Run it
 
@@ -51,6 +52,7 @@ js/providers.js  Dropbox, Google Drive and local-file adapters
 js/form.js       schema-driven edit forms
 js/suncalc.js    sun + Polaris maths
 js/pages/*.js    one file per section
+js/map.js        map preview, directions links, address lookup
 vendor/qrcode.js qrcode-generator (MIT)
 ```
 

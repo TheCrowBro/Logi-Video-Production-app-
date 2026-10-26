@@ -194,3 +194,19 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .stepper .icon-btn { border: 1px solid var(--line); color: var(--text); font-size: 1.3rem; }
 .qty { color: var(--accent); }
+
+/* venues & maps */
+.card-main { all: unset; box-sizing: border-box; display: grid; gap: 4px; width: 100%; cursor: pointer; min-height: var(--hit); } .card-main:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; border-radius: 8px; }
+.venue-card { display: grid; gap: 6px; }
+.perm-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.perm { font-size: .78rem; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg2); white-space: nowrap; }
+.perm b { font-weight: 800; }
+.perm-allowed { color: var(--ok); border-color: var(--ok); } .perm-ask { color: var(--accent); border-color: var(--accent); } .perm-no { color: var(--danger); border-color: var(--danger); }
+.stale { color: var(--danger); }
+.matrix { display: grid; gap: 8px; } .matrix-row { display: grid; grid-template-columns: 1fr minmax(9rem, 11rem); gap: 10px; align-items: center; } .matrix-row label { color: var(--text); font-size: .95rem; }
+.place { display: grid; gap: 8px; }
+.minimap { display: block; position: relative; height: 190px; border-radius: var(--radius); overflow: hidden; background: var(--bg2); border: 1px solid var(--line); margin-bottom: 4px; }
+.map-inner { position: absolute; left: 50%; top: 50%; width: 0; height: 0; } .map-inner img { position: absolute; width: 256px; height: 256px; max-width: none; user-select: none; -webkit-user-drag: none; }
+.pin { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -100%); font-size: 2rem; filter: drop-shadow(0 2px 2px #0006); }
+.attrib { position: absolute; right: 0; bottom: 0; font-size: .65rem; background: #ffffffcc; color: #333; padding: 1px 5px; }
+.v { margin-left: 8px; text-align: right; }

@@ -2,6 +2,8 @@ import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, m
 import { db, byId, bookingsOn, gearClash, upsert, remove, endOf, covers, qtyOf, usedQty } from '../store.js';
 import { openForm } from '../form.js';
 import { editKit } from './gear.js';
+import { venueWarnings, openVenue, chips as venueChips } from './venues.js';
+import { mapButtons } from '../map.js';
 import { getTimes } from '../suncalc.js';
 
 const STATUSES = ['Enquiry', 'Confirmed', 'Shot', 'Delivered', 'Cancelled'];
@@ -35,6 +37,7 @@ function editBooking(b, go) {
       { key: 'status', label: 'Status', type: 'select', options: STATUSES },
       { key: 'start', label: 'Start', type: 'time' },
       { key: 'end', label: 'Finish', type: 'time' },
+      ...(db.venues.length ? [{ key: 'venueId', label: 'Venue', type: 'select', options: [['', 'No saved venue'], ...db.venues.map(v => [v.id, v.name])], hint: 'Fills in the address and checks your equipment against the venue’s rules.' }] : []),
       { key: 'address', label: 'Location / address', type: 'textarea', rows: 2 },
       { key: 'stakeholders', label: 'Stakeholders & contacts', type: 'rows', columns: [{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'phone', label: 'Phone', type: 'tel' }] },
       { key: 'crew', label: 'Crew', type: 'checks', options: db.crew.map(c => ({ value: c.id, label: c.name, hint: c.role })), empty: 'Add people on the Crew page first.' },
@@ -45,6 +48,8 @@ function editBooking(b, go) {
     onSave: v => {
       const item = { ...v, id: v.id || uid() };
       if (!item.endDate || item.endDate <= item.date) delete item.endDate;
+      if (!item.venueId) delete item.venueId;
+      else if (!(item.address || '').trim()) item.address = byId('venues', item.venueId)?.address || '';
       item.gearQty = Object.fromEntries(Object.entries(item.gearQty || {}).filter(([id]) => (item.gear || []).includes(id)));
       upsert('bookings', item);
       go({ view: 'booking', id: item.id, day: item.date, cursor: new Date(parseISO(item.date).getFullYear(), parseISO(item.date).getMonth(), 1) });
@@ -157,6 +162,7 @@ function detail(go) {
       h('div', { class: 'muted' }, [dateRange(b, fmtLong), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`].filter(Boolean).join(' · ')),
       b.client && h('div', null, '🏢 ', b.client),
       b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address))),
+    venueBlock(b, gear),
     sunLine(b.date),
     section('Stakeholders', (b.stakeholders || []).length
       ? h('div', { class: 'list' }, b.stakeholders.map(s => h('div', { class: 'card-row card' },
@@ -186,6 +192,20 @@ function detail(go) {
         gear.length > 0 && h('button', { class: 'btn ghost small', onclick: () => editKit({ name: b.title, description: '', gear: b.gear, gearQty: b.gearQty || {}, notes: '' }) }, '＋ Save as kit')),
     ]),
     b.notes && section('Notes', h('p', { class: 'prewrap' }, b.notes)));
+}
+
+function venueBlock(b, gear) {
+  const v = b.venueId && byId('venues', b.venueId);
+  if (!v) return null;
+  const warns = venueWarnings(v, gear);
+  return h('section', { class: 'block' }, h('h3', null, 'Venue'),
+    h('div', { class: 'card' },
+      h('div', { class: 'card-row' }, h('strong', null, v.name), h('button', { class: 'btn ghost small', onclick: () => openVenue(v.id) }, 'Rules & details →')),
+      warns.map(w => h('div', { class: 'warn' }, '⚠ ' + w.text)),
+      venueChips(v),
+      (v.rules || '').trim() && h('div', { class: 'muted small prewrap' }, v.rules.split('\n').slice(0, 3).join('\n')),
+      v.access && h('div', { class: 'small' }, h('span', { class: 'muted' }, 'Access: '), v.access),
+      mapButtons(v)));
 }
 
 const section = (title, ...kids) => h('section', { class: 'block' }, h('h3', null, title), ...kids);

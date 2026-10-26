@@ -10,10 +10,11 @@ import { bookings } from './pages/bookings.js';
 import { crew } from './pages/crew.js';
 import { gear } from './pages/gear.js';
 import { insurance } from './pages/insurance.js';
+import { venues } from './pages/venues.js';
 import { me } from './pages/me.js';
 import { field } from './pages/field.js';
 
-const tabs = [bookings, crew, gear, insurance, me, field];
+const tabs = [bookings, crew, gear, venues, insurance, me, field];
 const page = document.getElementById('page');
 let current = -1;
 let cleanup = null;

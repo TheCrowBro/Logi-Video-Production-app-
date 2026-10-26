@@ -1,5 +1,6 @@
 // Schema-driven edit form shown in a sheet.
-import { h, sheet, groupBy } from './util.js';
+import { h, sheet, groupBy, toast } from './util.js';
+import { parseMapLink, geocode } from './map.js';
 
 /*
  fields: [{ key, label, type, options, required, placeholder, list, rows, columns, empty, hint }]
@@ -17,8 +18,41 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     let control;
 
     if (f.type === 'textarea') {
-      control = h('textarea', { id, rows: f.rows || 3, placeholder: f.placeholder || '', value: val ?? '' });
+      control = h('textarea', { id, 'data-key': f.key, rows: f.rows || 3, placeholder: f.placeholder || '', value: val ?? '' });
       readers.push(() => [f.key, control.value.trim()]);
+    } else if (f.type === 'matrix') {
+      // Per-item permission picker: not set / allowed / needs approval / not allowed.
+      const cur = { ...(val || {}) };
+      const sels = f.items.map(([k, label]) => {
+        const sel = h('select', { id: `${id}-${k}`, 'aria-label': label }, [['', 'Not set'], ['allowed', '✓ Allowed'], ['ask', '? Needs approval'], ['no', '✕ Not allowed']].map(([v, l]) => h('option', { value: v, selected: (cur[k] || '') === v }, l)));
+        return [k, sel, h('div', { class: 'matrix-row' }, h('label', { for: sel.id }, label), sel)];
+      });
+      control = h('div', { class: 'matrix' }, sels.map(s => s[2]));
+      readers.push(() => [f.key, Object.fromEntries(sels.map(([k, sel]) => [k, sel.value]).filter(([, v]) => v))]);
+    } else if (f.type === 'place') {
+      // Map location: coordinates, paste a map link, look up from the address, or use the phone's GPS.
+      const g = val || {};
+      const lat = h('input', { id: id + '-lat', type: 'number', step: 'any', min: -90, max: 90, placeholder: 'Latitude', 'aria-label': 'Latitude', value: g.lat ?? '' });
+      const lon = h('input', { id: id + '-lon', type: 'number', step: 'any', min: -180, max: 180, placeholder: 'Longitude', 'aria-label': 'Longitude', value: g.lon ?? '' });
+      const set = p => { lat.value = p.lat; lon.value = p.lon; };
+      const link = h('input', { type: 'text', inputMode: 'url', placeholder: 'Paste a Google / Apple / OpenStreetMap link', 'aria-label': 'Map link to read coordinates from', autocomplete: 'off',
+        onchange: () => { const p = parseMapLink(link.value); if (p) { set(p); toast('Location read from link'); } else if (link.value.trim()) toast('No coordinates found in that link. Short links (maps.app.goo.gl) need opening first.'); } });
+      const addr = () => form.querySelector('[data-key=address]');
+      control = h('div', { class: 'place' },
+        h('div', { class: 'row-edit' }, lat, lon),
+        link,
+        h('div', { class: 'actions' },
+          h('button', { type: 'button', class: 'btn ghost small', onclick: async e => {
+            const a = addr()?.value.trim(); if (!a) return toast('Enter the address first');
+            e.target.disabled = true;
+            try { set(await geocode(a)); toast('Location found'); } catch (err) { toast(err.message || 'Lookup failed. Are you online?'); }
+            e.target.disabled = false;
+          } }, '🔎 Find from address'),
+          h('button', { type: 'button', class: 'btn ghost small', onclick: () => {
+            if (!navigator.geolocation) return toast('Location is not available here');
+            navigator.geolocation.getCurrentPosition(p => { set({ lat: +p.coords.latitude.toFixed(6), lon: +p.coords.longitude.toFixed(6) }); toast('Using your current location'); }, () => toast('Could not get your location'), { timeout: 10000 });
+          } }, '📡 I’m here now')));
+      readers.push(() => [f.key, lat.value !== '' && lon.value !== '' ? { lat: Number(lat.value), lon: Number(lon.value) } : null]);
     } else if (f.type === 'select') {
       control = h('select', { id }, f.options.map(o => {
         const [v, l] = Array.isArray(o) ? o : [o, o];
@@ -79,7 +113,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
       let listEl;
       if (f.list) listEl = h('datalist', { id: id + '-l' }, f.list.map(o => h('option', { value: o })));
       const input = control = h('input', {
-        id, type: f.type === 'url' ? 'text' : (f.type || 'text'), required: !!f.required, placeholder: f.placeholder || '',
+        'data-key': f.key, id, type: f.type === 'url' ? 'text' : (f.type || 'text'), required: !!f.required, placeholder: f.placeholder || '',
         value: val ?? '', list: f.list ? id + '-l' : null, step: f.type === 'number' ? (f.min != null ? 1 : 'any') : null, min: f.min ?? null,
         inputMode: f.type === 'tel' ? 'tel' : f.type === 'url' ? 'url' : null, autocomplete: 'off',
       });
@@ -87,7 +121,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
       if (listEl) control = h('div', null, control, listEl);
     }
 
-    form.append(h('div', { class: 'field' + (f.type === 'checks' || f.type === 'rows' ? ' wide' : '') },
+    form.append(h('div', { class: 'field' + (['checks', 'rows', 'matrix', 'place'].includes(f.type) ? ' wide' : '') },
       h('label', { for: id }, f.label, f.required && h('span', { class: 'req', 'aria-hidden': 'true' }, ' *')), control, f.hint && h('small', { class: 'muted' }, f.hint)));
   });
 
