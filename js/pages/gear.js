@@ -3,7 +3,7 @@ import { db, upsert, remove, gearBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
 
 export const CATEGORIES = ['Camera', 'Lens', 'Lighting', 'Audio', 'Support', 'Grip', 'Drone', 'Monitoring', 'Power', 'Media', 'Accessories', 'Other'];
-const S = { q: '', cat: '' };
+const S = { q: '', cat: '', view: 'items' };
 
 function edit(g = {}) {
   openForm({
@@ -22,6 +22,42 @@ function edit(g = {}) {
   });
 }
 
+// Create / edit a reusable kit (a named set of equipment for a type of shoot).
+export function editKit(k = {}) {
+  openForm({
+    title: k.id ? 'Edit kit' : 'New kit',
+    values: k,
+    fields: [
+      { key: 'name', label: 'Kit name', required: true, placeholder: 'e.g. Interview set, Car shoot' },
+      { key: 'description', label: 'Type of shoot' },
+      { key: 'gear', label: 'Equipment in this kit', type: 'checks', options: db.gear.map(g => ({ value: g.id, label: g.name, group: g.category || 'Other' })).sort((a, b) => a.group.localeCompare(b.group)), empty: 'Add equipment first, then build kits from it.' },
+      { key: 'notes', label: 'Notes / reminders', type: 'textarea', hint: 'Consumables, permits or things to buy or hire that are not in your inventory.' },
+    ],
+    onSave: v => upsert('kits', v),
+    onDelete: k.id ? () => remove('kits', k.id) : null,
+  });
+}
+
+function kitsView(sym) {
+  const dupe = k => upsert('kits', { ...k, id: undefined, name: k.name + ' (copy)' });
+  return h('div', null,
+    h('p', { class: 'muted small' }, 'A kit is a saved list of gear for a type of shoot. Tick a kit when you create a booking and its equipment is added for you.'),
+    db.kits.length
+      ? h('div', { class: 'list' }, db.kits.map(k => {
+        const items = (k.gear || []).map(id => db.gear.find(g => g.id === id)).filter(Boolean);
+        const value = items.reduce((s, g) => s + (Number(g.value) || 0), 0);
+        const groups = groupBy(items, g => g.category || 'Other');
+        return h('div', { class: 'card' },
+          h('div', { class: 'card-row' },
+            h('div', { class: 'grow' }, h('strong', null, k.name), h('div', { class: 'muted small' }, [k.description, `${items.length} items`, money(value, sym)].filter(Boolean).join(' · '))),
+            h('button', { class: 'icon-btn', 'aria-label': 'Duplicate ' + k.name, onclick: () => dupe(k) }, '⧉'),
+            h('button', { class: 'icon-btn', 'aria-label': 'Edit ' + k.name, onclick: () => editKit(k) }, '✎')),
+          [...groups].map(([cat, list]) => h('div', { class: 'kit-line' }, h('b', null, cat + ': '), list.map(g => g.name).join(', '))),
+          k.notes && h('div', { class: 'muted small prewrap' }, k.notes));
+      }))
+      : empty('No kits yet. Build one for each kind of job you take on.', h('button', { class: 'btn primary', onclick: () => editKit() }, 'Create a kit')));
+}
+
 export const gear = {
   id: 'gear', label: 'Equipment', icon: '🎥',
   render(root) {
@@ -36,7 +72,11 @@ export const gear = {
       const out = db.gear.filter(g => gearBookings(g.id).some(b => endOf(b) >= today)).length;
 
       root.replaceChildren(h('div', null,
-        h('div', { class: 'page-head' }, h('h1', null, 'Equipment'), h('button', { class: 'btn primary', onclick: () => edit() }, '+ Add')),
+        h('div', { class: 'page-head' }, h('h1', null, 'Equipment'), h('button', { class: 'btn primary', onclick: () => (S.view === 'kits' ? editKit() : edit()) }, S.view === 'kits' ? '+ New kit' : '+ Add')),
+        h('div', { class: 'seg', role: 'tablist' },
+          h('button', { class: S.view === 'items' ? 'on' : '', role: 'tab', 'aria-selected': S.view === 'items', onclick: () => { S.view = 'items'; draw(); } }, `Items (${db.gear.length})`),
+          h('button', { class: S.view === 'kits' ? 'on' : '', role: 'tab', 'aria-selected': S.view === 'kits', onclick: () => { S.view = 'kits'; draw(); } }, `Kits (${db.kits.length})`)),
+        S.view === 'kits' ? kitsView(sym) : [
         db.gear.length > 0 && h('div', { class: 'stats' },
           stat(db.gear.length, 'items'), stat(money(total, sym), 'total value'), stat(out, 'booked ahead')),
         db.gear.length > 5 && h('input', { class: 'search', type: 'search', placeholder: 'Search kit or serial…', value: S.q, 'aria-label': 'Search equipment', oninput: e => { S.q = e.target.value; draw(); const i = root.querySelector('.search'); i.focus(); i.setSelectionRange(S.q.length, S.q.length); } }),
@@ -46,7 +86,7 @@ export const gear = {
         groups.length
           ? groups.map(([cat, items]) => h('section', { class: 'block' }, h('h3', null, cat),
             h('div', { class: 'list' }, items.sort((a, b) => a.name.localeCompare(b.name)).map(item => card(item, today, sym)))))
-          : empty(db.gear.length ? 'No matches.' : 'Log every camera, lens, light and mic you own. Then assign them to shoots on the Bookings page.', db.gear.length ? null : h('button', { class: 'btn primary', onclick: () => edit() }, 'Add first item'))));
+          : empty(db.gear.length ? 'No matches.' : 'Log every camera, lens, light and mic you own. Then assign them to shoots on the Bookings page.', db.gear.length ? null : h('button', { class: 'btn primary', onclick: () => edit() }, 'Add first item'))]));
     };
     draw();
   },

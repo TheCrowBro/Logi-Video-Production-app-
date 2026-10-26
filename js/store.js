@@ -8,7 +8,7 @@ const KEY = 'logi-db-v1';
 const blank = () => ({
   version: 1, updatedAt: 0,
   profile: { name: '', business: '', title: '', phone: '', email: '', website: '', location: '', currency: '$', bio: '' },
-  bookings: [], crew: [], gear: [], insurance: [],
+  bookings: [], crew: [], gear: [], insurance: [], kits: [],
 });
 
 function load() {
@@ -28,6 +28,7 @@ function normalise(raw) {
     crew: Array.isArray(raw.crew) ? raw.crew : [],
     gear: Array.isArray(raw.gear) ? raw.gear : [],
     insurance: Array.isArray(raw.insurance) ? raw.insurance : [],
+    kits: Array.isArray(raw.kits) ? raw.kits : [],
   };
 }
 
@@ -60,7 +61,8 @@ export function upsert(list, item) {
 export function remove(list, id) {
   update(d => {
     d[list] = d[list].filter(x => x.id !== id);
-    if (list === 'gear') d.bookings.forEach(b => b.gear = (b.gear || []).filter(g => g !== id));
+    if (list === 'gear') { d.bookings.forEach(b => b.gear = (b.gear || []).filter(g => g !== id)); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
+    if (list === 'kits') d.bookings.forEach(b => b.kits = (b.kits || []).filter(k => k !== id));
     if (list === 'crew') d.bookings.forEach(b => b.crew = (b.crew || []).filter(c => c !== id));
   });
 }
@@ -120,6 +122,10 @@ export function loadSample() {
       { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', date: iso(2), start: '19:00', end: '21:00', status: 'Enquiry', address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[5].id], notes: '' },
       { id: uid(), title: 'Wedding weekend', client: 'Lee & Marcus', date: iso(9), endDate: iso(11), start: '10:00', end: '22:00', status: 'Confirmed', address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
       { id: uid(), title: 'Product shots', client: 'Kiln & Co', date: iso(-4), start: '09:00', end: '15:00', status: 'Delivered', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
+    ],
+    kits: [
+      { id: uid(), name: 'Interview set', description: 'Two-light sit-down interview, clean dialogue', gear: [gear[0].id, gear[1].id, gear[3].id, gear[5].id, gear[6].id, gear[7].id], notes: 'Add a reflector and grey card.' },
+      { id: uid(), name: 'Car photography / rolling shots', description: 'Static + moving car work, optional aerials', gear: [gear[0].id, gear[2].id, gear[8].id, gear[9].id], notes: 'Polariser, microfibre cloths, tow-rig permit if needed.' },
     ],
     insurance: [
       { id: uid(), type: 'Equipment', provider: 'ProShield Mutual', policy: 'EQ-448120', cover: 12000, premium: 640, renewal: iso(21), phone: '+1 555 0900', claims: '+1 555 0901', link: '', notes: 'Covers kit on location & in transit.' },

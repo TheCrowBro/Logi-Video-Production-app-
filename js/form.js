@@ -7,6 +7,7 @@ import { h, sheet, groupBy } from './util.js';
 */
 export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save' }) {
   const readers = [];
+  const boxesByKey = {};
   const form = h('form', { class: 'form', novalidate: false });
 
   fields.forEach((f, i) => {
@@ -35,9 +36,11 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
           items.map(o => {
             const cb = h('input', { type: 'checkbox', checked: checked.has(o.value) });
             boxes.push([o.value, cb]);
+            if (o.adds) cb.addEventListener('change', () => { if (cb.checked) for (const [k, vals] of Object.entries(o.adds)) vals.forEach(v => boxesByKey[k]?.get(v) && (boxesByKey[k].get(v).checked = true)); });
             return h('label', { class: 'check' }, cb, h('span', null, o.label, o.hint && h('em', null, ' ' + o.hint)));
           }))));
       }
+      boxesByKey[f.key] = new Map(boxes);
       readers.push(() => [f.key, boxes.filter(([, cb]) => cb.checked).map(([v]) => v)]);
     } else if (f.type === 'rows') {
       const rows = (val || []).map(r => ({ ...r }));

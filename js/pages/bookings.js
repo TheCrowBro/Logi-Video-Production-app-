@@ -1,6 +1,7 @@
 import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid } from '../util.js';
 import { db, byId, bookingsOn, gearClash, upsert, remove, endOf, covers } from '../store.js';
 import { openForm } from '../form.js';
+import { editKit } from './gear.js';
 import { getTimes } from '../suncalc.js';
 
 const STATUSES = ['Enquiry', 'Confirmed', 'Shot', 'Delivered', 'Cancelled'];
@@ -37,6 +38,7 @@ function editBooking(b, go) {
       { key: 'address', label: 'Location / address', type: 'textarea', rows: 2 },
       { key: 'stakeholders', label: 'Stakeholders & contacts', type: 'rows', columns: [{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'phone', label: 'Phone', type: 'tel' }] },
       { key: 'crew', label: 'Crew', type: 'checks', options: db.crew.map(c => ({ value: c.id, label: c.name, hint: c.role })), empty: 'Add people on the Crew page first.' },
+      ...(db.kits.length ? [{ key: 'kits', label: 'Kits', type: 'checks', hint: 'Ticking a kit adds its equipment below. You can still adjust the list.', options: db.kits.map(k => ({ value: k.id, label: k.name, hint: `${(k.gear || []).length} items`, adds: { gear: k.gear || [] } })) }] : []),
       { key: 'gear', label: 'Equipment', type: 'checks', options: db.gear.map(g => ({ value: g.id, label: g.name, group: g.category || 'Other' })).sort((a, b) => a.group.localeCompare(b.group)), empty: 'Add kit on the Equipment page first.' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
@@ -165,6 +167,7 @@ function detail(go) {
         c.phone && h('a', { class: 'btn ghost small', href: telUrl(c.phone) }, '📞 ' + c.phone))))
       : h('p', { class: 'muted' }, 'No crew assigned.')),
     section(`Equipment (${gear.length})`, [
+      (b.kits || []).length > 0 && h('div', { class: 'muted small' }, 'Kits: ' + b.kits.map(id => byId('kits', id)?.name).filter(Boolean).join(', ')),
       clashes.length > 0 && h('div', { class: 'warn' }, `⚠ ${clashes.length} item${clashes.length > 1 ? 's are' : ' is'} also booked on another job that overlaps these dates.`),
       gear.length
         ? [...gearGroups].map(([cat, items]) => h('div', { class: 'gear-group' }, h('h4', null, cat),
@@ -176,7 +179,9 @@ function detail(go) {
           })))
         : h('p', { class: 'muted' }, 'No equipment selected.'),
       gear.length > 0 && h('div', { class: 'muted small' }, `Kit value on this shoot: ${(db.profile.currency || '$')}${total.toLocaleString()}`),
-      h('div', null, h('button', { class: 'btn ghost small', onclick: () => window.logiGo(2) }, 'Open equipment list →')),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn ghost small', onclick: () => window.logiGo(2) }, 'Open equipment list →'),
+        gear.length > 0 && h('button', { class: 'btn ghost small', onclick: () => editKit({ name: b.title, description: '', gear: b.gear, notes: '' }) }, '＋ Save as kit')),
     ]),
     b.notes && section('Notes', h('p', { class: 'prewrap' }, b.notes)));
 }

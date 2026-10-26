@@ -6,7 +6,7 @@ An installable (PWA) app for freelance videographers and small video businesses.
 |---|---------|--------------|
 | 1 | **Bookings** | Month calendar (multi-day shoots span their days) → tap a day → all bookings that day → tap a booking for address, stakeholders (tap-to-call), crew, notes and the **equipment list pulled from your gear inventory**. Warns when kit is double-booked on the same day. Shows sunrise/sunset/golden hour for the day once you've set a location. |
 | 2 | **Crew** | Trusted crew by role, with call/text/email buttons, a "View work" link to their portfolio, and their upcoming bookings. |
-| 3 | **Equipment** | Everything you own by category with serials and values, and which upcoming projects each item is booked on. |
+| 3 | **Equipment** | Everything you own by category with serials and values, and which upcoming projects each item is booked on. A **Kits** tab holds reusable gear sets per shoot type (interview, car shoot…); tick a kit on a booking to add its gear, or save a booking's gear as a new kit. |
 | 4 | **Insurance** | Policies, claims lines, renewal countdown, and a warning if equipment cover is below the value of your logged kit. |
 | 5 | **Me** | Your details, a **QR code** (vCard contact card, or a link to your website), share as `.vcf`. |
 | 6 | **Field** | Sun planner (rise/set, golden & blue hour, bearings, time scrubber), Polaris finder, white-balance reader (camera), noise meter (microphone). |
