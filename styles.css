@@ -57,7 +57,6 @@ a { color: var(--accent); }
 .flip-prev { animation: flipPrev .5s cubic-bezier(.2, .8, .25, 1) both; transform-origin: 50% 0; }
 @keyframes flipNext { from { transform: rotateX(-80deg) translateY(30px); opacity: 0; } to { transform: none; opacity: 1; } }
 @keyframes flipPrev { from { transform: rotateX(80deg) translateY(-30px); opacity: 0; } to { transform: none; opacity: 1; } }
-@media (prefers-reduced-motion: reduce) { .ring { transition: none; } .flip-next, .flip-prev { animation: none; } }
 
 /* common */
 .page-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 6px 0 12px; }
@@ -180,7 +179,10 @@ html[data-contrast=high] { --muted: color-mix(in srgb, var(--text) 82%, var(--bg
 html[data-contrast=high] .btn.ghost, html[data-contrast=high] .chip, html[data-contrast=high] .card, html[data-contrast=high] input, html[data-contrast=high] select, html[data-contrast=high] textarea { border-width: 2px; }
 html[data-contrast=high] .pill { border-width: 2px; color: var(--text); }
 html[data-contrast=high] .tab:not([data-d="0"]) { opacity: .8; }
-html[data-motion=reduce] .ring { transition: none; } html[data-motion=reduce] .flip-next, html[data-motion=reduce] .flip-prev, html[data-motion=reduce] .sheet, html[data-motion=reduce] .sheet-back { animation: none; } html[data-motion=reduce] * { scroll-behavior: auto; }
+/* Motion is off unless the user opts in (data-motion=full) and the device allows it. */
+html:not([data-motion=full]) *, html:not([data-motion=full]) *::before, html:not([data-motion=full]) *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+html:not([data-motion=full]) .btn:active, html:not([data-motion=full]) .chip:active, html:not([data-motion=full]) .icon-btn:active, html:not([data-motion=full]) .day:active, html:not([data-motion=full]) .card.tap:active, html:not([data-motion=full]) .seg button:active { transform: none; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (forced-colors: active) { .tab, .btn, .chip, .card { border: 1px solid CanvasText; } }
 .cloud, .chip { min-width: var(--hit); justify-content: center; }
 .seg button { min-height: var(--hit); }
