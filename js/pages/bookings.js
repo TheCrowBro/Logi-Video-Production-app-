@@ -1,11 +1,12 @@
 import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid } from '../util.js';
-import { db, byId, bookingsOn, gearClash, upsert, remove } from '../store.js';
+import { db, byId, bookingsOn, gearClash, upsert, remove, endOf, covers } from '../store.js';
 import { openForm } from '../form.js';
 import { getTimes } from '../suncalc.js';
 
 const STATUSES = ['Enquiry', 'Confirmed', 'Shot', 'Delivered', 'Cancelled'];
 const S = { view: 'month', cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1), day: todayISO(), id: null };
 
+const dateRange = (b, f) => endOf(b) > b.date ? `${f(b.date)} → ${f(endOf(b))}` : f(b.date);
 const pill = s => h('span', { class: 'pill st-' + s.toLowerCase() }, s);
 
 export const bookings = {
@@ -28,7 +29,8 @@ function editBooking(b, go) {
     fields: [
       { key: 'title', label: 'Project', required: true, placeholder: 'e.g. Brand film for…' },
       { key: 'client', label: 'Client' },
-      { key: 'date', label: 'Date', type: 'date', required: true },
+      { key: 'date', label: 'Start date', type: 'date', required: true },
+      { key: 'endDate', label: 'End date (multi-day)', type: 'date', hint: 'Leave blank for a single day.' },
       { key: 'status', label: 'Status', type: 'select', options: STATUSES },
       { key: 'start', label: 'Start', type: 'time' },
       { key: 'end', label: 'Finish', type: 'time' },
@@ -40,6 +42,7 @@ function editBooking(b, go) {
     ],
     onSave: v => {
       const item = { ...v, id: v.id || uid() };
+      if (!item.endDate || item.endDate <= item.date) delete item.endDate;
       upsert('bookings', item);
       go({ view: 'booking', id: item.id, day: item.date, cursor: new Date(parseISO(item.date).getFullYear(), parseISO(item.date).getMonth(), 1) });
     },
@@ -47,13 +50,14 @@ function editBooking(b, go) {
   });
 }
 
-const blankBooking = date => ({ title: '', client: '', date, status: 'Enquiry', start: '', end: '', address: '', stakeholders: [], crew: [], gear: [], notes: '' });
+const blankBooking = date => ({ title: '', client: '', date, endDate: '', status: 'Enquiry', start: '', end: '', address: '', stakeholders: [], crew: [], gear: [], notes: '' });
 
 /* ------------------------------- month ------------------------------- */
 function month(go) {
   const y = S.cursor.getFullYear(), m = S.cursor.getMonth();
   const prefix = `${y}-${pad(m + 1)}-`;
-  const byDay = groupBy(db.bookings.filter(b => b.date.startsWith(prefix)), b => b.date);
+  const byDay = new Map();
+  for (const b of db.bookings) for (let d = 1; d <= new Date(y, m + 1, 0).getDate(); d++) { const iso = prefix + pad(d); if (covers(b, iso)) { if (!byDay.has(iso)) byDay.set(iso, []); byDay.get(iso).push(b); } }
   const lead = (new Date(y, m, 1).getDay() + 6) % 7; // Monday first
   const total = new Date(y, m + 1, 0).getDate();
   const today = todayISO();
@@ -74,7 +78,7 @@ function month(go) {
       list.length > 0 && h('span', { class: 'dots' }, list.slice(0, 4).map(b => h('i', { class: 'st-' + b.status.toLowerCase() })))));
   }
 
-  const upcoming = db.bookings.filter(b => b.date >= today && b.status !== 'Cancelled')
+  const upcoming = db.bookings.filter(b => endOf(b) >= today && b.status !== 'Cancelled')
     .sort((a, b) => (a.date + (a.start || '')).localeCompare(b.date + (b.start || ''))).slice(0, 4);
 
   return h('div', null,
@@ -99,7 +103,7 @@ function bookingCard(b, onclick, showDate) {
     h('div', { class: 'card-row' },
       h('div', null,
         h('strong', null, b.title),
-        h('div', { class: 'muted' }, [showDate && fmtShort(b.date), b.start && `${b.start}${b.end ? '–' + b.end : ''}`, b.client].filter(Boolean).join(' · '))),
+        h('div', { class: 'muted' }, [(showDate || endOf(b) > b.date) && dateRange(b, fmtShort), b.start && `${b.start}${b.end ? '–' + b.end : ''}`, b.client].filter(Boolean).join(' · '))),
       pill(b.status)),
     b.address && h('div', { class: 'muted small' }, '📍 ' + b.address.split('\n')[0]),
     h('div', { class: 'muted small' }, `🎥 ${(b.gear || []).length} items · 👥 ${(b.crew || []).length} crew`));
@@ -142,11 +146,11 @@ function detail(go) {
 
   return h('div', null,
     h('div', { class: 'page-head' },
-      h('button', { class: 'btn ghost small', onclick: () => go({ view: 'day', day: b.date }) }, '‹ ' + fmtShort(b.date)),
+      h('button', { class: 'btn ghost small', onclick: () => go({ view: 'day', day: covers(b, S.day) ? S.day : b.date }) }, '‹ ' + fmtShort(covers(b, S.day) ? S.day : b.date)),
       h('button', { class: 'btn ghost', onclick: () => editBooking(b, go) }, 'Edit')),
     h('div', { class: 'card hero' },
       h('div', { class: 'card-row' }, h('h2', null, b.title), pill(b.status)),
-      h('div', { class: 'muted' }, [fmtLong(b.date), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`].filter(Boolean).join(' · ')),
+      h('div', { class: 'muted' }, [dateRange(b, fmtLong), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`].filter(Boolean).join(' · ')),
       b.client && h('div', null, '🏢 ', b.client),
       b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address))),
     sunLine(b.date),
@@ -161,7 +165,7 @@ function detail(go) {
         c.phone && h('a', { class: 'btn ghost small', href: telUrl(c.phone) }, '📞 ' + c.phone))))
       : h('p', { class: 'muted' }, 'No crew assigned.')),
     section(`Equipment (${gear.length})`, [
-      clashes.length > 0 && h('div', { class: 'warn' }, `⚠ ${clashes.length} item${clashes.length > 1 ? 's are' : ' is'} also booked on another job the same day.`),
+      clashes.length > 0 && h('div', { class: 'warn' }, `⚠ ${clashes.length} item${clashes.length > 1 ? 's are' : ' is'} also booked on another job that overlaps these dates.`),
       gear.length
         ? [...gearGroups].map(([cat, items]) => h('div', { class: 'gear-group' }, h('h4', null, cat),
           items.map(g => {

@@ -1,5 +1,5 @@
 import { h, groupBy, empty, fmtShort, todayISO, money } from '../util.js';
-import { db, upsert, remove, gearBookings } from '../store.js';
+import { db, upsert, remove, gearBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
 
 export const CATEGORIES = ['Camera', 'Lens', 'Lighting', 'Audio', 'Support', 'Grip', 'Drone', 'Monitoring', 'Power', 'Media', 'Accessories', 'Other'];
@@ -33,7 +33,7 @@ export const gear = {
       const list = db.gear.filter(g => (!S.cat || (g.category || 'Other') === S.cat) && (!q || `${g.name} ${g.serial} ${g.notes}`.toLowerCase().includes(q)));
       const groups = [...groupBy(list, g => g.category || 'Other')].sort((a, b) => a[0].localeCompare(b[0]));
       const total = db.gear.reduce((s, g) => s + (Number(g.value) || 0), 0);
-      const out = db.gear.filter(g => gearBookings(g.id).some(b => b.date >= today)).length;
+      const out = db.gear.filter(g => gearBookings(g.id).some(b => endOf(b) >= today)).length;
 
       root.replaceChildren(h('div', null,
         h('div', { class: 'page-head' }, h('h1', null, 'Equipment'), h('button', { class: 'btn primary', onclick: () => edit() }, '+ Add')),
@@ -56,14 +56,14 @@ const stat = (v, l) => h('div', { class: 'stat' }, h('b', null, v), h('span', nu
 
 function card(g, today, sym) {
   const all = gearBookings(g.id);
-  const ahead = all.filter(b => b.date >= today);
+  const ahead = all.filter(b => endOf(b) >= today);
   const past = all.length - ahead.length;
   return h('div', { class: 'card gear-card' },
     h('div', { class: 'card-row' },
       h('div', { class: 'grow' }, h('strong', null, g.name), h('div', { class: 'muted small' }, [g.serial && 'S/N ' + g.serial, g.value !== '' && g.value != null && money(g.value, sym)].filter(Boolean).join(' · '))),
       h('span', { class: 'pill ' + (ahead.length ? 'st-confirmed' : 'st-delivered') }, ahead.length ? `${ahead.length} booked` : 'Free'),
       h('button', { class: 'icon-btn', 'aria-label': 'Edit ' + g.name, onclick: () => edit(g) }, '✎')),
-    ahead.length > 0 && h('ul', { class: 'bk-list' }, ahead.slice(0, 5).map(b => h('li', null, h('b', null, fmtShort(b.date)), ' — ', b.title, b.client && h('span', { class: 'muted' }, ` (${b.client})`)))),
+    ahead.length > 0 && h('ul', { class: 'bk-list' }, ahead.slice(0, 5).map(b => h('li', null, h('b', null, fmtShort(b.date) + (endOf(b) > b.date ? ' – ' + fmtShort(endOf(b)) : '')), ' — ', b.title, b.client && h('span', { class: 'muted' }, ` (${b.client})`)))),
     past > 0 && h('div', { class: 'muted small' }, `Used on ${past} past shoot${past > 1 ? 's' : ''}`),
     g.notes && h('div', { class: 'muted small prewrap' }, g.notes));
 }

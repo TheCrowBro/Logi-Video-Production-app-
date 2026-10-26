@@ -1,5 +1,5 @@
-import { h, telUrl, safeUrl, empty, fmtShort } from '../util.js';
-import { db, upsert, remove, crewBookings } from '../store.js';
+import { h, telUrl, safeUrl, empty, fmtShort, todayISO } from '../util.js';
+import { db, upsert, remove, crewBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
 
 export const ROLES = ['Director', 'Producer', 'DOP', 'Camera Operator', '1st AC', '2nd AC', 'Gaffer', 'Grip', 'Sound Recordist', 'Boom Operator', 'Drone Pilot', 'Editor', 'Colourist', 'Motion Designer', 'MUA', 'Stylist', 'Runner', 'Location Manager', 'Other'];
@@ -48,7 +48,7 @@ export const crew = {
 
 function card(c) {
   const link = safeUrl(c.link);
-  const next = crewBookings(c.id).filter(b => b.date >= new Date().toISOString().slice(0, 10)).slice(0, 2);
+  const next = crewBookings(c.id).filter(b => endOf(b) >= todayISO()).slice(0, 2);
   return h('div', { class: 'card crew-card' },
     h('div', { class: 'card-row' },
       h('div', { class: 'avatar', 'aria-hidden': 'true' }, (c.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()),

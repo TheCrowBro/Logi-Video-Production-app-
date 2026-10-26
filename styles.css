@@ -152,3 +152,5 @@ input[type=range] { padding: 0; accent-color: var(--accent); background: none; b
 .meter { height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--ok), var(--accent) 60%, var(--danger)); position: relative; overflow: hidden; }
 .meter i { position: absolute; right: 0; top: 0; bottom: 0; display: block; width: 100%; background: var(--bg2); transition: width .1s; }
 .spark { width: 100%; height: 70px; margin-top: 10px; background: var(--bg2); border-radius: 10px; }
+.provider { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.help summary { cursor: pointer; color: var(--accent); font-size: .85rem; } .help div { margin-top: 6px; word-break: break-word; }

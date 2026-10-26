@@ -2,6 +2,7 @@
 // file you pick inside any cloud-synced folder (Google Drive, Dropbox, OneDrive, iCloud Drive...)
 // using the File System Access API where available. Export/Import covers everything else.
 import { uid } from './util.js';
+import { fileAdapter, dropboxAdapter, gdriveAdapter, dropboxBegin, dropboxFinish } from './providers.js';
 
 const KEY = 'logi-db-v1';
 const blank = () => ({
@@ -66,8 +67,13 @@ export function remove(list, id) {
 
 export const byId = (list, id) => db[list].find(x => x.id === id);
 
+// A booking may span several days: date .. endDate (inclusive).
+export const endOf = b => (b.endDate && b.endDate > b.date ? b.endDate : b.date);
+export const covers = (b, date) => b.date <= date && date <= endOf(b);
+export const overlaps = (a, b) => a.date <= endOf(b) && b.date <= endOf(a);
+
 export const bookingsOn = date =>
-  db.bookings.filter(b => b.date === date).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  db.bookings.filter(b => covers(b, date)).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
 
 export const activeBookings = () => db.bookings.filter(b => b.status !== 'Cancelled');
 
@@ -77,9 +83,9 @@ export const gearBookings = id =>
 export const crewBookings = id =>
   activeBookings().filter(b => (b.crew || []).includes(id)).sort((a, b) => a.date.localeCompare(b.date));
 
-// Other active bookings that use this gear on the same day.
+// Other active bookings that use this gear on overlapping days.
 export const gearClash = (booking, gearId) =>
-  activeBookings().filter(b => b.id !== booking.id && b.date === booking.date && (b.gear || []).includes(gearId));
+  activeBookings().filter(b => b.id !== booking.id && overlaps(b, booking) && (b.gear || []).includes(gearId));
 
 export function replaceAll(data) {
   db = normalise(data);
@@ -112,7 +118,7 @@ export function loadSample() {
     bookings: [
       { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', date: iso(2), start: '07:30', end: '17:00', status: 'Confirmed', address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[5].id, gear[6].id], notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
       { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', date: iso(2), start: '19:00', end: '21:00', status: 'Enquiry', address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[5].id], notes: '' },
-      { id: uid(), title: 'Wedding highlights', client: 'Lee & Marcus', date: iso(9), start: '10:00', end: '22:00', status: 'Confirmed', address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
+      { id: uid(), title: 'Wedding weekend', client: 'Lee & Marcus', date: iso(9), endDate: iso(11), start: '10:00', end: '22:00', status: 'Confirmed', address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
       { id: uid(), title: 'Product shots', client: 'Kiln & Co', date: iso(-4), start: '09:00', end: '15:00', status: 'Delivered', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
     ],
     insurance: [
@@ -125,13 +131,12 @@ export function loadSample() {
   persistLocal(); emit(); schedulePush();
 }
 
-/* ------------------------------ cloud file sync ------------------------------ */
+/* ------------------------------ cloud sync ------------------------------ */
 
 export const cloud = {
-  supported: typeof window.showSaveFilePicker === 'function',
-  handle: null,
+  supported: typeof window.showSaveFilePicker === 'function', // local-file linking
+  adapter: null,
   status: 'off', // off | synced | saving | needs-permission | error
-  name: '',
   error: '',
 };
 
@@ -148,98 +153,87 @@ const kv = async (mode, fn) => {
     t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error);
   });
 };
+const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* ignore */ } };
 
 function setStatus(status, error = '') { cloud.status = status; cloud.error = error; emit(); }
 
 export async function initCloud() {
-  if (!cloud.supported) return;
   try {
-    const handle = await kv('readonly', s => s.get('fileHandle'));
-    if (!handle) return;
-    cloud.handle = handle; cloud.name = handle.name;
-    if ((await handle.queryPermission({ mode: 'readwrite' })) === 'granted') await sync();
-    else setStatus('needs-permission');
+    if (await dropboxFinish()) { lsSet('logi-provider', 'dropbox'); }
   } catch (e) { setStatus('error', e.message); }
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && cloud.handle && cloud.status === 'synced') sync(); });
-}
-
-async function readFile() {
-  const text = await (await cloud.handle.getFile()).text();
-  if (!text.trim()) return null;
-  const data = JSON.parse(text);
-  if (!data || typeof data !== 'object' || !Array.isArray(data.bookings || [])) throw new Error('Not a Logi database file');
-  return data;
-}
-
-// Newest copy wins: pull the file if it is newer, otherwise push local.
-export async function sync() {
-  if (!cloud.handle) return;
   try {
+    const provider = lsGet('logi-provider');
+    if (provider === 'dropbox') cloud.adapter = dropboxAdapter();
+    else if (provider === 'gdrive') cloud.adapter = gdriveAdapter();
+    else if (cloud.supported) {
+      const handle = await kv('readonly', s => s.get('fileHandle'));
+      if (handle) cloud.adapter = fileAdapter(handle);
+    }
+    if (cloud.adapter) await sync();
+  } catch (e) { setStatus('error', e.message); }
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && cloud.adapter && cloud.status === 'synced') sync(); });
+}
+
+// Newest copy wins: pull the remote copy if it is newer, otherwise push local.
+export async function sync(ask = false) {
+  const a = cloud.adapter;
+  if (!a) return;
+  try {
+    if (!(await a.ready(ask))) return setStatus('needs-permission');
     setStatus('saving');
-    const remote = await readFile();
+    const remote = await a.read();
     if (remote && (remote.updatedAt || 0) > db.updatedAt) {
       db = normalise(remote); persistLocal();
       setStatus('synced');
-    } else {
-      await push();
-    }
-  } catch (e) { setStatus('error', e.message); }
+    } else await push();
+  } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
 }
 
 async function push() {
-  if (!cloud.handle) return;
+  if (!cloud.adapter) return;
   try {
     setStatus('saving');
-    const w = await cloud.handle.createWritable();
-    await w.write(exportJSON());
-    await w.close();
+    await cloud.adapter.write(exportJSON());
     setStatus('synced');
-  } catch (e) {
-    setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message);
-  }
+  } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
 }
 
 let timer;
 function schedulePush() {
-  if (!cloud.handle || cloud.status === 'needs-permission') return;
+  if (!cloud.adapter || cloud.status === 'needs-permission') return;
   clearTimeout(timer);
   timer = setTimeout(push, 800);
 }
 
-export async function reconnect() {
-  if (!cloud.handle) return;
-  if ((await cloud.handle.requestPermission({ mode: 'readwrite' })) === 'granted') await sync();
-  else setStatus('needs-permission');
-}
+export const reconnect = () => sync(true);
 
-async function adopt(handle, preferFile) {
-  cloud.handle = handle; cloud.name = handle.name;
-  await kv('readwrite', s => s.put(handle, 'fileHandle'));
-  if (preferFile) {
-    const remote = await readFile();
-    if (remote) { db = normalise(remote); persistLocal(); setStatus('synced'); return; }
-  }
-  await push();
+async function link(adapter, provider, handle) {
+  cloud.adapter = adapter;
+  lsSet('logi-provider', provider);
+  if (handle) await kv('readwrite', s => s.put(handle, 'fileHandle'));
+  await sync(true);
 }
 
 export async function createCloudFile() {
-  const handle = await window.showSaveFilePicker({
-    suggestedName: 'logi-production-db.json',
-    types: [{ description: 'Logi database', accept: { 'application/json': ['.json'] } }],
-  });
-  await adopt(handle, false);
+  const handle = await window.showSaveFilePicker({ suggestedName: 'logi-production-db.json', types: [{ description: 'Logi database', accept: { 'application/json': ['.json'] } }] });
+  const a = fileAdapter(handle);
+  await a.write(exportJSON()); // new file starts from the current data
+  await link(a, null, handle);
 }
 
 export async function openCloudFile() {
-  const [handle] = await window.showOpenFilePicker({
-    types: [{ description: 'Logi database', accept: { 'application/json': ['.json'] } }],
-  });
-  if ((await handle.requestPermission({ mode: 'readwrite' })) !== 'granted') throw new Error('Permission denied');
-  await adopt(handle, true);
+  const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Logi database', accept: { 'application/json': ['.json'] } }] });
+  await link(fileAdapter(handle), null, handle);
 }
 
+export const connectDropbox = () => dropboxBegin(); // redirects away; initCloud finishes the link on return
+export const connectGdrive = () => link(gdriveAdapter(), 'gdrive');
+
 export async function unlinkCloud() {
-  cloud.handle = null; cloud.name = '';
+  cloud.adapter?.signOut?.();
+  cloud.adapter = null;
+  lsSet('logi-provider', null);
   await kv('readwrite', s => s.delete('fileHandle'));
   setStatus('off');
 }

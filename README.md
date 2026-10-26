@@ -4,7 +4,7 @@ An installable (PWA) app for freelance videographers and small video businesses.
 
 | # | Section | What it does |
 |---|---------|--------------|
-| 1 | **Bookings** | Month calendar → tap a day → all bookings that day → tap a booking for address, stakeholders (tap-to-call), crew, notes and the **equipment list pulled from your gear inventory**. Warns when kit is double-booked on the same day. Shows sunrise/sunset/golden hour for the day once you've set a location. |
+| 1 | **Bookings** | Month calendar (multi-day shoots span their days) → tap a day → all bookings that day → tap a booking for address, stakeholders (tap-to-call), crew, notes and the **equipment list pulled from your gear inventory**. Warns when kit is double-booked on the same day. Shows sunrise/sunset/golden hour for the day once you've set a location. |
 | 2 | **Crew** | Trusted crew by role, with call/text/email buttons, a "View work" link to their portfolio, and their upcoming bookings. |
 | 3 | **Equipment** | Everything you own by category with serials and values, and which upcoming projects each item is booked on. |
 | 4 | **Insurance** | Policies, claims lines, renewal countdown, and a warning if equipment cover is below the value of your logged kit. |
@@ -23,13 +23,16 @@ Camera, microphone, location and the service worker (offline/install) need **HTT
 
 ## Your data and cloud storage
 
-All data is one JSON document, kept on the device and (optionally) mirrored to a file **you** choose:
+All data is one JSON document, kept on the device and mirrored to **one** storage you link under the ☁ button. Newest copy wins when the app opens or regains focus; there is no server and no account.
 
-- **Chrome / Edge / Android Chrome:** ☁ button → *Create database file…* and pick a file inside your Google Drive, Dropbox, OneDrive or iCloud Drive folder. Every change is written to that file; your cloud client syncs it. Newest copy wins when the app opens or regains focus. After a browser restart you may be asked to tap *Reconnect* (a browser permission rule).
-- **iOS Safari / Firefox** (no file-write API): use *Export backup* (share sheet → Save to Files / iCloud Drive) and *Import backup*.
-- Nothing is sent to any server; there is no account.
+| Option | Works on | One-time setup |
+|--------|----------|----------------|
+| **Dropbox** | every browser incl. iPhone | Create an app at dropbox.com/developers/apps (Scoped access → *App folder*), enable `files.content.read` + `files.content.write`, add the Redirect URI shown in the app (your hosted URL), paste the **App key**. Saved as `Apps/<your app>/logi-production-db.json`. Stays signed in (refresh token). |
+| **Google Drive** | every browser incl. iPhone | In Google Cloud Console enable the Drive API, create an OAuth *Web* client ID with your hosted origin as an authorised JavaScript origin, paste the **client ID**. Uses only the hidden app-data folder. Google tokens last ~1 hour, so tap *Reconnect* now and then. |
+| **File in a synced folder** | Chrome/Edge/Android | Pick a file inside any Drive/Dropbox/OneDrive/iCloud folder. |
+| **Export / Import** | everywhere | Manual backup (Share → Save to Files). |
 
-Sync is last-writer-wins on the whole file, so avoid editing on two devices at once while offline.
+Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can return to the app. The keys/IDs are public identifiers, not secrets; they and the sign-in tokens are stored only in this browser. Sync is whole-file last-writer-wins, so avoid editing on two devices at once while offline.
 
 ## Field-tool accuracy
 
@@ -43,7 +46,8 @@ Sync is last-writer-wins on the whole file, so avoid editing on two devices at o
 index.html  styles.css  sw.js  manifest.webmanifest
 js/app.js        shell, tab switching, storage sheet
 js/rolodex.js    3D tab drum
-js/store.js      database, cloud-file sync
+js/store.js      database, sync engine
+js/providers.js  Dropbox, Google Drive and local-file adapters
 js/form.js       schema-driven edit forms
 js/suncalc.js    sun + Polaris maths
 js/pages/*.js    one file per section

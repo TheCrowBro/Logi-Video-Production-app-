@@ -1,6 +1,7 @@
 import { h, sheet, toast } from './util.js';
 import { createRolodex } from './rolodex.js';
 import * as store from './store.js';
+import * as providers from './providers.js';
 import { bookings } from './pages/bookings.js';
 import { crew } from './pages/crew.js';
 import { gear } from './pages/gear.js';
@@ -60,20 +61,37 @@ cloudBtn.addEventListener('click', () => openStorage());
 
 function openStorage() {
   const body = h('div', { class: 'storage' });
+  if (providers.settings.gdriveId()) providers.loadGIS().catch(() => {});
+  const run = fn => async () => { try { await fn(); draw(); if (store.cloud.adapter) toast('Linked'); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } };
+  const keyField = (label, get, set, ph) => h('input', { type: 'text', placeholder: ph, 'aria-label': label, value: get(), autocomplete: 'off', spellcheck: false, oninput: e => set(e.target.value) });
+  const help = text => h('details', { class: 'help' }, h('summary', null, 'Setup'), h('div', { class: 'small muted' }, text));
+
   const draw = () => {
     const c = store.cloud;
+    const a = c.adapter;
     body.replaceChildren(
-      h('p', null, 'Your data is stored on this device and can be mirrored to a single JSON file in any cloud-synced folder — Google Drive, Dropbox, OneDrive or iCloud Drive.'),
-      c.supported
+      h('p', null, 'Your data lives on this device. Link one storage so it is mirrored automatically and shared between your phone and computer.'),
+      a
         ? h('div', { class: 'stack' },
-          c.handle
-            ? [h('p', { class: 'status-line', 'data-state': c.status }, `File: ${c.name} — ${c.status}${c.error ? ' (' + c.error + ')' : ''}`),
-              c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: async () => { await store.reconnect(); draw(); } }, 'Reconnect to file'),
-              h('button', { class: 'btn ghost', onclick: async () => { await store.sync(); draw(); toast('Synced'); } }, 'Sync now'),
-              h('button', { class: 'btn ghost', onclick: async () => { await store.unlinkCloud(); draw(); } }, 'Unlink file')]
-            : [h('button', { class: 'btn primary', onclick: run(store.createCloudFile) }, 'Create database file in my cloud folder…'),
-              h('button', { class: 'btn ghost', onclick: run(store.openCloudFile) }, 'Open an existing database file…')])
-        : h('p', { class: 'note' }, 'This browser cannot write to a chosen file (iOS Safari, Firefox). Use Share/Export below and save to iCloud Drive / Files, or open the app in Chrome or Edge to link a file directly.'),
+          h('p', { class: 'status-line', 'data-state': c.status }, `${a.label} — ${c.status}${c.error ? ' (' + c.error + ')' : ''}`),
+          c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: run(store.reconnect) }, 'Reconnect'),
+          h('button', { class: 'btn ghost', onclick: run(() => store.sync(true)) }, 'Sync now'),
+          h('button', { class: 'btn ghost', onclick: run(store.unlinkCloud) }, 'Unlink'))
+        : h('div', { class: 'stack' },
+          h('div', { class: 'provider' }, h('strong', null, 'Dropbox'),
+            keyField('Dropbox app key', providers.settings.dropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),
+            h('button', { class: 'btn primary', onclick: run(async () => { await store.connectDropbox(); }) }, 'Connect Dropbox'),
+            help(`Create an app at dropbox.com/developers/apps (Scoped access → App folder), enable files.content.read + files.content.write, add this Redirect URI: ${providers.redirectUri()} — then paste the App key. The database is saved as logi-production-db.json in Apps/<your app>.`)),
+          h('div', { class: 'provider' }, h('strong', null, 'Google Drive'),
+            keyField('Google OAuth client ID', providers.settings.gdriveId, providers.settings.setGdriveId, 'Google OAuth client ID'),
+            h('button', { class: 'btn primary', onclick: run(store.connectGdrive) }, 'Connect Google Drive'),
+            help(`In Google Cloud Console create an OAuth client ID (Web application), add ${location.origin} as an Authorised JavaScript origin, enable the Drive API, then paste the client ID. The app only uses its own hidden app-data folder. Google asks you to re-approve about hourly; tap Reconnect when prompted.`)),
+          c.supported
+            ? h('div', { class: 'provider' }, h('strong', null, 'A file in a synced folder'),
+              h('p', { class: 'small muted' }, 'Pick a file inside your Google Drive, Dropbox, OneDrive or iCloud Drive folder on this computer or Android phone.'),
+              h('button', { class: 'btn ghost', onclick: run(store.createCloudFile) }, 'Create database file…'),
+              h('button', { class: 'btn ghost', onclick: run(store.openCloudFile) }, 'Open existing database file…'))
+            : h('p', { class: 'note' }, 'Linking a local file isn’t supported in this browser (iOS Safari, Firefox) — use Dropbox / Google Drive above, or Export below.')),
       h('hr'),
       h('div', { class: 'stack' },
         h('button', { class: 'btn ghost', onclick: exportFile }, 'Export backup (.json)'),
@@ -81,9 +99,9 @@ function openStorage() {
         h('button', { class: 'btn ghost', onclick: () => { if (confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data')),
     );
   };
-  const run = fn => async () => { try { await fn(); draw(); toast('Linked'); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } };
   draw();
-  const unsub = store.subscribe(draw);
+  let last = store.cloud.status;
+  const unsub = store.subscribe(() => { if (store.cloud.status !== last) { last = store.cloud.status; draw(); } });
   sheet('Storage & sync', body, { onClose: unsub });
 }
 
