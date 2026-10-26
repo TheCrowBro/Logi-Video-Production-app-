@@ -2,17 +2,17 @@
 import { h, sheet } from './util.js';
 
 const KEY = 'logi-prefs';
-const DEFAULTS = { text: 'normal', contrast: 'normal', motion: 'rolodex', haptics: true, targets: 'normal' };
+const DEFAULTS = { text: 'normal', contrast: 'normal', motion: 'soft', haptics: true, targets: 'normal' };
 let prefs = { ...DEFAULTS };
 try { prefs = { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { /* defaults */ }
-if (prefs.motion !== 'off') prefs.motion = 'rolodex'; // only the tab bar animates; older saved values map to this
+if (!['soft', 'bar', 'off'].includes(prefs.motion)) prefs.motion = 'soft'; // older saved values map to the default
 
 export function applyPrefs() {
   const r = document.documentElement;
   r.dataset.text = prefs.text;
   r.dataset.contrast = prefs.contrast;
-  // Only the Rolodex bar animates, and not at all when the device asks for reduced motion.
-  r.dataset.motion = prefs.motion === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'off' : 'rolodex';
+  // The Rolodex bar spins and page content fades softly; nothing else moves. All off when the device asks for reduced motion.
+  r.dataset.motion = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'off' : prefs.motion;
   r.dataset.targets = prefs.targets;
 }
 const save = () => { try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* ignore */ } applyPrefs(); };
@@ -25,7 +25,7 @@ const GROUPS = [
   ['text', 'Text size', [['normal', 'Standard'], ['large', 'Large'], ['xlarge', 'Extra large']]],
   ['targets', 'Button size', [['normal', 'Standard'], ['large', 'Extra large']]],
   ['contrast', 'Contrast', [['normal', 'Standard'], ['high', 'High']]],
-  ['motion', 'Animation', [['rolodex', 'Tab bar only'], ['off', 'None']]],
+  ['motion', 'Animation', [['soft', 'Rolodex + soft fade'], ['bar', 'Rolodex only'], ['off', 'None']]],
   ['haptics', 'Vibration feedback', [[true, 'On'], [false, 'Off']]],
 ];
 
@@ -38,6 +38,6 @@ export function openDisplaySettings() {
       onclick: () => { prefs[key] = v; save(); haptic(); draw(); },
     }, l))))));
   draw();
-  body.append(h('p', { class: 'muted small' }, 'The spinning Rolodex is the only thing that animates. Choose None to stop it too; it also stops if your phone is set to reduce motion. Layouts follow your phone’s font-size and contrast settings.'));
+  body.append(h('p', { class: 'muted small' }, 'The spinning Rolodex and a soft fade on page content are the only animations. Choose None to stop both; they also stop if your phone is set to reduce motion. Layouts follow your phone’s font-size and contrast settings.'));
   sheet('Display & accessibility', body);
 }

@@ -23,7 +23,7 @@ function show(i, dir = 0) {
   cleanup = null;
   current = i;
   const t = tabs[i];
-  const holder = h('section', { class: 'page-card', 'aria-label': t.label });
+  const holder = h('section', { class: 'page-card' + (dir ? ' fade-in' : ''), 'aria-label': t.label });
   page.replaceChildren(holder);
   cleanup = t.render(holder) || null;
   try { localStorage.setItem('logi-tab', String(i)); } catch { /* private mode */ }

@@ -174,8 +174,11 @@ html[data-contrast=high] { --muted: color-mix(in srgb, var(--text) 82%, var(--bg
 html[data-contrast=high] .btn.ghost, html[data-contrast=high] .chip, html[data-contrast=high] .card, html[data-contrast=high] input, html[data-contrast=high] select, html[data-contrast=high] textarea { border-width: 2px; }
 html[data-contrast=high] .pill { border-width: 2px; color: var(--text); }
 html[data-contrast=high] .tab:not([data-d="0"]) { opacity: .8; }
-/* Only the Rolodex bar (.ring / .tab) animates. Everything else is static, and the bar stops too when motion is off. */
-html *:not(.ring):not(.tab), html *::before, html *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+/* Motion: the Rolodex bar (.ring / .tab) spins and new page content fades in softly (opacity only). Nothing else animates. */
+.fade-in { animation: softIn .35s ease-out both; }
+@keyframes softIn { from { opacity: 0; } to { opacity: 1; } }
+html *:not(.ring):not(.tab):not(.fade-in), html *::before, html *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+html[data-motion=bar] .fade-in { animation: none !important; }
 html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] *::after { animation: none !important; transition: none !important; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }
 @media (forced-colors: active) { .tab, .btn, .chip, .card { border: 1px solid CanvasText; } }
