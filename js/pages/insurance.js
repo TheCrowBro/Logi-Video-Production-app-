@@ -1,5 +1,5 @@
 import { h, telUrl, safeUrl, empty, money, daysUntil, parseISO } from '../util.js';
-import { db, upsert, remove } from '../store.js';
+import { db, upsert, remove, totalValue } from '../store.js';
 import { openForm } from '../form.js';
 
 const TYPES = ['Equipment', 'Public Liability', 'Professional Indemnity', 'Employers Liability', 'Drone', 'Vehicle', 'Travel', 'Business Interruption', 'Other'];
@@ -30,7 +30,7 @@ export const insurance = {
   render(root) {
     const sym = db.profile.currency || '$';
     const list = [...db.insurance].sort((a, b) => (a.renewal || '9999').localeCompare(b.renewal || '9999'));
-    const gearValue = db.gear.reduce((s, g) => s + (Number(g.value) || 0), 0);
+    const gearValue = db.gear.reduce((s, g) => s + totalValue(g), 0);
     const eqCover = db.insurance.filter(p => /equip|gear|kit/i.test(p.type) && (!p.renewal || daysUntil(p.renewal) >= 0)).reduce((s, p) => s + (Number(p.cover) || 0), 0);
     const annual = db.insurance.reduce((s, p) => s + (Number(p.premium) || 0), 0);
 

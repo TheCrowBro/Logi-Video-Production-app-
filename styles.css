@@ -186,3 +186,11 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .seg button { min-height: var(--hit); }
 .kv a { min-height: var(--hit); display: inline-flex; align-items: center; }
 .card.kv > div { align-items: center; }
+
+.check-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.check-row .check { flex: 1; min-width: 0; }
+.stepper { display: flex; align-items: center; flex: none; }
+.stepper input { width: 3.2rem; text-align: center; padding-left: 4px; padding-right: 4px; -moz-appearance: textfield; appearance: textfield; }
+.stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.stepper .icon-btn { border: 1px solid var(--line); color: var(--text); font-size: 1.3rem; }
+.qty { color: var(--accent); }

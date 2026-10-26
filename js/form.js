@@ -8,6 +8,7 @@ import { h, sheet, groupBy } from './util.js';
 export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save' }) {
   const readers = [];
   const boxesByKey = {};
+  const qtyByKey = {};
   const form = h('form', { class: 'form', novalidate: false });
 
   fields.forEach((f, i) => {
@@ -36,12 +37,30 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
           items.map(o => {
             const cb = h('input', { type: 'checkbox', checked: checked.has(o.value) });
             boxes.push([o.value, cb]);
-            if (o.adds) cb.addEventListener('change', () => { if (cb.checked) for (const [k, vals] of Object.entries(o.adds)) vals.forEach(v => boxesByKey[k]?.get(v) && (boxesByKey[k].get(v).checked = true)); });
-            return h('label', { class: 'check' }, cb, h('span', null, o.label, o.hint && h('em', null, ' ' + o.hint)));
+            let stepper = null;
+            if (f.qtyKey && o.qtyMax > 1) {
+              const start = Math.min(o.qtyMax, Math.max(1, Math.floor(Number((values[f.qtyKey] || {})[o.value])) || 1));
+              const input = h('input', { type: 'number', min: 1, max: o.qtyMax, value: start, inputMode: 'numeric', 'aria-label': `Quantity of ${o.label} (you own ${o.qtyMax})` });
+              const clamp = n => { input.value = Math.min(o.qtyMax, Math.max(1, Math.floor(n) || 1)); };
+              input.addEventListener('change', () => { clamp(Number(input.value)); if (Number(input.value) > 1) cb.checked = true; });
+              stepper = h('div', { class: 'stepper' },
+                h('button', { type: 'button', class: 'icon-btn', 'aria-label': `One fewer ${o.label}`, onclick: () => clamp(Number(input.value) - 1) }, '−'),
+                input,
+                h('button', { type: 'button', class: 'icon-btn', 'aria-label': `One more ${o.label}`, onclick: () => { clamp(Number(input.value) + 1); cb.checked = true; } }, '+'));
+              (qtyByKey[f.key] ||= new Map()).set(o.value, { input, clamp });
+            }
+            if (o.adds) cb.addEventListener('change', () => {
+              if (!cb.checked) return;
+              for (const [k, vals] of Object.entries(o.adds)) vals.forEach(v => boxesByKey[k]?.get(v) && (boxesByKey[k].get(v).checked = true));
+              for (const [id, n] of Object.entries(o.addsQty || {})) { const q = qtyByKey.gear?.get(id); if (q) q.clamp(Math.max(Number(q.input.value), n)); }
+            });
+            const label = h('label', { class: 'check' }, cb, h('span', null, o.label, o.hint && h('em', null, ' ' + o.hint)));
+            return stepper ? h('div', { class: 'check-row' }, label, stepper) : label;
           }))));
       }
       boxesByKey[f.key] = new Map(boxes);
       readers.push(() => [f.key, boxes.filter(([, cb]) => cb.checked).map(([v]) => v)]);
+      if (f.qtyKey) readers.push(() => [f.qtyKey, Object.fromEntries(boxes.filter(([v, cb]) => cb.checked && qtyByKey[f.key]?.get(v) && Number(qtyByKey[f.key].get(v).input.value) > 1).map(([v]) => [v, Number(qtyByKey[f.key].get(v).input.value)]))]);
     } else if (f.type === 'rows') {
       const rows = (val || []).map(r => ({ ...r }));
       const list = h('div', { class: 'rows' });
@@ -59,12 +78,12 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     } else {
       let listEl;
       if (f.list) listEl = h('datalist', { id: id + '-l' }, f.list.map(o => h('option', { value: o })));
-      control = h('input', {
+      const input = control = h('input', {
         id, type: f.type === 'url' ? 'text' : (f.type || 'text'), required: !!f.required, placeholder: f.placeholder || '',
-        value: val ?? '', list: f.list ? id + '-l' : null, step: f.type === 'number' ? 'any' : null,
+        value: val ?? '', list: f.list ? id + '-l' : null, step: f.type === 'number' ? (f.min != null ? 1 : 'any') : null, min: f.min ?? null,
         inputMode: f.type === 'tel' ? 'tel' : f.type === 'url' ? 'url' : null, autocomplete: 'off',
       });
-      readers.push(() => [f.key, f.type === 'number' ? (control.value === '' ? '' : Number(control.value)) : control.value.trim()]);
+      readers.push(() => [f.key, f.type === 'number' ? (input.value === '' ? '' : Number(input.value)) : input.value.trim()]);
       if (listEl) control = h('div', null, control, listEl);
     }
 

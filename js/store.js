@@ -61,7 +61,7 @@ export function upsert(list, item) {
 export function remove(list, id) {
   update(d => {
     d[list] = d[list].filter(x => x.id !== id);
-    if (list === 'gear') { d.bookings.forEach(b => b.gear = (b.gear || []).filter(g => g !== id)); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
+    if (list === 'gear') { d.bookings.forEach(b => { b.gear = (b.gear || []).filter(g => g !== id); if (b.gearQty) delete b.gearQty[id]; }); d.kits.forEach(k => { if (k.gearQty) delete k.gearQty[id]; }); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
     if (list === 'kits') d.bookings.forEach(b => b.kits = (b.kits || []).filter(k => k !== id));
     if (list === 'crew') d.bookings.forEach(b => b.crew = (b.crew || []).filter(c => c !== id));
   });
@@ -85,9 +85,20 @@ export const gearBookings = id =>
 export const crewBookings = id =>
   activeBookings().filter(b => (b.crew || []).includes(id)).sort((a, b) => a.date.localeCompare(b.date));
 
-// Other active bookings that use this gear on overlapping days.
-export const gearClash = (booking, gearId) =>
-  activeBookings().filter(b => b.id !== booking.id && overlaps(b, booking) && (b.gear || []).includes(gearId));
+// Quantities: an item can be owned in several units (g.qty); bookings and kits record how many they use.
+export const qtyOf = g => Math.max(1, Math.floor(Number(g && g.qty)) || 1);
+export const usedQty = (owner, gearId) => Math.max(1, Math.floor(Number(owner.gearQty && owner.gearQty[gearId])) || 1);
+export const unitValue = g => (Number(g.value) || 0);
+export const totalValue = g => unitValue(g) * qtyOf(g);
+
+// Other active bookings overlapping this one that use the same gear, but only when together they need
+// more units than you own (so 4 lights shared 2 + 2 is fine, 2 + 3 is a clash).
+export const gearClash = (booking, gearId) => {
+  const g = byId('gear', gearId);
+  const others = activeBookings().filter(b => b.id !== booking.id && overlaps(b, booking) && (b.gear || []).includes(gearId));
+  const need = usedQty(booking, gearId) + others.reduce((s, b) => s + usedQty(b, gearId), 0);
+  return need > qtyOf(g) ? others : [];
+};
 
 export function replaceAll(data) {
   db = normalise(data);
@@ -101,10 +112,10 @@ export function exportJSON() { return JSON.stringify(db, null, 2); }
 
 export function loadSample() {
   const d = new Date(); const iso = (off) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + off); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
-  const g = (name, category, value, serial = '') => ({ id: uid(), name, category, value, serial, notes: '' });
+  const g = (name, category, value, serial = '', qty = 1) => ({ id: uid(), name, category, value, serial, qty, notes: '' });
   const gear = [
     g('Sony FX6 body', 'Camera', 6000, 'FX6-120934'), g('Sony FE 24-70mm f/2.8 GM II', 'Lens', 2300),
-    g('Sigma 18-35mm f/1.8', 'Lens', 800), g('Aputure 600d Pro', 'Lighting', 1900), g('Aputure MC (x4)', 'Lighting', 500),
+    g('Sigma 18-35mm f/1.8', 'Lens', 800), g('Aputure 600d Pro', 'Lighting', 1900), g('Aputure MC (RGB pocket light)', 'Lighting', 125, '', 4),
     g('Sennheiser MKH 416', 'Audio', 1000), g('Sound Devices MixPre-6 II', 'Audio', 900), g('Sachtler Flowtech 75 tripod', 'Support', 1400),
     g('DJI Mavic 3 Pro', 'Drone', 2200), g('Atomos Ninja V+', 'Monitoring', 900),
   ];
@@ -118,13 +129,13 @@ export function loadSample() {
     ...db,
     gear, crew,
     bookings: [
-      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', date: iso(2), start: '07:30', end: '17:00', status: 'Confirmed', address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[5].id, gear[6].id], notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
-      { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', date: iso(2), start: '19:00', end: '21:00', status: 'Enquiry', address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[5].id], notes: '' },
+      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', date: iso(2), start: '07:30', end: '17:00', status: 'Confirmed', address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id], gearQty: { [gear[4].id]: 2 }, notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
+      { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', date: iso(2), start: '19:00', end: '21:00', status: 'Enquiry', address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[4].id, gear[5].id], gearQty: { [gear[4].id]: 2 }, notes: '' },
       { id: uid(), title: 'Wedding weekend', client: 'Lee & Marcus', date: iso(9), endDate: iso(11), start: '10:00', end: '22:00', status: 'Confirmed', address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
       { id: uid(), title: 'Product shots', client: 'Kiln & Co', date: iso(-4), start: '09:00', end: '15:00', status: 'Delivered', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
     ],
     kits: [
-      { id: uid(), name: 'Interview set', description: 'Two-light sit-down interview, clean dialogue', gear: [gear[0].id, gear[1].id, gear[3].id, gear[5].id, gear[6].id, gear[7].id], notes: 'Add a reflector and grey card.' },
+      { id: uid(), name: 'Interview set', description: 'Two-light sit-down interview, clean dialogue', gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id, gear[7].id], gearQty: { [gear[4].id]: 2 }, notes: 'Add a reflector and grey card.' },
       { id: uid(), name: 'Car photography / rolling shots', description: 'Static + moving car work, optional aerials', gear: [gear[0].id, gear[2].id, gear[8].id, gear[9].id], notes: 'Polariser, microfibre cloths, tow-rig permit if needed.' },
     ],
     insurance: [

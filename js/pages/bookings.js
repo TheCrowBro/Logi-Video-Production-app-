@@ -1,5 +1,5 @@
 import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid } from '../util.js';
-import { db, byId, bookingsOn, gearClash, upsert, remove, endOf, covers } from '../store.js';
+import { db, byId, bookingsOn, gearClash, upsert, remove, endOf, covers, qtyOf, usedQty } from '../store.js';
 import { openForm } from '../form.js';
 import { editKit } from './gear.js';
 import { getTimes } from '../suncalc.js';
@@ -38,13 +38,14 @@ function editBooking(b, go) {
       { key: 'address', label: 'Location / address', type: 'textarea', rows: 2 },
       { key: 'stakeholders', label: 'Stakeholders & contacts', type: 'rows', columns: [{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'phone', label: 'Phone', type: 'tel' }] },
       { key: 'crew', label: 'Crew', type: 'checks', options: db.crew.map(c => ({ value: c.id, label: c.name, hint: c.role })), empty: 'Add people on the Crew page first.' },
-      ...(db.kits.length ? [{ key: 'kits', label: 'Kits', type: 'checks', hint: 'Ticking a kit adds its equipment below. You can still adjust the list.', options: db.kits.map(k => ({ value: k.id, label: k.name, hint: `${(k.gear || []).length} items`, adds: { gear: k.gear || [] } })) }] : []),
-      { key: 'gear', label: 'Equipment', type: 'checks', options: db.gear.map(g => ({ value: g.id, label: g.name, group: g.category || 'Other' })).sort((a, b) => a.group.localeCompare(b.group)), empty: 'Add kit on the Equipment page first.' },
+      ...(db.kits.length ? [{ key: 'kits', label: 'Kits', type: 'checks', hint: 'Ticking a kit adds its equipment below. You can still adjust the list.', options: db.kits.map(k => ({ value: k.id, label: k.name, hint: `${(k.gear || []).length} items`, adds: { gear: k.gear || [] }, addsQty: k.gearQty || {} })) }] : []),
+      { key: 'gear', qtyKey: 'gearQty', label: 'Equipment', type: 'checks', options: db.gear.map(g => ({ value: g.id, label: g.name, group: g.category || 'Other', qtyMax: qtyOf(g), hint: qtyOf(g) > 1 ? `(${qtyOf(g)} owned)` : '' })).sort((a, b) => a.group.localeCompare(b.group)), empty: 'Add kit on the Equipment page first.' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
     onSave: v => {
       const item = { ...v, id: v.id || uid() };
       if (!item.endDate || item.endDate <= item.date) delete item.endDate;
+      item.gearQty = Object.fromEntries(Object.entries(item.gearQty || {}).filter(([id]) => (item.gear || []).includes(id)));
       upsert('bookings', item);
       go({ view: 'booking', id: item.id, day: item.date, cursor: new Date(parseISO(item.date).getFullYear(), parseISO(item.date).getMonth(), 1) });
     },
@@ -143,7 +144,8 @@ function detail(go) {
   const crew = (b.crew || []).map(id => byId('crew', id)).filter(Boolean);
   const gear = (b.gear || []).map(id => byId('gear', id)).filter(Boolean);
   const gearGroups = groupBy(gear, g => g.category || 'Other');
-  const total = gear.reduce((s, g) => s + (Number(g.value) || 0), 0);
+  const total = gear.reduce((s, g) => s + (Number(g.value) || 0) * usedQty(b, g.id), 0);
+  const units = gear.reduce((s, g) => s + usedQty(b, g.id), 0);
   const clashes = gear.filter(g => gearClash(b, g.id).length);
 
   return h('div', null,
@@ -166,7 +168,7 @@ function detail(go) {
         h('div', null, h('strong', null, c.name), h('div', { class: 'muted' }, c.role || '')),
         c.phone && h('a', { class: 'btn ghost small', href: telUrl(c.phone) }, '📞 ' + c.phone))))
       : h('p', { class: 'muted' }, 'No crew assigned.')),
-    section(`Equipment (${gear.length})`, [
+    section(`Equipment (${units})`, [
       (b.kits || []).length > 0 && h('div', { class: 'muted small' }, 'Kits: ' + b.kits.map(id => byId('kits', id)?.name).filter(Boolean).join(', ')),
       clashes.length > 0 && h('div', { class: 'warn' }, `⚠ ${clashes.length} item${clashes.length > 1 ? 's are' : ' is'} also booked on another job that overlaps these dates.`),
       gear.length
@@ -174,14 +176,14 @@ function detail(go) {
           items.map(g => {
             const c = gearClash(b, g.id);
             return h('div', { class: 'card-row gear-line' + (c.length ? ' clash' : '') },
-              h('span', null, g.name, c.length > 0 && h('em', { class: 'clash-note' }, ' ⚠ also on: ' + c.map(x => x.title).join(', '))),
+              h('span', null, g.name, usedQty(b, g.id) > 1 && h('b', { class: 'qty' }, ` ×${usedQty(b, g.id)}`), c.length > 0 && h('em', { class: 'clash-note' }, ' ⚠ also on: ' + c.map(x => x.title).join(', '))),
               h('span', { class: 'muted' }, g.serial || ''));
           })))
         : h('p', { class: 'muted' }, 'No equipment selected.'),
       gear.length > 0 && h('div', { class: 'muted small' }, `Kit value on this shoot: ${(db.profile.currency || '$')}${total.toLocaleString()}`),
       h('div', { class: 'actions' },
         h('button', { class: 'btn ghost small', onclick: () => window.logiGo(2) }, 'Open equipment list →'),
-        gear.length > 0 && h('button', { class: 'btn ghost small', onclick: () => editKit({ name: b.title, description: '', gear: b.gear, notes: '' }) }, '＋ Save as kit')),
+        gear.length > 0 && h('button', { class: 'btn ghost small', onclick: () => editKit({ name: b.title, description: '', gear: b.gear, gearQty: b.gearQty || {}, notes: '' }) }, '＋ Save as kit')),
     ]),
     b.notes && section('Notes', h('p', { class: 'prewrap' }, b.notes)));
 }
