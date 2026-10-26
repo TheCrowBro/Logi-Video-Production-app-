@@ -23,7 +23,7 @@ function show(i, dir = 0) {
   cleanup = null;
   current = i;
   const t = tabs[i];
-  const holder = h('section', { class: 'page-card' + (dir ? (dir > 0 ? ' flip-next' : ' flip-prev') : ''), 'aria-label': t.label });
+  const holder = h('section', { class: 'page-card', 'aria-label': t.label });
   page.replaceChildren(holder);
   cleanup = t.render(holder) || null;
   try { localStorage.setItem('logi-tab', String(i)); } catch { /* private mode */ }
@@ -36,7 +36,6 @@ store.subscribe(() => {
     const y = window.scrollY;
     cleanup && cleanup();
     const holder = page.firstElementChild;
-    holder.classList.remove('flip-next', 'flip-prev');
     holder.replaceChildren();
     cleanup = tabs[current].render(holder) || null;
     window.scrollTo(0, y);

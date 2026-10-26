@@ -57,6 +57,6 @@ vendor/qrcode.js qrcode-generator (MIT)
 ## Accessibility
 
 - Every button, chip, tab and checkbox is at least 44 px (48 px on touch screens), with a visible focus ring.
-- **Motion is off by default**: no spinning tab wheel, page flips or sliding panels. Full animation is an opt-in under **Aa**, and is never applied if the device asks for reduced motion.
+- **Motion is limited to the Rolodex bar** at the top; pages, sheets and buttons never animate. The bar can be switched off under **Aa → Animation**, and stops by itself when the device asks for reduced motion.
 - **Aa** button: text size, extra-large buttons, high contrast, animation, vibration feedback.
 - Dialogs trap focus and return it on close, the page behind is hidden from screen readers while one is open, and section changes are announced. Forms never close by accident when tapping outside them.
