@@ -42,11 +42,12 @@ export function stats(shifts) {
 
 /* --------------------------------- mutate --------------------------------- */
 const touch = s => { s.updatedAt = Date.now(); return s; };
-export function startShift(bookingId) {
+export function startShift(bookingId, kind = 'shoot') {
   if (running()) return;
   const now = Date.now();
-  update(d => { d.shifts.push(touch({ id: uid(), bookingId, date: ymd(new Date(now)), start: now, end: null, breaks: [] })); });
+  update(d => { d.shifts.push(touch({ id: uid(), bookingId, kind, date: ymd(new Date(now)), start: now, end: null, breaks: [] })); });
 }
+export const kindOf = s => (s && s.kind === 'edit' ? 'edit' : 'shoot');
 export function stopShift() {
   const s = running(); if (!s) return null;
   const now = Date.now();
@@ -72,12 +73,13 @@ export const deleteShift = id => remove('shifts', id);
 // Manual entry or correction: date, times and a single break total.
 export function editShift(s, bookingId) {
   const toTime = ms => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-  const vals = s ? { bookingId: s.bookingId, date: s.date, start: toTime(s.start), end: s.end ? toTime(s.end) : '', breakMin: Math.round(breakMs(s) / 6e4), note: s.note || '' } : { bookingId: bookingId || '', date: todayISO(), start: '08:00', end: '18:00', breakMin: defaultBreak(), note: '' };
+  const vals = s ? { bookingId: s.bookingId, kind: kindOf(s), date: s.date, start: toTime(s.start), end: s.end ? toTime(s.end) : '', breakMin: Math.round(breakMs(s) / 6e4), note: s.note || '' } : { bookingId: bookingId || '', kind: 'shoot', date: todayISO(), start: '08:00', end: '18:00', breakMin: defaultBreak(), note: '' };
   openForm({
     title: s ? 'Edit hours' : 'Add hours',
     values: vals,
     fields: [
       { key: 'bookingId', label: 'Project', type: 'select', options: [...db.bookings].sort((a, b) => b.date.localeCompare(a.date)).map(b => [b.id, `${fmtShort(b.date)} — ${b.title}`]) },
+      { key: 'kind', label: 'Kind', type: 'select', options: [['shoot', 'Shoot day'], ['edit', 'Edit / post']] },
       { key: 'date', label: 'Date', type: 'date', required: true },
       { key: 'start', label: 'Start', type: 'time', required: true },
       { key: 'end', label: 'Finish', type: 'time', hint: s && !s.end ? 'Leave blank to keep the clock running.' : 'Finishes after midnight? Enter the time; the date stays the start date.' },
@@ -91,8 +93,8 @@ export function editShift(s, bookingId) {
       const bm = Math.max(0, Number(v.breakMin) || 0) * 6e4;
       const breaks = bm ? [{ start, end: start + bm }] : [];
       update(d => {
-        if (s) { const x = d.shifts.find(y => y.id === s.id); if (x) Object.assign(x, touch({ bookingId: v.bookingId, date: v.date, start, end, breaks, note: v.note })); }
-        else d.shifts.push(touch({ id: uid(), bookingId: v.bookingId, date: v.date, start, end, breaks, note: v.note }));
+        if (s) { const x = d.shifts.find(y => y.id === s.id); if (x) Object.assign(x, touch({ bookingId: v.bookingId, kind: v.kind, date: v.date, start, end, breaks, note: v.note })); }
+        else d.shifts.push(touch({ id: uid(), bookingId: v.bookingId, kind: v.kind, date: v.date, start, end, breaks, note: v.note }));
       });
     },
     onDelete: s ? () => deleteShift(s.id) : null,
@@ -150,14 +152,15 @@ function projectBars(shifts) {
 const tile = (label, value, sub) => h('div', { class: 'stat' }, h('b', null, value), h('span', null, label), sub && h('small', { class: 'muted' }, sub));
 
 export function hoursPanel({ bookingId = null } = {}) {
-  let range = bookingId ? 'all' : LS.get('logi-hours-range') || 'month';
+  let range = bookingId ? 'all' : LS.get('logi-hours-range') || 'month', kind = 'all';
   const body = h('div', { class: 'stack hours' });
   const draw = () => {
     const all = db.shifts.filter(s => !bookingId || s.bookingId === bookingId).sort((a, b) => b.start - a.start);
-    const shifts = all.filter(s => inRange(s, range));
+    const shifts = all.filter(s => inRange(s, range) && (kind === 'all' || kindOf(s) === kind));
     const st = stats(shifts), live = running();
     body.replaceChildren(...nodes(
       h('div', { class: 'chips', role: 'group', 'aria-label': 'Period' }, RANGES.map(([k, l]) => h('button', { class: 'chip' + (range === k ? ' on' : ''), 'aria-pressed': range === k, onclick: () => { range = k; if (!bookingId) LS.set('logi-hours-range', k); draw(); } }, l))),
+      all.some(s => kindOf(s) === 'edit') && h('div', { class: 'chips', role: 'group', 'aria-label': 'Kind of work' }, [['all', 'Shoot + edit'], ['shoot', 'Shoot days'], ['edit', 'Edit / post']].map(([k, l]) => h('button', { class: 'chip' + (kind === k ? ' on' : ''), 'aria-pressed': kind === k, onclick: () => { kind = k; draw(); } }, l))),
       h('div', { class: 'stats' }, tile('hours', fmtHm(st.worked)), tile('days', String(st.days)), tile('avg day', fmtHm(st.avg)), tile('breaks', fmtHm(st.breaks)), tile('overtime', fmtHm(st.overtime), `over ${standardDay()}h days`), tile('longest day', fmtHm(st.longest))),
       live && h('div', { class: 'warn small' }, `Clock running on “${byId('bookings', live.bookingId)?.title || 'a booking'}” since ${new Date(live.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${onBreak(live) ? ' (on break)' : ''}.`),
       h('h3', null, 'Hours per week'), weeklyChart(all),
@@ -165,7 +168,7 @@ export function hoursPanel({ bookingId = null } = {}) {
       h('div', { class: 'card-row' }, h('h3', null, `Days (${shifts.length})`), h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => editShift(null, bookingId) }, '+ Add hours'), shifts.length > 0 && h('button', { class: 'btn ghost small', onclick: () => exportCsv(shifts) }, '⬇ CSV'))),
       shifts.length
         ? h('div', { class: 'list' }, shifts.map(s => h('button', { class: 'card tap hrs-shift', type: 'button', onclick: () => editShift(s) },
-          h('div', { class: 'card-row' }, h('div', null, h('strong', null, fmtShort(s.date)), !bookingId && h('div', { class: 'muted small' }, byId('bookings', s.bookingId)?.title || 'Deleted booking')), h('span', { class: 'pill ' + (s.end ? '' : 'st-cancelled rec') }, s.end ? fmtHm(workedMs(s)) : 'running')),
+          h('div', { class: 'card-row' }, h('div', null, h('strong', null, fmtShort(s.date), kindOf(s) === 'edit' && h('span', { class: 'tag' }, ' ✂ edit')), !bookingId && h('div', { class: 'muted small' }, byId('bookings', s.bookingId)?.title || 'Deleted booking')), h('span', { class: 'pill ' + (s.end ? '' : 'st-cancelled rec') }, s.end ? fmtHm(workedMs(s)) : 'running')),
           h('div', { class: 'muted small' }, `${new Date(s.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${s.end ? new Date(s.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '…'} · breaks ${fmtHm(breakMs(s))}${s.note ? ' · ' + s.note : ''}`))))
         : h('p', { class: 'muted small' }, 'No hours in this period. Use the clock bar on a shoot day, or add them by hand.'),
       h('p', { class: 'muted small' }, `Overtime counts anything beyond a ${standardDay()}-hour day. Change the standard day and the default approved break under Settings → Hours & breaks.`)));
@@ -181,7 +184,7 @@ export function openHoursSheet(bookingId) {
 
 function exportCsv(shifts) {
   const q = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
-  const rows = ['Date,Project,Client,Start,Finish,Breaks (min),Worked (h),Note', ...shifts.map(s => { const b = byId('bookings', s.bookingId) || {}; return [s.date, q(b.title || ''), q(b.client || ''), new Date(s.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), s.end ? new Date(s.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '', Math.round(breakMs(s) / 6e4), hrs(workedMs(s)), q(s.note || '')].join(','); })];
+  const rows = ['Date,Project,Client,Kind,Start,Finish,Breaks (min),Worked (h),Note', ...shifts.map(s => { const b = byId('bookings', s.bookingId) || {}; return [s.date, q(b.title || ''), q(b.client || ''), kindOf(s), new Date(s.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), s.end ? new Date(s.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '', Math.round(breakMs(s) / 6e4), hrs(workedMs(s)), q(s.note || '')].join(','); })];
   const file = new File([rows.join('\n') + '\n'], 'logi-hours.csv', { type: 'text/csv' });
   if (navigator.canShare?.({ files: [file] })) { navigator.share({ files: [file], title: 'Logi hours' }).catch(() => {}); return; }
   const a = h('a', { href: URL.createObjectURL(file), download: file.name }); document.body.append(a); a.click(); a.remove(); toast('CSV saved');

@@ -51,6 +51,7 @@ export function editVenue(v = {}, afterSave) {
       { key: 'permitNotes', label: 'Permit / insurance requirements', type: 'textarea', rows: 2, placeholder: 'e.g. £5m public liability, certificate 7 days ahead' },
       { key: 'access', label: 'Access & hours', type: 'textarea', rows: 2, placeholder: 'e.g. Load-in 7am via rear gate, quiet after 9pm' },
       { key: 'parking', label: 'Parking & loading' },
+      { key: 'hospital', label: 'Nearest A&E / hospital', placeholder: 'For the call sheet' },
       { key: 'power', label: 'Power available' },
       { key: 'checked', label: 'Rules last confirmed', type: 'date', hint: 'Set the date you last checked these rules with the venue.' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
@@ -117,7 +118,7 @@ function detail(go, draw) {
     (v.permit && v.permit !== 'Unknown') || v.permitNotes
       ? block('Permits & insurance', h('div', { class: 'kv card' }, row('Permit', v.permit && v.permit !== 'Unknown' ? v.permit : ''), v.permitNotes && h('p', { class: 'prewrap' }, v.permitNotes)))
       : null,
-    block('Access & logistics', h('div', { class: 'kv card' }, row('Access', v.access), row('Parking', v.parking), row('Power', v.power),
+    block('Access & logistics', h('div', { class: 'kv card' }, row('Access', v.access), row('Parking', v.parking), row('Power', v.power), row('Hospital', v.hospital),
       !v.access && !v.parking && !v.power && h('span', { class: 'muted' }, 'Nothing recorded yet.'))),
     (v.contact || v.phone || v.email) && block('Contact', h('div', { class: 'card' },
       v.contact && h('strong', null, v.contact),

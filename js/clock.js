@@ -31,7 +31,7 @@ export function initClockBar(root) {
       h('div', { class: 'clock-head' },
         list.length > 1 && !live
           ? h('select', { 'aria-label': 'Project', onchange: e => { S.choice = e.target.value; draw(); } }, list.map(b => h('option', { value: b.id, selected: chosen && b.id === chosen.id }, b.title)))
-          : h('span', { class: 'clock-title' }, h('span', { class: 'dot', 'aria-hidden': 'true' }), chosen ? chosen.title : 'Deleted booking'),
+          : h('span', { class: 'clock-title' }, h('span', { class: 'dot', 'aria-hidden': 'true' }), live && live.kind === 'edit' ? '✂ Edit · ' : '', chosen ? chosen.title : 'Deleted booking'),
         h('span', { class: 'clock-sub muted small' }, live
           ? (breaking ? (brLeft != null ? (brLeft > 0 ? `Break · ${fmtClock(brLeft)} left of ${breakLabel(br.planned)}` : `Break over by ${fmtClock(-brLeft)}`) : `On break · ${fmtClock(brElapsed)}`) : `Working · ${fmtClock(workedMs(live, now))}`)
           : `Shoot day · ${workedToday ? fmtHm(workedToday) + ' logged today' : 'not started'}`)),

@@ -5,14 +5,16 @@ import { editKit } from './gear.js';
 import { venueWarnings, openVenue, chips as venueChips } from './venues.js';
 import { mapButtons } from '../map.js';
 import { openCalendarSheet, openAddToCalendar, shareBooking, mailtoLink } from '../calendar.js';
-import { openHoursSheet, editShift, stats, fmtHm, defaultBreak } from '../hours.js';
+import { openHoursSheet, editShift, stats, fmtHm, defaultBreak, startShift, running } from '../hours.js';
+import { STATUSES as WF_STATUSES, TYPES, slugStatus, workflowBlock, openPipeline, hiresBlock, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, stageIndex } from '../workflow.js';
+import { openCallSheet } from '../callsheet.js';
 import { getTimes } from '../suncalc.js';
 
-const STATUSES = ['Enquiry', 'Confirmed', 'Shot', 'Delivered', 'Cancelled'];
+const STATUSES = WF_STATUSES;
 const S = { view: 'month', cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1), day: todayISO(), id: null };
 
 const dateRange = (b, f) => endOf(b) > b.date ? `${f(b.date)} → ${f(endOf(b))}` : f(b.date);
-const pill = s => h('span', { class: 'pill st-' + s.toLowerCase() }, s);
+const pill = s => h('span', { class: 'pill st-' + slugStatus(s) }, s);
 
 export const bookings = {
   id: 'bookings', label: 'Bookings', icon: '📅',
@@ -34,9 +36,10 @@ function editBooking(b, go) {
     fields: [
       { key: 'title', label: 'Project', required: true, placeholder: 'e.g. Brand film for…' },
       { key: 'client', label: 'Client' },
+      { key: 'type', label: 'Job type', type: 'select', options: TYPES, hint: 'Picks the pre- and post-production checklist template.' },
       { key: 'date', label: 'Start date', type: 'date', required: true },
       { key: 'endDate', label: 'End date (multi-day)', type: 'date', hint: 'Leave blank for a single day.' },
-      { key: 'status', label: 'Status', type: 'select', options: STATUSES },
+      { key: 'status', label: 'Stage', type: 'select', options: STATUSES },
       { key: 'start', label: 'Start', type: 'time' },
       { key: 'end', label: 'Finish', type: 'time' },
       ...(db.venues.length ? [{ key: 'venueId', label: 'Venue', type: 'select', options: [['', 'No saved venue'], ...db.venues.map(v => [v.id, v.name])], hint: 'Fills in the address and checks your equipment against the venue’s rules.' }] : []),
@@ -63,7 +66,7 @@ function editBooking(b, go) {
   });
 }
 
-const blankBooking = date => ({ title: '', client: '', date, endDate: '', status: 'Enquiry', start: '', end: '', address: '', stakeholders: [], crew: [], gear: [], notes: '' });
+const blankBooking = date => ({ title: '', client: '', type: 'brand', date, endDate: '', status: 'Enquiry', start: '', end: '', address: '', stakeholders: [], crew: [], gear: [], notes: '' });
 
 /* ------------------------------- month ------------------------------- */
 function month(go) {
@@ -86,9 +89,9 @@ function month(go) {
       onclick: () => go({ view: 'day', day: iso }),
     },
       h('span', { class: 'num' }, d),
-      list.slice(0, 2).map(b => h('span', { class: 'mini st-' + b.status.toLowerCase() }, b.title)),
+      list.slice(0, 2).map(b => h('span', { class: 'mini st-' + slugStatus(b.status) }, b.title)),
       list.length > 2 && h('span', { class: 'more' }, `+${list.length - 2}`),
-      list.length > 0 && h('span', { class: 'dots' }, list.slice(0, 4).map(b => h('i', { class: 'st-' + b.status.toLowerCase() })))));
+      list.length > 0 && h('span', { class: 'dots' }, list.slice(0, 4).map(b => h('i', { class: 'st-' + slugStatus(b.status) })))));
   }
 
   const upcoming = db.bookings.filter(b => endOf(b) >= today && b.status !== 'Cancelled')
@@ -98,7 +101,7 @@ function month(go) {
     h('div', { class: 'page-head' },
       h('h1', null, 'Bookings'),
       h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New')),
-    h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => openHoursSheet() }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: openCalendarSheet }, '📆 Calendar & email')),
+    h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date })) }, '🗂 Pipeline'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet() }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: openCalendarSheet }, '📆 Calendar & email')),
     h('div', { class: 'cal-nav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Previous month', onclick: () => go({ cursor: new Date(y, m - 1, 1) }) }, '‹'),
       h('div', { class: 'cal-title' }, new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
@@ -169,6 +172,13 @@ function detail(go) {
       b.client && h('div', null, '🏢 ', b.client),
       b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address)),
       h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openAddToCalendar(b) }, '📆 Add to calendar'), h('button', { class: 'btn ghost small', onclick: () => shareBooking(b) }, '📤 Share'), h('a', { class: 'btn ghost small', href: mailtoLink(b) }, '✉ Email'))),
+    workflowBlock(b, {
+      crew: () => document.getElementById('bk-crew')?.scrollIntoView({ block: 'start' }), venue: () => (b.venueId ? openVenue(b.venueId) : window.logiGo('venues')), insurance: () => window.logiGo('insurance'),
+      hires: () => document.getElementById('bk-hires')?.scrollIntoView({ block: 'start' }), shots: () => document.getElementById('bk-shots')?.scrollIntoView({ block: 'start' }), tcnotes: () => window.logiGo('tcnotes'),
+      callsheet: () => openCallSheet(b), kit: () => document.getElementById('bk-kit')?.scrollIntoView({ block: 'start' }), field: () => window.logiGo('field'), media: () => document.getElementById('bk-media')?.scrollIntoView({ block: 'start' }),
+      hours: () => openHoursSheet(b.id), licences: () => document.getElementById('bk-licences')?.scrollIntoView({ block: 'start' }), deliverables: () => document.getElementById('bk-deliverables')?.scrollIntoView({ block: 'start' }),
+    }),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openCallSheet(b) }, '📋 Call sheet')),
     venueBlock(b, gear),
     sunLine(b.date),
     section('Stakeholders', (b.stakeholders || []).length
@@ -176,12 +186,11 @@ function detail(go) {
         h('div', null, h('strong', null, s.name || '—'), h('div', { class: 'muted' }, s.role || '')),
         s.phone && h('a', { class: 'btn ghost small', href: telUrl(s.phone) }, '📞 ' + s.phone))))
       : h('p', { class: 'muted' }, 'No stakeholders added.')),
-    section(`Crew (${crew.length})`, crew.length
-      ? h('div', { class: 'list' }, crew.map(c => h('div', { class: 'card-row card' },
-        h('div', null, h('strong', null, c.name), h('div', { class: 'muted' }, c.role || '')),
-        c.phone && h('a', { class: 'btn ghost small', href: telUrl(c.phone) }, '📞 ' + c.phone))))
+    h('section', { class: 'block', id: 'bk-crew' }, h('h3', null, `Crew (${crew.length})`), crew.length
+      ? h('div', { class: 'list' }, crew.map(c => crewRow(b, c)))
       : h('p', { class: 'muted' }, 'No crew assigned.')),
-    section(`Equipment (${units})`, [
+    h('div', { id: 'bk-shots' }, stageIndex(b.status) <= 4 ? shotsBlock(b) : null),
+    h('section', { class: 'block', id: 'bk-kit' }, h('h3', null, `Equipment (${units})`), [
       (b.kits || []).length > 0 && h('div', { class: 'muted small' }, 'Kits: ' + b.kits.map(id => byId('kits', id)?.name).filter(Boolean).join(', ')),
       clashes.length > 0 && h('div', { class: 'warn' }, `⚠ ${clashes.length} item${clashes.length > 1 ? 's are' : ' is'} also booked on another job that overlaps these dates.`),
       gear.length
@@ -197,7 +206,11 @@ function detail(go) {
       h('div', { class: 'actions' },
         h('button', { class: 'btn ghost small', onclick: () => window.logiGo(2) }, 'Open equipment list →'),
         gear.length > 0 && h('button', { class: 'btn ghost small', onclick: () => editKit({ name: b.title, description: '', gear: b.gear, gearQty: b.gearQty || {}, notes: '' }) }, '＋ Save as kit')),
+      h('div', { id: 'bk-hires' }, hiresBlock(b)),
     ]),
+    h('div', { id: 'bk-media' }, mediaBlock(b)),
+    h('div', { id: 'bk-deliverables' }, deliverablesBlock(b)),
+    h('div', { id: 'bk-licences', class: 'block' }, licencesBlock(b)),
     hoursBlock(b),
     b.notes && section('Notes', h('p', { class: 'prewrap' }, b.notes)));
 }
@@ -211,7 +224,7 @@ function hoursBlock(b) {
         ? h('div', { class: 'card-row' }, h('div', null, h('strong', null, fmtHm(st.worked)), h('div', { class: 'muted small' }, `${st.days} day${st.days === 1 ? '' : 's'} · breaks ${fmtHm(st.breaks)}${st.overtime ? ' · overtime ' + fmtHm(st.overtime) : ''}`)))
         : h('p', { class: 'muted small' }, 'Nothing clocked yet. On the day, the clock bar under the Rolodex starts the hours for this shoot.'),
       h('div', { class: 'muted small' }, `Approved break: ${b.breakMinutes != null && b.breakMinutes !== '' ? b.breakMinutes + ' min' : defaultBreak() + ' min (default)'}${b.breakNote ? ' · ' + b.breakNote : ''}`),
-      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openHoursSheet(b.id) }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: () => editShift(null, b.id) }, '+ Add hours'))));
+      h('div', { class: 'actions' }, !running() && h('button', { class: 'btn ghost small', onclick: () => { startShift(b.id, 'edit'); window.scrollTo({ top: 0 }); } }, '✂ Start edit session'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet(b.id) }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: () => editShift(null, b.id) }, '+ Add hours'))));
 }
 
 function venueBlock(b, gear) {

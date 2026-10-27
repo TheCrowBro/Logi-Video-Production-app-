@@ -430,3 +430,27 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .break-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .break-grid .btn { flex-direction: column; gap: 2px; padding: 14px 10px; font-size: 1.05rem; }
 .break-grid .btn small { font-weight: 500; font-size: .75rem; opacity: .8; }
+
+/* workflow */
+.pill.st-quoted { color: var(--accent); border-color: var(--accent); } .pill.st-prepped { color: var(--ok); border-color: var(--ok); } .pill.st-in-post { color: var(--blue); border-color: var(--blue); } .pill.st-archived { color: var(--muted); }
+.mini.st-quoted { border-color: var(--accent); } .mini.st-prepped { border-color: var(--ok); } .mini.st-in-post { border-color: var(--blue); } .dots i.st-quoted { background: var(--accent); } .dots i.st-prepped { background: var(--ok); } .dots i.st-in-post { background: var(--blue); }
+.stage-strip { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 6px; scrollbar-width: none; }
+.stage { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg2); color: var(--muted); font: inherit; font-size: .85rem; cursor: pointer; min-height: 36px; }
+.stage.past { color: var(--text); } .stage.now { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.stage-no { font-size: .72rem; font-weight: 800; width: 1.2rem; height: 1.2rem; border-radius: 50%; display: inline-grid; place-items: center; background: color-mix(in srgb, currentColor 18%, transparent); }
+.progress { height: 6px; background: var(--bg2); border-radius: 3px; overflow: hidden; margin: 8px 0 10px; } .progress i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.checklist { display: grid; gap: 2px; }
+.check-item { display: flex; align-items: center; gap: 6px; } .check-item .check { flex: 1; min-width: 0; } .check-item.done .check span { color: var(--muted); text-decoration: line-through; }
+.workflow .help summary { margin-top: 6px; }
+.sub { margin-top: 12px; display: grid; gap: 6px; } .sub h4 { margin: 4px 0 2px; }
+.crew-line { display: grid; gap: 6px; } .crew-line select { width: auto; flex: 1; } .crew-line input[type=time] { width: auto; }
+.media-grid { display: grid; gap: 4px; font-size: .85rem; }
+.media-head, .media-row { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(5, 1fr) auto; gap: 4px; align-items: center; }
+.media-head { color: var(--muted); font-size: .68rem; text-align: center; } .media-head span:first-child { text-align: left; }
+.media-row input[type=checkbox] { width: 22px; height: 22px; margin: 0 auto; accent-color: var(--accent); } .media-row.safe .media-label::after { content: ' ✓'; color: var(--ok); }
+.media-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.overdue { color: var(--danger); font-weight: 700; }
+.pipeline { display: grid; gap: 14px; } .pipe-col h3 { margin-top: 0; }
+@media (min-width: 1000px) { .pipeline { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; } .sheet.wide-sheet { width: min(1100px, 100%); } }
+.callsheet { font-size: .82rem; max-height: 50vh; }
+.hours .tag { font-size: .7rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--muted); font-weight: 500; }

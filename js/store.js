@@ -11,6 +11,7 @@ const blank = () => ({
   bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [], logs: [], shifts: [],
   deleted: {}, // id -> time deleted (tombstones, so a merge with an older copy doesn't bring records back)
   calSync: { provider: null, calendarId: null, events: {}, feed: false, updatedAt: 0 }, // calendar link + event ids per booking
+  templates: {}, // per job type: edited checklist lines per stage
 });
 
 function load() {
@@ -36,6 +37,7 @@ function normalise(raw) {
     logs: Array.isArray(raw.logs) ? raw.logs.map(l => ({ ...l, notes: Array.isArray(l.notes) ? l.notes : [], scriptAt: Number(l.scriptAt) || (l.script ? Date.parse(l.script.imported) || 1 : 0) })) : [],
     deleted: Object.fromEntries(Object.entries(raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {}).filter(([, t]) => Date.now() - t < 180 * 864e5)),
     calSync: { ...b.calSync, ...(raw.calSync && typeof raw.calSync === 'object' ? raw.calSync : {}), events: raw.calSync?.events && typeof raw.calSync.events === 'object' ? raw.calSync.events : {} },
+    templates: raw.templates && typeof raw.templates === 'object' ? raw.templates : {},
   };
 }
 
@@ -150,14 +152,14 @@ export function loadSample() {
     ...db,
     gear, crew,
     bookings: [
-      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', date: iso(2), start: '07:30', end: '17:00', status: 'Confirmed', venueId: venueA, address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id], gearQty: { [gear[4].id]: 2 }, notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
-      { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', date: iso(2), start: '19:00', end: '21:00', status: 'Enquiry', address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[4].id, gear[5].id], gearQty: { [gear[4].id]: 2 }, notes: '' },
-      { id: uid(), title: 'Wedding weekend', client: 'Lee & Marcus', date: iso(9), endDate: iso(11), start: '10:00', end: '22:00', status: 'Confirmed', address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
+      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', type: 'brand', date: iso(2), start: '07:30', end: '17:00', status: 'Prepped', venueId: venueA, checks: { 'confirmed:deposit-received': 1, 'confirmed:booking-in-the-calendar': 1, 'confirmed:crew-asked-and-confirmed': 1, 'confirmed:venue-confirmed-permits-requested': 1, 'confirmed:insurance-certificate-sent': 1, 'confirmed:hires-booked': 1, 'prepped:shot-list-storyboard-done': 1, 'prepped:treatment-and-shot-list-approved': 1 }, crewStatus: { [crew[0].id]: 'confirmed', [crew[1].id]: 'asked' }, crewCall: { [crew[0].id]: '07:30', [crew[1].id]: '07:00' }, shots: [{ id: uid(), text: 'Wide: steam over the mash tun at first light', done: false }, { id: uid(), text: 'Ana interview, two lights, 50mm', done: false }, { id: uid(), text: 'Keg roll to the van, tracking', done: false }], hires: [{ id: uid(), item: 'Easyrig Vario 5', from: 'Dock Rentals', cost: 60, pickup: iso(1), return: iso(3), booked: 'yes' }], deliverables: [{ id: uid(), name: 'Brand film 16:9, 90 s', duration: '90 s', due: iso(23), status: 'Planned', link: '', delivered: '' }, { id: uid(), name: 'Social cut 9:16, 30 s', duration: '30 s', due: iso(27), status: 'Planned', link: '', delivered: '' }], address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id], gearQty: { [gear[4].id]: 2 }, notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
+      { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', type: 'corporate', date: iso(2), start: '19:00', end: '21:00', status: 'Quoted', checks: { 'enquiry:brief-received-objectives-audience-deliverables': 1, 'enquiry:budget-range-known': 1, 'quoted:quote-estimate-sent': 1 }, address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[4].id, gear[5].id], gearQty: { [gear[4].id]: 2 }, notes: '' },
+      { id: uid(), title: 'Wedding weekend', client: 'Lee & Marcus', type: 'wedding', date: iso(9), endDate: iso(11), start: '10:00', end: '22:00', status: 'Confirmed', checks: { 'confirmed:deposit-received': 1 }, address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
       { id: todayJob, title: 'Location recce — Elm Hall', client: 'Lee & Marcus', date: iso(0), start: '10:00', end: '14:00', status: 'Confirmed', address: 'Elm Hall Gardens', breakMinutes: 30, breakNote: '30 min lunch', stakeholders: [], crew: [], gear: [gear[0].id, gear[2].id], notes: 'Walk the ceremony route and check power at the marquee.' },
       { id: past1, title: 'Corporate headshots', client: 'Northline Legal', date: iso(-12), start: '08:00', end: '17:00', status: 'Delivered', address: '88 King Street, Level 9', breakMinutes: 45, stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id, gear[4].id], gearQty: { [gear[4].id]: 2 }, notes: '' },
       { id: past2, title: 'Festival highlights', client: 'Portside Council', date: iso(-20), endDate: iso(-19), start: '11:00', end: '23:00', status: 'Delivered', address: 'Harbour Green', breakMinutes: 60, stakeholders: [], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[8].id], notes: '' },
       { id: past3, title: 'Real-estate walkthrough', client: 'Dockside Lettings', date: iso(-33), start: '09:00', end: '12:00', status: 'Delivered', address: '4 Quay Lane', breakMinutes: 15, stakeholders: [], crew: [], gear: [gear[0].id, gear[8].id], notes: '' },
-      { id: past0, title: 'Product shots', client: 'Kiln & Co', date: iso(-4), start: '09:00', end: '15:00', status: 'Delivered', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
+      { id: past0, title: 'Product shots', client: 'Kiln & Co', type: 'brand', media: [{ id: uid(), label: 'A001', d1: true, d2: true, off: true, ver: true, clr: true }, { id: uid(), label: 'A002', d1: true, d2: true, off: false, ver: true, clr: false }], deliverables: [{ id: uid(), name: 'Product stills set (24)', duration: '', due: iso(3), status: 'Sent for review', link: '', delivered: '' }], licences: [{ id: uid(), kind: 'Music', title: 'Slow Pour — Artlist', licence: 'AL-88213', source: '', cost: 0 }], date: iso(-4), start: '09:00', end: '15:00', status: 'In post', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
     ],
     venues: [
       { id: venueA, name: 'Harbour Brewing Co. taproom', type: 'Retail / restaurant', address: '12 Dock Road, Portside', geo: { lat: 51.5033, lon: -0.1195 }, contact: 'Ana Ruiz', phone: '+1 555 0199', email: '', perms: { tripods: 'allowed', lighting: 'allowed', flash: 'ask', haze: 'no', drones: 'ask', generators: 'no', dollies: 'allowed', audio: 'allowed', pyro: 'no' }, rules: 'No filming of customers without a release.\nKeep the fire exit by the bar clear.\nStaff may ask you to pause during deliveries.', permit: 'Not needed', permitNotes: 'Certificate of public liability on file, minimum $2m.', access: 'Load-in 7am via the loading bay. Taproom opens at 12.', parking: 'Loading bay for 30 min, then street parking', power: 'Standard sockets, 2 x 16A at the bar', checked: iso(-20), notes: '' },
@@ -262,6 +264,7 @@ export function mergeDb(local, remote) {
     for (const [k, v] of Object.entries(b.events || {})) if (!events[k] || (v.at || 0) > (events[k].at || 0)) events[k] = v;
     out.calSync = { ...base, events };
   }
+  out.templates = ts(remote.templates) > ts(local.templates) ? remote.templates : local.templates;
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }

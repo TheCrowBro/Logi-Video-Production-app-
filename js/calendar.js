@@ -36,19 +36,24 @@ const hashOf = e => JSON.stringify([e.title, e.allDay, e.allDay ? e.start : e.st
 /* --------------------------------- .ics --------------------------------- */
 const esc = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const fold = line => { const out = []; let s = line; while (s.length > 74) { out.push(s.slice(0, 74)); s = ' ' + s.slice(74); } out.push(s); return out.join('\r\n'); };
-export function icsFor(bookings, name = CAL_NAME) {
+export function icsFor(bookings, extra = [], name = CAL_NAME) {
   const now = utc(new Date());
   const out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Logi//Production Deck//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + esc(name), 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
-  for (const b of bookings) {
-    const e = eventOf(b);
-    out.push('BEGIN:VEVENT', 'UID:' + e.uid, 'DTSTAMP:' + now, 'LAST-MODIFIED:' + utc(new Date(Number(b.updatedAt) || Date.now())),
+  for (const e of [...bookings.map(eventOf), ...extra]) {
+    out.push('BEGIN:VEVENT', 'UID:' + e.uid, 'DTSTAMP:' + now, 'LAST-MODIFIED:' + utc(new Date(Number(e.updatedAt) || Date.now())),
       e.allDay ? 'DTSTART;VALUE=DATE:' + dateOnly(e.start) : 'DTSTART:' + utc(e.start), e.allDay ? 'DTEND;VALUE=DATE:' + dateOnly(e.end) : 'DTEND:' + utc(e.end),
       'SUMMARY:' + esc(e.title), e.location && 'LOCATION:' + esc(e.location), 'DESCRIPTION:' + esc(e.description), 'STATUS:' + e.status, 'END:VEVENT');
   }
   out.push('END:VCALENDAR');
   return out.filter(Boolean).map(fold).join('\r\n') + '\r\n';
 }
-export const feedIcs = () => icsFor(activeBookings());
+// Deliverable due dates ride along as all-day events.
+export function dueEvents() {
+  const out = [];
+  for (const b of activeBookings()) for (const d of b.deliverables || []) if (d.due && d.status !== 'Delivered') out.push({ id: 'del:' + d.id, uid: `logi-del-${d.id}@logi.app`, title: `Deliver: ${d.name} — ${b.title}`, allDay: true, start: d.due, end: nextDay(d.due), location: '', description: `${b.title}${b.client ? ' for ' + b.client : ''}\nDeliverable: ${d.name}${d.duration ? ' (' + d.duration + ')' : ''}\nStatus: ${d.status}\n\nLogi booking ${b.id}`, status: 'CONFIRMED', updatedAt: b.updatedAt });
+  return out;
+}
+export const feedIcs = () => icsFor(activeBookings(), dueEvents());
 export const FEED_NAME = 'logi-bookings.ics';
 store.setAuxWriter(() => ({ name: FEED_NAME, text: feedIcs(), type: 'text/calendar' }));
 
@@ -65,7 +70,7 @@ async function shareIcs(name, text, title, body) {
   if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ title, text: body, files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; } }
   const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); a.remove(); toast('Calendar file saved');
 }
-export const shareBooking = b => shareIcs(slug(b.title) + '.ics', icsFor([b], b.title), b.title, summaryText(b));
+export const shareBooking = b => shareIcs(slug(b.title) + '.ics', icsFor([b], [], b.title), b.title, summaryText(b));
 export const shareAll = () => shareIcs(FEED_NAME, feedIcs(), CAL_NAME, `${activeBookings().length} bookings from Logi`);
 
 export function openAddToCalendar(b) {
@@ -107,17 +112,17 @@ export async function syncCalendar({ interactive = false } = {}) {
     const remote = await ad.list(calendarId, interactive);
     const byLogi = new Map(remote.filter(r => r.logiId).map(r => [r.logiId, r]));
     // adopt events another device already created, so they are updated rather than duplicated
-    for (const r of remote) if (r.logiId && !mapping[r.logiId] && byId('bookings', r.logiId)) mapping[r.logiId] = { id: r.id, hash: '', at: 0 };
+    for (const r of remote) if (r.logiId && !mapping[r.logiId] && (byId('bookings', r.logiId) || r.logiId.startsWith('del:'))) mapping[r.logiId] = { id: r.id, hash: '', at: 0 };
     // pull: edits made in the calendar since we last touched the event
     const changes = [];
-    for (const [bid, m] of Object.entries(mapping)) { const r = byLogi.get(bid), b = byId('bookings', bid); if (r && b && r.updated > m.at + 2000 && r.updated > (Number(b.updatedAt) || 0)) { const p = patchFromEvent(b, r); if (p) changes.push([bid, p]); } }
+    for (const [bid, m] of Object.entries(mapping)) { if (bid.startsWith('del:')) continue; const r = byLogi.get(bid), b = byId('bookings', bid); if (r && b && r.updated > m.at + 2000 && r.updated > (Number(b.updatedAt) || 0)) { const p = patchFromEvent(b, r); if (p) changes.push([bid, p]); } }
     if (changes.length) update(d => { for (const [bid, p] of changes) { const b = d.bookings.find(x => x.id === bid); if (b) { Object.assign(b, p); for (const k of ['endDate', 'start', 'end']) if (b[k] === undefined || b[k] === '') delete b[k]; b.updatedAt = Date.now(); } } });
     // push
-    const want = activeBookings(), wantIds = new Set(want.map(b => b.id));
-    for (const b of want) {
-      const e = eventOf(b), hash = hashOf(e), m = mapping[b.id];
-      if (!m || !byLogi.has(b.id)) { const id = await ad.create(calendarId, e); mapping[b.id] = { id, hash, at: Date.now() }; }
-      else if (m.hash !== hash) { await ad.update(calendarId, m.id, e); mapping[b.id] = { id: m.id, hash, at: Date.now() }; }
+    const want = [...activeBookings().map(b => ({ key: b.id, e: eventOf(b) })), ...dueEvents().map(e => ({ key: e.id, e }))], wantIds = new Set(want.map(w => w.key));
+    for (const { key, e } of want) {
+      const hash = hashOf(e), m = mapping[key];
+      if (!m || !byLogi.has(key)) { const id = await ad.create(calendarId, e); mapping[key] = { id, hash, at: Date.now() }; }
+      else if (m.hash !== hash) { await ad.update(calendarId, m.id, e); mapping[key] = { id: m.id, hash, at: Date.now() }; }
     }
     for (const [bid, m] of Object.entries(mapping)) if (!wantIds.has(bid)) { if (byLogi.has(bid)) await ad.remove(calendarId, m.id); delete mapping[bid]; }
     setState('ok');
@@ -135,7 +140,7 @@ export function disconnectCalendar() { ADAPTERS[db.calSync?.provider]?.signOut?.
 let lastHash = '', pushTimer = null;
 subscribe(() => {
   if (!db.calSync?.provider) return;
-  const hsh = JSON.stringify(activeBookings().map(b => [b.id, b.updatedAt]));
+  const hsh = JSON.stringify(activeBookings().map(b => [b.id, b.updatedAt, (b.deliverables || []).length]));
   if (hsh === lastHash) return; lastHash = hsh;
   clearTimeout(pushTimer); pushTimer = setTimeout(() => syncCalendar({ interactive: false }), 1500);
 });

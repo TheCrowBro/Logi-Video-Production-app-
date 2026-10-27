@@ -9,6 +9,7 @@ import { openInstallHelp, installState } from '../install.js';
 import { startTour } from '../tour.js';
 import { VERSION, REPO } from '../version.js';
 import * as notify from '../notify.js';
+import { templatesPanel } from '../workflow.js';
 
 const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null || v === '' ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* ignore */ } } };
 const loc = () => { try { return JSON.parse(LS.get('logi-loc')); } catch { return null; } };
@@ -33,6 +34,7 @@ export const settings = {
         h('div', { class: 'field' }, h('label', null, 'Standard day (hours)'), h('input', { type: 'number', min: 1, max: 24, step: 0.5, value: LS.get('logi-stdday') || 10, 'aria-label': 'Standard day in hours', onchange: e => { LS.set('logi-stdday', e.target.value); toast('Saved'); } }), h('small', { class: 'muted' }, 'Anything beyond this on a day counts as overtime in the statistics.')),
         notifyPanel(),
         h('div', { class: 'field' }, h('label', null, 'Default approved break (minutes per day)'), h('input', { type: 'number', min: 0, step: 5, value: LS.get('logi-breakdefault') || 30, 'aria-label': 'Default approved break in minutes', onchange: e => { LS.set('logi-breakdefault', e.target.value); toast('Saved'); } }), h('small', { class: 'muted' }, 'Used when a booking doesn’t set its own.')))),
+      section('Workflow templates', Object.keys(db.templates || {}).filter(k => k !== 'updatedAt').length ? 'customised' : 'defaults', templatesPanel()),
       section('Profile', db.profile.name || 'not set', profilePanel()),
       !installState().standalone && section('Install', installState().canPrompt ? 'ready to install' : 'see how', h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, 'Logi runs in the browser as it is. Installing adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline.'),
