@@ -6,10 +6,12 @@ import { applyPrefs, openDisplaySettings } from './a11y.js';
 import { initInstall } from './install.js';
 import { startTour, tourSeen } from './tour.js';
 import './calendar.js'; // registers the feed writer and the auto-push to a linked calendar
+import { initClockBar } from './clock.js';
 
 applyPrefs();
 document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);
 initInstall(document.getElementById('installBtn'));
+initClockBar(document.getElementById('clockbar'));
 import { bookings } from './pages/bookings.js';
 import { crew } from './pages/crew.js';
 import { gear } from './pages/gear.js';

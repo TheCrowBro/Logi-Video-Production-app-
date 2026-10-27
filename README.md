@@ -68,6 +68,12 @@ Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can ret
 - **Cloud copies merge** rather than overwrite: records are merged one by one (newest edit wins per record, notes are combined, deletions are remembered), so two devices editing at the same time don't lose each other's work. While TC Notes is open the cloud copy is also re-read every few seconds, so notes from another device arrive even without a direct link (subject to the cloud service's own delay).
 - Phone clocks drift about a second a day against a camera's crystal, so re-sync on long days.
 
+## Hours and breaks (the clock bar)
+
+On a shoot day a bar appears under the Rolodex naming the booking. **● Start work** starts the clock for that project; **■ Stop work** logs the hours. **☕ Break** pauses the work time and counts the break against the length approved for that production (set per booking as *Approved break per day*, with a default under Settings → Hours & breaks); the bar shows what's left and warns, with a buzz, when it's used up. If a shift is left running overnight the bar says so. Hours can also be added or corrected by hand (date, start, finish, break total), per booking or from the **📊 Hours** button on the Bookings page.
+
+**📊 Hours & statistics** shows totals for the period (hours, days, average day, breaks, overtime beyond your standard day, longest day), hours per week as a chart with a table view, hours by project, the list of days, and a CSV export for invoicing.
+
 ## Calendar and email
 
 Open **📆 Calendar** on the Bookings page, or **Add to calendar** on any booking.

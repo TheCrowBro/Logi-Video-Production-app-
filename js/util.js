@@ -19,6 +19,9 @@ export function h(tag, attrs, ...kids) {
   return el;
 }
 
+// Children for replaceChildren/append with h()'s rules: skip null/false, flatten arrays, strings become text.
+export const nodes = (...kids) => kids.flat(Infinity).filter(k => k != null && k !== false && k !== '').map(k => (k.nodeType ? k : document.createTextNode(String(k))));
+
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 export const pad = n => String(n).padStart(2, '0');

@@ -8,7 +8,7 @@ const KEY = 'logi-db-v1';
 const blank = () => ({
   version: 1, updatedAt: 0,
   profile: { name: '', business: '', title: '', phone: '', email: '', website: '', location: '', currency: '$', bio: '' },
-  bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [], logs: [],
+  bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [], logs: [], shifts: [],
   deleted: {}, // id -> time deleted (tombstones, so a merge with an older copy doesn't bring records back)
   calSync: { provider: null, calendarId: null, events: {}, feed: false, updatedAt: 0 }, // calendar link + event ids per booking
 });
@@ -32,6 +32,7 @@ function normalise(raw) {
     insurance: Array.isArray(raw.insurance) ? raw.insurance : [],
     kits: Array.isArray(raw.kits) ? raw.kits : [],
     venues: Array.isArray(raw.venues) ? raw.venues : [],
+    shifts: Array.isArray(raw.shifts) ? raw.shifts.map(s => ({ ...s, breaks: Array.isArray(s.breaks) ? s.breaks : [] })) : [],
     logs: Array.isArray(raw.logs) ? raw.logs.map(l => ({ ...l, notes: Array.isArray(l.notes) ? l.notes : [], scriptAt: Number(l.scriptAt) || (l.script ? Date.parse(l.script.imported) || 1 : 0) })) : [],
     deleted: Object.fromEntries(Object.entries(raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {}).filter(([, t]) => Date.now() - t < 180 * 864e5)),
     calSync: { ...b.calSync, ...(raw.calSync && typeof raw.calSync === 'object' ? raw.calSync : {}), events: raw.calSync?.events && typeof raw.calSync.events === 'object' ? raw.calSync.events : {} },
@@ -70,7 +71,7 @@ export function remove(list, id) {
     d[list] = d[list].filter(x => x.id !== id);
     d.deleted[id] = Date.now();
     if (list === 'gear') { d.bookings.forEach(b => { b.gear = (b.gear || []).filter(g => g !== id); if (b.gearQty) delete b.gearQty[id]; }); d.kits.forEach(k => { if (k.gearQty) delete k.gearQty[id]; }); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
-    if (list === 'bookings') d.logs.forEach(l => { if (l.bookingId === id) delete l.bookingId; });
+    if (list === 'bookings') { d.logs.forEach(l => { if (l.bookingId === id) delete l.bookingId; }); d.shifts.forEach(s => { if (s.bookingId === id) { s.bookingId = null; s.updatedAt = Date.now(); } }); }
     if (list === 'venues') d.bookings.forEach(b => { if (b.venueId === id) delete b.venueId; });
     if (list === 'kits') d.bookings.forEach(b => b.kits = (b.kits || []).filter(k => k !== id));
     if (list === 'crew') d.bookings.forEach(b => b.crew = (b.crew || []).filter(c => c !== id));
@@ -129,7 +130,9 @@ export async function eraseAll() {
 
 export function loadSample() {
   const d = new Date(); const iso = (off) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + off); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
-  const venueA = uid();
+  const venueA = uid(), todayJob = uid(), past0 = uid(), past1 = uid(), past2 = uid(), past3 = uid();
+  // worked days for the hours chart: [booking, days ago, start h, end h, break min]
+  const shift = (bid, ago, sh, eh, bm) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ago, sh, 0); const start = x.getTime(); return { id: uid(), bookingId: bid, date: iso(-ago), start, end: start + (eh - sh) * 36e5, breaks: bm ? [{ start: start + 4 * 36e5, end: start + 4 * 36e5 + bm * 6e4 }] : [], updatedAt: start }; };
   const g = (name, category, value, serial = '', qty = 1) => ({ id: uid(), name, category, value, serial, qty, notes: '' });
   const gear = [
     g('Sony FX6 body', 'Camera', 6000, 'FX6-120934'), g('Sony FE 24-70mm f/2.8 GM II', 'Lens', 2300),
@@ -150,12 +153,17 @@ export function loadSample() {
       { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', date: iso(2), start: '07:30', end: '17:00', status: 'Confirmed', venueId: venueA, address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id], gearQty: { [gear[4].id]: 2 }, notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
       { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', date: iso(2), start: '19:00', end: '21:00', status: 'Enquiry', address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[4].id, gear[5].id], gearQty: { [gear[4].id]: 2 }, notes: '' },
       { id: uid(), title: 'Wedding weekend', client: 'Lee & Marcus', date: iso(9), endDate: iso(11), start: '10:00', end: '22:00', status: 'Confirmed', address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
-      { id: uid(), title: 'Product shots', client: 'Kiln & Co', date: iso(-4), start: '09:00', end: '15:00', status: 'Delivered', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
+      { id: todayJob, title: 'Location recce — Elm Hall', client: 'Lee & Marcus', date: iso(0), start: '10:00', end: '14:00', status: 'Confirmed', address: 'Elm Hall Gardens', breakMinutes: 30, breakNote: '30 min lunch', stakeholders: [], crew: [], gear: [gear[0].id, gear[2].id], notes: 'Walk the ceremony route and check power at the marquee.' },
+      { id: past1, title: 'Corporate headshots', client: 'Northline Legal', date: iso(-12), start: '08:00', end: '17:00', status: 'Delivered', address: '88 King Street, Level 9', breakMinutes: 45, stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id, gear[4].id], gearQty: { [gear[4].id]: 2 }, notes: '' },
+      { id: past2, title: 'Festival highlights', client: 'Portside Council', date: iso(-20), endDate: iso(-19), start: '11:00', end: '23:00', status: 'Delivered', address: 'Harbour Green', breakMinutes: 60, stakeholders: [], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[8].id], notes: '' },
+      { id: past3, title: 'Real-estate walkthrough', client: 'Dockside Lettings', date: iso(-33), start: '09:00', end: '12:00', status: 'Delivered', address: '4 Quay Lane', breakMinutes: 15, stakeholders: [], crew: [], gear: [gear[0].id, gear[8].id], notes: '' },
+      { id: past0, title: 'Product shots', client: 'Kiln & Co', date: iso(-4), start: '09:00', end: '15:00', status: 'Delivered', address: 'Studio B, Foundry Lane', stakeholders: [], crew: [crew[2].id], gear: [gear[0].id, gear[3].id], notes: '' },
     ],
     venues: [
       { id: venueA, name: 'Harbour Brewing Co. taproom', type: 'Retail / restaurant', address: '12 Dock Road, Portside', geo: { lat: 51.5033, lon: -0.1195 }, contact: 'Ana Ruiz', phone: '+1 555 0199', email: '', perms: { tripods: 'allowed', lighting: 'allowed', flash: 'ask', haze: 'no', drones: 'ask', generators: 'no', dollies: 'allowed', audio: 'allowed', pyro: 'no' }, rules: 'No filming of customers without a release.\nKeep the fire exit by the bar clear.\nStaff may ask you to pause during deliveries.', permit: 'Not needed', permitNotes: 'Certificate of public liability on file, minimum $2m.', access: 'Load-in 7am via the loading bay. Taproom opens at 12.', parking: 'Loading bay for 30 min, then street parking', power: 'Standard sockets, 2 x 16A at the bar', checked: iso(-20), notes: '' },
       { id: uid(), name: 'Northline Legal, level 9', type: 'Office / corporate', address: '88 King Street, Level 9', geo: { lat: 51.5136, lon: -0.0899 }, contact: 'Dee Okafor', phone: '+1 555 0144', email: 'dee@example.com', perms: { tripods: 'allowed', lighting: 'ask', flash: 'no', haze: 'no', drones: 'no', generators: 'no', dollies: 'ask', audio: 'ask', pyro: 'no' }, rules: 'Book the goods lift 48 hours ahead.\nNo equipment in the main lobby; use the service entrance.', permit: 'Required', permitNotes: 'Building manager needs your certificate 7 days ahead.', access: 'Service entrance on Mill Lane, from 6pm.', parking: 'Nearest car park is 5 min walk', power: '', checked: iso(-200), notes: '' },
     ],
+    shifts: [shift(past0, 4, 8, 16, 30), shift(past1, 12, 7, 18, 45), shift(past2, 20, 10, 24, 60), shift(past2, 19, 10, 22, 45), shift(past3, 33, 8, 13, 15), shift(past1, 26, 9, 19, 30), shift(past3, 40, 8, 17, 30), shift(past0, 47, 9, 18, 45), shift(past2, 54, 10, 21, 60), shift(past1, 61, 8, 16, 30), shift(past3, 68, 9, 14, 15), shift(past0, 75, 8, 19, 45)],
     kits: [
       { id: uid(), name: 'Interview set', description: 'Two-light sit-down interview, clean dialogue', gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id, gear[7].id], gearQty: { [gear[4].id]: 2 }, notes: 'Add a reflector and grey card.' },
       { id: uid(), name: 'Car photography / rolling shots', description: 'Static + moving car work, optional aerials', gear: [gear[0].id, gear[2].id, gear[8].id, gear[9].id], notes: 'Polariser, microfibre cloths, tow-rig permit if needed.' },
@@ -245,7 +253,7 @@ export function mergeDb(local, remote) {
   const dead = { ...local.deleted };
   for (const [id, t] of Object.entries(remote.deleted || {})) dead[id] = Math.max(dead[id] || 0, t);
   const out = { ...local, deleted: dead };
-  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues']) out[list] = mergeList(local[list], remote[list], dead, newer);
+  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts']) out[list] = mergeList(local[list], remote[list], dead, newer);
   out.logs = mergeList(local.logs, remote.logs, dead, (x, y) => mergeLog(x, y, dead));
   out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking

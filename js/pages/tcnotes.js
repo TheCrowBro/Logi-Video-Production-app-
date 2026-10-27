@@ -1,5 +1,5 @@
 // Timecode notes: sync the phone to the camera's timecode, then every note is stamped with the running TC.
-import { h, uid, sheet, toast, empty, fmtShort, todayISO, announce } from '../util.js';
+import { h, uid, sheet, toast, empty, fmtShort, todayISO, announce, nodes } from '../util.js';
 import { db, byId, upsert, remove, update, subscribe, mergeLog } from '../store.js';
 import * as store from '../store.js';
 import * as link from '../link.js';
@@ -623,14 +623,14 @@ function openLink(log) {
     body.replaceChildren();
     if (l.status === 'connected') {
       const off = l.offset == null ? null : l.offset;
-      body.append(
+      body.append(...nodes(
         h('div', { class: 'link-state pop-in', 'data-s': 'connected' }, `Linked to ${l.peer?.name || 'device'}`),
         h('p', { class: 'small muted', style: 'text-align:center' }, off == null ? 'Measuring clocks…' : `Clocks differ by ${(off / 1000).toFixed(3)} s (measured to ±${Math.ceil((l.rtt || 0) / 2)} ms); stamps are corrected automatically.`),
         h('p', { class: 'small muted' }, 'The open log, its sync, Roll/Cut and every note now stay identical on both devices while the link is up. Close the app on either side and the link drops; the cloud copy carries on.'),
-        h('button', { class: 'btn ghost', onclick: () => { link.unlink(); } }, 'Unlink'));
+        h('button', { class: 'btn ghost', onclick: () => { link.unlink(); } }, 'Unlink')));
       return;
     }
-    body.append(
+    body.append(...nodes(
       l.error && h('div', { class: 'warn' }, l.error),
       h('p', { class: 'small muted' }, 'Links this device directly to another one running Logi on the same Wi‑Fi or hotspot, with no account and no internet needed. One device shows a code, the other scans it, then they swap.'),
       state, codeBox,
@@ -638,7 +638,7 @@ function openLink(log) {
         h('button', { class: 'btn primary', onclick: flowShow }, 'Show a code'),
         h('button', { class: 'btn ghost', onclick: flowScan }, 'Scan a code')),
       l.status === 'offering' && !scan && h('p', { class: 'small muted' }, 'Code shown. Scan it with the other device, then tap “Next: scan the reply”.'),
-      l.status === 'answering' && h('p', { class: 'small muted' }, 'Waiting for the first device to scan the reply…'));
+      l.status === 'answering' && h('p', { class: 'small muted' }, 'Waiting for the first device to scan the reply…')));
   };
   draw();
   const unsub = link.onChange(l => { if (l.status === 'connected') { cleanup(); draw(); toast('Devices linked'); } else if (l.status === 'idle' && l.error) draw(); });
