@@ -94,7 +94,7 @@ function openStorage() {
         ? h('div', { class: 'stack' },
           h('p', { class: 'status-line', 'data-state': c.status }, `${a.label} — ${c.status}${c.error ? ' (' + c.error + ')' : ''}`),
           c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: run(store.reconnect) }, 'Reconnect'),
-          h('button', { class: 'btn ghost', onclick: run(() => store.sync(true)) }, 'Sync now'),
+          h('button', { class: 'btn ghost', onclick: run(() => store.sync({ ask: true })) }, 'Sync now'),
           h('button', { class: 'btn ghost', onclick: run(store.unlinkCloud) }, 'Unlink'))
         : h('div', { class: 'stack' },
           h('div', { class: 'provider' }, h('strong', null, 'Dropbox'),

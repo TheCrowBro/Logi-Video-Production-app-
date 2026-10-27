@@ -9,6 +9,7 @@ const blank = () => ({
   version: 1, updatedAt: 0,
   profile: { name: '', business: '', title: '', phone: '', email: '', website: '', location: '', currency: '$', bio: '' },
   bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [], logs: [],
+  deleted: {}, // id -> time deleted (tombstones, so a merge with an older copy doesn't bring records back)
 });
 
 function load() {
@@ -30,7 +31,8 @@ function normalise(raw) {
     insurance: Array.isArray(raw.insurance) ? raw.insurance : [],
     kits: Array.isArray(raw.kits) ? raw.kits : [],
     venues: Array.isArray(raw.venues) ? raw.venues : [],
-    logs: Array.isArray(raw.logs) ? raw.logs.map(l => ({ ...l, notes: Array.isArray(l.notes) ? l.notes : [] })) : [],
+    logs: Array.isArray(raw.logs) ? raw.logs.map(l => ({ ...l, notes: Array.isArray(l.notes) ? l.notes : [], scriptAt: Number(l.scriptAt) || (l.script ? Date.parse(l.script.imported) || 1 : 0) })) : [],
+    deleted: Object.fromEntries(Object.entries(raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {}).filter(([, t]) => Date.now() - t < 180 * 864e5)),
   };
 }
 
@@ -56,13 +58,15 @@ export function upsert(list, item) {
   update(d => {
     const arr = d[list];
     const i = arr.findIndex(x => x.id === item.id);
-    if (i >= 0) arr[i] = item; else arr.push({ ...item, id: item.id || uid() });
+    const stamped = { ...item, id: item.id || uid(), updatedAt: Date.now() };
+    if (i >= 0) arr[i] = stamped; else arr.push(stamped);
   });
 }
 
 export function remove(list, id) {
   update(d => {
     d[list] = d[list].filter(x => x.id !== id);
+    d.deleted[id] = Date.now();
     if (list === 'gear') { d.bookings.forEach(b => { b.gear = (b.gear || []).filter(g => g !== id); if (b.gearQty) delete b.gearQty[id]; }); d.kits.forEach(k => { if (k.gearQty) delete k.gearQty[id]; }); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
     if (list === 'bookings') d.logs.forEach(l => { if (l.bookingId === id) delete l.bookingId; });
     if (list === 'venues') d.bookings.forEach(b => { if (b.venueId === id) delete b.venueId; });
@@ -201,19 +205,58 @@ export async function initCloud() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden && cloud.adapter && cloud.status === 'synced') sync(); });
 }
 
-// Newest copy wins: pull the remote copy if it is newer, otherwise push local.
-export async function sync(ask = false) {
+/* --------------------------------- merging --------------------------------- */
+// Two devices may edit at once, so copies are merged record by record rather than one copy replacing the other.
+const ts = r => Number(r && r.updatedAt) || 0;
+const nts = n => Number(n && n.upd) || Date.parse(n && n.at) || 0;
+function mergeList(a, b, dead, mergeOne) {
+  const m = new Map(); a.forEach(x => m.set(x.id, x));
+  b.forEach(y => { const x = m.get(y.id); m.set(y.id, x ? mergeOne(x, y) : y); });
+  return [...m.values()].filter(x => !(dead[x.id] > (mergeOne === mergeNote ? nts(x) : ts(x))));
+}
+const newer = (x, y) => (ts(y) > ts(x) ? y : x);
+const mergeNote = (x, y) => (nts(y) > nts(x) ? y : x);
+// A log's settings (sync point, mode, script…) follow the newer copy; its notes are the union of both.
+export function mergeLog(a, b, globalDead = db.deleted) {
+  const base = newer(a, b), other = base === a ? b : a;
+  const dead = { ...globalDead }; // a log carries its own note tombstones so they travel with it
+  for (const src of [a.dead, b.dead]) for (const [id, t] of Object.entries(src || {})) dead[id] = Math.max(dead[id] || 0, t);
+  const notes = mergeList(base.notes || [], other.notes || [], dead, mergeNote);
+  const sa = Number(a.scriptAt) || 0, sb = Number(b.scriptAt) || 0;
+  const sWin = sb > sa ? b : a, sLose = sWin === a ? b : a;
+  const script = sWin.script !== undefined ? sWin.script : sLose.script; // undefined = not carried on the wire
+  const own = Object.fromEntries(Object.entries(dead).filter(([id]) => (a.dead && id in a.dead) || (b.dead && id in b.dead)));
+  return { ...base, notes, script: script === undefined ? null : script, scriptAt: Math.max(sa, sb), dead: own };
+}
+export function mergeDb(local, remote) {
+  const dead = { ...local.deleted };
+  for (const [id, t] of Object.entries(remote.deleted || {})) dead[id] = Math.max(dead[id] || 0, t);
+  const out = { ...local, deleted: dead };
+  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues']) out[list] = mergeList(local[list], remote[list], dead, newer);
+  out.logs = mergeList(local.logs, remote.logs, dead, (x, y) => mergeLog(x, y, dead));
+  out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
+  out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
+  return out;
+}
+
+// Merge the remote copy in, then push if anything here isn't in it yet. `quiet` skips the "Saving…" flicker (background polls).
+let syncing = false;
+export async function sync({ ask = false, quiet = false } = {}) {
   const a = cloud.adapter;
-  if (!a) return;
+  if (!a || syncing) return;
+  syncing = true;
   try {
     if (!(await a.ready(ask))) return setStatus('needs-permission');
-    setStatus('saving');
+    if (!quiet) setStatus('saving');
     const remote = await a.read();
-    if (remote && (remote.updatedAt || 0) > db.updatedAt) {
-      db = normalise(remote); persistLocal();
-      setStatus('synced');
-    } else await push();
+    if (!remote) return await push();
+    const merged = mergeDb(db, normalise(remote));
+    const localChanged = JSON.stringify(merged) !== JSON.stringify(db);
+    const remoteStale = JSON.stringify(merged) !== JSON.stringify(normalise(remote));
+    if (localChanged) { db = merged; persistLocal(); emit(); }
+    if (remoteStale) await push(); else setStatus('synced');
   } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
+  finally { syncing = false; }
 }
 
 async function push() {
@@ -232,13 +275,13 @@ function schedulePush() {
   timer = setTimeout(push, 800);
 }
 
-export const reconnect = () => sync(true);
+export const reconnect = () => sync({ ask: true });
 
 async function link(adapter, provider, handle) {
   cloud.adapter = adapter;
   lsSet('logi-provider', provider);
   if (handle) await kv('readwrite', s => s.put(handle, 'fileHandle'));
-  await sync(true);
+  await sync({ ask: true });
 }
 
 export async function createCloudFile() {

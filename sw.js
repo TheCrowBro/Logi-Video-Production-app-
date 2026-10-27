@@ -1,8 +1,8 @@
-const CACHE = 'logi-v7';
+const CACHE = 'logi-v8';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'js/install.js', 'vendor/qrcode.js',
   'js/app.js', 'js/util.js', 'js/store.js', 'js/a11y.js', 'js/providers.js', 'js/rolodex.js', 'js/form.js', 'js/suncalc.js',
-  'js/pages/bookings.js', 'js/pages/crew.js', 'js/pages/gear.js', 'js/pages/venues.js', 'js/map.js', 'js/pages/tcnotes.js', 'js/timecode.js', 'js/docx.js', 'js/pages/insurance.js',
+  'js/pages/bookings.js', 'js/pages/crew.js', 'js/pages/gear.js', 'js/pages/venues.js', 'js/map.js', 'js/pages/tcnotes.js', 'js/timecode.js', 'js/docx.js', 'js/link.js', 'js/qr.js', 'vendor/jsQR.js', 'js/pages/insurance.js',
   'js/pages/me.js', 'js/pages/field.js',
 ];
 self.addEventListener('install', e => {

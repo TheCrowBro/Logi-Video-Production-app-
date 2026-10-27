@@ -2,12 +2,7 @@ import { h, safeUrl, telUrl, toast } from '../util.js';
 import { db, update } from '../store.js';
 import { openForm } from '../form.js';
 
-let qrLib;
-async function loadQR() {
-  if (qrLib) return qrLib;
-  await new Promise((res, rej) => document.head.append(h('script', { src: 'vendor/qrcode.js', onload: res, onerror: rej })));
-  return (qrLib = window.qrcode);
-}
+import { loadQR } from '../qr.js';
 
 const esc = s => String(s || '').replace(/([\;,])/g, '\\$1').replace(/\n/g, '\\n');
 
@@ -44,7 +39,7 @@ function edit() {
       { key: 'currency', label: 'Currency symbol', hint: 'Used for gear value and insurance totals.' },
       { key: 'bio', label: 'Short bio', type: 'textarea' },
     ],
-    onSave: v => update(d => { d.profile = { ...d.profile, ...v }; }),
+    onSave: v => update(d => { d.profile = { ...d.profile, ...v, updatedAt: Date.now() }; }),
   });
 }
 

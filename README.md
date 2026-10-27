@@ -51,7 +51,7 @@ All data is one JSON document, kept on the device and mirrored to **one** storag
 | **File in a synced folder** | Chrome/Edge/Android | Pick a file inside any Drive/Dropbox/OneDrive/iCloud folder. |
 | **Export / Import** | everywhere | Manual backup (Share → Save to Files). |
 
-Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can return to the app. The keys/IDs are public identifiers, not secrets; they and the sign-in tokens are stored only in this browser. Sync is whole-file last-writer-wins, so avoid editing on two devices at once while offline.
+Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can return to the app. The keys/IDs are public identifiers, not secrets; they and the sign-in tokens are stored only in this browser. Copies are merged record by record (see Timecode notes below), so editing on two devices is safe; a record edited on both within the same few seconds keeps the later edit.
 
 ## Timecode notes
 
@@ -60,6 +60,8 @@ Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can ret
 - The sync moment is the instant you tap Sync (typed) or Scan (camera); a slow OCR read doesn't put you out. Re-sync if the camera's clock is reset.
 - Camera scanning uses Tesseract OCR loaded from a CDN on first use (needs a connection once; the reader is then cached by the browser). Glare, tilt and tiny displays defeat it — typing the value is always available.
 - **Script marking**: add the script to a log (Script tab) from a Word .docx, a .txt/Fountain file, pasted text, or — on Android — by sharing the file straight to Logi from Google Docs (⋮ → Share & export → Send a copy → Word). Google Docs can't be read directly by an app, so on iPhone download it as Word or copy-paste. Tap a line to select it, or press and hold to select words, then **Mark** (or **Mark + note**): the note is stamped with the camera timecode and pinned to that line, shown as a highlight with a timecode badge, like a lined script. Notes list the quoted line and jump back to it; exports include it.
+- **Two devices at once (phone + laptop)**: tap **🔗 Link device** in TC Notes on both. One shows a code, the other scans it (or paste the code), then they swap. The link is direct between the two devices over the same Wi‑Fi or hotspot — no account, no internet needed — and while it is up the open log, its sync point, Roll/Cut and every note stay identical on both, within a fraction of a second. The two clocks are measured against each other (NTP-style, usually to a few ms) so stamps made on either device agree; a sync made on a device whose clock hasn't been measured shows a warning and may be a second out. Closing the app on either side drops the link; re-link with a fresh code.
+- **Cloud copies merge** rather than overwrite: records are merged one by one (newest edit wins per record, notes are combined, deletions are remembered), so two devices editing at the same time don't lose each other's work. While TC Notes is open the cloud copy is also re-read every few seconds, so notes from another device arrive even without a direct link (subject to the cloud service's own delay).
 - Phone clocks drift about a second a day against a camera's crystal, so re-sync on long days.
 
 ## Field-tool accuracy
@@ -81,10 +83,12 @@ js/suncalc.js    sun + Polaris maths
 js/pages/*.js    one file per section
 js/map.js        map preview, directions links, address lookup
 js/install.js    install prompt / Add-to-Home-Screen help
+js/link.js       direct device-to-device link (WebRTC), clock offset measurement
+js/qr.js         QR generate / camera decode
 .github/workflows/pages.yml  deploy to GitHub Pages
 js/timecode.js   SMPTE timecode maths (drop-frame aware)
 js/docx.js       .docx reader (no library) and script line classification
-vendor/qrcode.js qrcode-generator (MIT)
+vendor/qrcode.js qrcode-generator (MIT); vendor/jsQR.js jsQR (Apache-2.0)
 ```
 
 ## Accessibility

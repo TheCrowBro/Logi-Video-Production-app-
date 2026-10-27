@@ -1,6 +1,9 @@
 // Timecode notes: sync the phone to the camera's timecode, then every note is stamped with the running TC.
 import { h, uid, sheet, toast, empty, fmtShort, todayISO, announce } from '../util.js';
-import { db, byId, upsert, remove, update, subscribe } from '../store.js';
+import { db, byId, upsert, remove, update, subscribe, mergeLog } from '../store.js';
+import * as store from '../store.js';
+import * as link from '../link.js';
+import { qrSvg, scanner } from '../qr.js';
 import { openForm } from '../form.js';
 import { RATES, rate, framesToTc, tcToFrames, tcAt, framesAt, durationText } from '../timecode.js';
 import { haptic } from '../a11y.js';
@@ -14,8 +17,8 @@ try { S.id = localStorage.getItem('logi-tclog') || null; } catch { /* ignore */ 
 const current = () => (S.id && byId('logs', S.id)) || null;
 const MODES = [['free', 'Free run (camera clock always counts)'], ['record', 'Record run (counts only while recording)']];
 const settings = log => ({ r: rate(log.rate), sync: log.sync || null, record: log.mode === 'record' });
-const nowTc = log => { const { r, sync } = settings(log); return sync ? tcAt(sync, r) : null; };
-const nowFrames = log => { const { r, sync } = settings(log); return sync ? framesAt(sync, r) : null; };
+const nowTc = log => { const { r, sync } = settings(log); return sync ? tcAt(sync, r, link.nowOn(sync.dev)) : null; };
+const nowFrames = log => { const { r, sync } = settings(log); return sync ? framesAt(sync, r, link.nowOn(sync.dev)) : null; };
 const fmt = (frames, log) => framesToTc(frames, rate(log.rate));
 
 function newLog() {
@@ -59,7 +62,7 @@ function editLog(log) {
       v.autoTakes = v.autoTakes !== 'no';
       if (v.mode !== (log.mode || 'free') && v.sync) { // carry the value shown right now into the new mode
         const now = Date.now();
-        v.sync = { ...v.sync, frames: framesAt(v.sync, rate(v.rate), now), ms: now, rolling: v.mode === 'free' };
+        v.sync = { ...v.sync, frames: framesAt(v.sync, rate(v.rate), link.nowOn(v.sync.dev)), ms: now, dev: link.me.id, rolling: v.mode === 'free' };
       }
       if (!v.bookingId) delete v.bookingId;
       upsert('logs', v);
@@ -87,7 +90,7 @@ function openSync(log) {
   });
   const applySync = (frames, ms, how) => {
     const rolling = record ? rollingBox.checked : true;
-    upsert('logs', { ...byId('logs', log.id), sync: { frames, ms, how, rolling, at: new Date().toISOString() }, rate: log.rate });
+    upsert('logs', { ...byId('logs', log.id), sync: { frames, ms, how, rolling, dev: link.me.id, at: new Date().toISOString() }, rate: log.rate });
     haptic(30); toast('Synced to ' + framesToTc(frames, r)); announce('Timecode synced'); closeSheet();
   };
   const syncNow = () => {
@@ -219,14 +222,18 @@ export const tcnotes = {
     S.redraw = draw;
     const onWide = () => draw();
     WIDE.addEventListener('change', onWide);
+    const unlink = link.onChange(() => draw());
+    const poll = setInterval(() => { if (!document.hidden && current()) store.sync({ quiet: true }); }, 8000); // other devices' notes via the cloud copy
     draw();
-    return () => { stop(); unsub(); WIDE.removeEventListener('change', onWide); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null; };
+    return () => { stop(); unsub(); unlink(); clearInterval(poll); WIDE.removeEventListener('change', onWide); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null; };
   },
 };
 function picker() {
   const logs = [...db.logs].sort((a, b) => (b.created || '').localeCompare(a.created || ''));
   return h('div', null,
-    h('div', { class: 'page-head' }, h('h1', null, 'Timecode notes'), h('button', { class: 'btn primary', onclick: newLog }, '+ New log')),
+    h('div', { class: 'page-head' }, h('h1', null, 'Timecode notes'), h('div', { class: 'actions' },
+      h('button', { class: 'btn ghost' + (link.link.status === 'connected' ? ' linked-pill' : ''), onclick: () => openLink(null) }, link.link.status === 'connected' ? `🔗 ${link.link.peer?.name || 'Linked'}` : '🔗 Link device'),
+      h('button', { class: 'btn primary', onclick: newLog }, '+ New log'))),
     h('p', { class: 'muted small' }, 'Sync the phone to your camera’s timecode once, then every note you jot down is stamped with the camera’s timecode for the edit.'),
     S.shared && h('div', { class: 'warn' }, `“${S.shared.name}” is ready to add as a script. Open or create a log to attach it.`),
     logs.length
@@ -246,6 +253,9 @@ function logView(log, setTimer) {
     : record
       ? `${r.label} · record run · ${rolling ? `recording take ${log.take || 1} since ${when(sync.ms)}` : `camera stopped, holding since ${when(sync.ms)}`}`
       : `${r.label} · free run · synced ${sync.how === 'camera' ? 'by camera scan' : 'by hand'} at ${when(sync.ms)}`);
+  const clockNote = sync && sync.dev && sync.dev !== link.me.id && !link.clockOffset(sync.dev) && h('div', { class: 'warn small' }, '⚠ Synced on another device whose clock hasn’t been measured against this one. Link the devices for frame-accurate stamps; until then they may be a second or so out.');
+  const peerLog = link.link.status === 'connected' && S.peerLog && S.peerLog !== log.id && byId('logs', S.peerLog);
+  const follow = peerLog && h('div', { class: 'warn small card-row' }, h('span', null, `${link.link.peer?.name || 'The linked device'} is on “${peerLog.title}”.`), h('button', { class: 'btn ghost small', onclick: () => { S.id = peerLog.id; S.peerLog = null; S.view = 'notes'; try { localStorage.setItem('logi-tclog', peerLog.id); } catch { /* ignore */ } S.redraw(); } }, 'Follow'));
   const rollCut = record && h('div', { class: 'rollcut' },
     rolling
       ? h('button', { class: 'btn rec-btn cut', onclick: () => cut(log), 'aria-label': 'Cut: stop the timecode count' }, '■ Cut')
@@ -279,11 +289,13 @@ function logView(log, setTimer) {
   return h('div', null,
     h('div', { class: 'page-head' },
       h('button', { class: 'btn ghost small', onclick: () => { S.id = null; S.target = null; try { localStorage.removeItem('logi-tclog'); } catch { /* ignore */ } S.redraw(); } }, '‹ Logs'),
-      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openExport(log) }, 'Export'), h('button', { class: 'icon-btn', 'aria-label': 'Log settings', onclick: () => editLog(log) }, '⚙'))),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn ghost small' + (link.link.status === 'connected' ? ' linked-pill' : ''), onclick: () => openLink(log) }, link.link.status === 'connected' ? `🔗 ${link.link.peer?.name || 'Linked'}` : '🔗 Link device'),
+        h('button', { class: 'btn ghost small', onclick: () => openExport(log) }, 'Export'), h('button', { class: 'icon-btn', 'aria-label': 'Log settings', onclick: () => editLog(log) }, '⚙'))),
     h('div', { class: 'card tc-head' },
       h('div', { class: 'card-row' }, h('div', { class: 'grow' }, h('h2', null, log.title), h('div', { class: 'muted small' }, [log.camera, log.bookingId && byId('bookings', log.bookingId)?.title].filter(Boolean).join(' · '))),
         h('button', { class: 'btn ' + (sync ? 'ghost' : 'primary'), onclick: () => openSync(log) }, sync ? 'Re-sync' : 'Sync')),
-      clock, status, rollCut),
+      follow, clock, status, clockNote, rollCut),
     !WIDE.matches && h('div', { class: 'seg wide tc-views', role: 'tablist' },
       h('button', { role: 'tab', class: S.view !== 'script' ? 'on' : '', 'aria-selected': S.view !== 'script', onclick: () => { S.view = 'notes'; S.redraw(); } }, `Notes (${log.notes.length})`),
       h('button', { role: 'tab', class: S.view === 'script' ? 'on' : '', 'aria-selected': S.view === 'script', onclick: () => { S.view = 'script'; S.redraw(); } }, log.script ? `Script (${log.notes.filter(n => n.para).length} marks)` : 'Script')),
@@ -307,41 +319,42 @@ function roll(log) {
   const take = (l.take || 0) + 1, ms = Date.now();
   update(d => {
     const x = d.logs.find(y => y.id === log.id);
-    x.sync = { ...x.sync, ms, rolling: true }; x.take = take;
+    x.sync = { ...x.sync, ms, dev: link.me.id, rolling: true }; x.take = take; x.updatedAt = ms;
     if (x.autoTakes !== false) x.notes.push({ id: uid(), frames: x.sync.frames, text: `▶ Take ${take}`, at: new Date().toISOString(), kind: 'roll', take });
   });
   haptic(20); announce(`Rolling, take ${take}`);
 }
 function cut(log) {
   const l = byId('logs', log.id); if (!l || !l.sync) return;
-  const { r } = settings(l), ms = Date.now(), frames = framesAt(l.sync, r, ms), len = frames - l.sync.frames;
+  const { r } = settings(l), ms = Date.now(), frames = framesAt(l.sync, r, link.nowOn(l.sync.dev)), len = frames - l.sync.frames;
   update(d => {
     const x = d.logs.find(y => y.id === log.id);
-    x.sync = { ...x.sync, frames, ms, rolling: false };
+    x.sync = { ...x.sync, frames, ms, dev: link.me.id, rolling: false }; x.updatedAt = ms;
     const start = x.notes.find(n => n.kind === 'roll' && n.take === x.take);
-    if (start) start.dur = durationText(len, r);
+    if (start) { start.dur = durationText(len, r); start.upd = ms; }
   });
   haptic(20); announce(`Cut. Take ${l.take} was ${durationText(len, r)}`);
 }
 
 function pushNote(log, note) { update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes.push(note); }); }
+function deleteNote(log, n) { update(d => { const l = d.logs.find(x => x.id === log.id); if (l) { l.notes = l.notes.filter(x => x.id !== n.id); l.dead = { ...(l.dead || {}), [n.id]: Date.now() }; } d.deleted[n.id] = Date.now(); }); }
 
 function noteRow(log, n) {
   const text = h('div', { class: 'tc-text' + (n.text ? '' : ' muted'), contentEditable: 'plaintext-only', spellcheck: true, 'aria-label': 'Note text', role: 'textbox' }, n.text || 'Tap to add text…');
   text.addEventListener('focus', () => { if (!n.text) text.textContent = ''; });
-  text.addEventListener('blur', () => { const v = text.textContent.trim(); if (v !== (n.text || '')) update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.text = v; }); });
+  text.addEventListener('blur', () => { const v = text.textContent.trim(); if (v !== (n.text || '')) update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) { m.text = v; m.upd = Date.now(); } }); });
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } });
   const tc = h('button', { class: 'tc-mono tc-badge', type: 'button', title: 'Edit timecode', onclick: () => editStamp(log, n) }, n.frames == null ? 'unsynced' : fmt(n.frames, log));
   const quote = n.quote && h('button', { class: 'tc-quote', type: 'button', onclick: () => jumpTo(log, n), 'aria-label': 'Show this line in the script' }, n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`, n.para && ' ↗');
-  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') }, tc, h('div', { class: 'tc-body' }, quote, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes = l.notes.filter(x => x.id !== n.id); }) }, '✕'));
+  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') }, tc, h('div', { class: 'tc-body' }, quote, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => deleteNote(log, n) }, '✕'));
 }
 
 function editStamp(log, n) {
   const r = rate(log.rate);
   const input = h('input', { type: 'text', inputMode: 'numeric', class: 'tc-input', value: n.frames == null ? '' : fmt(n.frames, log), 'aria-label': 'Timecode' });
   const { close } = sheet('Edit timecode', h('div', { class: 'stack' }, input,
-    h('div', { class: 'form-actions' }, h('button', { class: 'btn ghost', onclick: () => { update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.frames = nowFrames(log); }); close(); } }, 'Stamp now'), h('span', { class: 'spacer' }),
-      h('button', { class: 'btn primary', onclick: () => { const f = tcToFrames(input.value, r); if (f == null) return toast('Not a valid timecode for ' + r.label); update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.frames = f; }); close(); } }, 'Save'))));
+    h('div', { class: 'form-actions' }, h('button', { class: 'btn ghost', onclick: () => { update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) { m.frames = nowFrames(log); m.upd = Date.now(); } }); close(); } }, 'Stamp now'), h('span', { class: 'spacer' }),
+      h('button', { class: 'btn primary', onclick: () => { const f = tcToFrames(input.value, r); if (f == null) return toast('Not a valid timecode for ' + r.label); update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) { m.frames = f; m.upd = Date.now(); } }); close(); } }, 'Save'))));
   setTimeout(() => input.focus(), 50);
 }
 
@@ -353,7 +366,7 @@ const quoteOf = (p, start, end) => { const t = (start != null ? p.text.slice(sta
 function setScript(log, script) {
   update(d => {
     const l = d.logs.find(x => x.id === log.id); if (!l) return;
-    l.script = script;
+    l.script = script; l.updatedAt = l.scriptAt = Date.now();
     l.notes.forEach(n => { if (n.para && !(script && script.paras.some(p => p.id === n.para))) { n.para = null; delete n.start; delete n.end; } });
   });
 }
@@ -525,8 +538,110 @@ function editNote(log, n) {
       n.quote && h('span', { class: 'muted small grow' }, n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`)),
     ta,
     h('div', { class: 'form-actions' },
-      h('button', { class: 'btn danger', onclick: () => { close(); update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes = l.notes.filter(x => x.id !== n.id); }); } }, 'Delete'),
+      h('button', { class: 'btn danger', onclick: () => { close(); deleteNote(log, n); } }, 'Delete'),
       h('span', { class: 'spacer' }), h('button', { class: 'btn ghost', onclick: () => close() }, 'Cancel'),
-      h('button', { class: 'btn primary', onclick: () => { const v = ta.value.trim(); close(); update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.text = v; }); } }, 'Save'))), { dismissOnBackdrop: false });
+      h('button', { class: 'btn primary', onclick: () => { const v = ta.value.trim(); close(); update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) { m.text = v; m.upd = Date.now(); } }); } }, 'Save'))), { dismissOnBackdrop: false });
   setTimeout(() => ta.focus(), 50);
+}
+
+/* ------------------------------ device link ------------------------------ */
+// While linked, the open log is kept identical on both devices: every change is sent, the receiver merges.
+const wire = log => { const { script, ...rest } = log; return { ...rest, scriptRev: script ? script.imported || 'x' : null }; };
+let lastSent = '';
+function maybeSend() {
+  const log = current();
+  if (!log || link.link.status !== 'connected') return;
+  const w = JSON.stringify(wire(log));
+  if (w === lastSent) return;
+  lastSent = w; link.send({ t: 'log', log: wire(log) });
+}
+subscribe(maybeSend);
+link.onChange(l => { if (l.status === 'connected') { lastSent = ''; maybeSend(); } });
+link.onMessage(m => {
+  if (m.t === 'log') {
+    const inc = m.log, mine = byId('logs', inc.id);
+    if (db.deleted[inc.id] > (Number(inc.updatedAt) || 0)) return; // deleted here on purpose
+    const { scriptRev, ...rest } = inc;
+    const merged = mine ? mergeLog(mine, { ...rest, script: undefined }) : { ...rest, script: null };
+    const theirScriptWins = !mine || (Number(inc.scriptAt) || 0) > (Number(mine.scriptAt) || 0);
+    if (theirScriptWins) {
+      if (scriptRev == null) merged.script = null;
+      else if (!merged.script || (merged.script.imported || 'x') !== scriptRev) link.send({ t: 'script?', id: inc.id });
+    }
+    if (!mine) {
+      update(d => { d.logs.push(merged); });
+      const cur = current(), fresh = !cur || (!cur.notes.length && !cur.sync);
+      if (fresh) { S.id = merged.id; S.view = 'notes'; S.peerLog = null; try { localStorage.setItem('logi-tclog', merged.id); } catch { /* ignore */ } S.redraw(); toast(`Following “${merged.title}” from ${link.link.peer?.name || 'the linked device'}`); }
+      else { S.peerLog = merged.id; S.redraw(); }
+      return;
+    }
+    if (JSON.stringify(merged) !== JSON.stringify(mine)) update(d => { const i = d.logs.findIndex(x => x.id === inc.id); if (i >= 0) d.logs[i] = merged; });
+    if (current() && current().id !== inc.id && S.peerLog !== inc.id) { S.peerLog = inc.id; S.redraw(); }
+  } else if (m.t === 'script?') {
+    const l = byId('logs', m.id); if (l) link.send({ t: 'script', id: m.id, script: l.script || null });
+  } else if (m.t === 'script') {
+    update(d => { const l = d.logs.find(x => x.id === m.id); if (l) l.script = m.script; });
+  }
+});
+
+function openLink(log) {
+  const body = h('div', { class: 'stack' });
+  let scan = null, myCode = '', closeSheet = () => {};
+  const cleanup = () => { scan && scan.stop(); scan = null; };
+  const state = h('div', { class: 'link-state' });
+  const codeBox = h('div', { class: 'stack' });
+  const pasteBox = (label, onCode) => {
+    const ta = h('textarea', { rows: 2, placeholder: 'LOGI…', 'aria-label': label, spellcheck: false });
+    return h('div', { class: 'stack' }, ta, h('button', { class: 'btn ghost small', onclick: () => onCode(ta.value) }, label));
+  };
+  const showCode = async code => {
+    myCode = code;
+    codeBox.replaceChildren(
+      h('div', { class: 'link-code', html: await qrSvg(code), role: 'img', 'aria-label': 'Link code as a QR code' }),
+      h('div', { class: 'link-text' }, code),
+      h('div', { class: 'actions center' }, h('button', { class: 'btn ghost small', onclick: async () => { try { await navigator.clipboard.writeText(code); toast('Copied'); } catch { toast('Select the code and copy it'); } } }, 'Copy code')));
+  };
+  const fail = e => { toast(e.message || String(e)); };
+  const startScan = (kind, onCode, hint) => {
+    cleanup();
+    scan = scanner(async code => { try { await onCode(code); } catch (e) { fail(e); draw(); } }, { hint });
+    codeBox.replaceChildren(scan.el, pasteBox('Use pasted code', async c => { try { await onCode(c); } catch (e) { fail(e); } }));
+  };
+
+  // Flows: A shows a code → B scans it and shows a reply → A scans the reply.
+  const flowShow = async () => {
+    try { state.textContent = 'Preparing code…'; await showCode(await link.createOffer()); state.textContent = 'Step 1 of 2: on the other device tap Link device → Scan a code, and scan this.'; 
+      codeBox.append(h('button', { class: 'btn primary', onclick: () => { state.textContent = 'Step 2 of 2: scan the reply code the other device is showing.'; startScan('A', async c => { await link.acceptAnswer(c); state.textContent = 'Connecting…'; }, 'Scan the reply code'); } }, 'Next: scan the reply'));
+    } catch (e) { fail(e); }
+  };
+  const flowScan = () => {
+    state.textContent = 'Scan the code shown on the first device.';
+    startScan('O', async c => { state.textContent = 'Preparing reply…'; await showCode(await link.acceptOffer(c)); state.textContent = 'Now scan this reply code with the first device (Next: scan the reply).'; }, 'Scan the first device’s code');
+  };
+  const draw = () => {
+    const l = link.link;
+    body.replaceChildren();
+    if (l.status === 'connected') {
+      const off = l.offset == null ? null : l.offset;
+      body.append(
+        h('div', { class: 'link-state', 'data-s': 'connected' }, `Linked to ${l.peer?.name || 'device'}`),
+        h('p', { class: 'small muted', style: 'text-align:center' }, off == null ? 'Measuring clocks…' : `Clocks differ by ${(off / 1000).toFixed(3)} s (measured to ±${Math.ceil((l.rtt || 0) / 2)} ms); stamps are corrected automatically.`),
+        h('p', { class: 'small muted' }, 'The open log, its sync, Roll/Cut and every note now stay identical on both devices while the link is up. Close the app on either side and the link drops; the cloud copy carries on.'),
+        h('button', { class: 'btn ghost', onclick: () => { link.unlink(); } }, 'Unlink'));
+      return;
+    }
+    body.append(
+      l.error && h('div', { class: 'warn' }, l.error),
+      h('p', { class: 'small muted' }, 'Links this device directly to another one running Logi on the same Wi‑Fi or hotspot, with no account and no internet needed. One device shows a code, the other scans it, then they swap.'),
+      state, codeBox,
+      l.status === 'idle' && h('div', { class: 'actions center' },
+        h('button', { class: 'btn primary', onclick: flowShow }, 'Show a code'),
+        h('button', { class: 'btn ghost', onclick: flowScan }, 'Scan a code')),
+      l.status === 'offering' && !scan && h('p', { class: 'small muted' }, 'Code shown. Scan it with the other device, then tap “Next: scan the reply”.'),
+      l.status === 'answering' && h('p', { class: 'small muted' }, 'Waiting for the first device to scan the reply…'));
+  };
+  draw();
+  const unsub = link.onChange(l => { if (l.status === 'connected') { cleanup(); draw(); toast('Devices linked'); } else if (l.status === 'idle' && l.error) draw(); });
+  const sh = sheet('Link another device', body, { dismissOnBackdrop: false, onClose: () => { cleanup(); unsub(); } });
+  closeSheet = sh.close;
 }
