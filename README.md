@@ -10,7 +10,7 @@ An installable (PWA) app for freelance videographers and small video businesses.
 | 4 | **Venues** | Saved places with a map pin, directions (Google / Apple Maps), contact, access and parking notes, a rules list (tripods, lighting, haze, drones, generators… each *allowed / needs approval / not allowed*), permit and insurance requirements, and a "rules last confirmed" date. Choose a venue on a booking and the app warns if your booked gear breaks its rules. |
 | 5 | **Insurance** | Policies, claims lines, renewal countdown, and a warning if equipment cover is below the value of your logged kit. |
 | 6 | **Me** | Your details, a **QR code** (vCard contact card, or a link to your website), share as `.vcf`. |
-| 7 | **Field** | Sun planner (rise/set, golden & blue hour, bearings, time scrubber), Polaris finder, white-balance reader (camera), noise meter (microphone). |
+| 7 | **Field** | Sun planner (rise/set, golden & blue hour, bearings, time scrubber), Polaris finder, white-balance reader (camera), noise meter (microphone), range finder (AR on Android/ARCore phones; tilt method on any phone). |
 
 | 8 | **TC Notes** | Timecode-stamped shoot notes. Pick the camera's frame rate (23.976, 24, 25, 29.97 NDF/DF, 30, 50, 59.94 NDF/DF, 60), free-run or record-run mode, sync once by typing the camera's timecode or scanning its display with the phone camera, then every note is stamped with the running camera timecode the moment you start typing. "Mark now" drops a stamp to fill in later. Export as .txt or .csv for the edit. |
 
@@ -68,6 +68,7 @@ Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can ret
 
 - **Sun / Polaris** use standard astronomical formulas (checked against known solstice values). Times display in the device's time zone. Compass aiming uses the phone's magnetic compass; enter your local declination for true north.
 - **White balance**: phones auto-correct colour, so the reading is only a true Kelvin value on devices that let the app lock white balance (some Android Chrome builds). Otherwise it's a rough indication — a grey card and your camera's own WB are the reference.
+- **Range finder**: not every phone can measure distance. *AR measure* uses WebXR hit-testing and needs an Android phone with ARCore in Chrome; iPhones can't do it in a browser. The *tilt method* works on any phone with a motion sensor: enter the camera height, aim at where the subject meets the ground, and distance = height ÷ tan(tilt); aim at the top for the subject's height. Expect about ±10% on level ground.
 - **Noise**: phone mics aren't calibrated. Match the offset once against a reference meter; treat results as an estimate.
 
 ## Layout
@@ -85,11 +86,18 @@ js/map.js        map preview, directions links, address lookup
 js/install.js    install prompt / Add-to-Home-Screen help
 js/link.js       direct device-to-device link (WebRTC), clock offset measurement
 js/qr.js         QR generate / camera decode
+js/range.js      range finder (WebXR hit-test + tilt method)
+js/tour.js       first-run spotlight walkthrough
 .github/workflows/pages.yml  deploy to GitHub Pages
 js/timecode.js   SMPTE timecode maths (drop-frame aware)
 js/docx.js       .docx reader (no library) and script line classification
 vendor/qrcode.js qrcode-generator (MIT); vendor/jsQR.js jsQR (Apache-2.0)
 ```
+
+## Tour and motion
+
+- A short spotlight walkthrough runs on first launch and can be replayed from **Aa → Take the tour again**.
+- Animation has three settings under **Aa**: *Rolodex + small touches* (default: the drum spins, pages fade in, buttons press, cards lift, new notes pop in, REC blinks softly, the tour spotlight glides), *Rolodex only*, and *None*. The phone's reduce-motion setting switches everything off regardless.
 
 ## Accessibility
 

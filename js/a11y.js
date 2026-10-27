@@ -1,5 +1,6 @@
 // Display & accessibility preferences, stored on this device only.
 import { h, sheet } from './util.js';
+import { startTour } from './tour.js';
 
 const KEY = 'logi-prefs';
 const DEFAULTS = { text: 'normal', contrast: 'normal', motion: 'soft', haptics: true, targets: 'normal' };
@@ -25,7 +26,7 @@ const GROUPS = [
   ['text', 'Text size', [['normal', 'Standard'], ['large', 'Large'], ['xlarge', 'Extra large']]],
   ['targets', 'Button size', [['normal', 'Standard'], ['large', 'Extra large']]],
   ['contrast', 'Contrast', [['normal', 'Standard'], ['high', 'High']]],
-  ['motion', 'Animation', [['soft', 'Rolodex + soft fade'], ['bar', 'Rolodex only'], ['off', 'None']]],
+  ['motion', 'Animation', [['soft', 'Rolodex + small touches'], ['bar', 'Rolodex only'], ['off', 'None']]],
   ['haptics', 'Vibration feedback', [[true, 'On'], [false, 'Off']]],
 ];
 
@@ -38,6 +39,8 @@ export function openDisplaySettings() {
       onclick: () => { prefs[key] = v; save(); haptic(); draw(); },
     }, l))))));
   draw();
-  body.append(h('p', { class: 'muted small' }, 'The spinning Rolodex and a soft fade on page content are the only animations. Choose None to stop both; they also stop if your phone is set to reduce motion. Layouts follow your phone’s font-size and contrast settings.'));
-  sheet('Display & accessibility', body);
+  body.append(
+    h('div', { class: 'pref' }, h('div', { class: 'pref-label' }, 'Help'), h('button', { class: 'btn ghost', onclick: () => { close(); setTimeout(() => startTour(), 150); } }, '🧭 Take the tour again')),
+    h('p', { class: 'muted small' }, '“Small touches” are short, gentle effects: buttons pressing, cards lifting, new notes popping in, the tour spotlight gliding. Nothing slides across the screen. Choose Rolodex only or None to stop them; everything also stops if your phone is set to reduce motion.'));
+  const { close } = sheet('Display & accessibility', body);
 }

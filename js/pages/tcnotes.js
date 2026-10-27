@@ -260,7 +260,7 @@ function logView(log, setTimer) {
     rolling
       ? h('button', { class: 'btn rec-btn cut', onclick: () => cut(log), 'aria-label': 'Cut: stop the timecode count' }, '■ Cut')
       : h('button', { class: 'btn rec-btn roll', disabled: !sync, onclick: () => roll(log), 'aria-label': 'Roll: start the timecode count' }, '● Roll'),
-    h('span', { class: 'pill ' + (rolling ? 'st-cancelled' : '') }, rolling ? 'REC' : 'STBY'),
+    h('span', { class: 'pill ' + (rolling ? 'st-cancelled rec' : '') }, rolling ? 'REC' : 'STBY'),
     !sync && h('span', { class: 'muted small' }, 'Sync first'));
   setTimer(setInterval(() => { if (sync && !document.hidden) clock.textContent = nowTc(log); }, 1000 / Math.min(r.nominal, 30)));
 
@@ -320,7 +320,7 @@ function roll(log) {
   update(d => {
     const x = d.logs.find(y => y.id === log.id);
     x.sync = { ...x.sync, ms, dev: link.me.id, rolling: true }; x.take = take; x.updatedAt = ms;
-    if (x.autoTakes !== false) x.notes.push({ id: uid(), frames: x.sync.frames, text: `▶ Take ${take}`, at: new Date().toISOString(), kind: 'roll', take });
+    if (x.autoTakes !== false) { const id = uid(); S.lastAdded = id; x.notes.push({ id, frames: x.sync.frames, text: `▶ Take ${take}`, at: new Date().toISOString(), kind: 'roll', take }); }
   });
   haptic(20); announce(`Rolling, take ${take}`);
 }
@@ -336,7 +336,7 @@ function cut(log) {
   haptic(20); announce(`Cut. Take ${l.take} was ${durationText(len, r)}`);
 }
 
-function pushNote(log, note) { update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes.push(note); }); }
+function pushNote(log, note) { S.lastAdded = note.id; update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes.push(note); }); }
 function deleteNote(log, n) { update(d => { const l = d.logs.find(x => x.id === log.id); if (l) { l.notes = l.notes.filter(x => x.id !== n.id); l.dead = { ...(l.dead || {}), [n.id]: Date.now() }; } d.deleted[n.id] = Date.now(); }); }
 
 function noteRow(log, n) {
@@ -346,7 +346,7 @@ function noteRow(log, n) {
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } });
   const tc = h('button', { class: 'tc-mono tc-badge', type: 'button', title: 'Edit timecode', onclick: () => editStamp(log, n) }, n.frames == null ? 'unsynced' : fmt(n.frames, log));
   const quote = n.quote && h('button', { class: 'tc-quote', type: 'button', onclick: () => jumpTo(log, n), 'aria-label': 'Show this line in the script' }, n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`, n.para && ' ↗');
-  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') }, tc, h('div', { class: 'tc-body' }, quote, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => deleteNote(log, n) }, '✕'));
+  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') + (n.id === S.lastAdded ? ' pop-in' : '') }, tc, h('div', { class: 'tc-body' }, quote, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => deleteNote(log, n) }, '✕'));
 }
 
 function editStamp(log, n) {
@@ -487,7 +487,7 @@ function segments(log, p, ranged) {
   return out;
 }
 
-const badge = (log, n) => h('button', { class: 'sc-badge tc-mono', type: 'button', title: n.text || 'Timecode mark', 'aria-label': `Mark at ${n.frames == null ? 'unsynced' : fmt(n.frames, log)}${n.text ? ': ' + n.text : ''}`, onclick: () => editNote(log, n) }, n.frames == null ? '--' : fmt(n.frames, log));
+const badge = (log, n) => h('button', { class: 'sc-badge tc-mono' + (n.id === S.lastAdded ? ' pop-in' : ''), type: 'button', title: n.text || 'Timecode mark', 'aria-label': `Mark at ${n.frames == null ? 'unsynced' : fmt(n.frames, log)}${n.text ? ': ' + n.text : ''}`, onclick: () => editNote(log, n) }, n.frames == null ? '--' : fmt(n.frames, log));
 
 function actionBar(log) {
   const { sync } = settings(log);
@@ -624,7 +624,7 @@ function openLink(log) {
     if (l.status === 'connected') {
       const off = l.offset == null ? null : l.offset;
       body.append(
-        h('div', { class: 'link-state', 'data-s': 'connected' }, `Linked to ${l.peer?.name || 'device'}`),
+        h('div', { class: 'link-state pop-in', 'data-s': 'connected' }, `Linked to ${l.peer?.name || 'device'}`),
         h('p', { class: 'small muted', style: 'text-align:center' }, off == null ? 'Measuring clocks…' : `Clocks differ by ${(off / 1000).toFixed(3)} s (measured to ±${Math.ceil((l.rtt || 0) / 2)} ms); stamps are corrected automatically.`),
         h('p', { class: 'small muted' }, 'The open log, its sync, Roll/Cut and every note now stay identical on both devices while the link is up. Close the app on either side and the link drops; the cloud copy carries on.'),
         h('button', { class: 'btn ghost', onclick: () => { link.unlink(); } }, 'Unlink'));

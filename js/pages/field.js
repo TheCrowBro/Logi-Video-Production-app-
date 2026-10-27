@@ -1,8 +1,9 @@
 // Field tools: sun planner, Polaris finder, white balance reader, sound meter.
 import { h, fmtTime, todayISO, parseISO, toast, pad } from '../util.js';
 import { getPosition, getTimes, polarisPosition, compassPoint } from '../suncalc.js';
+import { range } from '../range.js';
 
-const TOOLS = [['sun', '☀ Sun'], ['polaris', '★ Polaris'], ['wb', '🌡 White bal.'], ['noise', '🔊 Noise']];
+const TOOLS = [['sun', '☀ Sun'], ['polaris', '★ Polaris'], ['wb', '🌡 WB'], ['noise', '🔊 Noise'], ['range', '📏 Range']];
 const S = { tool: 'sun', date: null, declination: 0 };
 try { S.declination = Number(localStorage.getItem('logi-decl')) || 0; } catch { /* ignore */ }
 
@@ -16,7 +17,7 @@ export const field = {
       S.tool = tool;
       seg.querySelectorAll('button').forEach(b => { const on = b.dataset.t === tool; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
       body.replaceChildren();
-      stop = ({ sun, polaris, wb, noise })[tool](body) || null;
+      stop = ({ sun, polaris, wb, noise, range })[tool](body) || null;
     };
     const seg = h('div', { class: 'seg tools', role: 'tablist' }, TOOLS.map(([t, l]) => h('button', { 'data-t': t, role: 'tab', onclick: () => open(t) }, l)));
     root.append(h('div', null, h('div', { class: 'page-head' }, h('h1', null, 'Field tools')), seg, body));
@@ -81,14 +82,13 @@ function finder(getTarget, label) {
   };
   const start = async () => {
     try {
-      if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) {
-        if ((await DeviceOrientationEvent.requestPermission()) !== 'granted') return toast('Motion permission denied');
-      }
+      let denied = false;
+      if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) { try { denied = (await DeviceOrientationEvent.requestPermission()) !== 'granted'; } catch { denied = true; } }
       window.addEventListener('deviceorientationabsolute', handler);
       window.addEventListener('deviceorientation', handler);
       on = true; btn.textContent = 'Stop aiming';
       off = [() => window.removeEventListener('deviceorientationabsolute', handler), () => window.removeEventListener('deviceorientation', handler)];
-      setTimeout(() => { if (heading == null) out.textContent = 'No compass sensor found on this device.'; }, 2000);
+      setTimeout(() => { if (heading == null) out.textContent = denied ? 'Motion access was refused. Allow “motion & orientation” for this site in the browser settings, then try again.' : 'No compass sensor found on this device.'; }, 2000);
     } catch { toast('Compass not available'); }
   };
   const stop = () => { off.forEach(f => f()); off = []; on = false; heading = null; btn.textContent = 'Aim with phone'; out.className = 'finder muted'; out.textContent = 'Tap “Aim with phone” and hold the phone upright, back camera facing out.'; };

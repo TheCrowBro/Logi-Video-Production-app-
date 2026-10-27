@@ -4,6 +4,7 @@ import * as store from './store.js';
 import * as providers from './providers.js';
 import { applyPrefs, openDisplaySettings } from './a11y.js';
 import { initInstall } from './install.js';
+import { startTour, tourSeen } from './tour.js';
 
 applyPrefs();
 document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);
@@ -145,4 +146,5 @@ async function importFile(e) {
 }
 
 store.initCloud();
+if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
 if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
