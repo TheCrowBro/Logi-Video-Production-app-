@@ -53,11 +53,20 @@ export function stopShift() {
   update(d => { const x = d.shifts.find(y => y.id === s.id); (x.breaks || []).forEach(b => { if (!b.end) b.end = now; }); x.end = now; touch(x); });
   return byId('shifts', s.id);
 }
-export function toggleBreak() {
+// A break is started with a chosen length (minutes) so the bar can count it down; it ends when you come back.
+export const BREAK_CHOICES = [[15, '15 min'], [30, '30 min'], [60, '1 hour'], [120, '2 hours']];
+export function startBreak(planned) {
+  const s = running(); if (!s || onBreak(s)) return;
+  const now = Date.now();
+  update(d => { const x = d.shifts.find(y => y.id === s.id); x.breaks = [...(x.breaks || []), { start: now, end: null, planned }]; touch(x); });
+}
+export function endBreak() {
   const s = running(); if (!s) return;
   const now = Date.now();
-  update(d => { const x = d.shifts.find(y => y.id === s.id); const open = (x.breaks || []).find(b => !b.end); if (open) open.end = now; else x.breaks = [...(x.breaks || []), { start: now, end: null }]; touch(x); });
+  update(d => { const x = d.shifts.find(y => y.id === s.id); (x.breaks || []).forEach(b => { if (!b.end) b.end = now; }); touch(x); });
 }
+export const breakLabel = m => (BREAK_CHOICES.find(([x]) => x === m) || [m, `${m} min`])[1];
+export const currentBreak = s => (s && (s.breaks || []).find(b => !b.end)) || null;
 export const deleteShift = id => remove('shifts', id);
 
 // Manual entry or correction: date, times and a single break total.

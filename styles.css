@@ -426,3 +426,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 
 .subactions { display: flex; gap: 8px; flex-wrap: wrap; margin: -4px 0 10px; }
 @media (min-width: 1000px) { .bk-month > .subactions { grid-column: 1 / -1; } }
+
+.break-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.break-grid .btn { flex-direction: column; gap: 2px; padding: 14px 10px; font-size: 1.05rem; }
+.break-grid .btn small { font-weight: 500; font-size: .75rem; opacity: .8; }
