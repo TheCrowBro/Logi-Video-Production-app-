@@ -1,8 +1,8 @@
-const CACHE = 'logi-v13';
+const CACHE = 'logi-v14';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'js/install.js', 'vendor/qrcode.js',
   'js/app.js', 'js/util.js', 'js/store.js', 'js/a11y.js', 'js/providers.js', 'js/rolodex.js', 'js/form.js', 'js/suncalc.js',
-  'js/pages/bookings.js', 'js/pages/crew.js', 'js/pages/gear.js', 'js/pages/venues.js', 'js/map.js', 'js/pages/tcnotes.js', 'js/timecode.js', 'js/docx.js', 'js/link.js', 'js/qr.js', 'vendor/jsQR.js', 'js/range.js', 'js/tour.js', 'js/calendar.js', 'js/storage-ui.js', 'js/version.js', 'js/pages/settings.js', 'js/hours.js', 'js/clock.js', 'js/pages/insurance.js',
+  'js/pages/bookings.js', 'js/pages/crew.js', 'js/pages/gear.js', 'js/pages/venues.js', 'js/map.js', 'js/pages/tcnotes.js', 'js/timecode.js', 'js/docx.js', 'js/link.js', 'js/qr.js', 'vendor/jsQR.js', 'js/range.js', 'js/tour.js', 'js/calendar.js', 'js/storage-ui.js', 'js/version.js', 'js/pages/settings.js', 'js/hours.js', 'js/clock.js', 'js/notify.js', 'js/pages/insurance.js',
   'js/pages/me.js', 'js/pages/field.js',
 ];
 self.addEventListener('install', e => {
@@ -12,6 +12,16 @@ self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== 'logi-share').map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 // Stale-while-revalidate for same-origin GETs.
+// Break notifications: the buttons on them act on the open app (or open it).
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const action = e.action === 'back' ? 'break-end' : e.action === 'later' ? 'break-extend' : null;
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async list => {
+    const client = list[0] || (await self.clients.openWindow('./index.html'));
+    if (client) { if (client.focus) client.focus(); if (action) client.postMessage({ type: action }); }
+  }));
+});
+
 // Web Share Target: a file shared to the app arrives as a POST; park it and send the app to pick it up.
 self.addEventListener('fetch', e => {
   const req = e.request;

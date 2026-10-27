@@ -1,5 +1,5 @@
 // Settings: everything that isn't a record — storage, calendar links, display, field-tool defaults, backups, about.
-import { h, toast } from '../util.js';
+import { h, toast, nodes } from '../util.js';
 import { db, update } from '../store.js';
 import * as store from '../store.js';
 import { storagePanel, backupPanel } from '../storage-ui.js';
@@ -8,6 +8,7 @@ import { calendarPanel, calState } from '../calendar.js';
 import { openInstallHelp, installState } from '../install.js';
 import { startTour } from '../tour.js';
 import { VERSION, REPO } from '../version.js';
+import * as notify from '../notify.js';
 
 const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null || v === '' ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* ignore */ } } };
 const loc = () => { try { return JSON.parse(LS.get('logi-loc')); } catch { return null; } };
@@ -30,6 +31,7 @@ export const settings = {
       section('Field tool defaults', [l ? `${l.lat.toFixed(2)}°, ${l.lon.toFixed(2)}°` : 'no location', LS.get('logi-units') === 'ft' ? 'feet' : 'metres'].join(' · '), fieldDefaults()),
       section('Hours & breaks', `${LS.get('logi-stdday') || 10}h day · ${LS.get('logi-breakdefault') || 30} min break`, h('div', { class: 'stack' },
         h('div', { class: 'field' }, h('label', null, 'Standard day (hours)'), h('input', { type: 'number', min: 1, max: 24, step: 0.5, value: LS.get('logi-stdday') || 10, 'aria-label': 'Standard day in hours', onchange: e => { LS.set('logi-stdday', e.target.value); toast('Saved'); } }), h('small', { class: 'muted' }, 'Anything beyond this on a day counts as overtime in the statistics.')),
+        notifyPanel(),
         h('div', { class: 'field' }, h('label', null, 'Default approved break (minutes per day)'), h('input', { type: 'number', min: 0, step: 5, value: LS.get('logi-breakdefault') || 30, 'aria-label': 'Default approved break in minutes', onchange: e => { LS.set('logi-breakdefault', e.target.value); toast('Saved'); } }), h('small', { class: 'muted' }, 'Used when a booking doesn’t set its own.')))),
       section('Profile', db.profile.name || 'not set', profilePanel()),
       !installState().standalone && section('Install', installState().canPrompt ? 'ready to install' : 'see how', h('div', { class: 'stack' },
@@ -45,6 +47,25 @@ export const settings = {
     return () => panels.forEach(p => p.destroy && p.destroy());
   },
 };
+
+function notifyPanel() {
+  const wrap = h('div', { class: 'stack' });
+  const draw = () => {
+    const perm = notify.permission(), p = notify.notifyPrefs();
+    const row = (label, key, hint, disabled) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!p[key], disabled, onchange: e => { notify.setNotifyPrefs({ [key]: e.target.checked }); draw(); } }), h('span', null, label, h('em', null, ' ' + hint)));
+    wrap.replaceChildren(...nodes(
+      h('div', { class: 'pref-label' }, 'Break notifications'),
+      perm === 'unsupported' ? h('p', { class: 'small muted' }, 'This browser has no notifications.')
+        : perm === 'denied' ? h('p', { class: 'warn small' }, 'Notifications are blocked for this site. Allow them in the browser’s site settings, then come back here.')
+          : perm !== 'granted' ? h('button', { class: 'btn primary', onclick: async () => { await notify.requestPermission(); draw(); } }, '🔔 Turn on break notifications')
+            : [row('Notify me when a timed break is up', 'enabled', 'a system notification with a Back to work button', false),
+              row('Also warn two minutes before', 'early', 'for breaks of 10 minutes or more', !p.enabled),
+              'wakeLock' in navigator && row('Keep the screen on during breaks', 'wake', 'phones suspend the app in the background after a few minutes; a lit screen keeps the countdown alive', !p.enabled)],
+      h('p', { class: 'small muted' }, 'Works while the app is open on a computer, or in the background on a phone for the first few minutes (or for the whole break with the screen kept on). If the phone has suspended the app, the notification arrives the moment you return to it.')));
+  };
+  draw();
+  return wrap;
+}
 
 function fieldDefaults() {
   const l = loc() || {};

@@ -5,6 +5,7 @@ import { db, byId, subscribe, activeBookings, covers } from './store.js';
 import { running, onBreak, workedMs, breakMs, startShift, stopShift, startBreak, endBreak, currentBreak, BREAK_CHOICES, breakLabel, fmtClock, fmtHm, allowanceFor, openHoursSheet } from './hours.js';
 import { sheet } from './util.js';
 import { haptic } from './a11y.js';
+import * as notify from './notify.js';
 
 const S = { choice: null, warned: null, timesUp: null, timer: null };
 export function initClockBar(root) {
@@ -23,7 +24,9 @@ export function initClockBar(root) {
     const breaking = live && onBreak(live), br = breaking ? currentBreak(live) : null;
     const brElapsed = br ? now - br.start : 0, brLeft = br && br.planned ? br.planned * 6e4 - brElapsed : null;
     if (br && brLeft != null && brLeft <= 0 && S.timesUp !== br.start) { S.timesUp = br.start; haptic(80); announce('Break time is up'); toast(`Your ${breakLabel(br.planned)} break is up`); }
-    if (live && breaking && over >= 0 && S.warned !== live.id) { S.warned = live.id; haptic(60); announce('Approved break used up'); toast('Approved break for today used up'); }
+    notify.scheduleBreak(br, br ? breakLabel(br.planned) : '', () => { S.timesUp = br.start; });
+    notify.holdScreen(!!br);
+    if (live && breaking && over >= 0 && S.warned !== live.id) { S.warned = live.id; haptic(60); announce('Approved break used up'); toast('Approved break for today used up'); if (document.hidden) notify.notifyAllowanceUsed(); }
     root.replaceChildren(h('div', { class: 'clock' + (live ? (breaking ? ' on-break' : ' working') : '') },
       h('div', { class: 'clock-head' },
         list.length > 1 && !live
@@ -47,8 +50,22 @@ export function initClockBar(root) {
     const leftMin = Math.max(0, Math.round((allowance * 6e4 - usedMs) / 6e4));
     const { close } = sheet('Take a break', h('div', { class: 'stack' },
       h('p', { class: 'small muted' }, `${leftMin} min of today’s approved ${allowance} min left${booking && booking.breakNote ? ' · ' + booking.breakNote : ''}. The clock pauses until you tap Back to work.`),
+      notifyLine(),
       h('div', { class: 'break-grid' }, BREAK_CHOICES.map(([m, label]) => h('button', { class: 'btn ' + (m <= leftMin ? 'primary' : 'ghost'), onclick: () => { close(); startBreak(m); haptic(20); announce(`Break started, ${label}`); } }, label, h('small', null, m <= leftMin ? 'within approved' : `${m - leftMin} min over`))))));
   }
+  function notifyLine() {
+    const perm = notify.permission(), on = notify.notifyPrefs().enabled;
+    if (perm === 'unsupported') return null;
+    if (perm === 'granted' && on) return h('p', { class: 'small muted' }, '🔔 You’ll get a notification when the break is up.');
+    if (perm === 'denied') return h('p', { class: 'small muted' }, '🔕 Notifications are blocked for this site in the browser settings.');
+    return h('button', { class: 'btn ghost small', onclick: async e => { const r = await notify.requestPermission(); e.target.replaceWith(h('p', { class: 'small muted' }, r === 'granted' ? '🔔 You’ll get a notification when the break is up.' : '🔕 Notifications not allowed.')); } }, '🔔 Notify me when the break is up');
+  }
+  // The notification's "Back to work" button and "5 more min" arrive here from the service worker.
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
+    const d = e.data || {};
+    if (d.type === 'break-end') { if (running() && onBreak(running())) { endBreak(); toast('Back to work'); } }
+    else if (d.type === 'break-extend') { const s = running(), br = s && currentBreak(s); if (br) { notify.cancelBreak(); const planned = (br.planned || 0) + 5; import('./store.js').then(st => st.update(d2 => { const x = d2.shifts.find(y => y.id === s.id); const b2 = (x.breaks || []).find(y => !y.end); if (b2) b2.planned = planned; })); toast('5 more minutes'); } }
+  });
   draw();
   subscribe(draw);
   // tick once a second while something is running and the tab is visible
