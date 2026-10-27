@@ -7,5 +7,11 @@
   "display": "standalone",
   "background_color": "#14110f",
   "theme_color": "#14110f",
+  "share_target": {
+    "action": "./share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": { "title": "title", "text": "text", "files": [{ "name": "file", "accept": [".docx", ".txt", ".md", ".fountain", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"] }] }
+  },
   "icons": [{ "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
 }

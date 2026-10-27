@@ -11,7 +11,7 @@ import { crew } from './pages/crew.js';
 import { gear } from './pages/gear.js';
 import { insurance } from './pages/insurance.js';
 import { venues } from './pages/venues.js';
-import { tcnotes } from './pages/tcnotes.js';
+import { tcnotes, receiveSharedFile } from './pages/tcnotes.js';
 import { me } from './pages/me.js';
 import { field } from './pages/field.js';
 
@@ -48,7 +48,19 @@ let start = 0;
 try { start = Math.min(tabs.length - 1, Math.max(0, Number(localStorage.getItem('logi-tab')) || 0)); } catch { /* ignore */ }
 const rolodex = createRolodex(document.getElementById('rolodex'), tabs, { start, onSelect: (i, dir) => show(i, dir) });
 show(start);
-window.logiGo = i => rolodex.go(i); // lets pages jump between sections
+window.logiGo = i => rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); // lets pages jump between sections
+
+// A file shared to the app (Android share sheet) is parked by the service worker; hand it to TC Notes.
+if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in window) {
+  history.replaceState(null, '', location.pathname);
+  caches.open('logi-share').then(async c => {
+    const r = await c.match('shared-file'); if (!r) return;
+    const name = decodeURIComponent(r.headers.get('X-Name') || 'shared.docx');
+    const file = new File([await r.blob()], name, { type: r.headers.get('Content-Type') || '' });
+    await c.delete('shared-file');
+    receiveSharedFile(file);
+  }).catch(() => {});
+}
 
 /* ----------------------- storage / sync sheet ----------------------- */
 const cloudBtn = document.getElementById('cloudBtn');

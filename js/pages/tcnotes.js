@@ -1,12 +1,13 @@
 // Timecode notes: sync the phone to the camera's timecode, then every note is stamped with the running TC.
 import { h, uid, sheet, toast, empty, fmtShort, todayISO, announce } from '../util.js';
 import { db, byId, upsert, remove, update, subscribe } from '../store.js';
-import * as storeRef from '../store.js';
 import { openForm } from '../form.js';
 import { RATES, rate, framesToTc, tcToFrames, tcAt, framesAt, durationText } from '../timecode.js';
 import { haptic } from '../a11y.js';
+import { docxToLines, textToLines, buildScript, SAMPLE_SCRIPT } from '../docx.js';
 
-const S = { id: null, pending: null }; // pending = frames captured when the user started typing the next note
+// pending = frames captured when the user started typing the next note; target = the script line/selection about to be marked
+const S = { id: null, pending: null, view: 'notes', target: null, shared: null, redraw: () => {}, cleanupScript: null };
 try { S.id = localStorage.getItem('logi-tclog') || null; } catch { /* ignore */ }
 
 const current = () => (S.id && byId('logs', S.id)) || null;
@@ -177,8 +178,9 @@ function openSync(log) {
 }
 
 /* -------------------------------- export -------------------------------- */
-const asText = log => `${log.title}\n${rate(log.rate).label}${log.camera ? ' · ' + log.camera : ''} · ${log.created}\n\n` + log.notes.map(n => `${fmt(n.frames, log)}  ${n.text}${n.dur ? ` [${n.dur}]` : ''}`).join('\n') + '\n';
-const asCsv = log => 'Timecode,Note,Captured\n' + log.notes.map(n => `${fmt(n.frames, log)},"${String(n.text + (n.dur ? ' [' + n.dur + ']' : '')).replace(/"/g, '""')}",${n.at}`).join('\n') + '\n';
+const asText = log => `${log.title}\n${rate(log.rate).label}${log.camera ? ' · ' + log.camera : ''} · ${log.created}\n\n` + log.notes.map(n => `${fmt(n.frames, log)}  ${n.quote ? (n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`) + (n.text ? ' — ' : '') : ''}${n.text}${n.dur ? ` [${n.dur}]` : ''}`).join('\n') + '\n';
+const csvq = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
+const asCsv = log => 'Timecode,Note,Script line,Captured\n' + log.notes.map(n => `${fmt(n.frames, log)},${csvq(n.text + (n.dur ? ' [' + n.dur + ']' : ''))},${csvq(n.quote || '')},${n.at}`).join('\n') + '\n';
 
 async function shareFile(name, type, text) {
   const file = new File([text], name, { type });
@@ -204,14 +206,18 @@ export const tcnotes = {
     const stop = () => { clearInterval(timer); timer = null; };
     const unsub = subscribe(() => draw());
     draw = () => {
-      stop();
+      stop(); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null;
+      const y = window.scrollY;
       root.replaceChildren();
       const log = current();
       if (!log) { root.append(picker()); return; }
       root.append(logView(log, t => { timer = t; }));
+      window.scrollTo(0, y);
+      if (S.shared) { const f = S.shared; S.shared = null; setTimeout(() => openImport(log, f), 50); }
     };
+    S.redraw = draw;
     draw();
-    return () => { stop(); unsub(); };
+    return () => { stop(); unsub(); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null; };
   },
 };
 function picker() {
@@ -219,8 +225,9 @@ function picker() {
   return h('div', null,
     h('div', { class: 'page-head' }, h('h1', null, 'Timecode notes'), h('button', { class: 'btn primary', onclick: newLog }, '+ New log')),
     h('p', { class: 'muted small' }, 'Sync the phone to your camera’s timecode once, then every note you jot down is stamped with the camera’s timecode for the edit.'),
+    S.shared && h('div', { class: 'warn' }, `“${S.shared.name}” is ready to add as a script. Open or create a log to attach it.`),
     logs.length
-      ? h('div', { class: 'list' }, logs.map(l => h('button', { class: 'card tap', type: 'button', onclick: () => { S.id = l.id; try { localStorage.setItem('logi-tclog', l.id); } catch { /* ignore */ } storeRef.update(() => {}); } },
+      ? h('div', { class: 'list' }, logs.map(l => h('button', { class: 'card tap', type: 'button', onclick: () => { S.id = l.id; S.view = 'notes'; S.target = null; try { localStorage.setItem('logi-tclog', l.id); } catch { /* ignore */ } S.redraw(); } },
         h('div', { class: 'card-row' }, h('div', null, h('strong', null, l.title), h('div', { class: 'muted small' }, [l.created && fmtShort(l.created), rate(l.rate).id + (rate(l.rate).df ? ' DF' : ''), l.camera, l.bookingId && byId('bookings', l.bookingId)?.title].filter(Boolean).join(' · '))),
           h('span', { class: 'pill ' + (l.sync ? 'st-confirmed' : '') }, `${l.notes.length} note${l.notes.length === 1 ? '' : 's'}`)))))
       : empty('No logs yet. Start one per camera or per shoot day.', h('button', { class: 'btn primary', onclick: newLog }, 'New log')));
@@ -268,19 +275,23 @@ function logView(log, setTimer) {
   const notes = [...log.notes].sort((a, b) => (a.frames ?? -1) - (b.frames ?? -1) || a.at.localeCompare(b.at));
   return h('div', null,
     h('div', { class: 'page-head' },
-      h('button', { class: 'btn ghost small', onclick: () => { S.id = null; try { localStorage.removeItem('logi-tclog'); } catch { /* ignore */ } storeRef.update(() => {}); } }, '‹ Logs'),
+      h('button', { class: 'btn ghost small', onclick: () => { S.id = null; S.target = null; try { localStorage.removeItem('logi-tclog'); } catch { /* ignore */ } S.redraw(); } }, '‹ Logs'),
       h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openExport(log) }, 'Export'), h('button', { class: 'icon-btn', 'aria-label': 'Log settings', onclick: () => editLog(log) }, '⚙'))),
     h('div', { class: 'card tc-head' },
       h('div', { class: 'card-row' }, h('div', { class: 'grow' }, h('h2', null, log.title), h('div', { class: 'muted small' }, [log.camera, log.bookingId && byId('bookings', log.bookingId)?.title].filter(Boolean).join(' · '))),
         h('button', { class: 'btn ' + (sync ? 'ghost' : 'primary'), onclick: () => openSync(log) }, sync ? 'Re-sync' : 'Sync')),
       clock, status, rollCut),
+    h('div', { class: 'seg wide tc-views', role: 'tablist' },
+      h('button', { role: 'tab', class: S.view !== 'script' ? 'on' : '', 'aria-selected': S.view !== 'script', onclick: () => { S.view = 'notes'; S.redraw(); } }, `Notes (${log.notes.length})`),
+      h('button', { role: 'tab', class: S.view === 'script' ? 'on' : '', 'aria-selected': S.view === 'script', onclick: () => { S.view = 'script'; S.redraw(); } }, log.script ? `Script (${log.notes.filter(n => n.para).length} marks)` : 'Script')),
+    S.view === 'script' ? scriptView(log) : [
     h('div', { class: 'card tc-composer' },
       h('div', { class: 'card-row' }, h('span', { class: 'muted small' }, 'Next note at ', stamp), h('button', { class: 'btn ghost small', onclick: mark, title: 'Stamp the current timecode with no text' }, '⏺ Mark now')),
       input,
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: add }, '+ Add note'))),
     notes.length
       ? h('ol', { class: 'tc-notes', 'aria-label': 'Notes' }, notes.map(n => noteRow(log, n)))
-      : h('p', { class: 'muted small' }, 'Notes appear here, in timecode order.'));
+      : h('p', { class: 'muted small' }, 'Notes appear here, in timecode order.')]);
 }
 
 // Record run: the camera's count only moves while it records. Roll restarts the count from the held value, Cut freezes it.
@@ -314,7 +325,8 @@ function noteRow(log, n) {
   text.addEventListener('blur', () => { const v = text.textContent.trim(); if (v !== (n.text || '')) update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.text = v; }); });
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } });
   const tc = h('button', { class: 'tc-mono tc-badge', type: 'button', title: 'Edit timecode', onclick: () => editStamp(log, n) }, n.frames == null ? 'unsynced' : fmt(n.frames, log));
-  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') }, tc, h('div', { class: 'tc-body' }, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes = l.notes.filter(x => x.id !== n.id); }) }, '✕'));
+  const quote = n.quote && h('button', { class: 'tc-quote', type: 'button', onclick: () => jumpTo(log, n), 'aria-label': 'Show this line in the script' }, n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`, n.para && ' ↗');
+  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') }, tc, h('div', { class: 'tc-body' }, quote, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes = l.notes.filter(x => x.id !== n.id); }) }, '✕'));
 }
 
 function editStamp(log, n) {
@@ -324,4 +336,190 @@ function editStamp(log, n) {
     h('div', { class: 'form-actions' }, h('button', { class: 'btn ghost', onclick: () => { update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.frames = nowFrames(log); }); close(); } }, 'Stamp now'), h('span', { class: 'spacer' }),
       h('button', { class: 'btn primary', onclick: () => { const f = tcToFrames(input.value, r); if (f == null) return toast('Not a valid timecode for ' + r.label); update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.frames = f; }); close(); } }, 'Save'))));
   setTimeout(() => input.focus(), 50);
+}
+
+/* --------------------------------- script --------------------------------- */
+// A note can be pinned to a script paragraph (para) and optionally a character range within it (start, end).
+const MAXQ = 90;
+const quoteOf = (p, start, end) => { const t = (start != null ? p.text.slice(start, end) : p.text).replace(/\s+/g, ' ').trim(); return t.length > MAXQ ? t.slice(0, MAXQ - 1) + '…' : t; };
+
+function setScript(log, script) {
+  update(d => {
+    const l = d.logs.find(x => x.id === log.id); if (!l) return;
+    l.script = script;
+    l.notes.forEach(n => { if (n.para && !(script && script.paras.some(p => p.id === n.para))) { n.para = null; delete n.start; delete n.end; } });
+  });
+}
+
+export function receiveSharedFile(file) { S.shared = file; S.view = 'script'; window.logiGo('tcnotes'); S.redraw(); } // redraw covers the case where this tab is already open
+
+function openImport(log, preset) {
+  let pending = null;
+  const preview = h('div', { class: 'import-preview' });
+  const useBtn = h('button', { class: 'btn primary', disabled: true, onclick: () => {
+    if (!pending) return;
+    setScript(log, buildScript(pending.name, pending.lines)); S.view = 'script'; S.target = null; close();
+    toast(`Script loaded: ${pending.lines.length} lines`);
+  } }, log.script ? 'Replace script' : 'Use this script');
+  const show = (name, lines) => {
+    pending = { name, lines }; useBtn.disabled = !lines.length;
+    preview.replaceChildren(h('div', { class: 'small' }, h('b', null, name), ` — ${lines.length} lines`),
+      h('div', { class: 'import-sample muted small' }, lines.slice(0, 4).map(l => h('div', null, l.text)), lines.length > 4 && h('div', null, '…')));
+  };
+  const fail = e => { pending = null; useBtn.disabled = true; preview.replaceChildren(h('div', { class: 'warn' }, e.message || String(e))); };
+  const readFile = async file => {
+    try {
+      preview.textContent = 'Reading…';
+      const isDocx = /\.docx$/i.test(file.name) || /wordprocessingml/.test(file.type);
+      const lines = isDocx ? await docxToLines(file) : textToLines(await file.text());
+      if (!lines.length) throw new Error('No text found in that file');
+      show(file.name.replace(/\.[^.]+$/, ''), lines);
+    } catch (e) { fail(e); }
+  };
+  const fileIn = h('input', { type: 'file', accept: '.docx,.txt,.md,.fountain,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document', onchange: e => { const f = e.target.files[0]; if (f) readFile(f); } });
+  const paste = h('textarea', { rows: 5, placeholder: 'Paste the script text here', 'aria-label': 'Pasted script text' });
+  const body = h('div', { class: 'stack' },
+    h('div', { class: 'card' }, h('strong', null, 'Word document'),
+      h('p', { class: 'small muted' }, 'A .docx from Word or Pages, or a Google Doc downloaded as Word (File → Download → Microsoft Word). Plain .txt and Fountain files work too.'),
+      h('label', { class: 'btn ghost file-btn' }, '📄 Choose file…', fileIn)),
+    h('div', { class: 'card' }, h('strong', null, 'Google Docs'),
+      h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Logi from the Docs app on Android (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
+      paste, h('button', { class: 'btn ghost small', onclick: () => { const lines = textToLines(paste.value); lines.length ? show('Pasted script', lines) : fail(new Error('Nothing pasted yet')); } }, 'Use pasted text')),
+    h('button', { class: 'btn ghost small', onclick: () => show('Sample script', textToLines(SAMPLE_SCRIPT)) }, 'Try a sample script'),
+    preview,
+    log.script && h('p', { class: 'small muted' }, 'Replacing the script keeps your notes and their quoted lines, but they are no longer pinned to a line.'),
+    useBtn);
+  const { close } = sheet(log.script ? 'Replace script' : 'Add script', body, { dismissOnBackdrop: false });
+  if (preset) readFile(preset);
+}
+
+function scriptView(log) {
+  const sc = log.script;
+  if (!sc) return h('div', { class: 'empty' }, h('p', null, 'Add the script, then tap any line (or press and hold to select words) to pin a timecode note to it.'), h('button', { class: 'btn primary', onclick: () => openImport(log) }, '📄 Add script'));
+  const byPara = new Map();
+  for (const n of log.notes) if (n.para) { if (!byPara.has(n.para)) byPara.set(n.para, []); byPara.get(n.para).push(n); }
+  const bar = actionBar(log);
+  const body = h('div', { class: 'sc-body' }, sc.paras.map(p => paraEl(log, p, byPara.get(p.id) || [], bar)));
+  const paraOf = node => (node && (node.nodeType === 1 ? node : node.parentNode))?.closest?.('.sc-para');
+  const onSel = () => { // press-and-hold selection inside a line becomes the target
+    const s = document.getSelection(); if (!s || !s.rangeCount || s.isCollapsed) return;
+    const r = s.getRangeAt(0), startEl = paraOf(r.startContainer), endEl = paraOf(r.endContainer);
+    if (!startEl || !body.contains(startEl)) return;
+    const p = sc.paras.find(x => x.id === startEl.dataset.id); if (!p) return;
+    const textEl = startEl.querySelector('.sc-text');
+    let start = offsetIn(textEl, r.startContainer, r.startOffset);
+    let end = endEl === startEl ? offsetIn(textEl, r.endContainer, r.endOffset) : p.text.length;
+    if (start == null || end == null) return;
+    if (end < start) [start, end] = [end, start];
+    if (end === start) return;
+    S.target = { para: p.id, start, end, quote: quoteOf(p, start, end) };
+    body.querySelectorAll('.sc-para.sel').forEach(x => x.classList.remove('sel'));
+    bar.set(S.target);
+  };
+  document.addEventListener('selectionchange', onSel);
+  S.cleanupScript = () => { document.removeEventListener('selectionchange', onSel); bar.stop(); };
+  bar.set(S.target);
+  return h('div', { class: 'script' },
+    h('div', { class: 'card-row sc-head' },
+      h('div', { class: 'muted small' }, `${sc.name} · ${sc.paras.length} lines · ${log.notes.filter(n => n.para).length} marks`),
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openImport(log) }, 'Replace'), h('button', { class: 'btn ghost small', onclick: () => { setScript(log, null); S.target = null; } }, 'Remove'))),
+    body, bar.el);
+}
+
+// Character offset of a DOM point within a line, ignoring the timecode badges rendered inside it.
+function offsetIn(root, node, offset) {
+  if (!root.contains(node)) return null;
+  const r = document.createRange(); r.setStart(root, 0); r.setEnd(node, offset);
+  const frag = r.cloneContents(); frag.querySelectorAll('.sc-badge').forEach(b => b.remove());
+  return frag.textContent.length;
+}
+
+function paraEl(log, p, notes, bar) {
+  const selected = S.target && S.target.para === p.id && S.target.start == null;
+  const whole = notes.filter(n => n.start == null), ranged = notes.filter(n => n.start != null);
+  const el = h('div', { class: `sc-para kind-${p.kind}` + (selected ? ' sel' : ''), 'data-id': p.id, id: 'sc-' + p.id },
+    whole.length > 0 && h('div', { class: 'sc-gutter' }, whole.map(n => badge(log, n))),
+    h('div', { class: 'sc-text' }, segments(log, p, ranged)));
+  el.addEventListener('click', e => {
+    if (e.target.closest('.sc-badge')) return;
+    const s = document.getSelection(); if (s && !s.isCollapsed) return; // the user is selecting words
+    S.target = selected ? null : { para: p.id, quote: quoteOf(p) };
+    el.parentNode.querySelectorAll('.sc-para.sel').forEach(x => x.classList.remove('sel'));
+    if (S.target) el.classList.add('sel');
+    bar.set(S.target);
+  });
+  return el;
+}
+
+// Split a line into plain and highlighted runs so overlapping marks still render.
+function segments(log, p, ranged) {
+  const text = p.text;
+  if (!ranged.length) return [text];
+  const pts = new Set([0, text.length]);
+  ranged.forEach(n => { pts.add(Math.min(n.start, text.length)); pts.add(Math.min(n.end, text.length)); });
+  const b = [...pts].sort((x, y) => x - y), out = [];
+  for (let i = 0; i < b.length - 1; i++) {
+    const a = b[i], z = b[i + 1];
+    ranged.filter(n => n.start === a).forEach(n => out.push(badge(log, n)));
+    const covered = ranged.some(n => n.start <= a && n.end >= z);
+    out.push(covered ? h('mark', { class: 'sc-mark' }, text.slice(a, z)) : text.slice(a, z));
+  }
+  return out;
+}
+
+const badge = (log, n) => h('button', { class: 'sc-badge tc-mono', type: 'button', title: n.text || 'Timecode mark', 'aria-label': `Mark at ${n.frames == null ? 'unsynced' : fmt(n.frames, log)}${n.text ? ': ' + n.text : ''}`, onclick: () => editNote(log, n) }, n.frames == null ? '--' : fmt(n.frames, log));
+
+function actionBar(log) {
+  const { sync } = settings(log);
+  const info = h('div', { class: 'sc-target small grow' });
+  const live = h('span', { class: 'tc-mono tc-stamp' });
+  const markBtn = h('button', { class: 'btn primary', disabled: true, onclick: () => doMark('') }, '⏱ Mark');
+  const noteBtn = h('button', { class: 'btn ghost', disabled: true, onclick: () => markWithNote() }, '✎ Mark + note');
+  const tick = () => { live.textContent = sync ? nowTc(log) : 'not synced'; };
+  const set = t => {
+    if (!t) info.replaceChildren(h('span', { class: 'muted' }, 'Tap a line, or press and hold to select words, then Mark.'));
+    else info.replaceChildren(t.start != null ? '“' : '¶ ', h('b', null, t.quote), t.start != null ? '”' : '');
+    markBtn.disabled = noteBtn.disabled = !t;
+  };
+  const commit = (t, frames, text) => {
+    S.target = null; document.getSelection()?.removeAllRanges();
+    pushNote(log, { id: uid(), frames, text, at: new Date().toISOString(), para: t.para, start: t.start, end: t.end, quote: t.quote });
+    haptic(20); announce(`Marked ${frames == null ? 'unsynced' : fmt(frames, log)}`);
+  };
+  const doMark = text => { const t = S.target; if (t) commit(t, nowFrames(log), text); };
+  const markWithNote = () => {
+    const t = S.target; if (!t) return;
+    const frames = nowFrames(log); // the moment you tapped, not when you finish typing
+    const ta = h('textarea', { rows: 3, placeholder: 'What happened here?', 'aria-label': 'Note' });
+    const { close } = sheet('Mark + note', h('div', { class: 'stack' },
+      h('div', { class: 'small muted' }, 'At ', h('b', { class: 'tc-mono' }, frames == null ? 'unsynced' : fmt(frames, log)), ' · ', t.start != null ? `“${t.quote}”` : `¶ ${t.quote}`),
+      ta,
+      h('div', { class: 'form-actions' }, h('span', { class: 'spacer' }), h('button', { class: 'btn ghost', onclick: () => close() }, 'Cancel'),
+        h('button', { class: 'btn primary', onclick: () => { const text = ta.value.trim(); close(); commit(t, frames, text); } }, 'Save'))), { dismissOnBackdrop: false });
+    setTimeout(() => ta.focus(), 50);
+  };
+  tick(); const iv = setInterval(tick, 250);
+  const el = h('div', { class: 'sc-bar' }, h('div', { class: 'card-row' }, info, live), h('div', { class: 'actions' }, markBtn, noteBtn));
+  return { el, set, stop: () => clearInterval(iv) };
+}
+
+function jumpTo(log, n) {
+  if (!n.para) return toast('This note is no longer pinned to a line');
+  S.view = 'script'; S.target = null; S.redraw();
+  const el = document.getElementById('sc-' + n.para);
+  if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); }
+}
+
+function editNote(log, n) {
+  const ta = h('textarea', { rows: 3, value: n.text || '', 'aria-label': 'Note text' });
+  const { close } = sheet('Note', h('div', { class: 'stack' },
+    h('div', { class: 'card-row' },
+      h('button', { class: 'tc-badge tc-mono', type: 'button', onclick: () => { close(); editStamp(log, n); } }, n.frames == null ? 'unsynced' : fmt(n.frames, log)),
+      n.quote && h('span', { class: 'muted small grow' }, n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`)),
+    ta,
+    h('div', { class: 'form-actions' },
+      h('button', { class: 'btn danger', onclick: () => { close(); update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes = l.notes.filter(x => x.id !== n.id); }); } }, 'Delete'),
+      h('span', { class: 'spacer' }), h('button', { class: 'btn ghost', onclick: () => close() }, 'Cancel'),
+      h('button', { class: 'btn primary', onclick: () => { const v = ta.value.trim(); close(); update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.text = v; }); } }, 'Save'))), { dismissOnBackdrop: false });
+  setTimeout(() => ta.focus(), 50);
 }

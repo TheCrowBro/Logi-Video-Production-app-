@@ -43,6 +43,7 @@ Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can ret
 - When syncing in record run, tick "the camera is recording right now" only if it is; a stopped camera shows its last recorded timecode, and the app holds there until you tap Roll.
 - The sync moment is the instant you tap Sync (typed) or Scan (camera); a slow OCR read doesn't put you out. Re-sync if the camera's clock is reset.
 - Camera scanning uses Tesseract OCR loaded from a CDN on first use (needs a connection once; the reader is then cached by the browser). Glare, tilt and tiny displays defeat it — typing the value is always available.
+- **Script marking**: add the script to a log (Script tab) from a Word .docx, a .txt/Fountain file, pasted text, or — on Android — by sharing the file straight to Logi from Google Docs (⋮ → Share & export → Send a copy → Word). Google Docs can't be read directly by an app, so on iPhone download it as Word or copy-paste. Tap a line to select it, or press and hold to select words, then **Mark** (or **Mark + note**): the note is stamped with the camera timecode and pinned to that line, shown as a highlight with a timecode badge, like a lined script. Notes list the quoted line and jump back to it; exports include it.
 - Phone clocks drift about a second a day against a camera's crystal, so re-sync on long days.
 
 ## Field-tool accuracy
@@ -64,6 +65,7 @@ js/suncalc.js    sun + Polaris maths
 js/pages/*.js    one file per section
 js/map.js        map preview, directions links, address lookup
 js/timecode.js   SMPTE timecode maths (drop-frame aware)
+js/docx.js       .docx reader (no library) and script line classification
 vendor/qrcode.js qrcode-generator (MIT)
 ```
 
