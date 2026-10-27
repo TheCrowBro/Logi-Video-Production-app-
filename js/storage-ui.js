@@ -19,22 +19,46 @@ export function storagePanel() {
           c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: run(store.reconnect) }, 'Reconnect'),
           h('button', { class: 'btn ghost', onclick: run(() => store.sync({ ask: true })) }, 'Sync now'),
           h('button', { class: 'btn ghost', onclick: run(store.unlinkCloud) }, 'Unlink'))
-        : h('div', { class: 'stack' },
-          h('div', { class: 'provider' }, h('strong', null, 'Dropbox'),
-            keyField('Dropbox app key', providers.settings.dropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),
-            h('button', { class: 'btn primary', onclick: run(async () => { await store.connectDropbox(); }) }, 'Connect Dropbox'),
-            help(`Create an app at dropbox.com/developers/apps (Scoped access → App folder), enable files.content.read + files.content.write (and sharing.write if you want the calendar feed link), add this Redirect URI: ${providers.redirectUri()} — then paste the App key. The database is saved as logi-production-db.json in Apps/<your app>.`)),
-          h('div', { class: 'provider' }, h('strong', null, 'Google Drive'),
-            keyField('Google OAuth client ID', providers.settings.gdriveId, providers.settings.setGdriveId, 'Google OAuth client ID'),
-            h('button', { class: 'btn primary', onclick: run(store.connectGdrive) }, 'Connect Google Drive'),
-            help(`In Google Cloud Console create an OAuth client ID (Web application), add ${location.origin} as an Authorised JavaScript origin, enable the Drive API, then paste the client ID. The app only uses its own hidden app-data folder. Google asks you to re-approve about hourly; tap Reconnect when prompted.`)),
-          c.supported
-            ? h('div', { class: 'provider' }, h('strong', null, 'A file in a synced folder'),
-              h('p', { class: 'small muted' }, 'Pick a file inside your Google Drive, Dropbox, OneDrive or iCloud Drive folder on this computer or Android phone.'),
-              h('button', { class: 'btn ghost', onclick: run(store.createCloudFile) }, 'Create database file…'),
-              h('button', { class: 'btn ghost', onclick: run(store.openCloudFile) }, 'Open existing database file…'))
-            : h('p', { class: 'note' }, 'Linking a local file isn’t supported in this browser (iOS Safari, Firefox) — use Dropbox / Google Drive above, or a backup file.')));
+        : storageList());
   };
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const tag = (t, cls) => h('span', { class: 'tag ' + (cls || '') }, t);
+  const row = (ico, name, sub, tags, body, open) => h('details', { class: 'twirl', open },
+    h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, ico), h('span', null, h('span', { class: 'twirl-name' }, name), h('span', { class: 'twirl-sub' }, sub)), h('span', null, tags)),
+    h('div', { class: 'twirl-body' }, body));
+  const field = (label, get, set, ph, type = 'text') => h('input', { type, placeholder: ph, 'aria-label': label, value: get(), autocomplete: type === 'password' ? 'current-password' : 'off', spellcheck: false, oninput: e => set(e.target.value) });
+  function storageList() {
+    const c = store.cloud, wd = providers.settings.webdav();
+    const setWd = patch => providers.settings.setWebdav({ ...providers.settings.webdav(), ...patch });
+    return h('div', { class: 'stack' },
+      h('p', { class: 'small muted' }, 'Pick one. “Direct” means Logi talks to the service itself and works on every device, including iPhone. “Synced folder” means a desktop or Android sync client does the carrying.'),
+      row('📦', 'Dropbox', 'Direct · app folder · live calendar feed link', [tag('direct', 'ok'), tag('iPhone ✓', 'ok')], [
+        keyField('Dropbox app key', providers.settings.dropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),
+        h('button', { class: 'btn primary', onclick: run(async () => { await store.connectDropbox(); }) }, 'Connect Dropbox'),
+        help(`Create an app at dropbox.com/developers/apps (Scoped access → App folder), enable files.content.read + files.content.write (and sharing.write if you want the calendar feed link), add this Redirect URI: ${providers.redirectUri()} — then paste the App key. The database is saved as logi-production-db.json in Apps/<your app>.`)]),
+      row('🟢', 'Google Drive', 'Direct · hidden app-data folder · re-approve hourly', [tag('direct', 'ok'), tag('iPhone ✓', 'ok')], [
+        keyField('Google OAuth client ID', providers.settings.gdriveId, providers.settings.setGdriveId, 'Google OAuth client ID'),
+        h('button', { class: 'btn primary', onclick: run(store.connectGdrive) }, 'Connect Google Drive'),
+        help(`In Google Cloud Console create an OAuth client ID (Web application), add ${location.origin} as an Authorised JavaScript origin, enable the Drive API, then paste the client ID. The app only uses its own hidden app-data folder. Google asks you to re-approve about hourly; tap Reconnect when prompted.`)]),
+      row('🔷', 'Microsoft OneDrive', 'Direct · Logi’s own app folder · personal and work accounts', [tag('direct', 'ok'), tag('iPhone ✓', 'ok')], [
+        keyField('Microsoft application (client) ID', providers.settings.msId, providers.settings.setMsId, 'Microsoft application (client) ID'),
+        h('button', { class: 'btn primary', onclick: run(store.connectOneDrive) }, 'Connect OneDrive'),
+        help(`Azure portal → App registrations → New: accounts in any organisational directory and personal Microsoft accounts; platform Single-page application with redirect URI ${providers.redirectUri()}; API permission Files.ReadWrite.AppFolder (delegated). Paste the Application (client) ID. The same registration also serves the Outlook calendar link. Sign-in refreshes silently.`)]),
+      row('🗂️', 'A file in a synced folder', 'iCloud Drive (Mac) · OneDrive · Google Drive for desktop · Dropbox · Box Drive · Proton Drive · Synology Drive · Nextcloud · pCloud · MEGA…', [tag(c.supported ? 'this browser ✓' : 'not in this browser', c.supported ? 'ok' : 'no'), tag('iPhone ✗', 'no')],
+        c.supported
+          ? [h('p', { class: 'small muted' }, 'Pick a file inside any folder a sync client keeps mirrored on this computer or Android phone. Whatever that service is, it carries the file for you.'),
+            h('button', { class: 'btn primary', onclick: run(store.createCloudFile) }, 'Create database file…'),
+            h('button', { class: 'btn ghost', onclick: run(store.openCloudFile) }, 'Open existing database file…')]
+          : h('p', { class: 'note' }, ios ? 'iPhone and iPad can’t give a web app a file to keep writing to. Use Dropbox, Google Drive or OneDrive above — they work here.' : 'This browser can’t keep a file open for writing (Firefox and Safari). Chrome or Edge can, or use a direct service above.')),
+      row('🌐', 'WebDAV server', 'Advanced · Nextcloud, ownCloud, Synology, Fastmail, Hetzner, your own server', [tag('direct', 'ok'), tag('iPhone ✓', 'ok'), tag('CORS needed')], [
+        field('Server folder address', () => wd.url || '', v => setWd({ url: v.trim() }), 'https://cloud.example.com/remote.php/dav/files/you/Logi/', 'url'),
+        field('Username', () => wd.user || '', v => setWd({ user: v.trim() }), 'Username'),
+        field('App password', () => wd.pass || '', v => setWd({ pass: v }), 'App password', 'password'),
+        h('button', { class: 'btn primary', onclick: run(store.connectWebdav) }, 'Connect WebDAV'),
+        help('Point it at a folder that already exists. Use an app password, not your main one; it is kept only in this browser. The server has to allow requests from this site (CORS headers for ' + location.origin + '): Nextcloud needs the WebAppPassword/CORS app, Synology and most self-hosted servers a reverse-proxy rule. Without that the browser blocks the connection and Logi tells you.')]),
+      row('💾', 'No cloud — backup files', 'Export and import by hand from Backups & data', [tag('anywhere', 'ok')],
+        h('p', { class: 'small muted' }, 'Keep everything on this device and move it with the Export / Import buttons whenever you like. Works with any storage you can save a file to.')));
+  }
   draw();
   let last = store.cloud.status;
   const unsub = store.subscribe(() => { if (store.cloud.status !== last) { last = store.cloud.status; draw(); } });

@@ -2,7 +2,7 @@
 // file you pick inside any cloud-synced folder (Google Drive, Dropbox, OneDrive, iCloud Drive...)
 // using the File System Access API where available. Export/Import covers everything else.
 import { uid } from './util.js';
-import { fileAdapter, dropboxAdapter, gdriveAdapter, dropboxBegin, dropboxFinish } from './providers.js';
+import { fileAdapter, dropboxAdapter, gdriveAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish } from './providers.js';
 
 const KEY = 'logi-db-v1';
 const blank = () => ({
@@ -207,6 +207,8 @@ export async function initCloud() {
     const provider = lsGet('logi-provider');
     if (provider === 'dropbox') cloud.adapter = dropboxAdapter();
     else if (provider === 'gdrive') cloud.adapter = gdriveAdapter();
+    else if (provider === 'onedrive') cloud.adapter = onedriveAdapter();
+    else if (provider === 'webdav') cloud.adapter = webdavAdapter();
     else if (cloud.supported) {
       const handle = await kv('readonly', s => s.get('fileHandle'));
       if (handle) { const aux = await kv('readonly', s => s.get('auxHandle')); cloud.adapter = fileAdapter(handle, aux || null); cloud.auxName = aux ? aux.name : ''; }
@@ -339,6 +341,8 @@ export async function openCloudFile() {
 
 export const connectDropbox = () => dropboxBegin(); // redirects away; initCloud finishes the link on return
 export const connectGdrive = () => link(gdriveAdapter(), 'gdrive');
+export const connectOneDrive = () => link(onedriveAdapter(), 'onedrive');
+export async function connectWebdav() { const a = webdavAdapter(); if (!(await a.ready())) throw new Error('Enter the server address and username first'); await link(a, 'webdav'); if (cloud.status === 'error') { const msg = cloud.error; cloud.adapter = null; lsSet('logi-provider', null); setStatus('off'); throw new Error(msg); } }
 
 export async function unlinkCloud() {
   cloud.adapter?.signOut?.();

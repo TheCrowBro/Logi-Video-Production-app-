@@ -10,6 +10,8 @@ export const settings = {
   dropboxKey: () => LS.get('logi-dropbox-key') || '',
   gdriveId: () => LS.get('logi-gdrive-id') || '',
   msId: () => LS.get('logi-ms-id') || '',
+  webdav: () => { try { return JSON.parse(LS.get('logi-webdav')) || {}; } catch { return {}; } },
+  setWebdav: v => v ? LS.set('logi-webdav', JSON.stringify(v)) : LS.del('logi-webdav'),
   setMsId: v => LS.set('logi-ms-id', v.trim()),
   setDropboxKey: v => LS.set('logi-dropbox-key', v.trim()),
   setGdriveId: v => LS.set('logi-gdrive-id', v.trim()),
@@ -224,4 +226,50 @@ export async function microsoftToken(scopes, interactive) {
   if (!interactive) throw new Error('Microsoft sign-in needed — tap Sync now');
   return (await app.loginPopup({ scopes })).accessToken;
 }
+/* ------------------------------- OneDrive ------------------------------- */
+// Microsoft Graph, app folder only (Files.ReadWrite.AppFolder): Logi sees nothing but its own folder.
+const OD = 'https://graph.microsoft.com/v1.0/me/drive/special/approot:/';
+async function odfetch(path, init = {}, interactive = false) {
+  const token = await microsoftToken(['Files.ReadWrite.AppFolder'], interactive);
+  const r = await fetch(OD + path, { ...init, headers: { ...(init.headers || {}), Authorization: 'Bearer ' + token } });
+  if (r.status === 401) throw new Error('Microsoft sign-in expired — reconnect');
+  return r;
+}
+export const onedriveAdapter = () => ({
+  id: 'onedrive', label: 'OneDrive (app folder)',
+  ready: async ask => { try { await microsoftToken(['Files.ReadWrite.AppFolder'], ask); return true; } catch { return false; } },
+  read: async () => { const r = await odfetch(`${FILE}:/content`); if (r.status === 404) return null; if (!r.ok) throw new Error('OneDrive read failed (' + r.status + ')'); return parse(await r.text()); },
+  write: async text => { const r = await odfetch(`${FILE}:/content`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: text }); if (!r.ok) throw new Error('OneDrive write failed (' + r.status + ')'); },
+  writeAux: async ({ name, text }) => { const r = await odfetch(`${name}:/content`, { method: 'PUT', headers: { 'Content-Type': 'text/calendar' }, body: text }); if (!r.ok) throw new Error('OneDrive feed write failed (' + r.status + ')'); },
+  shareLink: async name => {
+    const r = await odfetch(`${name}:/createLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'view', scope: 'anonymous' }) });
+    if (!r.ok) throw new Error('OneDrive could not create a link (' + r.status + ')');
+    const u = (await r.json()).link?.webUrl; if (!u) throw new Error('OneDrive did not return a link');
+    return u + (u.includes('?') ? '&' : '?') + 'download=1';
+  },
+  signOut: () => microsoftSignOut(),
+});
+
+/* -------------------------------- WebDAV -------------------------------- */
+// Any WebDAV folder (Nextcloud, ownCloud, Synology, Fastmail, Hetzner…). The server must allow this site's origin (CORS).
+export const webdavAdapter = () => {
+  const cfg = settings.webdav();
+  const base = String(cfg.url || '').replace(/\/+$/, '');
+  const url = name => base + '/' + encodeURIComponent(name);
+  const headers = extra => ({ Authorization: 'Basic ' + btoa(`${cfg.user || ''}:${cfg.pass || ''}`), ...extra });
+  let host = 'WebDAV'; try { host = new URL(base).host; } catch { /* label only */ }
+  const explain = r => r.status === 401 ? 'WebDAV: wrong username or password' : r.status === 403 ? 'WebDAV: no permission for that folder' : `WebDAV ${r.status}`;
+  return {
+    id: 'webdav', label: `WebDAV (${host})`,
+    ready: async () => !!(base && cfg.user),
+    read: async () => {
+      let r; try { r = await fetch(url(FILE), { headers: headers({}) }); } catch { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); }
+      if (r.status === 404) return null; if (!r.ok) throw new Error(explain(r)); return parse(await r.text());
+    },
+    write: async text => { const r = await fetch(url(FILE), { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: text }).catch(() => { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); }); if (!r.ok) throw new Error(explain(r)); },
+    writeAux: async ({ name, text }) => { const r = await fetch(url(name), { method: 'PUT', headers: headers({ 'Content-Type': 'text/calendar' }), body: text }); if (!r.ok) throw new Error(explain(r)); },
+    signOut: () => settings.setWebdav(null),
+  };
+};
+
 export function microsoftSignOut() { try { const app = msApp; if (app) app.getAllAccounts().forEach(a => app.logoutPopup({ account: a }).catch(() => {})); } catch { /* ignore */ } }
