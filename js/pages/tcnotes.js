@@ -8,6 +8,7 @@ import { docxToLines, textToLines, buildScript, SAMPLE_SCRIPT } from '../docx.js
 
 // pending = frames captured when the user started typing the next note; target = the script line/selection about to be marked
 const S = { id: null, pending: null, view: 'notes', target: null, shared: null, redraw: () => {}, cleanupScript: null };
+const WIDE = matchMedia('(min-width: 1000px)'); // laptop: script and notes side by side
 try { S.id = localStorage.getItem('logi-tclog') || null; } catch { /* ignore */ }
 
 const current = () => (S.id && byId('logs', S.id)) || null;
@@ -216,8 +217,10 @@ export const tcnotes = {
       if (S.shared) { const f = S.shared; S.shared = null; setTimeout(() => openImport(log, f), 50); }
     };
     S.redraw = draw;
+    const onWide = () => draw();
+    WIDE.addEventListener('change', onWide);
     draw();
-    return () => { stop(); unsub(); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null; };
+    return () => { stop(); unsub(); WIDE.removeEventListener('change', onWide); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null; };
   },
 };
 function picker() {
@@ -281,17 +284,21 @@ function logView(log, setTimer) {
       h('div', { class: 'card-row' }, h('div', { class: 'grow' }, h('h2', null, log.title), h('div', { class: 'muted small' }, [log.camera, log.bookingId && byId('bookings', log.bookingId)?.title].filter(Boolean).join(' · '))),
         h('button', { class: 'btn ' + (sync ? 'ghost' : 'primary'), onclick: () => openSync(log) }, sync ? 'Re-sync' : 'Sync')),
       clock, status, rollCut),
-    h('div', { class: 'seg wide tc-views', role: 'tablist' },
+    !WIDE.matches && h('div', { class: 'seg wide tc-views', role: 'tablist' },
       h('button', { role: 'tab', class: S.view !== 'script' ? 'on' : '', 'aria-selected': S.view !== 'script', onclick: () => { S.view = 'notes'; S.redraw(); } }, `Notes (${log.notes.length})`),
       h('button', { role: 'tab', class: S.view === 'script' ? 'on' : '', 'aria-selected': S.view === 'script', onclick: () => { S.view = 'script'; S.redraw(); } }, log.script ? `Script (${log.notes.filter(n => n.para).length} marks)` : 'Script')),
-    S.view === 'script' ? scriptView(log) : [
+    WIDE.matches
+      ? h('div', { class: 'tc-split' }, h('div', { class: 'tc-pane' }, h('h3', null, `Notes (${log.notes.length})`), notesPane()), h('div', { class: 'tc-pane' }, h('h3', null, 'Script'), scriptView(log)))
+      : S.view === 'script' ? scriptView(log) : notesPane());
+
+  function notesPane() { return [
     h('div', { class: 'card tc-composer' },
       h('div', { class: 'card-row' }, h('span', { class: 'muted small' }, 'Next note at ', stamp), h('button', { class: 'btn ghost small', onclick: mark, title: 'Stamp the current timecode with no text' }, '⏺ Mark now')),
       input,
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: add }, '+ Add note'))),
     notes.length
       ? h('ol', { class: 'tc-notes', 'aria-label': 'Notes' }, notes.map(n => noteRow(log, n)))
-      : h('p', { class: 'muted small' }, 'Notes appear here, in timecode order.')]);
+      : h('p', { class: 'muted small' }, 'Notes appear here, in timecode order.')]; }
 }
 
 // Record run: the camera's count only moves while it records. Roll restarts the count from the held value, Cut freezes it.
@@ -505,7 +512,7 @@ function actionBar(log) {
 
 function jumpTo(log, n) {
   if (!n.para) return toast('This note is no longer pinned to a line');
-  S.view = 'script'; S.target = null; S.redraw();
+  S.view = 'script'; S.target = null; if (!WIDE.matches) S.redraw();
   const el = document.getElementById('sc-' + n.para);
   if (el) { el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); }
 }

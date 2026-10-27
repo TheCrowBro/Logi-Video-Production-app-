@@ -262,3 +262,38 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .sc-bar .actions { margin-top: 8px; } .sc-bar .actions .btn { flex: 1 1 auto; justify-content: center; }
 .sc-target { min-width: 0; word-break: break-word; }
 .import-preview { display: grid; gap: 6px; } .import-sample { border-left: 3px solid var(--line); padding-left: 10px; display: grid; gap: 2px; }
+
+/* install */
+.install-steps { padding-left: 1.3rem; display: grid; gap: 10px; margin: 0; }
+
+/* desktop / tablet layout: same app, more room */
+.rolodex { max-width: 720px; margin: 0 auto; }
+@media (min-width: 760px) {
+  .list { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0 12px; }
+  .stats { max-width: 560px; }
+}
+@media (min-width: 1000px) {
+  #app { max-width: 1120px; }
+  .page-card { max-width: 1120px; margin: 0 auto; }
+  .page-head h1 { font-size: 1.7rem; }
+  /* bookings month: calendar left, what's next right */
+  .bk-month { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-rows: auto auto 1fr; column-gap: 28px; align-items: start; }
+  .bk-month > .page-head { grid-column: 1 / -1; }
+  .bk-month > .cal-nav { grid-column: 1; grid-row: 2; } .bk-month > .cal { grid-column: 1; grid-row: 3; }
+  .bk-month > h3 { grid-column: 2; grid-row: 2; margin: 0; align-self: center; } .bk-month > .list, .bk-month > .empty { grid-column: 2; grid-row: 3; grid-template-columns: 1fr; }
+  .bk-month .day { min-height: 110px; }
+  /* booking detail: two columns of sections under the header */
+  .bk-detail { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
+  .bk-detail > .page-head, .bk-detail > .hero, .bk-detail > .sunline { grid-column: 1 / -1; }
+  .bk-detail .block .list { grid-template-columns: 1fr; }
+  /* timecode notes: script beside notes */
+  .tc-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0 28px; align-items: start; }
+  .tc-pane { min-width: 0; }
+  .tc-pane > h3 { margin-top: 8px; }
+  .tc-head .tc-clock { font-size: 3.6rem; }
+  .sc-bar { box-shadow: 0 -6px 18px #0002; }
+  /* field tools and forms get a sensible width instead of stretching */
+  .tool-body, .locbar { max-width: 760px; }
+  .cam-wrap { max-height: 56vh; }
+  .sheet { width: min(760px, 100%); }
+}

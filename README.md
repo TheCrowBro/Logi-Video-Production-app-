@@ -14,6 +14,22 @@ An installable (PWA) app for freelance videographers and small video businesses.
 
 | 8 | **TC Notes** | Timecode-stamped shoot notes. Pick the camera's frame rate (23.976, 24, 25, 29.97 NDF/DF, 30, 50, 59.94 NDF/DF, 60), free-run or record-run mode, sync once by typing the camera's timecode or scanning its display with the phone camera, then every note is stamped with the running camera timecode the moment you start typing. "Mark now" drops a stamp to fill in later. Export as .txt or .csv for the edit. |
 
+## Web app and installed app — the same thing
+
+Logi is one web app at one address. Open the address in any browser and use it there, or install it from that same address for an icon, full-screen use and offline access. Both share the same data (link a cloud storage under ☁ to keep your phone, laptop and browser in step).
+
+| Platform | Use in the browser | Install |
+|----------|--------------------|---------|
+| iPhone / iPad | Safari | Safari → Share → **Add to Home Screen** (the **Install** button in the header shows the steps) |
+| Android | Chrome, Edge, Samsung Internet | **Install** button in the header, or menu ⋮ → *Install app* |
+| Windows / Mac / Linux | Any browser | Chrome or Edge: **Install** button, or the install icon in the address bar. Firefox has no install; use it in a tab. |
+
+On a laptop the layout opens up: calendar beside the upcoming list, booking details in two columns, equipment and crew in a grid, and in TC Notes the script sits beside the notes.
+
+### Publishing it (GitHub Pages)
+
+`.github/workflows/pages.yml` deploys the app to GitHub Pages at `https://thecrowbro.github.io/Logi-Video-Production-app-/`. It runs on every push to `main`, or on demand: Actions → *Deploy to GitHub Pages* → *Run workflow* (pick any branch to preview it). The first run switches Pages on for the repository by itself. Any static host (Netlify, Cloudflare Pages, your own server) works too: upload the folder as is, over HTTPS.
+
 ## Run it
 
 It's a static site with no build step — serve the folder over HTTP:
@@ -64,6 +80,8 @@ js/form.js       schema-driven edit forms
 js/suncalc.js    sun + Polaris maths
 js/pages/*.js    one file per section
 js/map.js        map preview, directions links, address lookup
+js/install.js    install prompt / Add-to-Home-Screen help
+.github/workflows/pages.yml  deploy to GitHub Pages
 js/timecode.js   SMPTE timecode maths (drop-frame aware)
 js/docx.js       .docx reader (no library) and script line classification
 vendor/qrcode.js qrcode-generator (MIT)

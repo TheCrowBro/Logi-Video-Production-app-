@@ -9,7 +9,8 @@
 <title>Logi Production Deck</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icons/icon.svg">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<meta name="description" content="Bookings, crew, gear, venues, insurance, contact QR, field tools and timecode notes for freelance videographers. Works in the browser or installed on your phone or computer.">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -18,6 +19,7 @@
   <header class="top">
     <div class="brand"><span class="dot"></span>LOGI <small>production deck</small></div>
     <div class="top-actions">
+    <button id="installBtn" class="cloud" hidden><span class="cloud-ico" aria-hidden="true">⤓</span><span>Install</span></button>
     <button id="displayBtn" class="cloud" aria-label="Display and accessibility settings"><span class="cloud-ico" aria-hidden="true">Aa</span></button>
     <button id="cloudBtn" class="cloud" aria-label="Storage and sync"><span class="cloud-ico">☁</span><span id="cloudLabel">Local</span></button>
     </div>

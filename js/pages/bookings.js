@@ -89,7 +89,7 @@ function month(go) {
   const upcoming = db.bookings.filter(b => endOf(b) >= today && b.status !== 'Cancelled')
     .sort((a, b) => (a.date + (a.start || '')).localeCompare(b.date + (b.start || ''))).slice(0, 4);
 
-  return h('div', null,
+  return h('div', { class: 'bk-month' },
     h('div', { class: 'page-head' },
       h('h1', null, 'Bookings'),
       h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New')),
@@ -153,7 +153,7 @@ function detail(go) {
   const units = gear.reduce((s, g) => s + usedQty(b, g.id), 0);
   const clashes = gear.filter(g => gearClash(b, g.id).length);
 
-  return h('div', null,
+  return h('div', { class: 'bk-detail' },
     h('div', { class: 'page-head' },
       h('button', { class: 'btn ghost small', onclick: () => go({ view: 'day', day: covers(b, S.day) ? S.day : b.date }) }, '‹ ' + fmtShort(covers(b, S.day) ? S.day : b.date)),
       h('button', { class: 'btn ghost', onclick: () => editBooking(b, go) }, 'Edit')),
