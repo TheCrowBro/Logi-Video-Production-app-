@@ -308,3 +308,4 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .scan-reticle { position: absolute; left: 12%; top: 12%; width: 76%; height: 76%; border: 2px solid #fff; border-radius: 12px; box-shadow: 0 0 0 9999px #0005; }
 .scan-status { text-align: center; margin-top: 6px; }
 .linked-pill { color: var(--ok); border-color: var(--ok); }
+@media (max-width: 460px) { .brand small { display: none; } }
