@@ -12,7 +12,7 @@ An installable (PWA) app for freelance videographers and small video businesses.
 | 6 | **Me** | Your details, a **QR code** (vCard contact card, or a link to your website), share as `.vcf`. |
 | 7 | **Field** | Sun planner (rise/set, golden & blue hour, bearings, time scrubber), Polaris finder, white-balance reader (camera), noise meter (microphone). |
 
-| 8 | **TC Notes** | Timecode-stamped shoot notes. Pick the camera's frame rate (23.976, 24, 25, 29.97 NDF/DF, 30, 50, 59.94 NDF/DF, 60), sync once by typing the camera's timecode or scanning its display with the phone camera, then every note is stamped with the running camera timecode the moment you start typing. "Mark now" drops a stamp to fill in later. Export as .txt or .csv for the edit. |
+| 8 | **TC Notes** | Timecode-stamped shoot notes. Pick the camera's frame rate (23.976, 24, 25, 29.97 NDF/DF, 30, 50, 59.94 NDF/DF, 60), free-run or record-run mode, sync once by typing the camera's timecode or scanning its display with the phone camera, then every note is stamped with the running camera timecode the moment you start typing. "Mark now" drops a stamp to fill in later. Export as .txt or .csv for the edit. |
 
 ## Run it
 
@@ -39,7 +39,8 @@ Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can ret
 
 ## Timecode notes
 
-- Set the camera to **free-run** timecode so it keeps counting between takes; the app assumes the camera's clock runs continuously from the sync moment.
+- Each log has a **timecode mode**. *Free run*: the camera's clock always counts, so the app counts continuously from the sync moment. *Record run*: the camera only counts while recording, so you tap **● Roll** and **■ Cut** with the camera; the clock holds between takes, and each take is logged as a note with its length (switch that off in the log settings).
+- When syncing in record run, tick "the camera is recording right now" only if it is; a stopped camera shows its last recorded timecode, and the app holds there until you tap Roll.
 - The sync moment is the instant you tap Sync (typed) or Scan (camera); a slow OCR read doesn't put you out. Re-sync if the camera's clock is reset.
 - Camera scanning uses Tesseract OCR loaded from a CDN on first use (needs a connection once; the reader is then cached by the browser). Glare, tilt and tiny displays defeat it — typing the value is always available.
 - Phone clocks drift about a second a day against a camera's crystal, so re-sync on long days.

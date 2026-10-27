@@ -3,14 +3,15 @@ import { h, uid, sheet, toast, empty, fmtShort, todayISO, announce } from '../ut
 import { db, byId, upsert, remove, update, subscribe } from '../store.js';
 import * as storeRef from '../store.js';
 import { openForm } from '../form.js';
-import { RATES, rate, framesToTc, tcToFrames, looksLikeTc, tcAt, framesAt } from '../timecode.js';
+import { RATES, rate, framesToTc, tcToFrames, tcAt, framesAt, durationText } from '../timecode.js';
 import { haptic } from '../a11y.js';
 
 const S = { id: null, pending: null }; // pending = frames captured when the user started typing the next note
 try { S.id = localStorage.getItem('logi-tclog') || null; } catch { /* ignore */ }
 
 const current = () => (S.id && byId('logs', S.id)) || null;
-const settings = log => ({ r: rate(log.rate), sync: log.sync || null });
+const MODES = [['free', 'Free run (camera clock always counts)'], ['record', 'Record run (counts only while recording)']];
+const settings = log => ({ r: rate(log.rate), sync: log.sync || null, record: log.mode === 'record' });
 const nowTc = log => { const { r, sync } = settings(log); return sync ? tcAt(sync, r) : null; };
 const nowFrames = log => { const { r, sync } = settings(log); return sync ? framesAt(sync, r) : null; };
 const fmt = (frames, log) => framesToTc(frames, rate(log.rate));
@@ -18,15 +19,16 @@ const fmt = (frames, log) => framesToTc(frames, rate(log.rate));
 function newLog() {
   openForm({
     title: 'New timecode log',
-    values: { title: '', rate: '23.976', bookingId: '' },
+    values: { title: '', rate: '23.976', mode: 'free', bookingId: '' },
     fields: [
       { key: 'title', label: 'Title', required: true, placeholder: 'e.g. Harbour Brewing — Day 1, A cam' },
       { key: 'rate', label: 'Camera frame rate', type: 'select', options: RATES.map(r => [r.id, r.label]), hint: 'Match the camera’s timecode setting, not the sensor rate. Most cameras are 23.976 or 25.' },
+      { key: 'mode', label: 'Timecode mode', type: 'select', options: MODES, hint: 'Record run: you tap Roll and Cut with the camera, and each take is logged.' },
       { key: 'camera', label: 'Camera / card', placeholder: 'A cam, card 1' },
       ...(db.bookings.length ? [{ key: 'bookingId', label: 'Booking', type: 'select', options: [['', 'None'], ...[...db.bookings].sort((a, b) => b.date.localeCompare(a.date)).map(b => [b.id, `${fmtShort(b.date)} — ${b.title}`])] }] : []),
     ],
     onSave: v => {
-      const log = { ...v, id: uid(), created: todayISO(), notes: [], sync: null };
+      const log = { ...v, id: uid(), created: todayISO(), notes: [], sync: null, take: 0, autoTakes: true };
       if (!log.bookingId) delete log.bookingId;
       S.id = log.id; try { localStorage.setItem('logi-tclog', log.id); } catch { /* ignore */ }
       upsert('logs', log);
@@ -37,10 +39,12 @@ function newLog() {
 function editLog(log) {
   openForm({
     title: 'Log settings',
-    values: log,
+    values: { ...log, mode: log.mode || 'free', autoTakes: log.autoTakes === false ? 'no' : 'yes' },
     fields: [
       { key: 'title', label: 'Title', required: true },
       { key: 'rate', label: 'Camera frame rate', type: 'select', options: RATES.map(r => [r.id, r.label]), hint: 'Changing this after syncing keeps the sync moment but re-counts the frames.' },
+      { key: 'mode', label: 'Timecode mode', type: 'select', options: MODES, hint: 'Switching to record run holds the clock at its current value until you tap Roll.' },
+      { key: 'autoTakes', label: 'Log each take as a note (record run)', type: 'select', options: [['yes', 'Yes'], ['no', 'No']] },
       { key: 'camera', label: 'Camera / card' },
       ...(db.bookings.length ? [{ key: 'bookingId', label: 'Booking', type: 'select', options: [['', 'None'], ...[...db.bookings].sort((a, b) => b.date.localeCompare(a.date)).map(b => [b.id, `${fmtShort(b.date)} — ${b.title}`])] }] : []),
     ],
@@ -49,6 +53,11 @@ function editLog(log) {
         const old = rate(log.rate), nu = rate(v.rate);
         const f = tcToFrames(framesToTc(log.sync.frames, old).replace(';', ':'), nu);
         v.sync = f == null ? null : { ...log.sync, frames: f };
+      }
+      v.autoTakes = v.autoTakes !== 'no';
+      if (v.mode !== (log.mode || 'free') && v.sync) { // carry the value shown right now into the new mode
+        const now = Date.now();
+        v.sync = { ...v.sync, frames: framesAt(v.sync, rate(v.rate), now), ms: now, rolling: v.mode === 'free' };
       }
       if (!v.bookingId) delete v.bookingId;
       upsert('logs', v);
@@ -60,6 +69,8 @@ function editLog(log) {
 /* --------------------------------- sync --------------------------------- */
 function openSync(log) {
   const r = rate(log.rate);
+  const { record } = settings(log);
+  const rollingBox = h('input', { type: 'checkbox', checked: !!(log.sync && log.sync.rolling !== false) });
   const body = h('div', { class: 'stack' });
   let stream = null, raf = null, ocr = null, busy = false, closeSheet = () => {};
   const live = h('div', { class: 'tc-live muted' });
@@ -73,7 +84,8 @@ function openSync(log) {
     manual.value = d.replace(/(\d{2})(?=\d)/g, '$1:');
   });
   const applySync = (frames, ms, how) => {
-    upsert('logs', { ...byId('logs', log.id), sync: { frames, ms, how, at: new Date().toISOString() }, rate: log.rate });
+    const rolling = record ? rollingBox.checked : true;
+    upsert('logs', { ...byId('logs', log.id), sync: { frames, ms, how, rolling, at: new Date().toISOString() }, rate: log.rate });
     haptic(30); toast('Synced to ' + framesToTc(frames, r)); announce('Timecode synced'); closeSheet();
   };
   const syncNow = () => {
@@ -146,6 +158,7 @@ function openSync(log) {
 
   body.append(
     live,
+    record && h('label', { class: 'check card' }, rollingBox, h('span', null, 'The camera is recording right now', h('em', null, ' — leave unticked if it is stopped and the display is holding its last timecode'))),
     h('div', { class: 'card' },
       h('strong', null, 'Type it'),
       h('p', { class: 'small muted' }, `Read the timecode on the camera, type it, and tap Sync at the instant the camera shows that value. ${r.label}.`),
@@ -164,8 +177,8 @@ function openSync(log) {
 }
 
 /* -------------------------------- export -------------------------------- */
-const asText = log => `${log.title}\n${rate(log.rate).label}${log.camera ? ' · ' + log.camera : ''} · ${log.created}\n\n` + log.notes.map(n => `${fmt(n.frames, log)}  ${n.text}`).join('\n') + '\n';
-const asCsv = log => 'Timecode,Note,Captured\n' + log.notes.map(n => `${fmt(n.frames, log)},"${String(n.text).replace(/"/g, '""')}",${n.at}`).join('\n') + '\n';
+const asText = log => `${log.title}\n${rate(log.rate).label}${log.camera ? ' · ' + log.camera : ''} · ${log.created}\n\n` + log.notes.map(n => `${fmt(n.frames, log)}  ${n.text}${n.dur ? ` [${n.dur}]` : ''}`).join('\n') + '\n';
+const asCsv = log => 'Timecode,Note,Captured\n' + log.notes.map(n => `${fmt(n.frames, log)},"${String(n.text + (n.dur ? ' [' + n.dur + ']' : '')).replace(/"/g, '""')}",${n.at}`).join('\n') + '\n';
 
 async function shareFile(name, type, text) {
   const file = new File([text], name, { type });
@@ -214,9 +227,21 @@ function picker() {
 }
 
 function logView(log, setTimer) {
-  const { r, sync } = settings(log);
-  const clock = h('div', { class: 'tc-clock' + (sync ? '' : ' unsynced'), role: 'timer', 'aria-live': 'off' }, sync ? nowTc(log) : `--:--:--${r.df ? ';' : ':'}--`);
-  const status = h('div', { class: 'muted small' }, sync ? `${r.label} · synced ${sync.how === 'camera' ? 'by camera scan' : 'by hand'} at ${new Date(sync.ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : `${r.label} · not synced — tap Sync and match the camera`);
+  const { r, sync, record } = settings(log);
+  const rolling = !!sync && sync.rolling !== false;
+  const clock = h('div', { class: 'tc-clock' + (sync ? '' : ' unsynced') + (record && sync && !rolling ? ' held' : ''), role: 'timer', 'aria-live': 'off' }, sync ? nowTc(log) : `--:--:--${r.df ? ';' : ':'}--`);
+  const when = ms => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const status = h('div', { class: 'muted small' }, !sync
+    ? `${r.label} · ${record ? 'record run' : 'free run'} · not synced — tap Sync and match the camera`
+    : record
+      ? `${r.label} · record run · ${rolling ? `recording take ${log.take || 1} since ${when(sync.ms)}` : `camera stopped, holding since ${when(sync.ms)}`}`
+      : `${r.label} · free run · synced ${sync.how === 'camera' ? 'by camera scan' : 'by hand'} at ${when(sync.ms)}`);
+  const rollCut = record && h('div', { class: 'rollcut' },
+    rolling
+      ? h('button', { class: 'btn rec-btn cut', onclick: () => cut(log), 'aria-label': 'Cut: stop the timecode count' }, '■ Cut')
+      : h('button', { class: 'btn rec-btn roll', disabled: !sync, onclick: () => roll(log), 'aria-label': 'Roll: start the timecode count' }, '● Roll'),
+    h('span', { class: 'pill ' + (rolling ? 'st-cancelled' : '') }, rolling ? 'REC' : 'STBY'),
+    !sync && h('span', { class: 'muted small' }, 'Sync first'));
   setTimer(setInterval(() => { if (sync && !document.hidden) clock.textContent = nowTc(log); }, 1000 / Math.min(r.nominal, 30)));
 
   // Composer: the stamp is taken when you start typing (that is the moment you saw it), and shown live.
@@ -248,7 +273,7 @@ function logView(log, setTimer) {
     h('div', { class: 'card tc-head' },
       h('div', { class: 'card-row' }, h('div', { class: 'grow' }, h('h2', null, log.title), h('div', { class: 'muted small' }, [log.camera, log.bookingId && byId('bookings', log.bookingId)?.title].filter(Boolean).join(' · '))),
         h('button', { class: 'btn ' + (sync ? 'ghost' : 'primary'), onclick: () => openSync(log) }, sync ? 'Re-sync' : 'Sync')),
-      clock, status),
+      clock, status, rollCut),
     h('div', { class: 'card tc-composer' },
       h('div', { class: 'card-row' }, h('span', { class: 'muted small' }, 'Next note at ', stamp), h('button', { class: 'btn ghost small', onclick: mark, title: 'Stamp the current timecode with no text' }, '⏺ Mark now')),
       input,
@@ -256,6 +281,29 @@ function logView(log, setTimer) {
     notes.length
       ? h('ol', { class: 'tc-notes', 'aria-label': 'Notes' }, notes.map(n => noteRow(log, n)))
       : h('p', { class: 'muted small' }, 'Notes appear here, in timecode order.'));
+}
+
+// Record run: the camera's count only moves while it records. Roll restarts the count from the held value, Cut freezes it.
+function roll(log) {
+  const l = byId('logs', log.id); if (!l || !l.sync) return;
+  const take = (l.take || 0) + 1, ms = Date.now();
+  update(d => {
+    const x = d.logs.find(y => y.id === log.id);
+    x.sync = { ...x.sync, ms, rolling: true }; x.take = take;
+    if (x.autoTakes !== false) x.notes.push({ id: uid(), frames: x.sync.frames, text: `▶ Take ${take}`, at: new Date().toISOString(), kind: 'roll', take });
+  });
+  haptic(20); announce(`Rolling, take ${take}`);
+}
+function cut(log) {
+  const l = byId('logs', log.id); if (!l || !l.sync) return;
+  const { r } = settings(l), ms = Date.now(), frames = framesAt(l.sync, r, ms), len = frames - l.sync.frames;
+  update(d => {
+    const x = d.logs.find(y => y.id === log.id);
+    x.sync = { ...x.sync, frames, ms, rolling: false };
+    const start = x.notes.find(n => n.kind === 'roll' && n.take === x.take);
+    if (start) start.dur = durationText(len, r);
+  });
+  haptic(20); announce(`Cut. Take ${l.take} was ${durationText(len, r)}`);
 }
 
 function pushNote(log, note) { update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes.push(note); }); }
@@ -266,7 +314,7 @@ function noteRow(log, n) {
   text.addEventListener('blur', () => { const v = text.textContent.trim(); if (v !== (n.text || '')) update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) m.text = v; }); });
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } });
   const tc = h('button', { class: 'tc-mono tc-badge', type: 'button', title: 'Edit timecode', onclick: () => editStamp(log, n) }, n.frames == null ? 'unsynced' : fmt(n.frames, log));
-  return h('li', { class: 'tc-note' }, tc, text, h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes = l.notes.filter(x => x.id !== n.id); }) }, '✕'));
+  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') }, tc, h('div', { class: 'tc-body' }, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => update(d => { const l = d.logs.find(x => x.id === log.id); if (l) l.notes = l.notes.filter(x => x.id !== n.id); }) }, '✕'));
 }
 
 function editStamp(log, n) {

@@ -54,6 +54,8 @@ export function tcToFrames(text, r) {
 
 export const looksLikeTc = text => /^\d{1,2}[:;.,]\d{2}[:;.,]\d{2}(?:[:;.,]\d{2})?$/.test(String(text || '').trim());
 
-// A sync point is { ms: Date.now() when the camera showed it, frames }. Running timecode from one:
-export const framesAt = (sync, r, nowMs = Date.now()) => sync.frames + Math.round(((nowMs - sync.ms) / 1000) * r.nominal * r.scale);
+// A sync point is { ms: Date.now() when the camera showed it, frames, rolling }. Running timecode from one.
+// rolling:false means record-run with the camera stopped: the count holds at `frames` until the next roll.
+export const framesAt = (sync, r, nowMs = Date.now()) => sync.frames + (sync.rolling === false ? 0 : Math.round(((nowMs - sync.ms) / 1000) * r.nominal * r.scale));
+export const durationText = (frames, r) => { const s = Math.round(frames / (r.nominal * r.scale)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 export const tcAt = (sync, r, nowMs) => framesToTc(framesAt(sync, r, nowMs), r);
