@@ -4,6 +4,7 @@ import { openForm } from '../form.js';
 import { editKit } from './gear.js';
 import { venueWarnings, openVenue, chips as venueChips } from './venues.js';
 import { mapButtons } from '../map.js';
+import { openCalendarSheet, openAddToCalendar, shareBooking, mailtoLink } from '../calendar.js';
 import { getTimes } from '../suncalc.js';
 
 const STATUSES = ['Enquiry', 'Confirmed', 'Shot', 'Delivered', 'Cancelled'];
@@ -92,7 +93,7 @@ function month(go) {
   return h('div', { class: 'bk-month' },
     h('div', { class: 'page-head' },
       h('h1', null, 'Bookings'),
-      h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New')),
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: openCalendarSheet }, '📆 Calendar'), h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New'))),
     h('div', { class: 'cal-nav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Previous month', onclick: () => go({ cursor: new Date(y, m - 1, 1) }) }, '‹'),
       h('div', { class: 'cal-title' }, new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
@@ -161,7 +162,8 @@ function detail(go) {
       h('div', { class: 'card-row' }, h('h2', null, b.title), pill(b.status)),
       h('div', { class: 'muted' }, [dateRange(b, fmtLong), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`].filter(Boolean).join(' · ')),
       b.client && h('div', null, '🏢 ', b.client),
-      b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address))),
+      b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address)),
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openAddToCalendar(b) }, '📆 Add to calendar'), h('button', { class: 'btn ghost small', onclick: () => shareBooking(b) }, '📤 Share'), h('a', { class: 'btn ghost small', href: mailtoLink(b) }, '✉ Email'))),
     venueBlock(b, gear),
     sunLine(b.date),
     section('Stakeholders', (b.stakeholders || []).length

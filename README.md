@@ -64,6 +64,18 @@ Dropbox and Google need HTTPS hosting (e.g. GitHub Pages) so the sign-in can ret
 - **Cloud copies merge** rather than overwrite: records are merged one by one (newest edit wins per record, notes are combined, deletions are remembered), so two devices editing at the same time don't lose each other's work. While TC Notes is open the cloud copy is also re-read every few seconds, so notes from another device arrive even without a direct link (subject to the cloud service's own delay).
 - Phone clocks drift about a second a day against a camera's crystal, so re-sync on long days.
 
+## Calendar and email
+
+Open **📆 Calendar** on the Bookings page, or **Add to calendar** on any booking.
+
+| Strength | What it does | Works with |
+|----------|--------------|-----------|
+| **Add once** | One tap puts a booking into Google Calendar, Outlook.com, Microsoft 365, Yahoo (prefilled event) or Apple Calendar / anything else (`.ics` file). *Share* sends the `.ics` and details through the phone's share sheet; *Email* opens a message with the details filled in. *Share bookings* exports every active booking as one `.ics`. | Everything, no setup |
+| **Live feed** | With a cloud storage linked (☁), Logi keeps `logi-bookings.ics` up to date next to its database. Subscribe to the file's link once (Google Calendar: *Other calendars → From URL*; Apple Calendar: *File → New Calendar Subscription*; iPhone: *Settings → Calendar → Accounts → Add Subscribed Calendar*; Outlook: *Add calendar → Subscribe from web*) and the calendar follows every change. Dropbox and Google Drive links are fetched by the app (Dropbox needs the `sharing.write` permission on your Dropbox app; Drive adds the `drive.file` scope, limited to files Logi created). With a synced folder, pick where the file goes and share it from your Dropbox/Drive/OneDrive app. One-way; refresh timing is the calendar's (Apple: your choice, Outlook ~3 h, Google up to a day). | Any calendar app that can subscribe to a URL |
+| **Two-way sync** | Logi creates a *Logi bookings* calendar in your account and keeps it in step: new, changed and cancelled bookings go up; a date, time, title or address you edit in the calendar comes back into the booking. Google needs the same OAuth client ID as the Drive link plus the Google Calendar API enabled (scope `calendar.app.created`: Logi can only touch the calendar it made, and Google asks you to re-approve about hourly). Microsoft needs an Azure app registration (single-page application, redirect URI = the app's address, delegated `Calendars.ReadWrite`); its sign-in refreshes silently. | Google Calendar, Microsoft 365 / Outlook |
+
+Apple's iCloud calendar has no web API, so for it use the live feed or Add once. Cancelled bookings are removed from the feed and from synced calendars.
+
 ## Field-tool accuracy
 
 - **Sun / Polaris** use standard astronomical formulas (checked against known solstice values). Times display in the device's time zone. Compass aiming uses the phone's magnetic compass; enter your local declination for true north.
@@ -87,6 +99,7 @@ js/install.js    install prompt / Add-to-Home-Screen help
 js/link.js       direct device-to-device link (WebRTC), clock offset measurement
 js/qr.js         QR generate / camera decode
 js/range.js      range finder (WebXR hit-test + tilt method)
+js/calendar.js   .ics, add-to-calendar links, live feed, two-way sync (Google / Microsoft)
 js/tour.js       first-run spotlight walkthrough
 .github/workflows/pages.yml  deploy to GitHub Pages
 js/timecode.js   SMPTE timecode maths (drop-frame aware)

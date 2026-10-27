@@ -9,6 +9,8 @@ const LS = {
 export const settings = {
   dropboxKey: () => LS.get('logi-dropbox-key') || '',
   gdriveId: () => LS.get('logi-gdrive-id') || '',
+  msId: () => LS.get('logi-ms-id') || '',
+  setMsId: v => LS.set('logi-ms-id', v.trim()),
   setDropboxKey: v => LS.set('logi-dropbox-key', v.trim()),
   setGdriveId: v => LS.set('logi-gdrive-id', v.trim()),
 };
@@ -23,11 +25,13 @@ const parse = text => {
 };
 
 /* ------------------------------ local file ------------------------------ */
-export const fileAdapter = handle => ({
-  id: 'file', label: handle.name, handle,
+export const fileAdapter = (handle, aux = null) => ({
+  id: 'file', label: handle.name, handle, aux,
   ready: async (ask) => (await handle.queryPermission({ mode: 'readwrite' })) === 'granted' || (ask && (await handle.requestPermission({ mode: 'readwrite' })) === 'granted'),
   read: async () => parse(await (await handle.getFile()).text()),
   write: async text => { const w = await handle.createWritable(); await w.write(text); await w.close(); },
+  // The calendar feed goes to a second file the user picks in the same synced folder.
+  writeAux: async function ({ text }) { if (!this.aux) return; if ((await this.aux.queryPermission({ mode: 'readwrite' })) !== 'granted') return; const w = await this.aux.createWritable(); await w.write(text); await w.close(); },
 });
 
 /* -------------------------------- Dropbox -------------------------------- */
@@ -86,34 +90,55 @@ export const dropboxAdapter = () => ({
     const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + await dropboxToken(), 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': JSON.stringify({ path: '/' + FILE, mode: 'overwrite', mute: true }) }, body: text });
     if (!r.ok) throw new Error('Dropbox write failed (' + r.status + ')');
   },
+  writeAux: async ({ name, text }) => {
+    const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + await dropboxToken(), 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': JSON.stringify({ path: '/' + name, mode: 'overwrite', mute: true }) }, body: text });
+    if (!r.ok) throw new Error('Dropbox feed write failed (' + r.status + ')');
+  },
+  // A direct-download shared link for the feed. Needs the sharing.write scope on your Dropbox app.
+  shareLink: async name => {
+    const hdr = { Authorization: 'Bearer ' + await dropboxToken(), 'Content-Type': 'application/json' };
+    let r = await fetch('https://api.dropboxapi.com/2/sharing/create_shared_link_with_settings', { method: 'POST', headers: hdr, body: JSON.stringify({ path: '/' + name }) });
+    let j = await r.json().catch(() => ({}));
+    if (r.status === 409 && /already_exists/.test(JSON.stringify(j))) { r = await fetch('https://api.dropboxapi.com/2/sharing/list_shared_links', { method: 'POST', headers: hdr, body: JSON.stringify({ path: '/' + name, direct_only: true }) }); j = await r.json(); j = j.links?.[0] || {}; }
+    if (!r.ok && r.status !== 409) throw new Error(r.status === 401 || r.status === 403 ? 'Your Dropbox app needs the sharing.write permission (add it in the Dropbox App Console, then reconnect).' : 'Dropbox link failed (' + r.status + ')');
+    if (!j.url) throw new Error('Dropbox did not return a link');
+    const u = new URL(j.url); u.searchParams.set('dl', '1'); return u.toString(); // dl=1 serves the file itself
+  },
   signOut: () => { LS.del('logi-dbx-token'); },
 });
 
 /* ----------------------------- Google Drive ----------------------------- */
-let gisPromise, gToken = null;
+let gisPromise; const gTokens = {}; // one token per scope set
 export const loadGIS = () => gisPromise || (gisPromise = new Promise((res, rej) => {
   if (window.google?.accounts?.oauth2) return res();
   const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; s.onerror = () => rej(new Error('Could not load Google sign-in')); document.head.append(s);
 }));
 
-async function gdriveToken(interactive) {
-  if (gToken && gToken.exp > Date.now()) return gToken.value;
+export async function googleToken(scope, interactive) {
+  const t = gTokens[scope];
+  if (t && t.exp > Date.now()) return t.value;
+  if (!interactive) throw new Error('Google sign-in needed — tap Reconnect / Sync now');
   const id = settings.gdriveId();
   if (!id) throw new Error('Enter your Google client ID first');
   await loadGIS();
   return new Promise((res, rej) => {
     const client = google.accounts.oauth2.initTokenClient({
-      client_id: id, scope: 'https://www.googleapis.com/auth/drive.appdata',
-      callback: r => { if (r.error) return rej(new Error(r.error_description || r.error)); gToken = { value: r.access_token, exp: Date.now() + r.expires_in * 1000 - 60000 }; LS.set('logi-gdrive-on', '1'); res(gToken.value); },
+      client_id: id, scope,
+      callback: r => { if (r.error) return rej(new Error(r.error_description || r.error)); gTokens[scope] = { value: r.access_token, exp: Date.now() + r.expires_in * 1000 - 60000 }; LS.set('logi-gdrive-on', '1'); res(r.access_token); },
       error_callback: e => rej(new Error(e.type || 'Google sign-in blocked')),
     });
-    client.requestAccessToken({ prompt: interactive ? 'consent' : '' });
+    client.requestAccessToken({ prompt: '' });
   });
 }
+export const forgetGoogleToken = scope => { delete gTokens[scope]; };
+const DRIVE_APP = 'https://www.googleapis.com/auth/drive.appdata', DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
+const driveScope = () => LS.get('logi-feed-drive') === '1' ? DRIVE_APP + ' ' + DRIVE_FILE : DRIVE_APP;
+const gdriveToken = interactive => googleToken(driveScope(), interactive);
+const hasToken = () => { const t = gTokens[driveScope()]; return !!(t && t.exp > Date.now()); };
 
 async function gfetch(url, init = {}, interactive = false) {
   const r = await fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: 'Bearer ' + await gdriveToken(interactive) } });
-  if (r.status === 401) { gToken = null; throw new Error('Google session expired — reconnect'); }
+  if (r.status === 401) { forgetGoogleToken(driveScope()); throw new Error('Google session expired — reconnect'); }
   return r;
 }
 
@@ -131,7 +156,7 @@ export const gdriveAdapter = () => {
   return {
     id: 'gdrive', label: 'Google Drive (app data)',
     // Tokens last an hour and can't be refreshed silently by the browser, so ask on a user gesture when expired.
-    ready: async ask => { if (gToken && gToken.exp > Date.now()) return true; if (!ask) return false; await gdriveToken(true); return true; },
+    ready: async ask => { if (hasToken()) return true; if (!ask) return false; await gdriveToken(true); return true; },
     read: async () => {
       const id = await find(); if (!id) return null;
       const r = await gfetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`);
@@ -151,6 +176,52 @@ export const gdriveAdapter = () => {
       }
       if (!r.ok) throw new Error('Drive write failed (' + r.status + ')');
     },
-    signOut: () => { gToken = null; LS.del('logi-gdrive-file'); LS.del('logi-gdrive-on'); },
+    // The feed lives as a visible file in Drive (drive.file scope: only files this app made), shared read-only by link.
+    enableFeed: async () => { LS.set('logi-feed-drive', '1'); await gdriveToken(true); },
+    writeAux: async ({ name, text }) => {
+      if (LS.get('logi-feed-drive') !== '1') return;
+      let fid = LS.get('logi-gdrive-feed');
+      if (!fid) { const r = await gfetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`name='${name}' and trashed=false`)}&fields=files(id)`); fid = (await r.json()).files?.[0]?.id || null; }
+      let r;
+      if (fid) r = await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${fid}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'text/calendar' }, body: text });
+      else {
+        const boundary = 'logi' + Date.now();
+        r = await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ name, mimeType: 'text/calendar' })}\r\n--${boundary}\r\nContent-Type: text/calendar\r\n\r\n${text}\r\n--${boundary}--` });
+        if (r.ok) fid = (await r.json()).id;
+      }
+      if (!r.ok) throw new Error('Drive feed write failed (' + r.status + ')');
+      LS.set('logi-gdrive-feed', fid);
+    },
+    shareLink: async () => {
+      const fid = LS.get('logi-gdrive-feed'); if (!fid) throw new Error('The feed file has not been written yet — add or edit a booking first');
+      const r = await gfetch(`https://www.googleapis.com/drive/v3/files/${fid}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) });
+      if (!r.ok) throw new Error('Could not share the feed file (' + r.status + ')');
+      return `https://drive.google.com/uc?export=download&id=${fid}`;
+    },
+    signOut: () => { forgetGoogleToken(driveScope()); LS.del('logi-gdrive-file'); LS.del('logi-gdrive-feed'); LS.del('logi-gdrive-on'); },
   };
 };
+
+/* ------------------------------ Microsoft 365 ------------------------------ */
+let msalPromise, msApp = null;
+const loadMsal = () => msalPromise || (msalPromise = new Promise((res, rej) => {
+  if (window.msal) return res();
+  const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js'; s.onload = res; s.onerror = () => rej(new Error('Could not load Microsoft sign-in')); document.head.append(s);
+}));
+async function msal() {
+  if (msApp) return msApp;
+  const id = settings.msId(); if (!id) throw new Error('Enter your Microsoft application (client) ID first');
+  await loadMsal();
+  msApp = new window.msal.PublicClientApplication({ auth: { clientId: id, authority: 'https://login.microsoftonline.com/common', redirectUri: redirectUri() }, cache: { cacheLocation: 'localStorage' } });
+  await msApp.initialize();
+  return msApp;
+}
+// MSAL refreshes silently in a hidden frame, so background syncs keep working after the first sign-in.
+export async function microsoftToken(scopes, interactive) {
+  const app = await msal();
+  const account = app.getAllAccounts()[0];
+  if (account) { try { return (await app.acquireTokenSilent({ scopes, account })).accessToken; } catch (e) { if (!interactive) throw new Error('Microsoft sign-in needed — tap Sync now'); } }
+  if (!interactive) throw new Error('Microsoft sign-in needed — tap Sync now');
+  return (await app.loginPopup({ scopes })).accessToken;
+}
+export function microsoftSignOut() { try { const app = msApp; if (app) app.getAllAccounts().forEach(a => app.logoutPopup({ account: a }).catch(() => {})); } catch { /* ignore */ } }

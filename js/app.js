@@ -5,6 +5,7 @@ import * as providers from './providers.js';
 import { applyPrefs, openDisplaySettings } from './a11y.js';
 import { initInstall } from './install.js';
 import { startTour, tourSeen } from './tour.js';
+import './calendar.js'; // registers the feed writer and the auto-push to a linked calendar
 
 applyPrefs();
 document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);

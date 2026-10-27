@@ -10,6 +10,7 @@ const blank = () => ({
   profile: { name: '', business: '', title: '', phone: '', email: '', website: '', location: '', currency: '$', bio: '' },
   bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [], logs: [],
   deleted: {}, // id -> time deleted (tombstones, so a merge with an older copy doesn't bring records back)
+  calSync: { provider: null, calendarId: null, events: {}, feed: false, updatedAt: 0 }, // calendar link + event ids per booking
 });
 
 function load() {
@@ -33,6 +34,7 @@ function normalise(raw) {
     venues: Array.isArray(raw.venues) ? raw.venues : [],
     logs: Array.isArray(raw.logs) ? raw.logs.map(l => ({ ...l, notes: Array.isArray(l.notes) ? l.notes : [], scriptAt: Number(l.scriptAt) || (l.script ? Date.parse(l.script.imported) || 1 : 0) })) : [],
     deleted: Object.fromEntries(Object.entries(raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {}).filter(([, t]) => Date.now() - t < 180 * 864e5)),
+    calSync: { ...b.calSync, ...(raw.calSync && typeof raw.calSync === 'object' ? raw.calSync : {}), events: raw.calSync?.events && typeof raw.calSync.events === 'object' ? raw.calSync.events : {} },
   };
 }
 
@@ -166,6 +168,7 @@ export function loadSample() {
 export const cloud = {
   supported: typeof window.showSaveFilePicker === 'function', // local-file linking
   adapter: null,
+  auxName: '', feedUrl: '', feedError: '', // calendar feed (see calendar.js)
   status: 'off', // off | synced | saving | needs-permission | error
   error: '',
 };
@@ -189,6 +192,7 @@ const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localSt
 function setStatus(status, error = '') { cloud.status = status; cloud.error = error; emit(); }
 
 export async function initCloud() {
+  cloud.feedUrl = lsGet('logi-feed-url') || '';
   try {
     if (await dropboxFinish()) { lsSet('logi-provider', 'dropbox'); }
   } catch (e) { setStatus('error', e.message); }
@@ -198,7 +202,7 @@ export async function initCloud() {
     else if (provider === 'gdrive') cloud.adapter = gdriveAdapter();
     else if (cloud.supported) {
       const handle = await kv('readonly', s => s.get('fileHandle'));
-      if (handle) cloud.adapter = fileAdapter(handle);
+      if (handle) { const aux = await kv('readonly', s => s.get('auxHandle')); cloud.adapter = fileAdapter(handle, aux || null); cloud.auxName = aux ? aux.name : ''; }
     }
     if (cloud.adapter) await sync();
   } catch (e) { setStatus('error', e.message); }
@@ -235,6 +239,12 @@ export function mergeDb(local, remote) {
   for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues']) out[list] = mergeList(local[list], remote[list], dead, newer);
   out.logs = mergeList(local.logs, remote.logs, dead, (x, y) => mergeLog(x, y, dead));
   out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
+  { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking
+    const a = local.calSync || {}, b = remote.calSync || {}, base = ts(b) > ts(a) ? b : a;
+    const events = { ...(a.events || {}) };
+    for (const [k, v] of Object.entries(b.events || {})) if (!events[k] || (v.at || 0) > (events[k].at || 0)) events[k] = v;
+    out.calSync = { ...base, events };
+  }
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }
@@ -259,13 +269,37 @@ export async function sync({ ask = false, quiet = false } = {}) {
   finally { syncing = false; }
 }
 
+let auxWriter = null;
+export const setAuxWriter = fn => { auxWriter = fn; }; // calendar.js supplies the feed contents
 async function push() {
   if (!cloud.adapter) return;
   try {
     setStatus('saving');
     await cloud.adapter.write(exportJSON());
+    if (db.calSync?.feed && auxWriter && cloud.adapter.writeAux) {
+      try { await cloud.adapter.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
+    }
     setStatus('synced');
   } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
+}
+export async function setFeed(on) {
+  if (on && cloud.adapter?.enableFeed) await cloud.adapter.enableFeed();
+  update(d => { d.calSync = { ...d.calSync, feed: !!on, updatedAt: Date.now() }; });
+  if (on) await push();
+}
+export async function createFeedFile() { // local-file storage: pick where the feed file lives (same synced folder)
+  const handle = await window.showSaveFilePicker({ suggestedName: 'logi-bookings.ics', types: [{ description: 'Calendar feed', accept: { 'text/calendar': ['.ics'] } }] });
+  await kv('readwrite', s => s.put(handle, 'auxHandle'));
+  if (cloud.adapter) cloud.adapter.aux = handle;
+  cloud.auxName = handle.name;
+  await push();
+}
+export async function feedLink() {
+  if (!cloud.adapter?.shareLink) throw new Error('No link for this storage');
+  await push();
+  cloud.feedUrl = await cloud.adapter.shareLink('logi-bookings.ics');
+  lsSet('logi-feed-url', cloud.feedUrl); emit();
+  return cloud.feedUrl;
 }
 
 let timer;
@@ -301,7 +335,8 @@ export const connectGdrive = () => link(gdriveAdapter(), 'gdrive');
 
 export async function unlinkCloud() {
   cloud.adapter?.signOut?.();
-  cloud.adapter = null;
+  cloud.adapter = null; cloud.auxName = ''; cloud.feedUrl = ''; lsSet('logi-feed-url', null);
+  await kv('readwrite', s => s.delete('auxHandle'));
   lsSet('logi-provider', null);
   await kv('readwrite', s => s.delete('fileHandle'));
   setStatus('off');
