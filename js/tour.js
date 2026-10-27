@@ -9,8 +9,7 @@ const STEPS = [
   { go: 'venues', target: ['.page-head'], title: 'Venues', text: 'Rules, permits, contacts and a map pin for every place you shoot. A booking warns if your kit breaks a venue’s rules.' },
   { go: 'field', target: ['.seg.tools'], title: 'Field tools', text: 'Sun and golden hour, Polaris, white balance, a noise meter and a range finder.' },
   { go: 'tcnotes', target: ['.page-head'], title: 'Timecode notes', text: 'Sync once to your camera’s timecode and every note is stamped for the edit. Link your laptop to write on both at once.' },
-  { target: ['#cloudBtn'], title: 'Your data', text: 'Everything stays on this device until you link Dropbox, Google Drive or a synced folder here. Then all your devices share one database.' },
-  { target: ['#displayBtn'], title: 'Make it yours', text: 'Text size, bigger buttons, contrast and animation live here, and so does this tour if you want it again.' },
+  { go: 'settings', target: ['.page-head'], title: 'Settings', text: 'Storage and sync (your data stays on this device until you link Dropbox, Google Drive or a synced folder), calendar links, display and accessibility, field-tool defaults, backups, and this tour again.' },
 ];
 const done = () => { try { localStorage.setItem('logi-tour', 'done'); } catch { /* ignore */ } };
 export const tourSeen = () => { try { return !!localStorage.getItem('logi-tour'); } catch { return true; } };

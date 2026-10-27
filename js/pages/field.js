@@ -93,6 +93,7 @@ function finder(getTarget, label) {
   };
   const stop = () => { off.forEach(f => f()); off = []; on = false; heading = null; btn.textContent = 'Aim with phone'; out.className = 'finder muted'; out.textContent = 'Tap “Aim with phone” and hold the phone upright, back camera facing out.'; };
   const btn = h('button', { class: 'btn primary', onclick: () => (on ? stop() : start()) }, 'Aim with phone');
+  try { S.declination = Number(localStorage.getItem('logi-decl')) || 0; } catch { /* keep */ }
   const decl = h('input', { type: 'number', step: 'any', value: S.declination, 'aria-label': 'Magnetic declination in degrees', oninput: e => { S.declination = Number(e.target.value) || 0; try { localStorage.setItem('logi-decl', S.declination); } catch { /* ignore */ } } });
   return { el: h('div', { class: 'card' }, h('div', { class: 'card-row' }, btn, h('label', { class: 'decl small muted' }, 'Declination° (E+) ', decl)), out), stop, repaint: paint };
 }

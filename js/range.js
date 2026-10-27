@@ -20,6 +20,7 @@ export async function arSupported() {
 }
 
 export function range(root) {
+  units = LS.get('logi-units') || 'm';
   const stops = [];
   const unitSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Units' }, [['m', 'Metres'], ['ft', 'Feet']].map(([u, l]) => h('button', { type: 'button', class: units === u ? 'on' : '', 'aria-pressed': units === u, onclick: () => { units = u; LS.set('logi-units', u); root.replaceChildren(); stops.forEach(f => f()); range(root); } }, l)));
   root.append(

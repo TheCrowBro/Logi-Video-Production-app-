@@ -30,6 +30,8 @@ On a laptop the layout opens up: calendar beside the upcoming list, booking deta
 
 `.github/workflows/pages.yml` deploys the app to GitHub Pages at `https://thecrowbro.github.io/Logi-Video-Production-app-/`. It runs on every push to `main`, or on demand: Actions → *Deploy to GitHub Pages* → *Run workflow* (pick any branch to preview it). The first run switches Pages on for the repository by itself. Any static host (Netlify, Cloudflare Pages, your own server) works too: upload the folder as is, over HTTPS.
 
+| 9 | **Settings** | Storage & sync, calendar & email, display & accessibility, field-tool defaults (location, units, declination, camera height, noise calibration), profile currency, install, backups (export / import / sample / erase), about and the tour. The ☁ and Aa buttons in the header are shortcuts to the same panels. |
+
 ## Run it
 
 It's a static site with no build step — serve the folder over HTTP:

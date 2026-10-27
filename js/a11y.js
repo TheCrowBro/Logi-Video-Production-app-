@@ -30,17 +30,23 @@ const GROUPS = [
   ['haptics', 'Vibration feedback', [[true, 'On'], [false, 'Off']]],
 ];
 
-export function openDisplaySettings() {
-  const body = h('div', { class: 'stack' });
-  const draw = () => body.replaceChildren(...GROUPS.map(([key, label, opts]) => h('div', { class: 'pref', role: 'group', 'aria-label': label },
+export const prefsSummary = () => [prefs.text !== 'normal' && `${prefs.text === 'large' ? 'large' : 'extra large'} text`, prefs.targets === 'large' && 'big buttons', prefs.contrast === 'high' && 'high contrast', prefs.motion !== 'soft' && (prefs.motion === 'off' ? 'no animation' : 'Rolodex only')].filter(Boolean).join(' · ') || 'standard';
+
+export function displayPanel({ onTour } = {}) {
+  const groups = h('div', { class: 'stack' });
+  const draw = () => groups.replaceChildren(...GROUPS.map(([key, label, opts]) => h('div', { class: 'pref', role: 'group', 'aria-label': label },
     h('div', { class: 'pref-label' }, label),
     h('div', { class: 'seg wide' }, opts.map(([v, l]) => h('button', {
       type: 'button', class: prefs[key] === v ? 'on' : '', 'aria-pressed': prefs[key] === v,
       onclick: () => { prefs[key] = v; save(); haptic(); draw(); },
     }, l))))));
   draw();
-  body.append(
-    h('div', { class: 'pref' }, h('div', { class: 'pref-label' }, 'Help'), h('button', { class: 'btn ghost', onclick: () => { close(); setTimeout(() => startTour(), 150); } }, '🧭 Take the tour again')),
+  const el = h('div', { class: 'stack' }, groups,
+    onTour && h('div', { class: 'pref' }, h('div', { class: 'pref-label' }, 'Help'), h('button', { class: 'btn ghost', onclick: onTour }, '🧭 Take the tour again')),
     h('p', { class: 'muted small' }, '“Small touches” are short, gentle effects: buttons pressing, cards lifting, new notes popping in, the tour spotlight gliding. Nothing slides across the screen. Choose Rolodex only or None to stop them; everything also stops if your phone is set to reduce motion.'));
-  const { close } = sheet('Display & accessibility', body);
+  return { el, destroy: () => {} };
+}
+
+export function openDisplaySettings() {
+  const { close } = sheet('Display & accessibility', displayPanel({ onTour: () => { close(); setTimeout(() => startTour(), 150); } }).el);
 }

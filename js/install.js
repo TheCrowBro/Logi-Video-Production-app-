@@ -4,6 +4,7 @@ import { h, sheet } from './util.js';
 const standalone = () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true;
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let deferred = null;
+export const installState = () => ({ standalone: standalone(), canPrompt: !!deferred, ios: isIOS() });
 
 export function initInstall(btn) {
   if (!btn) return;

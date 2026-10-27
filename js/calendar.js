@@ -211,7 +211,7 @@ const microsoft = {
 export const ADAPTERS = { google, microsoft };
 
 /* --------------------------------- sheet --------------------------------- */
-export function openCalendarSheet() {
+export function calendarPanel() {
   const body = h('div', { class: 'stack' });
   const keyField = (label, get, set, ph) => h('input', { type: 'text', placeholder: ph, 'aria-label': label, value: get(), autocomplete: 'off', spellcheck: false, oninput: e => set(e.target.value) });
   const help = text => h('details', { class: 'help' }, h('summary', null, 'Setup'), h('div', { class: 'small muted' }, text));
@@ -249,5 +249,6 @@ export function openCalendarSheet() {
   };
   draw();
   const un1 = onCalChange(draw), un2 = store.subscribe(() => { if (document.activeElement?.tagName !== 'INPUT') draw(); });
-  sheet('Calendar & email', body, { onClose: () => { un1(); un2(); } });
+  return { el: body, destroy: () => { un1(); un2(); } };
 }
+export function openCalendarSheet() { const p = calendarPanel(); sheet('Calendar & email', p.el, { onClose: p.destroy }); }

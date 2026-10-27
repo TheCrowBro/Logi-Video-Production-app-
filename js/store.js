@@ -120,6 +120,13 @@ export function replaceAll(data) {
 
 export function exportJSON() { return JSON.stringify(db, null, 2); }
 
+// Wipe this device: unlink storage first so the cloud copy is left alone.
+export async function eraseAll() {
+  await unlinkCloud();
+  db = blank(); db.updatedAt = Date.now();
+  persistLocal(); emit();
+}
+
 export function loadSample() {
   const d = new Date(); const iso = (off) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() + off); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; };
   const venueA = uid();

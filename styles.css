@@ -345,3 +345,15 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .xr-sub { font-size: .9rem; opacity: .9; }
 .xr-bar { display: flex; gap: 10px; justify-content: center; padding-bottom: 24px; pointer-events: auto; } .xr-bar .btn { min-width: 6rem; justify-content: center; }
 .xr-overlay .btn.ghost { background: #0008; color: #fff; border-color: #fff8; }
+
+/* settings */
+.settings-section { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; }
+.settings-section > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 10px; padding: 14px; min-height: var(--hit); font-weight: 700; }
+.settings-section > summary::-webkit-details-marker { display: none; }
+.settings-section > summary::after { content: '›'; margin-left: auto; color: var(--muted); font-size: 1.3rem; transition: transform .15s ease; }
+.settings-section[open] > summary::after { transform: rotate(90deg); }
+.settings-section > summary:focus-visible { outline: 3px solid var(--focus); border-radius: var(--radius); }
+.ss-status { font-weight: 500; }
+.ss-body { padding: 0 14px 14px; border-top: 1px solid var(--line); padding-top: 12px; }
+.ss-body .provider, .ss-body .card { background: var(--bg2); }
+@media (min-width: 1000px) { .settings-section { max-width: 760px; } }
