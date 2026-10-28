@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline' https://accounts.google.com; frame-src https://accounts.google.com https://login.microsoftonline.com https://login.live.com; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://www.dropbox.com; manifest-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#14110f">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11,7 +12,7 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <meta name="description" content="Bookings, crew, gear, venues, insurance, contact QR, field tools and timecode notes for freelance videographers. Works in the browser or installed on your phone or computer.">
-<script>try{var p=JSON.parse(localStorage.getItem('logi-prefs')||'{}'),d=document.documentElement;d.dataset.palette=p.palette||'brass';d.dataset.scheme=p.scheme==='light'||p.scheme==='dark'?p.scheme:(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');}catch(e){}</script>
+<script src="js/prepaint.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -21,6 +22,7 @@
     <div class="brand"><span class="dot"></span>VDEX <small>production deck</small></div>
     <div class="top-actions">
     <button id="installBtn" class="cloud" hidden><span class="cloud-ico" aria-hidden="true">⤓</span><span>Install</span></button>
+    <button id="lockBtn" class="cloud" hidden aria-label="Lock Vdex" title="Lock Vdex"><span class="cloud-ico" aria-hidden="true">🔒</span></button>
     <button id="displayBtn" class="cloud" aria-label="Display and accessibility settings"><span class="cloud-ico" aria-hidden="true">Aa</span></button>
     <button id="cloudBtn" class="cloud" aria-label="Storage and sync"><span class="cloud-ico">☁</span><span id="cloudLabel">Local</span></button>
     </div>

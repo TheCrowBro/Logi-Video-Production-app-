@@ -1,7 +1,7 @@
 // Single JSON database. Lives in localStorage for speed/offline, and is mirrored to a
 // file you pick inside any cloud-synced folder (Google Drive, Dropbox, OneDrive, iCloud Drive...)
 // using the File System Access API where available. Export/Import covers everything else.
-import { uid } from './util.js';
+import { uid, ymd } from './util.js';
 import { fileAdapter, dropboxAdapter, gdriveAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish } from './providers.js';
 
 const KEY = 'logi-db-v1';
@@ -42,11 +42,22 @@ function normalise(raw) {
 }
 
 export let db = load();
+// The app lock seals the plaintext copy while the app is hidden or locked; writes then wait in memory for the unseal.
+let sealed = false, dirty = false, pendingSync = false, rev = 0;
+export const revision = () => rev;
+export const isSealed = () => sealed;
+export const serialize = () => JSON.stringify(db);
+export function setSealed(on) { sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; schedulePush(); } } }
+export function flush() { persistLocal(); }
+export function reload() { db = load(); rev++; emit(); }
+export const touch = () => emit();
 const subs = new Set();
 export const subscribe = fn => { subs.add(fn); return () => subs.delete(fn); };
 const emit = () => subs.forEach(fn => fn());
 
 function persistLocal() {
+  rev++;
+  if (sealed) { dirty = true; return; }
   try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { console.warn('localStorage full?', e); }
 }
 
@@ -127,7 +138,11 @@ export function exportJSON() { return JSON.stringify(db, null, 2); }
 export async function eraseAll() {
   await unlinkCloud();
   db = blank(); db.updatedAt = Date.now();
+  sealed = false; dirty = false;
   persistLocal(); emit();
+  // The lock's vault, PIN and backup marks go too, otherwise the next start would bring the old data back.
+  ['logi-vault', 'logi-lock', 'logi-backup-cloud', 'logi-backup-export', 'logi-sync-at', 'logi-backup-nudge', 'logi-loc'].forEach(k => lsSet(k, null));
+  setTimeout(() => location.reload(), 600);
 }
 
 export function loadSample() {
@@ -273,6 +288,7 @@ export function mergeDb(local, remote) {
 let syncing = false;
 export async function sync({ ask = false, quiet = false } = {}) {
   const a = cloud.adapter;
+  if (sealed) { pendingSync = true; return; }
   if (!a || syncing) return;
   syncing = true;
   try {
@@ -284,7 +300,7 @@ export async function sync({ ask = false, quiet = false } = {}) {
     const localChanged = JSON.stringify(merged) !== JSON.stringify(db);
     const remoteStale = JSON.stringify(merged) !== JSON.stringify(normalise(remote));
     if (localChanged) { db = merged; persistLocal(); emit(); }
-    if (remoteStale) await push(); else setStatus('synced');
+    if (remoteStale) await push(); else { lsSet('logi-sync-at', String(Date.now())); setStatus('synced'); }
   } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
   finally { syncing = false; }
 }
@@ -296,6 +312,8 @@ async function push() {
   try {
     setStatus('saving');
     await cloud.adapter.write(exportJSON());
+    lsSet('logi-sync-at', String(Date.now()));
+    await autoBackup();
     if (db.calSync?.feed && auxWriter && cloud.adapter.writeAux) {
       try { await cloud.adapter.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
     }
@@ -322,8 +340,25 @@ export async function feedLink() {
   return cloud.feedUrl;
 }
 
+// Once a day, after a change, a dated copy goes next to the database: one file per weekday and one per month.
+async function autoBackup() {
+  const a = cloud.adapter; if (!a || !a.writeExtra) return;
+  const now = new Date(), day = ymd(now), month = day.slice(0, 7);
+  let last = {}; try { last = JSON.parse(lsGet('logi-backup-cloud')) || {}; } catch { /* none yet */ }
+  if (last.day === day) return;
+  const names = [`vdex-backup-${['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][now.getDay()]}.json`];
+  if (last.month !== month) names.push(`vdex-backup-${month}.json`);
+  try {
+    const text = exportJSON();
+    for (const name of names) await a.writeExtra(name, text);
+    lsSet('logi-backup-cloud', JSON.stringify({ day, month, at: Date.now(), name: names[0], provider: a.id }));
+    cloud.backupError = '';
+  } catch (e) { cloud.backupError = e.message; }
+}
+
 let timer;
 function schedulePush() {
+  if (sealed) { pendingSync = true; return; }
   if (!cloud.adapter || cloud.status === 'needs-permission') return;
   clearTimeout(timer);
   timer = setTimeout(push, 800);

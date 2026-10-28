@@ -10,6 +10,8 @@ import { startTour } from '../tour.js';
 import { VERSION, REPO } from '../version.js';
 import * as notify from '../notify.js';
 import { templatesPanel } from '../workflow.js';
+import { securityPanel, enabled as lockEnabled, config as lockConfig } from '../lock.js';
+import { health as backupHealth } from '../backup.js';
 
 const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null || v === '' ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* ignore */ } } };
 const loc = () => { try { return JSON.parse(LS.get('logi-loc')); } catch { return null; } };
@@ -17,7 +19,7 @@ const loc = () => { try { return JSON.parse(LS.get('logi-loc')); } catch { retur
 export const settings = {
   id: 'settings', label: 'Settings', icon: '⚙️',
   render(root) {
-    const panels = [storagePanel(), calendarPanel()];
+    const panels = [storagePanel(), calendarPanel(), securityPanel()];
     const display = displayPanel({ onTour: () => startTour() });
     const section = (title, status, body, open = false) => h('details', { class: 'settings-section', open },
       h('summary', null, h('span', { class: 'ss-title' }, title), status && h('span', { class: 'ss-status muted small' }, status)),
@@ -27,6 +29,7 @@ export const settings = {
     root.append(
       h('div', { class: 'page-head' }, h('h1', null, 'Settings')),
       section('Storage & sync', c.adapter ? `${c.adapter.label} · ${c.status}` : 'this device only', panels[0].el, !c.adapter),
+      section('Security', lockEnabled() ? `PIN set${(lockConfig() || {}).bio ? ' · fingerprint / face' : ''}` : '⚠ no PIN', panels[2].el),
       section('Calendar & email', calStatus, panels[1].el),
       section('Display & accessibility', prefsSummary(), display.el),
       section('Field tool defaults', [l ? `${l.lat.toFixed(2)}°, ${l.lon.toFixed(2)}°` : 'no location', LS.get('logi-units') === 'ft' ? 'feet' : 'metres'].join(' · '), fieldDefaults()),
@@ -39,7 +42,7 @@ export const settings = {
       !installState().standalone && section('Install', installState().canPrompt ? 'ready to install' : 'see how', h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, 'Vdex runs in the browser as it is. Installing adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline.'),
         h('button', { class: 'btn primary', onclick: () => { const b = document.getElementById('installBtn'); if (b && !b.hidden) b.click(); else openInstallHelp(); } }, '⤓ Install Vdex'))),
-      section('Backups & data', `${db.bookings.length} bookings · ${db.gear.length} items`, backupPanel()),
+      section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
       section('About', 'v' + VERSION, h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, `Vdex ${VERSION}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link.`),
         h('div', { class: 'actions' },

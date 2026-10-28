@@ -119,7 +119,7 @@ function openSync(log) {
 
   async function loadOcr() {
     if (ocr) return ocr;
-    if (!window.Tesseract) await new Promise((res, rej) => document.head.append(h('script', { src: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js', onload: res, onerror: () => rej(new Error('could not load')) })));
+    if (!window.Tesseract) await new Promise((res, rej) => document.head.append(h('script', { src: 'https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js', integrity: 'sha384-GJqSu7vueQ9qN0E9yLPb3Wtpd7OrgK8KmYzC8T1IysG1bcvxvIO4qtYR/D3A991F', crossOrigin: 'anonymous', onload: res, onerror: () => rej(new Error('could not load')) })));
     const w = await window.Tesseract.createWorker('eng', 1);
     await w.setParameters({ tessedit_char_whitelist: '0123456789:;.', tessedit_pageseg_mode: '7' }); // single line
     return (ocr = w);

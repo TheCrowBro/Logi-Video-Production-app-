@@ -1,4 +1,5 @@
 import { h, groupBy, empty, fmtShort, todayISO, money } from '../util.js';
+import { exportAssetRegister } from '../backup.js';
 import { db, upsert, remove, gearBookings, endOf, qtyOf, usedQty, totalValue } from '../store.js';
 import { openForm } from '../form.js';
 
@@ -76,6 +77,7 @@ export const gear = {
 
       root.replaceChildren(h('div', null,
         h('div', { class: 'page-head' }, h('h1', null, 'Equipment'), h('button', { class: 'btn primary', onclick: () => (S.view === 'kits' ? editKit() : edit()) }, S.view === 'kits' ? '+ New kit' : '+ Add')),
+        h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => exportAssetRegister() }, '🧾 Asset register (CSV)')),
         h('div', { class: 'seg', role: 'tablist' },
           h('button', { class: S.view === 'items' ? 'on' : '', role: 'tab', 'aria-selected': S.view === 'items', onclick: () => { S.view = 'items'; draw(); } }, `Items (${db.gear.reduce((s, g) => s + qtyOf(g), 0)})`),
           h('button', { class: S.view === 'kits' ? 'on' : '', role: 'tab', 'aria-selected': S.view === 'kits', onclick: () => { S.view = 'kits'; draw(); } }, `Kits (${db.kits.length})`)),

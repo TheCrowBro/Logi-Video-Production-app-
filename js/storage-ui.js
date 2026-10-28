@@ -2,6 +2,7 @@
 import { h, toast } from './util.js';
 import * as store from './store.js';
 import * as providers from './providers.js';
+import * as backup from './backup.js';
 
 export function storagePanel() {
   const el = h('div', { class: 'storage' });
@@ -68,33 +69,22 @@ export function storagePanel() {
 export function backupPanel() {
   const erase = h('div', { class: 'stack' });
   const armErase = () => erase.replaceChildren(
-    h('div', { class: 'warn small' }, 'This removes every booking, contact, item, venue, policy and log from this device and unlinks any storage. A linked cloud copy is left as it is. There is no undo.'),
+    h('div', { class: 'warn small' }, 'This removes every booking, contact, item, venue, policy and log from this device, unlinks any storage and removes the PIN. A linked cloud copy and any backup files are left as they are. There is no undo.'),
     h('div', { class: 'actions' }, h('button', { class: 'btn danger', onclick: async () => { await store.eraseAll(); toast('Everything erased'); draw(); } }, 'Yes, erase everything'), h('button', { class: 'btn ghost', onclick: draw }, 'Keep my data')));
   const draw = () => erase.replaceChildren(h('button', { class: 'btn ghost', onclick: armErase }, 'Erase all data on this device…'));
   draw();
+  const a = store.cloud.adapter;
   return h('div', { class: 'stack' },
-    h('button', { class: 'btn ghost', onclick: exportFile }, 'Export backup (.json)'),
-    h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: importFile })),
+    backup.healthLine(),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', onclick: () => backup.exportFile() }, 'Export backup'),
+      h('button', { class: 'btn ghost', onclick: () => backup.exportFile({ encrypted: true }) }, '🔐 Encrypted backup…'),
+      h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: backup.importFile }))),
+    a && a.readExtra && h('button', { class: 'btn ghost', onclick: () => backup.restoreFromCloud() }, '☁ Restore an automatic cloud backup…'),
+    h('p', { class: 'small muted' }, 'With Dropbox, Google Drive, OneDrive or WebDAV linked, Vdex also writes a dated backup next to its database once a day after a change: one per weekday and one per month. Backup files are plain unless you choose the encrypted one, so keep them somewhere private.'),
     h('button', { class: 'btn ghost', onclick: () => { if (confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),
     erase);
 }
 
-export async function exportFile() {
-  const blob = new Blob([store.exportJSON()], { type: 'application/json' });
-  const file = new File([blob], 'vdex-production-db.json', { type: 'application/json' });
-  if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Vdex backup' }); return; } catch (e) { if (e.name === 'AbortError') return; }
-  }
-  const a = h('a', { href: URL.createObjectURL(blob), download: file.name });
-  document.body.append(a); a.click(); a.remove();
-}
-
-export async function importFile(e) {
-  const f = e.target.files[0];
-  if (!f) return;
-  try {
-    const data = JSON.parse(await f.text());
-    if (!data || typeof data !== 'object' || !('bookings' in data || 'gear' in data)) throw new Error('Not a Vdex database file');
-    if (confirm('Replace your current data with this file?')) { store.replaceAll(data); toast('Imported'); }
-  } catch (err) { toast('Import failed: ' + err.message); }
-}
+export const exportFile = backup.exportFile;
+export const importFile = backup.importFile;

@@ -454,3 +454,24 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 @media (min-width: 1000px) { .pipeline { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); align-items: start; } .sheet.wide-sheet { width: min(1100px, 100%); } }
 .callsheet { font-size: .82rem; max-height: 50vh; }
 .hours .tag { font-size: .7rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--muted); font-weight: 500; }
+
+/* ------------------------------ app lock ------------------------------ */
+.lock { position: fixed; inset: 0; z-index: 300; background: var(--bg); color: var(--text); display: flex; align-items: center; justify-content: center; padding: 24px max(16px, env(safe-area-inset-left, 0px)); overflow: auto; }
+.lock-card { width: min(380px, 100%); text-align: center; }
+.lock-card .brand { justify-content: center; margin-bottom: 8px; }
+.lock h1 { font-size: 1.25rem; margin: 8px 0 4px; }
+.pin-dots { display: flex; justify-content: center; gap: 12px; margin: 14px 0 6px; min-height: 18px; }
+.pin-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); display: inline-block; }
+.pin-dots i.on { background: var(--accent); border-color: var(--accent); }
+.lock-msg { min-height: 1.4em; color: var(--danger); font-size: .9rem; margin: 4px 0 8px; }
+.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px auto 14px; max-width: 320px; }
+.keypad .key { min-height: max(64px, var(--hit)); font: inherit; font-size: 1.5rem; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+.keypad .key.soft { background: var(--bg2); font-size: 1.3rem; }
+.keypad .key:active { transform: scale(.96); }
+.lock-bio { width: 100%; margin-bottom: 8px; }
+.lock-forgot { text-align: left; margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--card); }
+.lock.shake .pin-dots { animation: shake .4s; }
+@keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
+html[data-motion=off] .lock.shake .pin-dots { animation: none; }
+.sheet-back.behind-lock { visibility: hidden; }
+.pin-input { font-size: 1.3rem; letter-spacing: .3em; text-align: center; }

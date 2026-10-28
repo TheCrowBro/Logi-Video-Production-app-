@@ -4,6 +4,7 @@
 
 - **No account, no subscription, no server.** Your data stays on your device and only goes where *you* send it (your own Dropbox, Google Drive, OneDrive or server).
 - **Works offline** once installed, which matters on location.
+- **Locks with a PIN, or your fingerprint or face,** and keeps everything it stores encrypted whenever it is locked, in the background or closed. Never loses your data: automatic daily backups in your cloud storage, encrypted backup files, and a reminder when there's no recent copy.
 - **Phone and computer share one database** once you link a cloud storage.
 - **On a computer, one click installs it:** there is an installer for Windows, Mac and Linux, or use it in any browser.
 
@@ -166,6 +167,26 @@ Tap **Aa** (or Settings → *Display & accessibility*):
 - **Vibration feedback** has no effect on an iPhone: iPhones don't let web apps vibrate.
 - Everything works with VoiceOver.
 
+### Lock it: PIN, Face ID and Touch ID
+
+1. Settings → **Security** → **Set a PIN…** (4 to 8 digits; 6 is a good length).
+2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On an iPhone that is Face ID or Touch ID, and it works in Safari and in the installed app on iOS 16.4 or later. If the switch doesn't appear, your iPhone or browser doesn't offer it to web apps, and the PIN is the way in.
+3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
+
+What the lock does: the screen can't be used until the PIN or Face ID opens it, and everything Vdex stores on the phone (bookings, contacts, kit serials, insurance details, cloud sign-ins) is kept **encrypted** (AES-256) whenever Vdex is locked, in the background or closed. The PIN is never stored, only a key derived from it, so after five wrong tries the lock makes you wait, and you can choose to have the phone's Vdex data **erased after 10 wrong PINs** (only sensible with a cloud storage linked or a recent backup).
+
+**If you forget the PIN** it cannot be recovered: tap *Forgot PIN?* on the lock screen, erase this phone's Vdex data, then link your cloud storage or import a backup and everything comes back. That is why the next section matters.
+
+### Never lose your data
+
+A stolen, lost or broken phone should cost you a phone, not your business records. Keep at least one copy somewhere else:
+
+- **Link a cloud storage** (Dropbox, Google Drive, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
+- **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
+- Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
+- **Equipment → Asset register (CSV)** exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
+- **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
+
 ### iPhone questions and answers
 
 **I installed it and my bookings vanished.**
@@ -199,7 +220,13 @@ No. Vdex is your side of the job: you record their feedback and send them the do
 Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
 
 **Can I start over?**
-Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, and leaves the cloud copy alone.
+Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
+
+**I forgot my PIN.**
+It can't be recovered. Tap *Forgot PIN?* on the lock screen to erase this phone's Vdex data, then link your storage or import a backup.
+
+**Is my data encrypted?**
+On the phone, yes once a PIN is set: whenever Vdex is locked, in the background or closed. The copy in your cloud storage is protected by that account's own sign-in, and backup files are plain unless you choose the encrypted kind.
 
 ---
 
@@ -340,6 +367,26 @@ Tap **Aa** (or Settings → *Display & accessibility*):
 - **Vibration feedback** gives a small buzz on taps; turn it off here if you'd rather not.
 - Everything works with TalkBack.
 
+### Lock it: PIN, fingerprint and face
+
+1. Settings → **Security** → **Set a PIN…** (4 to 8 digits; 6 is a good length).
+2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On Android that is the fingerprint, face or screen-lock check Chrome already uses. If the switch doesn't appear, your phone or browser doesn't offer it to web apps, and the PIN is the way in.
+3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
+
+What the lock does: the screen can't be used until the PIN or your fingerprint opens it, and everything Vdex stores on the phone (bookings, contacts, kit serials, insurance details, cloud sign-ins) is kept **encrypted** (AES-256) whenever Vdex is locked, in the background or closed. The PIN is never stored, only a key derived from it, so after five wrong tries the lock makes you wait, and you can choose to have the phone's Vdex data **erased after 10 wrong PINs** (only sensible with a cloud storage linked or a recent backup).
+
+**If you forget the PIN** it cannot be recovered: tap *Forgot PIN?* on the lock screen, erase this phone's Vdex data, then link your cloud storage or import a backup and everything comes back. That is why the next section matters.
+
+### Never lose your data
+
+A stolen, lost or broken phone should cost you a phone, not your business records. Keep at least one copy somewhere else:
+
+- **Link a cloud storage** (Dropbox, Google Drive, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
+- **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
+- Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
+- **Equipment → Asset register (CSV)** exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
+- **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
+
 ### Android questions and answers
 
 **There's no Install button.**
@@ -373,7 +420,13 @@ No. Vdex is your side of the job: you record their feedback and send them the do
 Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
 
 **Can I start over?**
-Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, and leaves the cloud copy alone.
+Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
+
+**I forgot my PIN.**
+It can't be recovered. Tap *Forgot PIN?* on the lock screen to erase this phone's Vdex data, then link your storage or import a backup.
+
+**Is my data encrypted?**
+On the phone, yes once a PIN is set: whenever Vdex is locked, in the background or closed. The copy in your cloud storage is protected by that account's own sign-in, and backup files are plain unless you choose the encrypted kind.
 
 ---
 
@@ -397,6 +450,7 @@ The installed app opens in its own window, works offline, and keeps its data on 
 - There is no GPS in a computer, so set your location by hand: Field → **Enter**, or Settings → *Field tool defaults*. The sun, Polaris and call-sheet times then work as usual.
 - Break notifications pop up like any other app's. They have no buttons; clicking one brings Vdex to the front.
 - Backups, call sheets and exports save through a normal Save dialog instead of a share sheet.
+- The PIN lock works the same way (Settings → *Security*), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
 - To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 - Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.
 
@@ -458,6 +512,14 @@ Camera, microphone, location, notifications and installing need https or `localh
 
 **The desktop app** is `desktop/main.js`: Electron serving these same files from `http://localhost:47831`, so the service worker, storage and sign-ins behave exactly as in Chrome. Sign-in pop-ups and the print window stay inside the app; every other link opens in the system browser. Electron has no service-worker notifications, so `js/notify.js` shows plain ones there, and `js/install.js` treats the app as already installed.
 
+**Security notes**
+- `index.html` carries a Content Security Policy: scripts only from this origin and the three sign-in / OCR / Microsoft libraries, no inline scripts (the theme pre-paint lives in `js/prepaint.js`), workers from blob URLs for the OCR engine, frames only for Google and Microsoft sign-in, no plugins, no base-URI tricks.
+- The two third-party scripts loaded at run time (MSAL and tesseract.js) are pinned to exact versions with Subresource Integrity hashes; Google's sign-in script changes too often for a hash.
+- The DOM is built with `h()` text nodes; the only `innerHTML` uses carry generated QR SVG. User links go through `safeUrl` (http or https only); calendar and CSV output is escaped; the call-sheet print window escapes HTML.
+- Dropbox sign-in uses PKCE with a random `state` checked on return. Google and Microsoft tokens live in memory or in the libraries' own cache; the Dropbox refresh token and the WebDAV password are kept in localStorage and are part of what the lock encrypts.
+- The app lock (`js/lock.js`, `js/crypto.js`): a random 256-bit data key encrypts the database and those secrets with AES-256-GCM into `logi-vault`; the key is wrapped by a PBKDF2-SHA-256 key derived from the PIN (300,000 iterations, random salt) and, when enrolled, by a WebAuthn platform credential: with the PRF extension the wrapping key comes from the authenticator itself, otherwise the biometric gates a non-extractable key kept in IndexedDB and the assertion signature is verified. Plaintext copies exist only while the app is unlocked and visible; they are removed synchronously on hide, lock and page exit. Wrong PINs are rate-limited and can optionally wipe the device.
+- Not covered, by design: the copy in your cloud storage is plain JSON protected by that account; the phone-to-laptop link trusts whoever scanned the code; a short PIN can be brute-forced offline by someone who copies the device's storage, which is why 6 or more digits and the device's own lock still matter.
+
 **Platform notes**
 - Install prompts come from `beforeinstallprompt` (Chromium); iOS gets written instructions (`js/install.js`).
 - The synced-folder storage uses the File System Access API, so it is offered only where `showSaveFilePicker` exists (desktop Chromium).
@@ -484,6 +546,7 @@ js/timecode.js   SMPTE timecode maths (drop-frame aware)     js/docx.js   .docx 
 js/link.js       phone–laptop link over WebRTC with clock-offset measurement     js/qr.js   QR generate / decode
 js/suncalc.js    sun and Polaris     js/range.js   range finder (WebXR + tilt)     js/map.js   map preview and directions
 js/a11y.js       themes, text size, motion, accessibility     js/tour.js   first-run tour     js/install.js   install prompt
+js/lock.js       PIN / biometric lock and the encrypted vault     js/crypto.js   WebCrypto helpers     js/backup.js   backup health, encrypted backups, cloud restore, asset register
 desktop/         the desktop app (main.js), its icon, and the version sync used by the installers
 vendor/          qrcode-generator (MIT), jsQR (Apache-2.0); see vendor/LICENSES.md
 ```

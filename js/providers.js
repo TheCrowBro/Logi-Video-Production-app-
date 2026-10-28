@@ -45,15 +45,20 @@ export async function dropboxBegin() {
   const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
   const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
   LS.set('logi-dbx-verifier', verifier);
-  const q = new URLSearchParams({ client_id: key, response_type: 'code', code_challenge: challenge, code_challenge_method: 'S256', token_access_type: 'offline', redirect_uri: redirectUri(), state: 'logi-dropbox' });
+  const state = 'vdex-' + b64url(crypto.getRandomValues(new Uint8Array(16))); // random, checked on return (no cross-site login injection)
+  LS.set('logi-dbx-state', state);
+  const q = new URLSearchParams({ client_id: key, response_type: 'code', code_challenge: challenge, code_challenge_method: 'S256', token_access_type: 'offline', redirect_uri: redirectUri(), state });
   location.href = 'https://www.dropbox.com/oauth2/authorize?' + q;
 }
 
 // Call on page load; returns true if it consumed an OAuth redirect.
 export async function dropboxFinish() {
   const p = new URLSearchParams(location.search);
-  if (p.get('state') !== 'logi-dropbox') return false;
+  const state = p.get('state');
+  if (!state || !state.startsWith('vdex-')) return false;
   history.replaceState(null, '', location.pathname);
+  const expected = LS.get('logi-dbx-state'); LS.del('logi-dbx-state');
+  if (!expected || state !== expected) throw new Error('Dropbox sign-in did not come from this device; try again');
   const code = p.get('code');
   if (!code) throw new Error(p.get('error_description') || 'Dropbox sign-in cancelled');
   const r = await fetch('https://api.dropboxapi.com/oauth2/token', {
@@ -91,6 +96,16 @@ export const dropboxAdapter = () => ({
   write: async text => {
     const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + await dropboxToken(), 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': JSON.stringify({ path: '/' + FILE, mode: 'overwrite', mute: true }) }, body: text });
     if (!r.ok) throw new Error('Dropbox write failed (' + r.status + ')');
+  },
+  writeExtra: async (name, text) => {
+    const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + await dropboxToken(), 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': JSON.stringify({ path: '/' + name, mode: 'overwrite', mute: true }) }, body: text });
+    if (!r.ok) throw new Error('Dropbox backup write failed (' + r.status + ')');
+  },
+  readExtra: async name => {
+    const r = await fetch('https://content.dropboxapi.com/2/files/download', { method: 'POST', headers: { Authorization: 'Bearer ' + await dropboxToken(), 'Dropbox-API-Arg': JSON.stringify({ path: '/' + name }) } });
+    if (r.status === 409) return null;
+    if (!r.ok) throw new Error('Dropbox read failed (' + r.status + ')');
+    return r.text();
   },
   writeAux: async ({ name, text }) => {
     const r = await fetch('https://content.dropboxapi.com/2/files/upload', { method: 'POST', headers: { Authorization: 'Bearer ' + await dropboxToken(), 'Content-Type': 'application/octet-stream', 'Dropbox-API-Arg': JSON.stringify({ path: '/' + name, mode: 'overwrite', mute: true }) }, body: text });
@@ -146,6 +161,11 @@ async function gfetch(url, init = {}, interactive = false) {
 
 export const gdriveAdapter = () => {
   let fileId = LS.get('logi-gdrive-file');
+  const findExtra = async name => { // another file of ours in the hidden app-data folder, by name
+    const r = await gfetch(`https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=${encodeURIComponent(`name='${name.replace(/'/g, "\\'")}'`)}&fields=files(id)`);
+    if (!r.ok) throw new Error('Drive lookup failed (' + r.status + ')');
+    return (await r.json()).files?.[0]?.id || null;
+  };
   const find = async () => {
     if (fileId) return fileId;
     const q = encodeURIComponent(`name='${FILE}'`);
@@ -180,6 +200,24 @@ export const gdriveAdapter = () => {
     },
     // The feed lives as a visible file in Drive (drive.file scope: only files this app made), shared read-only by link.
     enableFeed: async () => { LS.set('logi-feed-drive', '1'); await gdriveToken(true); },
+    writeExtra: async (name, text) => {
+      const id = await findExtra(name);
+      let r;
+      if (id) r = await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: text });
+      else {
+        const boundary = 'logi' + Date.now();
+        const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ name, parents: ['appDataFolder'] })}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${text}\r\n--${boundary}--`;
+        r = await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body });
+      }
+      if (!r.ok) throw new Error('Drive backup write failed (' + r.status + ')');
+    },
+    readExtra: async name => {
+      const id = await findExtra(name); if (!id) return null;
+      const r = await gfetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`);
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error('Drive read failed (' + r.status + ')');
+      return r.text();
+    },
     writeAux: async ({ name, text }) => {
       if (LS.get('logi-feed-drive') !== '1') return;
       let fid = LS.get('logi-gdrive-feed');
@@ -208,7 +246,7 @@ export const gdriveAdapter = () => {
 let msalPromise, msApp = null;
 const loadMsal = () => msalPromise || (msalPromise = new Promise((res, rej) => {
   if (window.msal) return res();
-  const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js'; s.onload = res; s.onerror = () => rej(new Error('Could not load Microsoft sign-in')); document.head.append(s);
+  const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js'; s.integrity = 'sha384-B5PXeUfgiegchZiX5iMRssMrHd9NfPhFnITob1HyW1CY76udptWpBsniaDsH/+BY'; s.crossOrigin = 'anonymous'; s.onload = res; s.onerror = () => rej(new Error('Could not load Microsoft sign-in')); document.head.append(s);
 }));
 async function msal() {
   if (msApp) return msApp;
@@ -240,6 +278,8 @@ export const onedriveAdapter = () => ({
   ready: async ask => { try { await microsoftToken(['Files.ReadWrite.AppFolder'], ask); return true; } catch { return false; } },
   read: async () => { const r = await odfetch(`${FILE}:/content`); if (r.status === 404) return null; if (!r.ok) throw new Error('OneDrive read failed (' + r.status + ')'); return parse(await r.text()); },
   write: async text => { const r = await odfetch(`${FILE}:/content`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: text }); if (!r.ok) throw new Error('OneDrive write failed (' + r.status + ')'); },
+  writeExtra: async (name, text) => { const r = await odfetch(`${name}:/content`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: text }); if (!r.ok) throw new Error('OneDrive backup write failed (' + r.status + ')'); },
+  readExtra: async name => { const r = await odfetch(`${name}:/content`); if (r.status === 404) return null; if (!r.ok) throw new Error('OneDrive read failed (' + r.status + ')'); return r.text(); },
   writeAux: async ({ name, text }) => { const r = await odfetch(`${name}:/content`, { method: 'PUT', headers: { 'Content-Type': 'text/calendar' }, body: text }); if (!r.ok) throw new Error('OneDrive feed write failed (' + r.status + ')'); },
   shareLink: async name => {
     const r = await odfetch(`${name}:/createLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'view', scope: 'anonymous' }) });
@@ -267,6 +307,8 @@ export const webdavAdapter = () => {
       if (r.status === 404) return null; if (!r.ok) throw new Error(explain(r)); return parse(await r.text());
     },
     write: async text => { const r = await fetch(url(FILE), { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: text }).catch(() => { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); }); if (!r.ok) throw new Error(explain(r)); },
+    writeExtra: async (name, text) => { const r = await fetch(url(name), { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: text }); if (!r.ok) throw new Error(explain(r)); },
+    readExtra: async name => { const r = await fetch(url(name), { headers: headers({}) }); if (r.status === 404) return null; if (!r.ok) throw new Error(explain(r)); return r.text(); },
     writeAux: async ({ name, text }) => { const r = await fetch(url(name), { method: 'PUT', headers: headers({ 'Content-Type': 'text/calendar' }), body: text }); if (!r.ok) throw new Error(explain(r)); },
     signOut: () => settings.setWebdav(null),
   };
