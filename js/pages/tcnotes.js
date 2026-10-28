@@ -403,7 +403,7 @@ function openImport(log, preset) {
       h('p', { class: 'small muted' }, 'A .docx from Word or Pages, or a Google Doc downloaded as Word (File → Download → Microsoft Word). Plain .txt and Fountain files work too.'),
       h('label', { class: 'btn ghost file-btn' }, '📄 Choose file…', fileIn)),
     h('div', { class: 'card' }, h('strong', null, 'Google Docs'),
-      h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Logi from the Docs app on Android (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
+      h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on Android (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
       paste, h('button', { class: 'btn ghost small', onclick: () => { const lines = textToLines(paste.value); lines.length ? show('Pasted script', lines) : fail(new Error('Nothing pasted yet')); } }, 'Use pasted text')),
     h('button', { class: 'btn ghost small', onclick: () => show('Sample script', textToLines(SAMPLE_SCRIPT)) }, 'Try a sample script'),
     preview,
@@ -591,7 +591,7 @@ function openLink(log) {
   const state = h('div', { class: 'link-state' });
   const codeBox = h('div', { class: 'stack' });
   const pasteBox = (label, onCode) => {
-    const ta = h('textarea', { rows: 2, placeholder: 'LOGI…', 'aria-label': label, spellcheck: false });
+    const ta = h('textarea', { rows: 2, placeholder: 'VDEX…', 'aria-label': label, spellcheck: false });
     return h('div', { class: 'stack' }, ta, h('button', { class: 'btn ghost small', onclick: () => onCode(ta.value) }, label));
   };
   const showCode = async code => {
@@ -632,7 +632,7 @@ function openLink(log) {
     }
     body.append(...nodes(
       l.error && h('div', { class: 'warn' }, l.error),
-      h('p', { class: 'small muted' }, 'Links this device directly to another one running Logi on the same Wi‑Fi or hotspot, with no account and no internet needed. One device shows a code, the other scans it, then they swap.'),
+      h('p', { class: 'small muted' }, 'Links this device directly to another one running Vdex on the same Wi‑Fi or hotspot, with no account and no internet needed. One device shows a code, the other scans it, then they swap.'),
       state, codeBox,
       l.status === 'idle' && h('div', { class: 'actions center' },
         h('button', { class: 'btn primary', onclick: flowShow }, 'Show a code'),

@@ -17,12 +17,12 @@ export const settings = {
   setGdriveId: v => LS.set('logi-gdrive-id', v.trim()),
 };
 export const redirectUri = () => location.origin + location.pathname;
-const FILE = 'logi-production-db.json';
+const FILE = 'vdex-production-db.json';
 
 const parse = text => {
   if (!text || !text.trim()) return null;
   const d = JSON.parse(text);
-  if (!d || typeof d !== 'object' || !('bookings' in d || 'gear' in d)) throw new Error('Not a Logi database file');
+  if (!d || typeof d !== 'object' || !('bookings' in d || 'gear' in d)) throw new Error('Not a Vdex database file');
   return d;
 };
 
@@ -227,7 +227,7 @@ export async function microsoftToken(scopes, interactive) {
   return (await app.loginPopup({ scopes })).accessToken;
 }
 /* ------------------------------- OneDrive ------------------------------- */
-// Microsoft Graph, app folder only (Files.ReadWrite.AppFolder): Logi sees nothing but its own folder.
+// Microsoft Graph, app folder only (Files.ReadWrite.AppFolder): Vdex sees nothing but its own folder.
 const OD = 'https://graph.microsoft.com/v1.0/me/drive/special/approot:/';
 async function odfetch(path, init = {}, interactive = false) {
   const token = await microsoftToken(['Files.ReadWrite.AppFolder'], interactive);

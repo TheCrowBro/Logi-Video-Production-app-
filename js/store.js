@@ -308,7 +308,7 @@ export async function setFeed(on) {
   if (on) await push();
 }
 export async function createFeedFile() { // local-file storage: pick where the feed file lives (same synced folder)
-  const handle = await window.showSaveFilePicker({ suggestedName: 'logi-bookings.ics', types: [{ description: 'Calendar feed', accept: { 'text/calendar': ['.ics'] } }] });
+  const handle = await window.showSaveFilePicker({ suggestedName: 'vdex-bookings.ics', types: [{ description: 'Calendar feed', accept: { 'text/calendar': ['.ics'] } }] });
   await kv('readwrite', s => s.put(handle, 'auxHandle'));
   if (cloud.adapter) cloud.adapter.aux = handle;
   cloud.auxName = handle.name;
@@ -317,7 +317,7 @@ export async function createFeedFile() { // local-file storage: pick where the f
 export async function feedLink() {
   if (!cloud.adapter?.shareLink) throw new Error('No link for this storage');
   await push();
-  cloud.feedUrl = await cloud.adapter.shareLink('logi-bookings.ics');
+  cloud.feedUrl = await cloud.adapter.shareLink('vdex-bookings.ics');
   lsSet('logi-feed-url', cloud.feedUrl); emit();
   return cloud.feedUrl;
 }
@@ -339,14 +339,14 @@ async function link(adapter, provider, handle) {
 }
 
 export async function createCloudFile() {
-  const handle = await window.showSaveFilePicker({ suggestedName: 'logi-production-db.json', types: [{ description: 'Logi database', accept: { 'application/json': ['.json'] } }] });
+  const handle = await window.showSaveFilePicker({ suggestedName: 'vdex-production-db.json', types: [{ description: 'Vdex database', accept: { 'application/json': ['.json'] } }] });
   const a = fileAdapter(handle);
   await a.write(exportJSON()); // new file starts from the current data
   await link(a, null, handle);
 }
 
 export async function openCloudFile() {
-  const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Logi database', accept: { 'application/json': ['.json'] } }] });
+  const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Vdex database', accept: { 'application/json': ['.json'] } }] });
   await link(fileAdapter(handle), null, handle);
 }
 

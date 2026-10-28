@@ -2,7 +2,7 @@
 import { h } from './util.js';
 
 const STEPS = [
-  { title: 'Welcome to Logi', text: 'Your whole production in one deck: bookings, crew, kit, venues, insurance, field tools and timecode notes. This tour takes about a minute. Tap Skip any time.' },
+  { title: 'Welcome to Vdex', text: 'Your whole production in one deck: bookings, crew, kit, venues, insurance, field tools and timecode notes. This tour takes about a minute. Tap Skip any time.' },
   { go: 'bookings', target: ['.binder'], title: 'The Rolodex', text: 'Spin it to move between sections: drag it, tap ▲ ▼, use the arrow keys, or scroll on it.' },
   { go: 'bookings', target: ['.bk-month .page-head', '.page-head'], title: 'Bookings', text: 'Tap a date to see the day, then a booking for its address, contacts, crew and kit. Multi-day shoots span their days.' },
   { go: 'gear', target: ['.seg[role=tablist]', '.page-head'], title: 'Equipment & kits', text: 'Log everything you own, with quantities. Save kits for the shoots you do most and tick one on a booking to load its gear.' },

@@ -1,6 +1,6 @@
 {
-  "name": "Logi Production Deck",
-  "short_name": "Logi",
+  "name": "Vdex",
+  "short_name": "Vdex",
   "description": "Bookings, crew, gear, insurance and field tools for freelance videographers.",
   "start_url": "./index.html",
   "scope": "./",

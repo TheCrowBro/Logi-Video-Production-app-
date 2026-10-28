@@ -31,16 +31,16 @@ export function storagePanel() {
     const c = store.cloud, wd = providers.settings.webdav();
     const setWd = patch => providers.settings.setWebdav({ ...providers.settings.webdav(), ...patch });
     return h('div', { class: 'stack' },
-      h('p', { class: 'small muted' }, 'Pick one. “Direct” means Logi talks to the service itself and works on every device, including iPhone. “Synced folder” means a desktop or Android sync client does the carrying.'),
+      h('p', { class: 'small muted' }, 'Pick one. “Direct” means Vdex talks to the service itself and works on every device, including iPhone. “Synced folder” means a desktop or Android sync client does the carrying.'),
       row('📦', 'Dropbox', 'Direct · app folder · live calendar feed link', [tag('direct', 'ok'), tag('iPhone ✓', 'ok')], [
         keyField('Dropbox app key', providers.settings.dropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),
         h('button', { class: 'btn primary', onclick: run(async () => { await store.connectDropbox(); }) }, 'Connect Dropbox'),
-        help(`Create an app at dropbox.com/developers/apps (Scoped access → App folder), enable files.content.read + files.content.write (and sharing.write if you want the calendar feed link), add this Redirect URI: ${providers.redirectUri()} — then paste the App key. The database is saved as logi-production-db.json in Apps/<your app>.`)]),
+        help(`Create an app at dropbox.com/developers/apps (Scoped access → App folder), enable files.content.read + files.content.write (and sharing.write if you want the calendar feed link), add this Redirect URI: ${providers.redirectUri()} — then paste the App key. The database is saved as vdex-production-db.json in Apps/<your app>.`)]),
       row('🟢', 'Google Drive', 'Direct · hidden app-data folder · re-approve hourly', [tag('direct', 'ok'), tag('iPhone ✓', 'ok')], [
         keyField('Google OAuth client ID', providers.settings.gdriveId, providers.settings.setGdriveId, 'Google OAuth client ID'),
         h('button', { class: 'btn primary', onclick: run(store.connectGdrive) }, 'Connect Google Drive'),
         help(`In Google Cloud Console create an OAuth client ID (Web application), add ${location.origin} as an Authorised JavaScript origin, enable the Drive API, then paste the client ID. The app only uses its own hidden app-data folder. Google asks you to re-approve about hourly; tap Reconnect when prompted.`)]),
-      row('🔷', 'Microsoft OneDrive', 'Direct · Logi’s own app folder · personal and work accounts', [tag('direct', 'ok'), tag('iPhone ✓', 'ok')], [
+      row('🔷', 'Microsoft OneDrive', 'Direct · Vdex’s own app folder · personal and work accounts', [tag('direct', 'ok'), tag('iPhone ✓', 'ok')], [
         keyField('Microsoft application (client) ID', providers.settings.msId, providers.settings.setMsId, 'Microsoft application (client) ID'),
         h('button', { class: 'btn primary', onclick: run(store.connectOneDrive) }, 'Connect OneDrive'),
         help(`Azure portal → App registrations → New: accounts in any organisational directory and personal Microsoft accounts; platform Single-page application with redirect URI ${providers.redirectUri()}; API permission Files.ReadWrite.AppFolder (delegated). Paste the Application (client) ID. The same registration also serves the Outlook calendar link. Sign-in refreshes silently.`)]),
@@ -51,11 +51,11 @@ export function storagePanel() {
             h('button', { class: 'btn ghost', onclick: run(store.openCloudFile) }, 'Open existing database file…')]
           : h('p', { class: 'note' }, ios ? 'iPhone and iPad can’t give a web app a file to keep writing to. Use Dropbox, Google Drive or OneDrive above — they work here.' : 'This browser can’t keep a file open for writing (Firefox and Safari). Chrome or Edge can, or use a direct service above.')),
       row('🌐', 'WebDAV server', 'Advanced · Nextcloud, ownCloud, Synology, Fastmail, Hetzner, your own server', [tag('direct', 'ok'), tag('iPhone ✓', 'ok'), tag('CORS needed')], [
-        field('Server folder address', () => wd.url || '', v => setWd({ url: v.trim() }), 'https://cloud.example.com/remote.php/dav/files/you/Logi/', 'url'),
+        field('Server folder address', () => wd.url || '', v => setWd({ url: v.trim() }), 'https://cloud.example.com/remote.php/dav/files/you/Vdex/', 'url'),
         field('Username', () => wd.user || '', v => setWd({ user: v.trim() }), 'Username'),
         field('App password', () => wd.pass || '', v => setWd({ pass: v }), 'App password', 'password'),
         h('button', { class: 'btn primary', onclick: run(store.connectWebdav) }, 'Connect WebDAV'),
-        help('Point it at a folder that already exists. Use an app password, not your main one; it is kept only in this browser. The server has to allow requests from this site (CORS headers for ' + location.origin + '): Nextcloud needs the WebAppPassword/CORS app, Synology and most self-hosted servers a reverse-proxy rule. Without that the browser blocks the connection and Logi tells you.')]),
+        help('Point it at a folder that already exists. Use an app password, not your main one; it is kept only in this browser. The server has to allow requests from this site (CORS headers for ' + location.origin + '): Nextcloud needs the WebAppPassword/CORS app, Synology and most self-hosted servers a reverse-proxy rule. Without that the browser blocks the connection and Vdex tells you.')]),
       row('💾', 'No cloud — backup files', 'Export and import by hand from Backups & data', [tag('anywhere', 'ok')],
         h('p', { class: 'small muted' }, 'Keep everything on this device and move it with the Export / Import buttons whenever you like. Works with any storage you can save a file to.')));
   }
@@ -81,9 +81,9 @@ export function backupPanel() {
 
 export async function exportFile() {
   const blob = new Blob([store.exportJSON()], { type: 'application/json' });
-  const file = new File([blob], 'logi-production-db.json', { type: 'application/json' });
+  const file = new File([blob], 'vdex-production-db.json', { type: 'application/json' });
   if (navigator.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Logi backup' }); return; } catch (e) { if (e.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], title: 'Vdex backup' }); return; } catch (e) { if (e.name === 'AbortError') return; }
   }
   const a = h('a', { href: URL.createObjectURL(blob), download: file.name });
   document.body.append(a); a.click(); a.remove();
@@ -94,7 +94,7 @@ export async function importFile(e) {
   if (!f) return;
   try {
     const data = JSON.parse(await f.text());
-    if (!data || typeof data !== 'object' || !('bookings' in data || 'gear' in data)) throw new Error('Not a Logi database file');
+    if (!data || typeof data !== 'object' || !('bookings' in data || 'gear' in data)) throw new Error('Not a Vdex database file');
     if (confirm('Replace your current data with this file?')) { store.replaceAll(data); toast('Imported'); }
   } catch (err) { toast('Import failed: ' + err.message); }
 }

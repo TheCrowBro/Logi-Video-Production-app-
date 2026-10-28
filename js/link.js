@@ -43,11 +43,11 @@ function expand(d) {
   lines.push('a=end-of-candidates');
   return lines.join('\r\n') + '\r\n';
 }
-const encode = async (kind, sdp) => `LOGI${kind}.` + await deflate(JSON.stringify(squeeze(sdp)));
-export const codeKind = code => (String(code).trim().match(/^LOGI([OA])\./) || [])[1] || null; // O = offer (first device), A = answer
+const encode = async (kind, sdp) => `VDEX${kind}.` + await deflate(JSON.stringify(squeeze(sdp)));
+export const codeKind = code => (String(code).trim().match(/^VDEX([OA])\./) || [])[1] || null; // O = offer (first device), A = answer
 async function decode(code, kind) {
-  const m = String(code).trim().match(/^LOGI([OA])\.([A-Za-z0-9_-]+)$/);
-  if (!m) throw new Error('That is not a Logi link code');
+  const m = String(code).trim().match(/^VDEX([OA])\.([A-Za-z0-9_-]+)$/);
+  if (!m) throw new Error('That is not a Vdex link code');
   if (kind && m[1] !== kind) throw new Error(m[1] === 'O' ? 'That is a first-device code. Scan it with "Scan a code" on the other device.' : 'That is a reply code. Scan it on the device that showed the first code.');
   return expand(JSON.parse(await inflate(m[2])));
 }

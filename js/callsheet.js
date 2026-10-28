@@ -33,7 +33,7 @@ export function callSheetText(b) {
     (b.hires || []).length && 'Hires: ' + b.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '),
     gear.length && '',
     b.notes && 'NOTES', b.notes, b.notes && '',
-    `Produced by ${[p.name, p.business].filter(Boolean).join(' / ') || 'Logi'}${p.phone ? ' · ' + p.phone : ''}${p.email ? ' · ' + p.email : ''}`,
+    `Produced by ${[p.name, p.business].filter(Boolean).join(' / ') || 'Vdex'}${p.phone ? ' · ' + p.phone : ''}${p.email ? ' · ' + p.email : ''}`,
   ].filter(x => x !== null && x !== false && x !== undefined);
   return out.join('\n');
 }

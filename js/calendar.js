@@ -14,7 +14,7 @@ const nextDay = iso => { const d = parseISO(iso); d.setDate(d.getDate() + 1); re
 const localDate = (iso, hm) => { const [y, m, d] = iso.split('-').map(Number); const [hh, mm] = (hm || '00:00').split(':').map(Number); return new Date(y, m - 1, d, hh || 0, mm || 0); };
 const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-const CAL_NAME = 'Logi bookings';
+const CAL_NAME = 'Vdex bookings';
 
 /* ------------------------------ one event ------------------------------ */
 export function eventOf(b) {
@@ -28,8 +28,8 @@ export function eventOf(b) {
   const crew = (b.crew || []).map(id => byId('crew', id)).filter(Boolean).map(c => c.name + (c.role ? ` (${c.role})` : ''));
   const lines = [b.client && 'Client: ' + b.client, 'Status: ' + b.status, venue && 'Venue: ' + venue.name, crew.length && 'Crew: ' + crew.join(', '),
     (b.stakeholders || []).length && 'Contacts: ' + b.stakeholders.map(s => [s.name, s.role, s.phone].filter(Boolean).join(' ')).join('; '),
-    (b.gear || []).length && `Equipment: ${b.gear.length} item${b.gear.length === 1 ? '' : 's'}`, b.notes && '\n' + b.notes, '\nLogi booking ' + b.id].filter(Boolean);
-  return { id: b.id, uid: `logi-${b.id}@logi.app`, title: b.title + (b.client ? ' — ' + b.client : ''), allDay, start, end, location, description: lines.join('\n'), status: b.status === 'Cancelled' ? 'CANCELLED' : b.status === 'Enquiry' ? 'TENTATIVE' : 'CONFIRMED' };
+    (b.gear || []).length && `Equipment: ${b.gear.length} item${b.gear.length === 1 ? '' : 's'}`, b.notes && '\n' + b.notes, '\nVdex booking ' + b.id].filter(Boolean);
+  return { id: b.id, uid: `vdex-${b.id}@vdex.app`, title: b.title + (b.client ? ' — ' + b.client : ''), allDay, start, end, location, description: lines.join('\n'), status: b.status === 'Cancelled' ? 'CANCELLED' : b.status === 'Enquiry' ? 'TENTATIVE' : 'CONFIRMED' };
 }
 const hashOf = e => JSON.stringify([e.title, e.allDay, e.allDay ? e.start : e.start.getTime(), e.allDay ? e.end : e.end.getTime(), e.location, e.description, e.status]);
 
@@ -38,7 +38,7 @@ const esc = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').repl
 const fold = line => { const out = []; let s = line; while (s.length > 74) { out.push(s.slice(0, 74)); s = ' ' + s.slice(74); } out.push(s); return out.join('\r\n'); };
 export function icsFor(bookings, extra = [], name = CAL_NAME) {
   const now = utc(new Date());
-  const out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Logi//Production Deck//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + esc(name), 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
+  const out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vdex//Production Deck//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + esc(name), 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
   for (const e of [...bookings.map(eventOf), ...extra]) {
     out.push('BEGIN:VEVENT', 'UID:' + e.uid, 'DTSTAMP:' + now, 'LAST-MODIFIED:' + utc(new Date(Number(e.updatedAt) || Date.now())),
       e.allDay ? 'DTSTART;VALUE=DATE:' + dateOnly(e.start) : 'DTSTART:' + utc(e.start), e.allDay ? 'DTEND;VALUE=DATE:' + dateOnly(e.end) : 'DTEND:' + utc(e.end),
@@ -50,11 +50,11 @@ export function icsFor(bookings, extra = [], name = CAL_NAME) {
 // Deliverable due dates ride along as all-day events.
 export function dueEvents() {
   const out = [];
-  for (const b of activeBookings()) for (const d of b.deliverables || []) if (d.due && d.status !== 'Delivered') out.push({ id: 'del:' + d.id, uid: `logi-del-${d.id}@logi.app`, title: `Deliver: ${d.name} — ${b.title}`, allDay: true, start: d.due, end: nextDay(d.due), location: '', description: `${b.title}${b.client ? ' for ' + b.client : ''}\nDeliverable: ${d.name}${d.duration ? ' (' + d.duration + ')' : ''}\nStatus: ${d.status}\n\nLogi booking ${b.id}`, status: 'CONFIRMED', updatedAt: b.updatedAt });
+  for (const b of activeBookings()) for (const d of b.deliverables || []) if (d.due && d.status !== 'Delivered') out.push({ id: 'del:' + d.id, uid: `vdex-del-${d.id}@vdex.app`, title: `Deliver: ${d.name} — ${b.title}`, allDay: true, start: d.due, end: nextDay(d.due), location: '', description: `${b.title}${b.client ? ' for ' + b.client : ''}\nDeliverable: ${d.name}${d.duration ? ' (' + d.duration + ')' : ''}\nStatus: ${d.status}\n\nVdex booking ${b.id}`, status: 'CONFIRMED', updatedAt: b.updatedAt });
   return out;
 }
 export const feedIcs = () => icsFor(activeBookings(), dueEvents());
-export const FEED_NAME = 'logi-bookings.ics';
+export const FEED_NAME = 'vdex-bookings.ics';
 store.setAuxWriter(() => ({ name: FEED_NAME, text: feedIcs(), type: 'text/calendar' }));
 
 /* ------------------------------ quick links ------------------------------ */
@@ -71,7 +71,7 @@ async function shareIcs(name, text, title, body) {
   const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); a.remove(); toast('Calendar file saved');
 }
 export const shareBooking = b => shareIcs(slug(b.title) + '.ics', icsFor([b], [], b.title), b.title, summaryText(b));
-export const shareAll = () => shareIcs(FEED_NAME, feedIcs(), CAL_NAME, `${activeBookings().length} bookings from Logi`);
+export const shareAll = () => shareIcs(FEED_NAME, feedIcs(), CAL_NAME, `${activeBookings().length} bookings from Vdex`);
 
 export function openAddToCalendar(b) {
   const e = eventOf(b);
@@ -228,7 +228,7 @@ export function calendarPanel() {
         h('p', { class: 'small muted' }, `Save or share all ${n} active booking${n === 1 ? '' : 's'} as a calendar file. Any calendar app imports it.`),
         h('button', { class: 'btn ghost', onclick: shareAll }, '📤 Share bookings (.ics)')),
       h('div', { class: 'card' }, h('strong', null, 'Live feed (any calendar app)'),
-        h('p', { class: 'small muted' }, 'Logi keeps a logi-bookings.ics file in your linked cloud storage up to date. Subscribe to its link once and your calendar follows every change by itself. One-way, from Logi to the calendar.'),
+        h('p', { class: 'small muted' }, 'Vdex keeps a vdex-bookings.ics file in your linked cloud storage up to date. Subscribe to its link once and your calendar follows every change by itself. One-way, from Vdex to the calendar.'),
         !a ? h('p', { class: 'note' }, 'Link a cloud storage first (☁ at the top).')
           : [h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cs.feed, onchange: async e => { await store.setFeed(e.target.checked); draw(); } }), h('span', null, `Publish the feed to ${a.label}`)),
             cs.feed && a.id === 'file' && h('div', { class: 'stack' },
@@ -239,7 +239,7 @@ export function calendarPanel() {
               cloud.feedError && h('div', { class: 'warn small' }, cloud.feedError)),
             cs.feed && help('Google Calendar (web): Other calendars → + → From URL → paste the link. Apple Calendar: File → New Calendar Subscription. iPhone: Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar. Outlook: Add calendar → Subscribe from web. Refresh is up to the calendar: Apple lets you choose (5 min–weekly), Outlook about every 3 hours, Google up to a day.')]),
       h('div', { class: 'card' }, h('strong', null, 'Two-way sync'),
-        h('p', { class: 'small muted' }, 'Keeps a “Logi bookings” calendar in your account: bookings go to it, and date, time, title or location edits made there come back into Logi.'),
+        h('p', { class: 'small muted' }, 'Keeps a “Vdex bookings” calendar in your account: bookings go to it, and date, time, title or location edits made there come back into Vdex.'),
         cs.provider
           ? [h('p', { class: 'status-line', 'data-state': calState.status === 'ok' ? 'synced' : calState.status === 'error' ? 'error' : '' }, `${cs.provider === 'google' ? 'Google Calendar' : 'Microsoft 365 / Outlook'} — ${calState.status}${calState.at ? ' · ' + new Date(calState.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}${calState.error ? ' (' + calState.error + ')' : ''}`),
             h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => syncCalendar({ interactive: true }) }, 'Sync now'), h('button', { class: 'btn ghost', onclick: () => { disconnectCalendar(); draw(); } }, 'Disconnect'))]
