@@ -14,7 +14,7 @@
 | 🤖 **Android phone or tablet** | [Android guide](#android-guide) |
 | 💻 **Mac, Windows or Chromebook** | [Using Vdex on a computer](#using-vdex-on-a-computer) |
 | 🔌 Linking Dropbox, Google, Microsoft or your own server | [Setup guides](#setup-guides-optional-connections), done once from any device |
-| 🧑‍💻 Running or publishing the app yourself | [For developers](#for-developers) |
+| 🧑‍💻 Running the app yourself | [For developers](#for-developers) |
 
 The two phone guides cover the same ground in the same order, so a crew with both kinds of phone can follow along together. Where the phones behave differently, the guide for that phone says so.
 
@@ -436,8 +436,6 @@ Vdex is a static web app: plain HTML, CSS and JavaScript modules, no build step,
 python3 -m http.server 8000   # then open http://localhost:8000
 ```
 Camera, microphone, location, notifications and installing need https or `localhost`.
-
-**Publish it.** `.github/workflows/pages.yml` deploys to GitHub Pages at `https://thecrowbro.github.io/Logi-Video-Production-app-/` on every push to `main`, or on demand from the Actions tab (*Deploy to GitHub Pages → Run workflow*, any branch). The first run switches Pages on. Any static host over https works as well: upload the folder as is.
 
 **Platform notes**
 - Install prompts come from `beforeinstallprompt` (Chromium); iOS gets written instructions (`js/install.js`).
