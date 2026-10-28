@@ -1,32 +1,69 @@
 # Vdex
 
-**Vdex is a production deck for freelance videographers and small video businesses.** Bookings, crew, kit, venues, insurance, a shoot-day clock, timecode notes, pre- and post-production checklists and a few field tools, all in one app that runs on your phone, tablet and computer.
+**Vdex is a production deck for freelance videographers and small video businesses.** Bookings, crew, kit, venues, insurance, a shoot-day clock, timecode notes, pre- and post-production checklists and a few field tools, all in one app that lives on your phone and works on your computer too.
 
-- **No account, no subscription, no server.** Your data stays on your device, and only goes where *you* send it (your own Dropbox, Google Drive, OneDrive or a synced folder).
+- **No account, no subscription, no server.** Your data stays on your device and only goes where *you* send it (your own Dropbox, Google Drive, OneDrive or server).
 - **Works offline** once installed, which matters on location.
-- **One address, two ways to use it:** open it in a browser, or install it like an app.
+- **Phone and computer share one database** once you link a cloud storage.
 
-**Contents:** [Get started](#get-started-in-two-minutes) · [What's on the Rolodex](#whats-on-the-rolodex) · [Everyday how-tos](#everyday-how-tos) · [Your data and syncing](#your-data-and-syncing) · [Calendar](#calendar) · [Field tools](#field-tools) · [Make it yours](#make-it-yours) · [Questions and answers](#questions-and-answers) · [Setup guides](#setup-guides-optional-connections) · [For developers](#for-developers)
+## Which guide do you need?
 
----
+| Your device | Read this |
+|---|---|
+| 📱 **iPhone or iPad** | [iPhone guide](#iphone-guide) |
+| 🤖 **Android phone or tablet** | [Android guide](#android-guide) |
+| 💻 **Mac, Windows or Chromebook** | [Using Vdex on a computer](#using-vdex-on-a-computer) |
+| 🔌 Linking Dropbox, Google, Microsoft or your own server | [Setup guides](#setup-guides-optional-connections), done once from any device |
+| 🧑‍💻 Running or publishing the app yourself | [For developers](#for-developers) |
 
-## Get started in two minutes
-
-1. **Open the Vdex address** your team or you published (see [For developers](#for-developers) if it isn't published yet).
-2. **Install it** so it gets an icon and works offline. Tap the **Install** button in the top bar:
-   - **iPhone / iPad:** open the address in Safari, tap **Share**, then **Add to Home Screen**.
-   - **Android:** tap **Install** (or the browser menu ⋮ → *Install app*).
-   - **Computer:** in Chrome or Edge tap **Install**, or the install icon in the address bar. Firefox and Safari on Mac just use it in a tab.
-3. **Take the tour.** It starts by itself the first time. You can replay it any time from **Aa → Take the tour again**.
-4. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. (It replaces what's there, so only do this on a fresh install.)
-
-The top bar has three buttons: **Install**, **Aa** (text size, theme, accessibility) and **☁** (storage and sync).
+The two phone guides cover the same ground in the same order, so a crew with both kinds of phone can follow along together. Where the phones behave differently, the guide for that phone says so.
 
 ---
 
-## What's on the Rolodex
+## iPhone guide
 
-The spinning drum at the top is how you move between sections: **drag or swipe it**, tap **▲ ▼**, use the **arrow keys**, or scroll on it with a mouse.
+### Install it on your iPhone
+
+Vdex is a web app, so there is nothing to find in the App Store. You install it from Safari:
+
+1. Open the Vdex address in **Safari**. Other iPhone browsers can't add it to the Home Screen properly.
+2. Tap **Share**, the square with an arrow at the bottom of the screen.
+3. Scroll down and tap **Add to Home Screen**, then **Add**.
+4. From now on, open Vdex from its Home Screen icon.
+
+Tapping **Install** in Vdex's own top bar shows these same steps.
+
+Why install it rather than keep it in a Safari tab:
+
+- **It keeps your data.** Safari may clear a website's saved data after about a week of not using it. The installed app is kept apart from Safari and doesn't lose data that way.
+- **Notifications only work in the installed app.** Safari tabs can't show them. Camera, microphone and location work in the installed app on iOS 16.4 or later.
+- **It opens full-screen and works offline.**
+
+**One thing to know:** the installed app and the Safari tab are two separate copies with separate data. If you entered bookings in Safari before installing, export a backup there (Settings → *Backups & data* → **Export backup**) and import it in the installed app, or link the same cloud storage on both and they merge.
+
+### Let Vdex use the camera, microphone and location
+
+iPhone asks the first time a tool needs something. Tap **Allow**.
+
+| It asks for | Used by |
+|---|---|
+| Camera | Scanning the camera's timecode, reading white balance, scanning a link code |
+| Microphone | The noise meter |
+| Location | Sun, golden hour and Polaris, and the sunrise and sunset on call sheets |
+| Motion & Orientation | Aiming at the sun or Polaris, and the tilt range finder |
+| Notifications | "Break's up" alerts from the shoot-day clock |
+
+If you tapped **Don't Allow** by mistake: the camera and microphone are asked for again next time. For location, open iPhone **Settings → Privacy & Security → Location Services → Safari Websites** (installed web apps usually follow that setting). For notifications, open **Settings → Notifications**, find Vdex and switch it on, then turn the toggle on again inside Vdex (Settings → *Hours & breaks*).
+
+### The first time you open it
+
+1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**.
+2. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
+3. The top bar has three buttons: **Install** (until it's installed), **Aa** (text size, theme, accessibility) and **☁** (storage and sync).
+
+### What's on the Rolodex
+
+The spinning drum at the top is how you move between sections: **swipe it** up or down, or tap **▲ ▼**.
 
 | Card | What it's for |
 |------|---------------|
@@ -37,144 +74,324 @@ The spinning drum at the top is how you move between sections: **drag or swipe i
 | **Insurance** | Your policies, claims lines and renewal dates, with a warning if your kit is worth more than it's insured for. |
 | **Me** | Your details and a QR code that hands your contact card, or your website, to anyone who scans it. |
 | **Field** | Sun and golden hour, Polaris finder, white-balance reader, noise meter, range finder. |
-| **TC Notes** | Shoot notes stamped with the camera's timecode, with your script alongside. Links your phone and laptop so both can take notes. |
+| **TC Notes** | Shoot notes stamped with the camera's timecode, with your script alongside. Links your iPhone and a laptop so both can take notes. |
 | **Settings** | Storage, calendar links, themes, defaults, backups, templates, and everything else. |
 
----
-
-## Everyday how-tos
-
 ### Add a booking
+
 1. Bookings → **+ New** (or tap a date, then **+ New**).
 2. Fill in the project, client, **job type** (this picks the right checklist), dates (multi-day shoots have an end date), times and address.
 3. Pick a **venue** if you've saved one: its address fills in and Vdex warns if your kit breaks the venue's rules.
 4. Tick **crew** and **equipment**. Tick a **kit** to load a whole set of gear at once, then adjust. Items you own more than one of get a quantity.
-5. Set the **approved break per day** if the production has one (used by the shoot-day clock).
+5. Set the **approved break per day** if the production has one. The shoot-day clock uses it.
 
 Vdex warns when the same piece of kit is needed on two overlapping jobs.
 
 ### Run a shoot day
+
 - On the day, a **clock bar** appears under the Rolodex with the booking's name. **● Start work** starts the clock; **■ Stop work** logs the hours.
-- **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar also keeps a running total against the break length approved for that production, and warns when it's used up.
-- Turn on **break notifications** (Settings → *Hours & breaks*, or the link in the break chooser) to get a system notification with a *Back to work* button when a break is up.
-- **📋 Call sheet** on the booking page builds one from the booking, venue, crew (with each person's call time), kit, hires and the day's sunrise and sunset. Share it, copy it, email it or print it.
+- **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar keeps a running total against the break length approved for that production and warns when it's used up.
+- **Notifications on an iPhone.** Turn them on under Settings → *Hours & breaks* (installed app only). Vdex counts the break only while it is on screen: the moment you switch to another app or lock the phone, iPhone pauses Vdex, so a "break's up" alert can't go off in the background. It shows the moment you reopen Vdex instead. For a reliable alarm on a long break, leave Vdex open with *Keep the screen on during breaks* switched on, or set a timer in the Clock app as well.
+- **📋 Call sheet** on the booking page builds one from the booking, venue, crew (with each person's call time), kit, hires and the day's sunrise and sunset. **Share** opens the iPhone share sheet (Messages, Mail, AirDrop, WhatsApp…); you can also copy it, email it or print it with AirPrint.
 - The **shot list** on the booking page is there to tick off as you cover it.
 
 ### Take timecode notes
+
 1. TC Notes → **+ New log**. Choose the camera's frame rate and whether its timecode is **free run** (always counting) or **record run** (counts only while recording).
-2. Tap **Sync**: type the timecode the camera shows and tap Sync at that instant, or point the phone at the camera's timecode display and **Scan**.
+2. Tap **Sync**: type the timecode the camera shows and tap Sync at that instant, or point the iPhone at the camera's timecode display and tap **Scan**. The scanner downloads its text reader the first time, so do that once while you have a connection.
 3. Type notes. Each one is stamped with the camera's timecode the moment you start typing. **⏺ Mark now** drops a stamp to fill in later.
 4. In record run, tap **● Roll** and **■ Cut** with the camera; each take is logged with its length.
-5. Add the **script** (Word file, text, or paste it in). Tap a line, or press and hold to select words, then **Mark** to pin a stamp to that part of the script.
-6. **Export** as text or a spreadsheet for the edit.
+5. **Adding the script on an iPhone.** Tap **Script → Word document** and pick a `.docx` from the Files app (iCloud Drive, Google Drive and Dropbox all show up in Files). For a Google Doc, open it in the Docs app, tap ⋮ → *Share & export → Send a copy → Word* and save it to Files first, or select all, copy, and paste the text into Vdex. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
+6. **Export** shares the notes as text or a spreadsheet, to Mail, AirDrop, Files or anywhere else in the share sheet.
 
-**Phone and laptop together:** tap **🔗 Link device** on both, one shows a code, the other scans it, then they swap. Both then show the same clock and the same notes, live, with no internet needed. There's more detail in [Questions and answers](#questions-and-answers).
+**iPhone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
 ### Keep track of a project
+
 - Every booking has a **stage**: Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. The strip on the booking page shows where it is; tap a stage to move it.
 - Each stage has a **checklist** that depends on the job type. Tick things off, add your own items, and when a stage is complete a **Next** button moves the project on. Items with an arrow open the tool they're about (call sheet, kit, media log, hours…).
 - **🗂 Pipeline** on the Bookings page shows every project by stage, with its progress and next deadline.
 - Change the checklists for each job type under Settings → *Workflow templates*.
 
 ### After the shoot
+
 - **Media & backups** on the booking page: one row per card; tick as it's copied to drive 1, drive 2, offsite, and verified. A card can only be marked *cleared* once it's on two drives.
 - **Deliverables**: what the client gets, with due dates (they appear in your calendar), status and links.
 - **Music & stock licences**: keep the licence numbers with the project.
-- **✂ Start edit session** runs the clock for post days. **📊 Hours & statistics** shows totals, hours per week, hours by project, overtime, and exports a spreadsheet for invoicing.
+- **✂ Start edit session** runs the clock for post days. **📊 Hours & statistics** shows totals, hours per week, hours by project and overtime, and shares a spreadsheet for invoicing.
 
----
+### Your data on an iPhone
 
-## Your data and syncing
+**Where it lives.** Inside the installed app on this phone. Nothing is uploaded unless you link a storage of your own.
 
-**Where it lives.** Everything is stored on the device you're using. Nothing is uploaded unless you link a storage of your own.
-
-**Backups.** Settings → *Backups & data* → **Export backup** saves one file with everything in it; **Import backup** restores it. Do this before changing phones.
+**Backups.** Settings → *Backups & data* → **Export backup** opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
 
 **Using Vdex on more than one device.** Link **one** cloud storage under **☁** (or Settings → *Storage & sync*). Every device linked to the same storage then shares one database, and changes made on two devices at once are merged rather than overwriting each other.
 
-Which to choose:
+| On an iPhone you can link | Notes |
+|---|---|
+| **Dropbox** | Needs a one-time setup, see [Setup guides](#setup-guides-optional-connections). Stays signed in. |
+| **Google Drive** | Needs a one-time setup. Google makes you sign in again about once an hour; tap **Reconnect** when asked. |
+| **OneDrive** | Needs a one-time setup. Stays signed in. |
+| **WebDAV** | Your own Nextcloud, ownCloud, Synology or similar server. |
 
-| You want to… | Pick | Notes |
-|--------------|------|-------|
-| Use it on an iPhone and a computer | **Dropbox**, **Google Drive** or **OneDrive** | Direct connections; work everywhere. Each needs a one-time setup, see [Setup guides](#setup-guides-optional-connections). |
-| Keep it on a computer or Android phone that already syncs a folder | **A file in a synced folder** | Pick a file inside your iCloud Drive (Mac), OneDrive, Google Drive, Dropbox or any synced folder. Not possible on iPhone. |
-| Use your own server | **WebDAV** | For Nextcloud, ownCloud, Synology and the like. Needs the server to allow this site (see the setup guide). |
-| Keep it simple | **No cloud** | Export a backup now and then. |
+There is no iCloud Drive option: iPhones don't let web apps keep a file in a synced folder. The four above work on your iPhone and on your computer, so pick one and link it everywhere.
 
----
+### Calendar on an iPhone
 
-## Calendar
-
-Three ways to get bookings into the calendar you already use:
-
-1. **Add once** — on any booking, **📆 Add to calendar** opens it ready-filled in Google Calendar, Outlook, Microsoft 365 or Yahoo, or saves a calendar file for Apple Calendar. **📤 Share** and **✉ Email** send the details to anyone.
-2. **Live feed** — with a cloud storage linked, Vdex keeps a calendar file up to date that any calendar app can subscribe to once; after that it follows every change by itself. Bookings → **📆 Calendar & email** → *Live feed* has the link and the steps for Google, Apple, iPhone and Outlook.
-3. **Two-way sync** — Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the setup in [Setup guides](#setup-guides-optional-connections).
+1. **Add once.** On any booking, **📆 Add to calendar** → **Apple Calendar** saves a calendar file; open it and tap **Add All**. The Google Calendar and Outlook options open those apps or sites ready-filled. **📤 Share** and **✉ Email** send the details to anyone.
+2. **Live feed.** With a cloud storage linked, Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. Then on the iPhone: **Settings → Calendar** (on iOS 18, **Settings → Apps → Calendar**) → **Accounts → Add Account → Other → Add Subscribed Calendar**, paste the link. On a Mac, Calendar → *File → New Calendar Subscription* does the same and reaches the iPhone through iCloud.
+3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [Setup guides](#setup-guides-optional-connections).
 
 Deliverable due dates ride along as all-day events.
 
----
-
-## Field tools
+### Field tools on an iPhone
 
 Set your location first (Field → **Use GPS**, or Settings → *Field tool defaults*), then:
 
-- **Sun** — sunrise, sunset, golden and blue hour, the sun's direction, and a slider to see any time of day. Aim the phone to find the sun.
+- **Sun** — sunrise, sunset, golden and blue hour, the sun's direction, and a slider to see any time of day. Aim the phone to find the sun (allow Motion & Orientation when asked).
 - **Polaris** — where it is tonight, for aligning timelapses and star trackers (northern hemisphere).
-- **WB** — a rough colour temperature from the phone camera. Phones auto-correct colour, so treat it as a guide; a grey card and your camera's own white balance are the reference.
+- **WB** — a rough colour temperature from the camera. iPhones auto-correct colour, so treat it as a guide; a grey card and your camera's own white balance are the reference.
 - **Noise** — a sound level estimate from the microphone. Calibrate it once against a real meter (Settings → *Field tool defaults*).
-- **Range** — distance measuring. **AR measure** needs an Android phone with ARCore in Chrome (iPhones can't do this in a browser). The **tilt method** works on any phone: enter the camera height, aim at where the subject meets the ground, and it works out the distance; aim at the top for the subject's height. About ±10% on level ground.
+- **Range** — **AR measure isn't available on iPhones** (Safari can't do AR in a web app yet). Use the **tilt method**: enter the camera height, aim at where the subject meets the ground, and it works out the distance; aim at the top for the subject's height. About ±10% on level ground.
 
----
-
-## Make it yours
+### Make it yours
 
 Tap **Aa** (or Settings → *Display & accessibility*):
 
-- **Colour theme** — Brass, Noir, Forest, Ocean, Plum or Mono, each in light and dark, or following your device.
+- **Colour theme** — Brass, Noir, Forest, Ocean, Plum or Mono, each in light and dark, or following your iPhone.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
-- **Animation** — the Rolodex plus small touches, the Rolodex only, or none. Your phone's reduce-motion setting switches everything off regardless.
-- Everything works with a screen reader and a keyboard (arrow keys turn the Rolodex).
+- **Animation** — the Rolodex plus small touches, the Rolodex only, or none. iPhone's Reduce Motion setting switches everything off regardless.
+- **Vibration feedback** has no effect on an iPhone: iPhones don't let web apps vibrate.
+- Everything works with VoiceOver.
 
----
+### iPhone questions and answers
 
-## Questions and answers
+**I installed it and my bookings vanished.**
+They're still in Safari: the installed app and the Safari tab are separate copies. In Safari, Settings → *Backups & data* → **Export backup**, then **Import backup** in the installed app.
 
-**Is it free? Is it private?**
-Yes and yes. There's no account and no server. Vdex only talks to a service when you link one, and then only to your own storage or calendar.
+**My data disappeared after a few weeks.**
+Safari clears website data it hasn't seen for a while. Use the installed app, link a cloud storage, and export a backup now and then.
 
-**The camera, microphone, GPS or notifications don't work.**
-They need the app to be opened over a secure address (https) or installed, and you have to allow them when the browser asks. If you said no once, allow them again in the browser's site settings. In a preview inside another app they're usually blocked.
+**The Install button only shows instructions.**
+That's how iPhones work: web apps are added through Safari's Share button, not a download.
 
-**Where's the Install button?**
-It hides once the app is installed. On iPhone it shows the Safari steps instead of installing directly, because that's how iPhones work.
+**I can't turn notifications on.**
+Only the installed app can show them, on iOS 16.4 or later. Open Vdex from the Home Screen icon and try again.
 
-**My bookings aren't on my other device.**
-Each device starts with its own data. Link the same storage on both (☁), or export a backup on one and import it on the other.
+**The camera, microphone or GPS won't start.**
+They need the installed app or a secure (https) address, iOS 16.4 or later, and your permission when asked. If you refused once, see *Let Vdex use the camera…* above.
 
 **Google keeps asking me to sign in again.**
-That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Reconnect** or **Sync now** when it asks. Dropbox and Microsoft stay signed in.
+That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Reconnect** or **Sync now**. Dropbox and Microsoft stay signed in.
 
-**The two devices won't link.**
-They need to be on the same Wi‑Fi or one phone's hotspot (no internet required). Some office and hotel networks keep devices apart; a hotspot always works. If one device has no camera to scan with, copy the code and paste it on the other.
+**My iPhone and laptop won't link.**
+Put both on the same Wi‑Fi or on the iPhone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
 
-**Will I get a break notification if my phone is locked?**
-Only while the phone keeps the app alive: reliably on a computer, and on a phone for the first few minutes in the background, or for the whole break if *Keep the screen on during breaks* is on. If the phone has suspended the app, the notification arrives the moment you open it again. Waking a locked phone by itself would need a server, which Vdex doesn't have.
+**Will I get a break notification if the phone is locked?**
+Not while it's locked or in another app: iPhone pauses web apps straight away. The alert appears when you reopen Vdex. Keep Vdex on screen with *Keep the screen on during breaks*, or use the Clock app's timer too.
 
 **Can clients log in to review or approve?**
 No. Vdex is your side of the job: you record their feedback and send them the documents.
 
 **I deleted something by mistake.**
-Import your last backup (Settings → *Backups & data*). If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
+Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
 
 **Can I start over?**
-Settings → *Backups & data* → **Erase all data on this device**. It asks twice, and it leaves any linked cloud copy alone.
+Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, and leaves the cloud copy alone.
+
+---
+
+## Android guide
+
+### Install it on your Android phone
+
+Vdex is a web app, so there is nothing to find in the Play Store. You install it from the browser:
+
+1. Open the Vdex address in **Chrome**. Edge and Samsung Internet work too. Firefox can't install it, so use it in a tab there.
+2. Tap **Install** in Vdex's top bar and confirm. If you don't see it, open Chrome's menu **⋮ → Install app** (older phones say *Add to Home screen*).
+3. Vdex appears in your app list and on the Home screen. It opens full-screen and works offline.
+
+Chrome and the installed app share the same data, so it doesn't matter which one you open. (If you install from Samsung Internet, that browser keeps its own copy, so pick one browser and stick with it.)
+
+### Let Vdex use the camera, microphone and location
+
+Android asks the first time a tool needs something. Tap **Allow** (or *While using the app*).
+
+| It asks for | Used by |
+|---|---|
+| Camera | Scanning the camera's timecode, reading white balance, scanning a link code, AR measuring |
+| Microphone | The noise meter |
+| Location | Sun, golden hour and Polaris, and the sunrise and sunset on call sheets |
+| Notifications | "Break's up" alerts from the shoot-day clock |
+
+Android doesn't ask for motion sensors; the sun pointer and tilt range finder just work.
+
+If you tapped **Don't allow** by mistake: long-press the Vdex icon → **App info** → **Site settings**, or in Chrome **⋮ → Settings → Site settings → All sites → the Vdex address**, and allow it there.
+
+### The first time you open it
+
+1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**.
+2. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
+3. The top bar has three buttons: **Install** (until it's installed), **Aa** (text size, theme, accessibility) and **☁** (storage and sync).
+
+### What's on the Rolodex
+
+The spinning drum at the top is how you move between sections: **swipe it** up or down, or tap **▲ ▼**.
+
+| Card | What it's for |
+|------|---------------|
+| **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, and its pre/post-production checklist. |
+| **Crew** | The freelancers you trust: role, phone, email, a link to their work, and which of your bookings they're on. |
+| **Equipment** | Everything you own, with serial numbers, values and quantities, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). |
+| **Venues** | Places you shoot: map pin and directions, access and parking notes, nearest hospital, contact, and the rules (tripods, lighting, haze, drones… allowed, needs approval, or not allowed). |
+| **Insurance** | Your policies, claims lines and renewal dates, with a warning if your kit is worth more than it's insured for. |
+| **Me** | Your details and a QR code that hands your contact card, or your website, to anyone who scans it. |
+| **Field** | Sun and golden hour, Polaris finder, white-balance reader, noise meter, range finder. |
+| **TC Notes** | Shoot notes stamped with the camera's timecode, with your script alongside. Links your phone and a laptop so both can take notes. |
+| **Settings** | Storage, calendar links, themes, defaults, backups, templates, and everything else. |
+
+### Add a booking
+
+1. Bookings → **+ New** (or tap a date, then **+ New**).
+2. Fill in the project, client, **job type** (this picks the right checklist), dates (multi-day shoots have an end date), times and address.
+3. Pick a **venue** if you've saved one: its address fills in and Vdex warns if your kit breaks the venue's rules.
+4. Tick **crew** and **equipment**. Tick a **kit** to load a whole set of gear at once, then adjust. Items you own more than one of get a quantity.
+5. Set the **approved break per day** if the production has one. The shoot-day clock uses it.
+
+Vdex warns when the same piece of kit is needed on two overlapping jobs.
+
+### Run a shoot day
+
+- On the day, a **clock bar** appears under the Rolodex with the booking's name. **● Start work** starts the clock; **■ Stop work** logs the hours.
+- **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar keeps a running total against the break length approved for that production and warns when it's used up.
+- **Notifications on Android.** Turn them on under Settings → *Hours & breaks*. When a break is up, Android shows a notification with **▶ Back to work** and **5 more min** buttons, even while you're in another app, plus a two-minute warning. Android keeps Vdex counting in the background for a few minutes and may then pause it to save battery, in which case the alert arrives when you open Vdex again. For long breaks, switch on *Keep the screen on during breaks*, or stop Android pausing Chrome (phone **Settings → Apps → Chrome → Battery → Unrestricted**).
+- **📋 Call sheet** on the booking page builds one from the booking, venue, crew (with each person's call time), kit, hires and the day's sunrise and sunset. **Share** opens the Android share sheet (WhatsApp, Gmail, Messages…); you can also copy it, email it or print it.
+- The **shot list** on the booking page is there to tick off as you cover it.
+
+### Take timecode notes
+
+1. TC Notes → **+ New log**. Choose the camera's frame rate and whether its timecode is **free run** (always counting) or **record run** (counts only while recording).
+2. Tap **Sync**: type the timecode the camera shows and tap Sync at that instant, or point the phone at the camera's timecode display and tap **Scan**. The scanner downloads its text reader the first time, so do that once while you have a connection.
+3. Type notes. Each one is stamped with the camera's timecode the moment you start typing. **⏺ Mark now** drops a stamp to fill in later.
+4. In record run, tap **● Roll** and **■ Cut** with the camera; each take is logged with its length.
+5. **Adding the script on Android.** Share it straight into Vdex: in the Google Docs app tap ⋮ → *Share & export → Send a copy → Word*, then choose **Vdex** in the share sheet. Any `.docx` can be shared to Vdex the same way, or picked with **Script → Word document**. You can also paste the text. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
+6. **Export** shares the notes as text or a spreadsheet, to Gmail, Drive or anywhere else in the share sheet.
+
+**Phone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
+
+### Keep track of a project
+
+- Every booking has a **stage**: Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. The strip on the booking page shows where it is; tap a stage to move it.
+- Each stage has a **checklist** that depends on the job type. Tick things off, add your own items, and when a stage is complete a **Next** button moves the project on. Items with an arrow open the tool they're about (call sheet, kit, media log, hours…).
+- **🗂 Pipeline** on the Bookings page shows every project by stage, with its progress and next deadline.
+- Change the checklists for each job type under Settings → *Workflow templates*.
+
+### After the shoot
+
+- **Media & backups** on the booking page: one row per card; tick as it's copied to drive 1, drive 2, offsite, and verified. A card can only be marked *cleared* once it's on two drives.
+- **Deliverables**: what the client gets, with due dates (they appear in your calendar), status and links.
+- **Music & stock licences**: keep the licence numbers with the project.
+- **✂ Start edit session** runs the clock for post days. **📊 Hours & statistics** shows totals, hours per week, hours by project and overtime, and shares a spreadsheet for invoicing.
+
+### Your data on Android
+
+**Where it lives.** In Chrome's storage for the Vdex site, which the installed app shares. Nothing is uploaded unless you link a storage of your own. Clearing Chrome's browsing or site data removes it, so keep a backup.
+
+**Backups.** Settings → *Backups & data* → **Export backup** opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
+
+**Using Vdex on more than one device.** Link **one** cloud storage under **☁** (or Settings → *Storage & sync*). Every device linked to the same storage then shares one database, and changes made on two devices at once are merged rather than overwriting each other.
+
+| On Android you can link | Notes |
+|---|---|
+| **Google Drive** | Needs a one-time setup, see [Setup guides](#setup-guides-optional-connections). Google makes you sign in again about once an hour; tap **Reconnect** when asked. |
+| **Dropbox** | Needs a one-time setup. Stays signed in. |
+| **OneDrive** | Needs a one-time setup. Stays signed in. |
+| **WebDAV** | Your own Nextcloud, ownCloud, Synology or similar server. |
+
+The *file in a synced folder* option you may see on a computer doesn't appear on Android: phones don't let web apps keep a file in a synced folder. The four above work on your phone and on your computer, so pick one and link it everywhere.
+
+### Calendar on Android
+
+1. **Add once.** On any booking, **📆 Add to calendar** → **Google Calendar** opens the Google Calendar app ready-filled; **Outlook** does the same for Outlook. The Apple option saves a calendar file for any app that imports one. **📤 Share** and **✉ Email** send the details to anyone.
+2. **Live feed.** With a cloud storage linked, Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. The Google Calendar app can't add subscriptions itself, so open **calendar.google.com** in a browser → *Other calendars → + → From URL* and paste the link; it then shows up in the app and in Samsung Calendar. Outlook: **outlook.com → Add calendar → Subscribe from web**.
+3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [Setup guides](#setup-guides-optional-connections).
+
+Deliverable due dates ride along as all-day events.
+
+### Field tools on Android
+
+Set your location first (Field → **Use GPS**, or Settings → *Field tool defaults*), then:
+
+- **Sun** — sunrise, sunset, golden and blue hour, the sun's direction, and a slider to see any time of day. Aim the phone to find the sun. If the pointer seems off, wave the phone in a figure of eight to calibrate the compass.
+- **Polaris** — where it is tonight, for aligning timelapses and star trackers (northern hemisphere).
+- **WB** — a rough colour temperature from the camera. Phones auto-correct colour, so treat it as a guide; a grey card and your camera's own white balance are the reference.
+- **Noise** — a sound level estimate from the microphone. Calibrate it once against a real meter (Settings → *Field tool defaults*).
+- **Range** — **AR measure** works on Android phones that support ARCore (most recent phones; Google Play Services for AR installs itself), in Chrome. Tap **📐 Measure in AR**, point the phone at a surface and the distance from the camera is shown; tap **Set point** twice to measure the length between two places. On other phones, or outdoors in flat light where AR struggles, use the **tilt method**: enter the camera height, aim at where the subject meets the ground, and it works out the distance; aim at the top for the subject's height. About ±10% on level ground.
+
+### Make it yours
+
+Tap **Aa** (or Settings → *Display & accessibility*):
+
+- **Colour theme** — Brass, Noir, Forest, Ocean, Plum or Mono, each in light and dark, or following your phone.
+- **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
+- **Animation** — the Rolodex plus small touches, the Rolodex only, or none. Android's *Remove animations* setting switches everything off regardless.
+- **Vibration feedback** gives a small buzz on taps; turn it off here if you'd rather not.
+- Everything works with TalkBack.
+
+### Android questions and answers
+
+**There's no Install button.**
+Either Vdex is already installed (open it from your app list), or you're in a browser that can't install web apps. Open the address in Chrome.
+
+**Notifications don't show.**
+Allow them when Vdex asks, check the phone's notification settings for Chrome (or for Vdex under App info), and check Do Not Disturb. If alerts arrive late, Android has paused Vdex in the background: see *Run a shoot day* above.
+
+**The camera, microphone or GPS won't start.**
+They need a secure (https) address or the installed app, and your permission when asked. If you refused once, see *Let Vdex use the camera…* above.
+
+**AR measure says it's not available.**
+Your phone has no ARCore support, or you're not in Chrome. Use the tilt method instead.
+
+**The sun pointer points the wrong way.**
+Calibrate the compass by moving the phone in a figure of eight, and keep it away from magnets, cases with magnets and car mounts.
+
+**Google keeps asking me to sign in again.**
+That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Reconnect** or **Sync now**. Dropbox and Microsoft stay signed in.
+
+**My phone and laptop won't link.**
+Put both on the same Wi‑Fi or on the phone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
+
+**My bookings aren't on my other device.**
+Each device starts with its own data. Link the same storage on both (☁), or export a backup on one and import it on the other.
+
+**Can clients log in to review or approve?**
+No. Vdex is your side of the job: you record their feedback and send them the documents.
+
+**I deleted something by mistake.**
+Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
+
+**Can I start over?**
+Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, and leaves the cloud copy alone.
+
+---
+
+## Using Vdex on a computer
+
+Everything in the phone guides works the same on a computer; the [Android guide](#android-guide) is the closer match. The differences:
+
+- **Install:** in Chrome or Edge tap **Install** in Vdex's top bar, or the install icon at the right of the address bar. Safari on a Mac: *File → Add to Dock*. Firefox just uses it in a tab.
+- **Layout:** with a wide window, timecode notes and the script sit side by side, and the Rolodex also turns with the **arrow keys** or the mouse wheel.
+- **One more storage option:** in Chrome or Edge, **☁ → A file in a synced folder** keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder, with no sign-in. Your phone can't use that option, so for phone-and-computer use choose Dropbox, Google Drive, OneDrive or WebDAV instead.
+- **Notifications** are reliable while the browser or installed app is open.
+- **Backups, call sheets and exports** download as files instead of opening a share sheet.
+- **Linking a phone:** the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 
 ---
 
 ## Setup guides (optional connections)
 
-These are one-time jobs, needed only for the direct cloud links and two-way calendar sync. The app shows the exact address to paste wherever a form asks for a "redirect URI" or "origin". Vdex must be published at a secure (https) address for these to work.
+These are one-time jobs, needed only for the direct cloud links and two-way calendar sync. The app shows the exact address to paste wherever a form asks for a "redirect URI" or "origin". Vdex must be published at a secure (https) address for these to work. The forms are easiest on a computer, but the key or ID you get at the end can be typed into Vdex on any device.
 
 ### Dropbox
 1. Go to **dropbox.com/developers/apps** and create an app: *Scoped access*, *App folder*. Give it any name (Vdex will save into `Apps/that name/`).
@@ -193,8 +410,8 @@ These are one-time jobs, needed only for the direct cloud links and two-way cale
 3. Under *API permissions* add the delegated permissions `Files.ReadWrite.AppFolder` (OneDrive) and `Calendars.ReadWrite` (calendar).
 4. Copy the **Application (client) ID** into Vdex. One registration serves both the storage link and the calendar sync.
 
-### A file in a synced folder (computer or Android)
-1. ☁ → *A file in a synced folder* → **Create database file…**
+### A file in a synced folder (computers only)
+1. In Chrome or Edge, ☁ → *A file in a synced folder* → **Create database file…**
 2. Save it inside a folder your sync app keeps copied (iCloud Drive on a Mac, OneDrive, Google Drive for desktop, Dropbox, Box, Proton Drive, Synology Drive…).
 3. On another computer, choose **Open existing database file…** and pick the same file.
 
@@ -205,8 +422,8 @@ These are one-time jobs, needed only for the direct cloud links and two-way cale
 
 ### Live calendar feed
 1. Link a cloud storage first, then Bookings → **📆 Calendar & email** → tick *Publish the feed*.
-2. Tap **Get the subscription link** (Dropbox, Google Drive, OneDrive) or, with a synced folder, pick where the file goes and share it from your sync app as a direct-download link.
-3. Subscribe once: Google Calendar *Other calendars → + → From URL*; Apple Calendar *File → New Calendar Subscription*; iPhone *Settings → Calendar → Accounts → Add Subscribed Calendar*; Outlook *Add calendar → Subscribe from web*. How often it refreshes is up to the calendar app.
+2. Tap **Get the subscription link** (Dropbox, Google Drive, OneDrive) or, with a synced folder on a computer, pick where the file goes and share it from your sync app as a direct-download link.
+3. Subscribe once: Google Calendar on the web *Other calendars → + → From URL*; Apple Calendar *File → New Calendar Subscription*; iPhone *Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar*; Outlook *Add calendar → Subscribe from web*. How often it refreshes is up to the calendar app.
 
 ---
 
@@ -221,6 +438,13 @@ python3 -m http.server 8000   # then open http://localhost:8000
 Camera, microphone, location, notifications and installing need https or `localhost`.
 
 **Publish it.** `.github/workflows/pages.yml` deploys to GitHub Pages at `https://thecrowbro.github.io/Logi-Video-Production-app-/` on every push to `main`, or on demand from the Actions tab (*Deploy to GitHub Pages → Run workflow*, any branch). The first run switches Pages on. Any static host over https works as well: upload the folder as is.
+
+**Platform notes**
+- Install prompts come from `beforeinstallprompt` (Chromium); iOS gets written instructions (`js/install.js`).
+- The synced-folder storage uses the File System Access API, so it is offered only where `showSaveFilePicker` exists (desktop Chromium).
+- Script files can be shared into the app through the Web Share Target in `manifest.webmanifest` and `sw.js` (Android Chrome); elsewhere the file picker and paste are used.
+- Break notifications are local (service-worker `showNotification` on timers), so they depend on the page staying alive; there is no push server.
+- Motion sensors use `DeviceOrientationEvent.requestPermission` where it exists (iOS) and `deviceorientationabsolute` elsewhere.
 
 **Where things are**
 ```
