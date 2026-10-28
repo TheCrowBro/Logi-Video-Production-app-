@@ -1,0 +1,53 @@
+# Builds the one-click installers: Vdex-Setup-<version>.exe (Windows), Vdex-<version>.pkg (Mac) and
+# Vdex-<version>.AppImage (Linux). Run it from the Actions tab (Run workflow) and download the files from the
+# run's Artifacts, or push a tag such as v1.1.0 and the installers are attached to a release of that name.
+name: Build desktop installers
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            args: --win
+          - os: macos-latest
+            args: --mac
+          - os: ubuntu-latest
+            args: --linux
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run dist -- ${{ matrix.args }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"   # unsigned builds: no Apple or Windows certificate needed
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vdex-${{ matrix.os }}
+          path: |
+            dist/*.exe
+            dist/*.pkg
+            dist/*.AppImage
+          if-no-files-found: error
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: installers
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: installers/*

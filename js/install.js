@@ -1,7 +1,8 @@
 // "Install" affordance: Chrome/Edge/Android get the real install prompt; iOS and others get instructions.
 import { h, sheet } from './util.js';
 
-const standalone = () => matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true;
+const desktopApp = () => /\bElectron\//.test(navigator.userAgent); // the Vdex desktop app (Windows, Mac, Linux installers)
+const standalone = () => desktopApp() || matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: window-controls-overlay)').matches || navigator.standalone === true;
 const isIOS = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 let deferred = null;
 export const installState = () => ({ standalone: standalone(), canPrompt: !!deferred, ios: isIOS() });

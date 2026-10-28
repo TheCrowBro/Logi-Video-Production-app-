@@ -11,6 +11,7 @@ try { prefs = { ...DEF, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { /*
 export const notifyPrefs = () => ({ ...prefs });
 export const setNotifyPrefs = patch => { prefs = { ...prefs, ...patch }; try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* ignore */ } };
 
+const desktopApp = /\bElectron\//.test(navigator.userAgent); // the desktop app shows plain notifications: Electron has no service-worker ones
 export const supported = () => 'Notification' in window;
 export const permission = () => (supported() ? Notification.permission : 'unsupported');
 export async function requestPermission() {
@@ -22,9 +23,11 @@ async function show(title, body, { tag = 'logi-break', actions = [], urgent = fa
   if (permission() !== 'granted') return false;
   const opts = { body, tag, renotify: true, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', vibrate: urgent ? [250, 100, 250, 100, 400] : [200, 100, 200], requireInteraction: urgent, data: { tag } };
   try {
-    const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+    const reg = !desktopApp && 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
     if (reg && reg.showNotification) { await reg.showNotification(title, { ...opts, actions }); return true; }
-    new Notification(title, opts); return true; // no service worker (plain page): still a notification, without the button
+    const n = new Notification(title, opts); // no service worker (plain page or the desktop app): still a notification, without the buttons
+    n.onclick = () => { window.focus(); n.close(); };
+    return true;
   } catch { return false; }
 }
 

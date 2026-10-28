@@ -5,6 +5,7 @@
 - **No account, no subscription, no server.** Your data stays on your device and only goes where *you* send it (your own Dropbox, Google Drive, OneDrive or server).
 - **Works offline** once installed, which matters on location.
 - **Phone and computer share one database** once you link a cloud storage.
+- **On a computer, one click installs it:** there is an installer for Windows, Mac and Linux, or use it in any browser.
 
 ## Which guide do you need?
 
@@ -12,7 +13,7 @@
 |---|---|
 | 📱 **iPhone or iPad** | [iPhone guide](#iphone-guide) |
 | 🤖 **Android phone or tablet** | [Android guide](#android-guide) |
-| 💻 **Mac, Windows or Chromebook** | [Using Vdex on a computer](#using-vdex-on-a-computer) |
+| 💻 **Windows, Mac or Linux computer** | [Using Vdex on a computer](#using-vdex-on-a-computer): one-click installers, or the browser |
 | 🔌 Linking Dropbox, Google, Microsoft or your own server | [Setup guides](#setup-guides-optional-connections), done once from any device |
 | 🧑‍💻 Running the app yourself | [For developers](#for-developers) |
 
@@ -378,20 +379,36 @@ Settings → *Backups & data* → **Erase all data on this device**. It asks twi
 
 ## Using Vdex on a computer
 
-Everything in the phone guides works the same on a computer; the [Android guide](#android-guide) is the closer match. The differences:
+### The easy way: a one-click installer
 
-- **Install:** in Chrome or Edge tap **Install** in Vdex's top bar, or the install icon at the right of the address bar. Safari on a Mac: *File → Add to Dock*. Firefox just uses it in a tab.
-- **Layout:** with a wide window, timecode notes and the script sit side by side, and the Rolodex also turns with the **arrow keys** or the mouse wheel.
-- **One more storage option:** in Chrome or Edge, **☁ → A file in a synced folder** keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder, with no sign-in. Your phone can't use that option, so for phone-and-computer use choose Dropbox, Google Drive, OneDrive or WebDAV instead.
-- **Notifications** are reliable while the browser or installed app is open.
-- **Backups, call sheets and exports** download as files instead of opening a share sheet.
-- **Linking a phone:** the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
+Open the repository's **Releases** page, download the file for your computer, and open it:
+
+| Computer | File | Then |
+|---|---|---|
+| **Windows** | `Vdex-Setup-<version>.exe` | Double-click it. Vdex installs in a few seconds, opens, and gets a Start menu and desktop shortcut. If Windows shows *Windows protected your PC*, click **More info → Run anyway**: the installer isn't signed with a paid certificate, which is all that warning means. |
+| **Mac** | `Vdex-<version>.pkg` | Double-click it and follow the installer; Vdex lands in Applications. If macOS says it can't be opened because it's from an unidentified developer, right-click (Control-click) the file and choose **Open**, or go to **System Settings → Privacy & Security** and click **Open Anyway**. |
+| **Linux** | `Vdex-<version>.AppImage` | Make it executable (right-click → Properties → *Allow executing as program*, or `chmod +x`), then double-click it. |
+
+The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **☁ → A file in a synced folder**, which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Dropbox, Google Drive, OneDrive or WebDAV, and link the same one everywhere.
+
+**Good to know about the desktop app**
+
+- It and the browser version keep separate data. Pick one, or link the same cloud storage on both and they merge.
+- There is no GPS in a computer, so set your location by hand: Field → **Enter**, or Settings → *Field tool defaults*. The sun, Polaris and call-sheet times then work as usual.
+- Break notifications pop up like any other app's. They have no buttons; clicking one brings Vdex to the front.
+- Backups, call sheets and exports save through a normal Save dialog instead of a share sheet.
+- To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
+- Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.
+
+### Or use it in a browser
+
+Everything in the phone guides works the same on a computer in a browser, with no installer at all. In Chrome or Edge tap **Install** in Vdex's top bar (or the install icon at the right of the address bar) to give it a window and an icon; Safari on a Mac has *File → Add to Dock*; Firefox and Chromebooks just use it in a tab. Chrome and Edge also offer the *file in a synced folder* storage option. With a wide window, timecode notes and the script sit side by side, and the Rolodex turns with the **arrow keys** or the mouse wheel.
 
 ---
 
 ## Setup guides (optional connections)
 
-These are one-time jobs, needed only for the direct cloud links and two-way calendar sync. The app shows the exact address to paste wherever a form asks for a "redirect URI" or "origin". Vdex must be published at a secure (https) address for these to work. The forms are easiest on a computer, but the key or ID you get at the end can be typed into Vdex on any device.
+These are one-time jobs, needed only for the direct cloud links and two-way calendar sync. The app shows the exact address to paste wherever a form asks for a "redirect URI" or "origin": for the desktop app it is `http://localhost:47831`, and for the browser version it is the secure (https) address Vdex is opened from. The forms are easiest on a computer, but the key or ID you get at the end can be typed into Vdex on any device.
 
 ### Dropbox
 1. Go to **dropbox.com/developers/apps** and create an app: *Scoped access*, *App folder*. Give it any name (Vdex will save into `Apps/that name/`).
@@ -411,7 +428,7 @@ These are one-time jobs, needed only for the direct cloud links and two-way cale
 4. Copy the **Application (client) ID** into Vdex. One registration serves both the storage link and the calendar sync.
 
 ### A file in a synced folder (computers only)
-1. In Chrome or Edge, ☁ → *A file in a synced folder* → **Create database file…**
+1. In the desktop app, or in Chrome or Edge, ☁ → *A file in a synced folder* → **Create database file…**
 2. Save it inside a folder your sync app keeps copied (iCloud Drive on a Mac, OneDrive, Google Drive for desktop, Dropbox, Box, Proton Drive, Synology Drive…).
 3. On another computer, choose **Open existing database file…** and pick the same file.
 
@@ -437,12 +454,17 @@ python3 -m http.server 8000   # then open http://localhost:8000
 ```
 Camera, microphone, location, notifications and installing need https or `localhost`.
 
+**Making the installers.** `npm install` once, then `npm run dist -- --win`, `--mac` or `--linux` builds `Vdex-Setup-<version>.exe`, `Vdex-<version>.pkg` or `Vdex-<version>.AppImage` into `dist/`, each on its own kind of computer (a Windows build on Linux also needs Wine). `.github/workflows/desktop.yml` builds all three on GitHub: open the **Actions** tab → **Build desktop installers** → **Run workflow**, then download them from the run's Artifacts; pushing a tag such as `v1.1.0` attaches them to a release of that name. The builds are unsigned; electron-builder picks up certificates through its `CSC_*` variables if you have them. The version comes from `js/version.js`.
+
+**The desktop app** is `desktop/main.js`: Electron serving these same files from `http://localhost:47831`, so the service worker, storage and sign-ins behave exactly as in Chrome. Sign-in pop-ups and the print window stay inside the app; every other link opens in the system browser. Electron has no service-worker notifications, so `js/notify.js` shows plain ones there, and `js/install.js` treats the app as already installed.
+
 **Platform notes**
 - Install prompts come from `beforeinstallprompt` (Chromium); iOS gets written instructions (`js/install.js`).
 - The synced-folder storage uses the File System Access API, so it is offered only where `showSaveFilePicker` exists (desktop Chromium).
 - Script files can be shared into the app through the Web Share Target in `manifest.webmanifest` and `sw.js` (Android Chrome); elsewhere the file picker and paste are used.
 - Break notifications are local (service-worker `showNotification` on timers), so they depend on the page staying alive; there is no push server.
 - Motion sensors use `DeviceOrientationEvent.requestPermission` where it exists (iOS) and `deviceorientationabsolute` elsewhere.
+- The desktop app has no network geolocation (that needs a Google API key in Electron), so the location is entered by hand there.
 
 **Where things are**
 ```
@@ -462,6 +484,7 @@ js/timecode.js   SMPTE timecode maths (drop-frame aware)     js/docx.js   .docx 
 js/link.js       phone–laptop link over WebRTC with clock-offset measurement     js/qr.js   QR generate / decode
 js/suncalc.js    sun and Polaris     js/range.js   range finder (WebXR + tilt)     js/map.js   map preview and directions
 js/a11y.js       themes, text size, motion, accessibility     js/tour.js   first-run tour     js/install.js   install prompt
+desktop/         the desktop app (main.js), its icon, and the version sync used by the installers
 vendor/          qrcode-generator (MIT), jsQR (Apache-2.0); see vendor/LICENSES.md
 ```
 
