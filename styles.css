@@ -17,6 +17,30 @@
 :root[data-palette=plum][data-scheme=light] { --bg: #f1e9f3; --bg2: #e8dcec; --card: #fcf8fd; --line: #d8c6dd; --text: #2b1a30; --muted: #74607b; --accent: #b23c7f; --accent-ink: #ffffff; --paper: #fcf8fd; --paper-ink: #2b1a30; }
 :root[data-palette=mono] { --bg: #121212; --bg2: #1a1a1a; --card: #222222; --line: #343434; --text: #eeeeee; --muted: #9a9a9a; --accent: #e6e6e6; --accent-ink: #111111; --paper: #eeeeee; --paper-ink: #111111; }
 :root[data-palette=mono][data-scheme=light] { --bg: #f4f4f4; --bg2: #eaeaea; --card: #ffffff; --line: #d4d4d4; --text: #111111; --muted: #666666; --accent: #222222; --accent-ink: #ffffff; --paper: #ffffff; --paper-ink: #111111; }
+
+/* Camera-brand inspired palettes (not affiliated with the brands) */
+:root[data-palette=sony] { --bg: #0f0f10; --bg2: #171718; --card: #1f1f21; --line: #323235; --text: #f2f2f2; --muted: #9c9ca2; --accent: #ff7a1a; --accent-ink: #1a0d00; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=sony][data-scheme=light] { --bg: #f4f4f5; --bg2: #eaeaec; --card: #ffffff; --line: #d5d5da; --text: #1a1a1c; --muted: #66666d; --accent: #c04f00; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=canon] { --bg: #141011; --bg2: #1d1718; --card: #261f20; --line: #3b3032; --text: #f5efef; --muted: #a69a9b; --accent: #e2231a; --accent-ink: #ffffff; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=canon][data-scheme=light] { --bg: #f7f3f3; --bg2: #eee6e6; --card: #ffffff; --line: #dccfcf; --text: #241a1a; --muted: #71615f; --accent: #c0130b; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=nikon] { --bg: #121210; --bg2: #1a1a16; --card: #23231d; --line: #383830; --text: #f4f3ea; --muted: #a3a194; --accent: #ffe100; --accent-ink: #1a1700; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=nikon][data-scheme=light] { --bg: #f6f5ec; --bg2: #ecebdd; --card: #fffffa; --line: #d9d7c2; --text: #201f16; --muted: #6b6957; --accent: #d6b400; --accent-ink: #1a1700; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=fujifilm] { --bg: #0f1512; --bg2: #161f1a; --card: #1d2922; --line: #2f4036; --text: #eef5f0; --muted: #97a79d; --accent: #1fbf74; --accent-ink: #04170c; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=fujifilm][data-scheme=light] { --bg: #eef4f0; --bg2: #e1eae4; --card: #fafdfb; --line: #c8d8ce; --text: #162019; --muted: #5f7066; --accent: #007a44; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=lumix] { --bg: #0e1220; --bg2: #161b2c; --card: #1e2438; --line: #30395a; --text: #eef0f8; --muted: #9aa1bb; --accent: #4d86ff; --accent-ink: #031033; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=lumix][data-scheme=light] { --bg: #eef1f8; --bg2: #e1e6f2; --card: #fbfcff; --line: #c9d2e6; --text: #171b2a; --muted: #5e6680; --accent: #0041c0; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=blackmagic] { --bg: #131313; --bg2: #1b1b1b; --card: #242424; --line: #373737; --text: #f1f1f1; --muted: #9d9d9d; --accent: #ff8a2b; --accent-ink: #1c0e00; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=blackmagic][data-scheme=light] { --bg: #f2f2f2; --bg2: #e8e8e8; --card: #ffffff; --line: #d3d3d3; --text: #1b1b1b; --muted: #666666; --accent: #b84f00; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=red] { --bg: #0d0d0d; --bg2: #161616; --card: #1f1f1f; --line: #333333; --text: #f3f3f3; --muted: #9b9b9b; --accent: #e5001f; --accent-ink: #ffffff; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=red][data-scheme=light] { --bg: #f5f2f2; --bg2: #ebe5e5; --card: #ffffff; --line: #d8cfcf; --text: #1c1818; --muted: #6d6262; --accent: #c0001a; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=arri] { --bg: #0c1424; --bg2: #131d31; --card: #1a2640; --line: #2c3b5c; --text: #edf2fa; --muted: #98a5bf; --accent: #5aa9ff; --accent-ink: #02132b; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=arri][data-scheme=light] { --bg: #edf2f9; --bg2: #dfe7f3; --card: #fbfdff; --line: #c7d3e6; --text: #141c2c; --muted: #5b6a85; --accent: #1f4e9c; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=leica] { --bg: #0c0c0c; --bg2: #151515; --card: #1e1e1e; --line: #313131; --text: #f4f4f4; --muted: #9a9a9a; --accent: #e2001a; --accent-ink: #ffffff; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=leica][data-scheme=light] { --bg: #f4f4f4; --bg2: #eaeaea; --card: #ffffff; --line: #d4d4d4; --text: #161616; --muted: #656565; --accent: #cf0014; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=gopro] { --bg: #0b1220; --bg2: #13203a; --card: #1a2a46; --line: #2d4466; --text: #eaf3fb; --muted: #93aac0; --accent: #19b0ff; --accent-ink: #001a2b; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=gopro][data-scheme=light] { --bg: #eaf4fa; --bg2: #dbe9f3; --card: #f9fdff; --line: #c2d7e6; --text: #12202c; --muted: #54707f; --accent: #006fa6; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
+:root[data-palette=dji] { --bg: #111314; --bg2: #191c1e; --card: #212528; --line: #353b3f; --text: #eff2f3; --muted: #9ba5aa; --accent: #9ec5d6; --accent-ink: #08181f; --paper: #f3efe6; --paper-ink: #24211d; }
+:root[data-palette=dji][data-scheme=light] { --bg: #eef1f3; --bg2: #e1e6e9; --card: #fbfcfd; --line: #cbd4d9; --text: #171c1f; --muted: #5f6b72; --accent: #3b6b85; --accent-ink: #ffffff; --paper: #fbf9f4; --paper-ink: #24211d; color-scheme: light; }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; font-size: 100%; }
 html[data-text=large] { font-size: 118%; } html[data-text=xlarge] { font-size: 138%; }
@@ -510,3 +534,5 @@ html[data-motion=off] .lock.shake .pin-dots { animation: none; }
 .update-bar .btn { white-space: nowrap; }
 body.has-update-bar #page { padding-bottom: 110px; }
 @media (max-width: 480px) { .update-bar { flex-wrap: wrap; justify-content: center; border-radius: 16px; } }
+
+.theme-group { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; display: flex; flex-direction: column; gap: 2px; } .theme-group .twirl-sub { text-transform: none; letter-spacing: 0; }

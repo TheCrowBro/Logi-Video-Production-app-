@@ -7,7 +7,6 @@ import { db, byId, endOf, upsert, activeBookings } from './store.js';
 import { getTimes } from './suncalc.js';
 import { setCheck, itemId } from './workflow.js';
 import { saveOrShare } from './backup.js';
-import { makePdf } from './pdf.js';
 
 const INCLUDE = { kit: true, rules: true, sun: true, contacts: true, notes: true };
 const BLANK = { generalCall: '', lunch: '', wrap: '', schedule: [], attendees: '', weather: '', dress: '', emergency: '', notes: '', version: 0, editedAt: 0, sentAt: 0 };
@@ -140,7 +139,8 @@ const escHtml = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;
 export const callSheetHtml = b => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Call sheet — ${escHtml(b.title)}</title><style>${docCss('')}\n@page{margin:14mm}@media print{.cs-doc{padding:0}}</style></head><body>${renderDoc(b).outerHTML}</body></html>`;
 
 /* ------------------------------------ PDF ------------------------------------ */
-export function callSheetPdf(b) {
+export async function callSheetPdf(b) {
+  const { makePdf } = await import('./pdf.js'); // loaded on demand
   const d = callSheetData(b), { cs, v } = d, inc = cs.include, blocks = [];
   const kv = (k, val) => { if (val) blocks.push({ type: 'kv', k, v: val }); };
   blocks.push({ type: 'title', text: b.title }, { type: 'subtitle', text: [b.client, dateLabel(b), cs.version ? `Version ${cs.version}` : 'Draft'].filter(Boolean).join('   ·   ') });
@@ -229,7 +229,7 @@ export function callSheetPage(b, go) {
   const text = () => callSheetText(byId('bookings', b.id));
   const share = async () => { if (navigator.share) { try { await navigator.share({ title: 'Call sheet — ' + b.title, text: text() }); markSent(b.id); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const copy = async () => { try { await navigator.clipboard.writeText(text()); toast('Copied'); markSent(b.id); } catch { toast('Select the text and copy it'); } };
-  const pdf = async () => { try { const bytes = callSheetPdf(byId('bookings', b.id)); if (await saveOrShare(bytes, `call-sheet-${slug(b.title)}-${b.date}.pdf`, 'application/pdf')) { toast('PDF saved'); markSent(b.id); } } catch (e) { toast('Could not make the PDF: ' + (e.message || e)); } };
+  const pdf = async () => { try { const bytes = await callSheetPdf(byId('bookings', b.id)); if (await saveOrShare(bytes, `call-sheet-${slug(b.title)}-${b.date}.pdf`, 'application/pdf')) { toast('PDF saved'); markSent(b.id); } } catch (e) { toast('Could not make the PDF: ' + (e.message || e)); } };
   const web = async () => { if (await saveOrShare(callSheetHtml(byId('bookings', b.id)), `call-sheet-${slug(b.title)}-${b.date}.html`, 'text/html')) markSent(b.id); };
   const emailHref = `mailto:${withEmail.map(c => c.email.trim()).join(',')}?` + new URLSearchParams({ subject: `Call sheet — ${b.title} — ${fmtShort(b.date)}`, body: text() }).toString().replace(/\+/g, '%20');
   return h('div', { class: 'cs-page' },

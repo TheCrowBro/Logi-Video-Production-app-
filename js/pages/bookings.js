@@ -1,4 +1,4 @@
-import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid } from '../util.js';
+import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid, toast } from '../util.js';
 import { db, byId, bookingsOn, gearClash, upsert, remove, endOf, covers, qtyOf, usedQty } from '../store.js';
 import { openForm } from '../form.js';
 import { editKit } from './gear.js';
@@ -6,7 +6,7 @@ import { venueWarnings, openVenue, chips as venueChips } from './venues.js';
 import { mapButtons } from '../map.js';
 import { openCalendarSheet, openAddToCalendar, shareBooking, mailtoLink } from '../calendar.js';
 import { openHoursSheet, editShift, stats, fmtHm, defaultBreak, startShift, running } from '../hours.js';
-import { STATUSES as WF_STATUSES, TYPES, slugStatus, workflowBlock, openPipeline, hiresBlock, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, stageIndex } from '../workflow.js';
+import { STATUSES as WF_STATUSES, typeOptions, templateById, applyTemplateDefaults, applyTemplateExtras, saveBookingAsTemplate, pickTemplate, typeLabel, slugStatus, workflowBlock, openPipeline, hiresBlock, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, stageIndex } from '../workflow.js';
 import { callSheetPage, openCallSheets, sheetState, commitDraft } from '../callsheet.js';
 import { getTimes } from '../suncalc.js';
 
@@ -38,7 +38,7 @@ function editBooking(b, go) {
     fields: [
       { key: 'title', label: 'Project', required: true, placeholder: 'e.g. Brand film for…' },
       { key: 'client', label: 'Client' },
-      { key: 'type', label: 'Job type', type: 'select', options: TYPES, hint: 'Picks the pre- and post-production checklist template.' },
+      { key: 'type', label: 'Job type', type: 'select', options: typeOptions(), hint: 'Picks the pre- and post-production checklists. Your own templates (Settings → Project templates) are listed first.' },
       { key: 'date', label: 'Start date', type: 'date', required: true },
       { key: 'endDate', label: 'End date (multi-day)', type: 'date', hint: 'Leave blank for a single day.' },
       { key: 'status', label: 'Stage', type: 'select', options: STATUSES },
@@ -62,6 +62,7 @@ function editBooking(b, go) {
       else if (!(item.address || '').trim()) item.address = byId('venues', item.venueId)?.address || '';
       item.gearQty = Object.fromEntries(Object.entries(item.gearQty || {}).filter(([id]) => (item.gear || []).includes(id)));
       upsert('bookings', item);
+      if (isNew) { const t = templateById(item.type); if (t) { const n = applyTemplateExtras(item.id, t); if (n) toast(`Template applied: ${n} item${n === 1 ? '' : 's'} added`); } }
       go({ view: 'booking', id: item.id, day: item.date, cursor: new Date(parseISO(item.date).getFullYear(), parseISO(item.date).getMonth(), 1) });
     },
     onDelete: isNew ? null : () => { remove('bookings', b.id); go({ view: 'day' }); },
@@ -102,7 +103,7 @@ function month(go) {
   return h('div', { class: 'bk-month' },
     h('div', { class: 'page-head' },
       h('h1', null, 'Bookings'),
-      h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New')),
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => pickTemplate(t => editBooking(applyTemplateDefaults(blankBooking(today), t), go)) }, '📐 From template'), h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New'))),
     h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date })) }, '🗂 Pipeline'), h('button', { class: 'btn ghost small', onclick: () => openCallSheets(b => go({ view: 'callsheet', id: b.id, day: b.date })) }, '📋 Call sheets'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet() }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: openCalendarSheet }, '📆 Calendar & email')),
     h('div', { class: 'cal-nav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Previous month', onclick: () => go({ cursor: new Date(y, m - 1, 1) }) }, '‹'),
@@ -143,7 +144,7 @@ function day(go) {
   return h('div', null,
     h('div', { class: 'page-head' },
       h('button', { class: 'btn ghost small', onclick: () => go({ view: 'month', cursor: new Date(d.getFullYear(), d.getMonth(), 1) }) }, '‹ Calendar'),
-      h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(S.day), go) }, '+ New')),
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => pickTemplate(t => editBooking(applyTemplateDefaults(blankBooking(S.day), t), go)) }, '📐 From template'), h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(S.day), go) }, '+ New'))),
     h('div', { class: 'cal-nav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Previous day', onclick: () => shift(-1) }, '‹'),
       h('div', { class: 'cal-title' }, fmtLong(S.day)),
@@ -170,7 +171,7 @@ function detail(go) {
       h('button', { class: 'btn ghost', onclick: () => editBooking(b, go) }, 'Edit')),
     h('div', { class: 'card hero' },
       h('div', { class: 'card-row' }, h('h2', null, b.title), pill(b.status)),
-      h('div', { class: 'muted' }, [dateRange(b, fmtLong), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`].filter(Boolean).join(' · ')),
+      h('div', { class: 'muted' }, [dateRange(b, fmtLong), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`, typeLabel(b.type)].filter(Boolean).join(' · ')),
       b.client && h('div', null, '🏢 ', b.client),
       b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address)),
       h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openAddToCalendar(b) }, '📆 Add to calendar'), h('button', { class: 'btn ghost small', onclick: () => shareBooking(b) }, '📤 Share'), h('a', { class: 'btn ghost small', href: mailtoLink(b) }, '✉ Email'))),
@@ -180,7 +181,9 @@ function detail(go) {
       callsheet: () => go({ view: 'callsheet', id: b.id }), kit: () => document.getElementById('bk-kit')?.scrollIntoView({ block: 'start' }), field: () => window.logiGo('field'), media: () => document.getElementById('bk-media')?.scrollIntoView({ block: 'start' }),
       hours: () => openHoursSheet(b.id), licences: () => document.getElementById('bk-licences')?.scrollIntoView({ block: 'start' }), deliverables: () => document.getElementById('bk-deliverables')?.scrollIntoView({ block: 'start' }),
     }),
-    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`)),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
+      h('button', { class: 'btn ghost small', onclick: () => saveBookingAsTemplate(b, t => t && toast(`Saved as the “${t.name}” template`)) }, '📐 Save as template'),
+      templateById(b.type) && h('button', { class: 'btn ghost small', onclick: () => { const n = applyTemplateExtras(b.id, templateById(b.type)); toast(n ? `${n} item${n === 1 ? '' : 's'} added from the template` : 'Nothing missing from the template'); } }, '↻ Apply template items')),
     venueBlock(b, gear),
     sunLine(b.date),
     section('Stakeholders', (b.stakeholders || []).length

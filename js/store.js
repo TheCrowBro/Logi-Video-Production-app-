@@ -12,6 +12,7 @@ const blank = () => ({
   deleted: {}, // id -> time deleted (tombstones, so a merge with an older copy doesn't bring records back)
   calSync: { provider: null, calendarId: null, events: {}, feed: false, updatedAt: 0 }, // calendar link + event ids per booking
   templates: {}, // per job type: edited checklist lines per stage
+  projectTemplates: [], // the user's own job types: defaults for a new booking (times, kit, crew, deliverables, schedule…)
 });
 
 function load() {
@@ -38,6 +39,7 @@ function normalise(raw) {
     deleted: Object.fromEntries(Object.entries(raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {}).filter(([, t]) => Date.now() - t < 180 * 864e5)),
     calSync: { ...b.calSync, ...(raw.calSync && typeof raw.calSync === 'object' ? raw.calSync : {}), events: raw.calSync?.events && typeof raw.calSync.events === 'object' ? raw.calSync.events : {} },
     templates: raw.templates && typeof raw.templates === 'object' ? raw.templates : {},
+    projectTemplates: Array.isArray(raw.projectTemplates) ? raw.projectTemplates : [],
   };
 }
 
@@ -50,10 +52,10 @@ export const serialize = () => JSON.stringify(db);
 export function setSealed(on) { sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; schedulePush(); } } }
 export function flush() { persistLocal(); }
 export function reload() { db = load(); rev++; emit(); }
-export const touch = () => emit();
+export const touch = () => { rev++; emit(); };
 const subs = new Set();
 export const subscribe = fn => { subs.add(fn); return () => subs.delete(fn); };
-const emit = () => subs.forEach(fn => fn());
+const emit = (reason = 'data') => subs.forEach(fn => fn(reason)); // 'data' after a change, 'status' for cloud status only
 
 function persistLocal() {
   rev++;
@@ -221,7 +223,7 @@ const kv = async (mode, fn) => {
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* ignore */ } };
 
-function setStatus(status, error = '') { cloud.status = status; cloud.error = error; emit(); }
+function setStatus(status, error = '') { cloud.status = status; cloud.error = error; emit('status'); }
 
 export async function initCloud() {
   cloud.feedUrl = lsGet('logi-feed-url') || '';
@@ -270,7 +272,7 @@ export function mergeDb(local, remote) {
   const dead = { ...local.deleted };
   for (const [id, t] of Object.entries(remote.deleted || {})) dead[id] = Math.max(dead[id] || 0, t);
   const out = { ...local, deleted: dead };
-  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts']) out[list] = mergeList(local[list], remote[list], dead, newer);
+  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates']) out[list] = mergeList(local[list] || [], remote[list] || [], dead, newer);
   out.logs = mergeList(local.logs, remote.logs, dead, (x, y) => mergeLog(x, y, dead));
   out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking

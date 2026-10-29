@@ -1,7 +1,7 @@
 // Project pipeline: every booking moves through stages, each with a checklist from a template for its job type.
 // Also the smaller post/pre lists that hang off a booking: hires, shot list, media offload log, deliverables, licences.
 import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes } from './util.js';
-import { db, byId, update, upsert, subscribe } from './store.js';
+import { db, byId, update, upsert, remove, subscribe } from './store.js';
 import { openForm } from './form.js';
 
 /* --------------------------------- stages --------------------------------- */
@@ -15,6 +15,116 @@ export const stageIndex = s => Math.max(0, STAGES.findIndex(x => x[0] === s));
 export const PHASE = s => (stageIndex(s) <= 3 ? 'Pre-production' : stageIndex(s) === 4 ? 'Production' : 'Post-production');
 
 export const TYPES = [['brand', 'Brand / commercial'], ['corporate', 'Corporate / interview'], ['event', 'Event'], ['wedding', 'Wedding'], ['music', 'Music video'], ['realestate', 'Real estate'], ['doc', 'Documentary'], ['other', 'Other']];
+
+/* ---------------------------- project templates ---------------------------- */
+// The user's own job types. Each one starts from a built-in type's checklists (editable like any type under
+// Workflow templates) and carries the defaults a new booking of that kind should begin with.
+export const projectTemplates = () => (db.projectTemplates || []).filter(t => t && t.id);
+export const templateById = id => projectTemplates().find(t => t.id === id) || null;
+export const baseType = type => { const t = templateById(type); return t ? (t.base || 'other') : (type || 'other'); };
+export const typeOptions = () => [...projectTemplates().map(t => [t.id, `${t.icon || '📐'} ${t.name}`]), ...TYPES];
+export const typeLabel = type => { const t = templateById(type); if (t) return t.name; const b = TYPES.find(x => x[0] === type); return b ? b[1] : 'Other'; };
+const lines = s => String(s || '').split('\n').map(x => x.trim()).filter(Boolean);
+// What a fresh booking of this type starts with (the form shows it, so everything can still be changed).
+export function applyTemplateDefaults(booking, t) {
+  if (!t) return booking;
+  const out = { ...booking, type: t.id };
+  if (t.start) out.start = t.start; if (t.end) out.end = t.end;
+  if (t.breakMinutes !== '' && t.breakMinutes != null) out.breakMinutes = t.breakMinutes; if (t.breakNote) out.breakNote = t.breakNote;
+  if ((t.kits || []).length) out.kits = [...t.kits];
+  if ((t.gear || []).length) { out.gear = [...t.gear]; out.gearQty = { ...(t.gearQty || {}) }; }
+  if ((t.crew || []).length) out.crew = [...t.crew];
+  if (t.notes && !out.notes) out.notes = t.notes;
+  return out;
+}
+// The parts that live outside the booking form: deliverables (due dates counted from the shoot date), the shot list
+// and the call sheet's schedule and notes. Adds what is missing; never duplicates or overwrites.
+export function applyTemplateExtras(bookingId, t) {
+  if (!t) return 0;
+  let added = 0;
+  update(d => {
+    const b = d.bookings.find(x => x.id === bookingId); if (!b) return;
+    const have = new Set((b.deliverables || []).map(x => (x.name || '').toLowerCase()));
+    for (const dl of t.deliverables || []) {
+      if (!dl.name || have.has(dl.name.toLowerCase())) continue;
+      const days = Number(dl.dueDays); const due = Number.isFinite(days) && dl.dueDays !== '' ? (() => { const [y, m, dd] = (b.endDate || b.date).split('-').map(Number); const x = new Date(y, m - 1, dd + days); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; })() : '';
+      b.deliverables = [...(b.deliverables || []), { id: uid(), name: dl.name, duration: dl.duration || '', due, status: 'Planned', link: '', delivered: '' }]; added++;
+    }
+    const shots = new Set((b.shots || []).map(s => (s.text || '').toLowerCase()));
+    for (const text of lines(t.shots)) if (!shots.has(text.toLowerCase())) { b.shots = [...(b.shots || []), { id: uid(), text, done: false }]; added++; }
+    const cs = { ...(b.callSheet || {}) }; let csChanged = false;
+    const sched = (cs.schedule || []); const seen = new Set(sched.map(r => `${r.time}|${(r.item || '').toLowerCase()}`));
+    for (const r of t.schedule || []) { if (!(r.time || r.item) || seen.has(`${r.time}|${(r.item || '').toLowerCase()}`)) continue; sched.push({ id: uid(), date: b.endDate ? b.date : '', time: r.time || '', item: r.item || '' }); csChanged = true; added++; }
+    if (csChanged) cs.schedule = sched;
+    for (const k of ['generalCall', 'lunch', 'wrap', 'dress', 'emergency']) if (t['cs_' + k] && !cs[k]) { cs[k] = t['cs_' + k]; csChanged = true; }
+    if (t.instructions && !cs.notes) { cs.notes = t.instructions; csChanged = true; }
+    if (csChanged) { cs.editedAt = Date.now(); b.callSheet = cs; }
+    b.updatedAt = Date.now();
+  });
+  return added;
+}
+// A booking becomes a template: its structure, with deliverable due dates turned into days after the shoot.
+export function templateFromBooking(b) {
+  const dayDiff = iso => { if (!iso) return ''; const [y1, m1, d1] = (b.endDate || b.date).split('-').map(Number), [y2, m2, d2] = iso.split('-').map(Number); return Math.round((new Date(y2, m2 - 1, d2) - new Date(y1, m1 - 1, d1)) / 864e5); };
+  const cs = b.callSheet || {};
+  return { name: `${b.title} template`, icon: '📐', base: baseType(b.type), start: b.start || '', end: b.end || '', breakMinutes: b.breakMinutes ?? '', breakNote: b.breakNote || '', kits: [...(b.kits || [])], gear: [...(b.gear || [])], gearQty: { ...(b.gearQty || {}) }, crew: [...(b.crew || [])], notes: b.notes || '',
+    deliverables: (b.deliverables || []).map(d => ({ name: d.name, duration: d.duration || '', dueDays: dayDiff(d.due) })), shots: (b.shots || []).map(s => s.text).join('\n'),
+    schedule: (cs.schedule || []).map(r => ({ time: r.time || '', item: r.item || '' })), cs_generalCall: cs.generalCall || '', cs_lunch: cs.lunch || '', cs_wrap: cs.wrap || '', cs_dress: cs.dress || '', cs_emergency: cs.emergency || '', instructions: cs.notes || '' };
+}
+export function editProjectTemplate(t, onDone) {
+  const isNew = !t || !t.id;
+  openForm({
+    title: isNew ? 'New project template' : 'Edit project template',
+    values: { icon: '📐', base: 'other', ...(t || {}) },
+    fields: [
+      { key: 'name', label: 'Template name', required: true, placeholder: 'e.g. Car shoot, Podcast episode, Conference day' },
+      { key: 'icon', label: 'Icon (an emoji)', placeholder: '📐' },
+      { key: 'base', label: 'Checklists start from', type: 'select', options: TYPES, hint: 'The pre- and post-production checklists of this built-in type; edit them for this template under Workflow templates.' },
+      { key: 'start', label: 'Usual start', type: 'time' }, { key: 'end', label: 'Usual finish', type: 'time' },
+      { key: 'breakMinutes', label: 'Approved break per day (minutes)', type: 'number', min: 0 }, { key: 'breakNote', label: 'Break terms' },
+      ...(db.kits.length ? [{ key: 'kits', label: 'Kits', type: 'checks', options: db.kits.map(k => ({ value: k.id, label: k.name, hint: k.description })) }] : []),
+      { key: 'gear', qtyKey: 'gearQty', label: 'Equipment', type: 'checks', options: db.gear.map(g => ({ value: g.id, label: g.name, group: g.category || 'Other', qtyMax: Math.max(1, Number(g.qty) || 1) })), empty: 'Add items on the Equipment page first.' },
+      { key: 'crew', label: 'Usual crew', type: 'checks', options: db.crew.map(c => ({ value: c.id, label: c.name, hint: c.role })), empty: 'Add people on the Crew page first.' },
+      { key: 'deliverables', label: 'Deliverables', type: 'rows', columns: [{ key: 'name', label: 'Deliverable' }, { key: 'duration', label: 'Duration' }, { key: 'dueDays', label: 'Due (days after shoot)', type: 'number' }] },
+      { key: 'shots', label: 'Shot list', type: 'textarea', rows: 4, placeholder: 'One shot per line' },
+      { key: 'schedule', label: 'Call sheet schedule', type: 'rows', columns: [{ key: 'time', label: 'Time', type: 'time' }, { key: 'item', label: 'What happens' }] },
+      { key: 'cs_generalCall', label: 'General call', type: 'time' }, { key: 'cs_lunch', label: 'Lunch', type: 'time' }, { key: 'cs_wrap', label: 'Wrap', type: 'time' },
+      { key: 'cs_dress', label: 'Dress code / bring' }, { key: 'cs_emergency', label: 'Emergency contact on the day' },
+      { key: 'instructions', label: 'Call sheet instructions', type: 'textarea', rows: 2 },
+      { key: 'notes', label: 'Booking notes', type: 'textarea', rows: 2 },
+    ],
+    onSave: v => {
+      const item = { ...v, id: (t && t.id) || 'tpl-' + uid(), icon: (v.icon || '📐').trim().slice(0, 4) || '📐' };
+      item.gearQty = Object.fromEntries(Object.entries(item.gearQty || {}).filter(([id]) => (item.gear || []).includes(id)));
+      upsert('projectTemplates', item); toast(isNew ? 'Template created' : 'Template saved'); onDone && onDone(item);
+    },
+    onDelete: isNew ? null : () => { remove('projectTemplates', t.id); toast('Template deleted'); onDone && onDone(null); },
+  });
+}
+export function saveBookingAsTemplate(b, onDone) { editProjectTemplate({ ...templateFromBooking(b) }, onDone); }
+// A sheet to pick a template for a new booking.
+export function pickTemplate(onPick) {
+  const list = projectTemplates();
+  let close = () => {};
+  const body = h('div', { class: 'stack' },
+    list.length ? h('div', { class: 'list' }, ...list.map(t => h('button', { class: 'card tap', type: 'button', onclick: () => { close(); onPick(t); } },
+      h('div', { class: 'card-row' }, h('div', null, h('strong', null, `${t.icon || '📐'} ${t.name}`), h('div', { class: 'muted small' }, [t.start && `${t.start}${t.end ? '–' + t.end : ''}`, (t.kits || []).length && `${t.kits.length} kit${t.kits.length === 1 ? '' : 's'}`, (t.gear || []).length && `${t.gear.length} items`, (t.crew || []).length && `${t.crew.length} crew`, (t.deliverables || []).length && `${t.deliverables.length} deliverables`].filter(Boolean).join(' · ') || typeLabel(t.base))))))) : h('p', { class: 'muted' }, 'No templates yet. Make one here, or open a booking that went well and tap “Save as template”.'),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { close(); editProjectTemplate(null, t => t && onPick(t)); } }, '+ New template')));
+  ({ close } = sheet('New booking from a template', body));
+}
+export function projectTemplatesPanel() {
+  const wrap = h('div', { class: 'stack' });
+  const draw = () => {
+    const list = projectTemplates();
+    wrap.replaceChildren(...nodes(
+      h('p', { class: 'small muted' }, 'Your own kinds of job. A template fills a new booking in: usual times and break, kits, equipment, crew, deliverables with their due dates, a shot list and the call sheet’s schedule. Its checklists start from a built-in type and can be edited under Workflow templates. Pick a template with “From template” on the Bookings page, or save any booking as one.'),
+      list.length ? h('div', { class: 'list' }, ...list.map(t => h('div', { class: 'card card-row' }, h('div', null, h('strong', null, `${t.icon || '📐'} ${t.name}`), h('div', { class: 'muted small' }, `checklists: ${typeLabel(t.base)}${t.start ? ' · ' + t.start + (t.end ? '–' + t.end : '') : ''}${(t.crew || []).length ? ' · ' + t.crew.length + ' crew' : ''}${(t.deliverables || []).length ? ' · ' + t.deliverables.length + ' deliverables' : ''}`)),
+        h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => editProjectTemplate(t, draw) }, 'Edit'), h('button', { class: 'btn ghost small', onclick: () => { upsert('projectTemplates', { ...t, id: 'tpl-' + uid(), name: t.name + ' (copy)' }); draw(); } }, 'Duplicate'))))) : null,
+      h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => editProjectTemplate(null, draw) }, '+ New template'))));
+  };
+  draw();
+  return wrap;
+}
 
 // Default checklists. An entry is "text" or { t: text, a: action } where the action opens the matching tool.
 const BASE = {
@@ -42,15 +152,16 @@ export const itemId = (stage, text) => slugStatus(stage) + ':' + slug(text);
 // Resolved template for a job type: the user's edited lists from Settings win over the defaults.
 export function templateFor(type) {
   const custom = db.templates && db.templates[type || 'other'];
+  const base = baseType(type);
   const out = {};
   for (const [stage] of STAGES) {
-    const def = [...(BASE[stage] || []), ...((EXTRA[type] || {})[stage] || [])].map(x => (typeof x === 'string' ? { t: x } : x));
+    const def = [...(BASE[stage] || []), ...((EXTRA[base] || {})[stage] || [])].map(x => (typeof x === 'string' ? { t: x } : x));
     const lines = custom && Array.isArray(custom[stage]) ? custom[stage] : null;
     out[stage] = lines ? lines.map(t => def.find(d => d.t === t) || { t }) : def;
   }
   return out;
 }
-export const defaultLines = (type, stage) => [...(BASE[stage] || []), ...((EXTRA[type] || {})[stage] || [])].map(x => (typeof x === 'string' ? x : x.t));
+export const defaultLines = (type, stage) => [...(BASE[stage] || []), ...((EXTRA[baseType(type)] || {})[stage] || [])].map(x => (typeof x === 'string' ? x : x.t));
 
 export function itemsFor(b, stage) {
   const tpl = templateFor(b.type)[stage] || [];
@@ -205,7 +316,7 @@ export function templatesPanel() {
   const wrap = h('div', { class: 'stack' });
   const draw = () => {
     wrap.replaceChildren(...nodes(h('p', { class: 'small muted' }, 'One checklist item per line. Items with an arrow in the app (call sheet, kit, media…) keep their shortcut if you leave their wording as it is. Changes apply to every booking of that type.'),
-      TYPES.map(([type, label]) => h('details', { class: 'twirl' }, h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, '📋'), h('span', null, h('span', { class: 'twirl-name' }, label), h('span', { class: 'twirl-sub' }, db.templates && db.templates[type] ? 'customised' : 'default'))),
+      [...projectTemplates().map(t => [t.id, `${t.icon || '📐'} ${t.name} (yours)`]), ...TYPES].map(([type, label]) => h('details', { class: 'twirl' }, h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, '📋'), h('span', null, h('span', { class: 'twirl-name' }, label), h('span', { class: 'twirl-sub' }, db.templates && db.templates[type] ? 'customised' : 'default'))),
         h('div', { class: 'twirl-body' }, STAGES.map(([stage]) => { const lines = templateFor(type)[stage].map(x => x.t); const ta = h('textarea', { rows: Math.min(8, lines.length + 1), value: lines.join('\n'), 'aria-label': `${label}: ${stage} checklist` }); ta.addEventListener('change', () => update(d => { d.templates = d.templates || {}; d.templates[type] = { ...(d.templates[type] || {}), [stage]: ta.value.split('\n').map(s => s.trim()).filter(Boolean) }; d.templates.updatedAt = Date.now(); })); return h('div', { class: 'field' }, h('label', null, stage), ta); }),
           h('button', { class: 'btn ghost small', onclick: () => { update(d => { if (d.templates) { delete d.templates[type]; d.templates.updatedAt = Date.now(); } }); toast('Reset to defaults'); draw(); } }, 'Reset this type to defaults'))))));
   };

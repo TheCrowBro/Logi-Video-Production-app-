@@ -48,16 +48,22 @@ function show(i, dir = 0) {
 }
 
 // Re-render the active page when data changes (field tools keep their own live state).
-store.subscribe(() => {
+// Redraws are coalesced: a burst of changes in one go (an import, a template applied, a merge) draws the page once.
+let redrawQueued = false;
+function redraw() {
+  redrawQueued = false;
+  if (current < 0 || !tabs[current] || tabs[current].static) return;
+  const y = window.scrollY;
+  cleanup && cleanup();
+  const holder = page.firstElementChild;
+  holder.replaceChildren();
+  cleanup = tabs[current].render(holder) || null;
+  window.scrollTo(0, y);
+}
+store.subscribe(reason => {
   paintCloud();
-  if (current >= 0 && !tabs[current].static) {
-    const y = window.scrollY;
-    cleanup && cleanup();
-    const holder = page.firstElementChild;
-    holder.replaceChildren();
-    cleanup = tabs[current].render(holder) || null;
-    window.scrollTo(0, y);
-  }
+  if (reason === 'status' && tabs[current] && tabs[current].id !== 'settings') return; // sync status alone is not worth redrawing a page for
+  if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); }
 });
 
 let start = 0;

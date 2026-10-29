@@ -77,7 +77,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 | **Me** | Your details and a QR code that hands your contact card, or your website, to anyone who scans it. |
 | **Field** | Sun and golden hour, Polaris finder, white-balance reader, noise meter, range finder. |
 | **TC Notes** | Shoot notes stamped with the camera's timecode, with your script alongside. Links your iPhone and a laptop so both can take notes. |
-| **Settings** | Storage, calendar links, themes, defaults, backups, templates, and everything else. |
+| **Settings** | Storage, security, calendar links, themes, defaults, backups, your project templates, and everything else. |
 
 ### Add a booking
 
@@ -88,6 +88,12 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 5. Set the **approved break per day** if the production has one. The shoot-day clock uses it.
 
 Vdex warns when the same piece of kit is needed on two overlapping jobs.
+
+### Your own project templates
+
+If you keep doing the same kind of job, make it a template once: Settings → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
+
+Then on the Bookings page tap **📐 From template** instead of + New: the booking form arrives filled in, you add the title and date, and on saving the deliverables, shots and call sheet lines are added too. Open any booking that went well and tap **📐 Save as template** to turn it into one; **↻ Apply template items** on a booking adds anything from its template that is still missing. Everything can still be changed on the booking itself.
 
 ### Run a shoot day
 
@@ -161,7 +167,7 @@ Set your location first (Field → **Use GPS**, or Settings → *Field tool defa
 
 Tap **Aa** (or Settings → *Display & accessibility*):
 
-- **Colour theme** — Brass, Noir, Forest, Ocean, Plum or Mono, each in light and dark, or following your iPhone.
+- **Colour theme** — the classics (Brass, Noir, Forest, Ocean, Plum, Mono) and a set in the colours of camera brands (Sony, Canon, Nikon, Fujifilm, Lumix, Blackmagic, RED, ARRI, Leica, GoPro, DJI), each in light and dark, or following your iPhone. The brand themes borrow the colours only; Vdex isn't affiliated with any of them.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
 - **Animation** — the Rolodex plus small touches, the Rolodex only, or none. iPhone's Reduce Motion setting switches everything off regardless.
 - **Vibration feedback** has no effect on an iPhone: iPhones don't let web apps vibrate.
@@ -280,7 +286,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 | **Me** | Your details and a QR code that hands your contact card, or your website, to anyone who scans it. |
 | **Field** | Sun and golden hour, Polaris finder, white-balance reader, noise meter, range finder. |
 | **TC Notes** | Shoot notes stamped with the camera's timecode, with your script alongside. Links your phone and a laptop so both can take notes. |
-| **Settings** | Storage, calendar links, themes, defaults, backups, templates, and everything else. |
+| **Settings** | Storage, security, calendar links, themes, defaults, backups, your project templates, and everything else. |
 
 ### Add a booking
 
@@ -291,6 +297,12 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 5. Set the **approved break per day** if the production has one. The shoot-day clock uses it.
 
 Vdex warns when the same piece of kit is needed on two overlapping jobs.
+
+### Your own project templates
+
+If you keep doing the same kind of job, make it a template once: Settings → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
+
+Then on the Bookings page tap **📐 From template** instead of + New: the booking form arrives filled in, you add the title and date, and on saving the deliverables, shots and call sheet lines are added too. Open any booking that went well and tap **📐 Save as template** to turn it into one; **↻ Apply template items** on a booking adds anything from its template that is still missing. Everything can still be changed on the booking itself.
 
 ### Run a shoot day
 
@@ -364,7 +376,7 @@ Set your location first (Field → **Use GPS**, or Settings → *Field tool defa
 
 Tap **Aa** (or Settings → *Display & accessibility*):
 
-- **Colour theme** — Brass, Noir, Forest, Ocean, Plum or Mono, each in light and dark, or following your phone.
+- **Colour theme** — the classics (Brass, Noir, Forest, Ocean, Plum, Mono) and a set in the colours of camera brands (Sony, Canon, Nikon, Fujifilm, Lumix, Blackmagic, RED, ARRI, Leica, GoPro, DJI), each in light and dark, or following your phone. The brand themes borrow the colours only; Vdex isn't affiliated with any of them.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
 - **Animation** — the Rolodex plus small touches, the Rolodex only, or none. Android's *Remove animations* setting switches everything off regardless.
 - **Vibration feedback** gives a small buzz on taps; turn it off here if you'd rather not.
@@ -547,7 +559,7 @@ js/providers.js  Dropbox, Google Drive, OneDrive, WebDAV and local-file adapters
 js/storage-ui.js storage panel and backups
 js/form.js       schema-driven edit forms
 js/pages/        one file per Rolodex card (bookings, crew, gear, venues, insurance, me, field, tcnotes, settings)
-js/workflow.js   stages, checklist templates, pipeline, hires, shot list, media log, deliverables, licences
+js/workflow.js   stages, checklist templates, project templates, pipeline, hires, shot list, media log, deliverables, licences
 js/callsheet.js  call sheets: in-place editor, document, in-app printing, PDF, web page, list     js/pdf.js   small PDF writer (no library)
 js/hours.js      shifts, breaks, statistics, chart     js/clock.js   the shoot-day clock bar     js/notify.js  break notifications
 js/calendar.js   .ics, add-to-calendar links, live feed, two-way sync

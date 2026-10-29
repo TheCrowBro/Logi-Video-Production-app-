@@ -19,7 +19,8 @@ async function checkGitHub() { // version check only, used on macOS
     const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Vdex' } });
     if (!r.ok) throw new Error('GitHub answered ' + r.status);
     const j = await r.json(); const tag = String(j.tag_name || '').replace(/^v/, '');
-    if (tag && newer(tag, app.getVersion())) set({ status: 'available', available: tag, url: j.html_url || RELEASES });
+    const url = /^https:\/\/github\.com\//.test(String(j.html_url || '')) ? j.html_url : RELEASES; // never open anything but GitHub
+    if (tag && newer(tag, app.getVersion())) set({ status: 'available', available: tag, url });
     else set({ status: 'current', available: null });
   } catch (e) { set({ status: 'error', error: e.message || String(e) }); }
   return state;
@@ -40,7 +41,7 @@ function initUpdater(getWindow) {
   ipcMain.handle('updates:check', () => check());
   ipcMain.handle('updates:state', () => state);
   ipcMain.handle('updates:install', () => { if (updater && state.status === 'ready') { setImmediate(() => updater.quitAndInstall()); return true; } return false; });
-  ipcMain.handle('updates:open', () => shell.openExternal(state.url || RELEASES));
+  ipcMain.handle('updates:open', () => shell.openExternal(/^https:\/\/github\.com\//.test(state.url || '') ? state.url : RELEASES));
   if (!app.isPackaged) { set({ status: 'dev' }); return; }
   if (process.platform === 'darwin') { setTimeout(checkGitHub, 8000); setInterval(checkGitHub, 4 * 3600e3); return; }
   try {
