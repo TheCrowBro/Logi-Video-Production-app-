@@ -9,6 +9,7 @@ import './calendar.js'; // registers the feed writer and the auto-push to a link
 import { initClockBar } from './clock.js';
 import * as lock from './lock.js';
 import * as backup from './backup.js';
+import { initUpdates } from './update.js';
 
 applyPrefs();
 await lock.gate(); // with a PIN set, nothing below runs until the lock screen is passed
@@ -99,4 +100,4 @@ function openStorage() {
 store.initCloud();
 backup.nudgeIfStale();
 if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
-if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
+initUpdates(); // service worker, offline copy, and the "new version" bar

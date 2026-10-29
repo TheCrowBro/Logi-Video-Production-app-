@@ -1,17 +1,30 @@
-const CACHE = 'logi-v18';
+// Vdex service worker: makes the app work offline and carries updates. Every deploy stamps a new BUILD (see
+// tools/stamp-build.mjs), which gives a new cache: the app's files are fetched once into it and served cache-first,
+// so one deploy is one consistent set of files, and the old set is dropped when the new worker takes over. The page
+// (js/update.js) then offers to reload.
+const BUILD = 'dev'; // stamped with the commit on deploy
+const CACHE = 'logi-' + BUILD;
 const SHELL = [
-  './', 'index.html', 'styles.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', 'js/install.js', 'vendor/qrcode.js',
-  'js/app.js', 'js/util.js', 'js/store.js', 'js/a11y.js', 'js/providers.js', 'js/rolodex.js', 'js/form.js', 'js/suncalc.js',
-  'js/pages/bookings.js', 'js/pages/crew.js', 'js/pages/gear.js', 'js/pages/venues.js', 'js/map.js', 'js/pages/tcnotes.js', 'js/timecode.js', 'js/docx.js', 'js/link.js', 'js/qr.js', 'vendor/jsQR.js', 'js/range.js', 'js/tour.js', 'js/calendar.js', 'js/storage-ui.js', 'js/version.js', 'js/pages/settings.js', 'js/hours.js', 'js/clock.js', 'js/notify.js', 'js/workflow.js', 'js/callsheet.js', 'js/pages/insurance.js',
-  'js/pages/me.js', 'js/pages/field.js', 'js/prepaint.js', 'js/crypto.js', 'js/lock.js', 'js/backup.js', 'js/callsheet.js', 'js/pdf.js', 'js/workflow.js',
+  './', 'index.html', 'styles.css', 'manifest.webmanifest', 'js/a11y.js', 'js/app.js', 'js/backup.js', 'js/calendar.js', 'js/callsheet.js', 'js/clock.js', 'js/crypto.js', 'js/docx.js', 'js/form.js', 'js/hours.js', 'js/install.js', 'js/link.js', 'js/lock.js', 'js/map.js', 'js/notify.js', 'js/pages/bookings.js', 'js/pages/crew.js', 'js/pages/field.js', 'js/pages/gear.js', 'js/pages/insurance.js', 'js/pages/me.js', 'js/pages/settings.js', 'js/pages/tcnotes.js', 'js/pages/venues.js', 'js/pdf.js', 'js/prepaint.js', 'js/providers.js', 'js/qr.js', 'js/range.js', 'js/rolodex.js', 'js/storage-ui.js', 'js/store.js', 'js/suncalc.js', 'js/timecode.js', 'js/tour.js', 'js/update.js', 'js/util.js', 'js/version.js', 'js/workflow.js', 'vendor/LICENSES.md', 'vendor/jsQR.js', 'vendor/qrcode.js', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon.svg',
 ];
+const shellKeys = new Set(SHELL.map(p => new URL(p, self.registration.scope).href));
+const keyOf = req => { const u = new URL(req.url); u.search = ''; u.hash = ''; return u.href; };
+
+// Precache straight from the server (cache: 'reload'), never from the browser's HTTP cache, so a build is never a mix.
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
+const dropOld = () => caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== 'logi-share').map(k => caches.delete(k))));
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== 'logi-share').map(k => caches.delete(k)))).then(() => self.clients.claim()));
+  e.waitUntil(dropOld().then(() => self.clients.claim()));
 });
-// Stale-while-revalidate for same-origin GETs.
+let tidied = false;
+self.addEventListener('message', e => {
+  if (e.data === 'skip-waiting') self.skipWaiting();
+  else if (e.data === 'cleanup') e.waitUntil(dropOld()); // a request the old worker was still handling can leave an empty cache behind
+  else if (e.data === 'build' && e.source) e.source.postMessage({ type: 'build', build: BUILD });
+});
+
 // Break notifications: the buttons on them act on the open app (or open it).
 self.addEventListener('notificationclick', e => {
   e.notification.close();
@@ -22,9 +35,9 @@ self.addEventListener('notificationclick', e => {
   }));
 });
 
-// Web Share Target: a file shared to the app arrives as a POST; park it and send the app to pick it up.
 self.addEventListener('fetch', e => {
   const req = e.request;
+  // Web Share Target: a file shared to the app arrives as a POST; park it and send the app to pick it up.
   if (req.method === 'POST' && new URL(req.url).pathname.endsWith('/share')) {
     e.respondWith((async () => {
       try {
@@ -36,7 +49,16 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  const key = keyOf(req);
+  if (!tidied) { tidied = true; e.waitUntil(dropOld()); }
   e.respondWith(caches.open(CACHE).then(async c => {
+    if (req.mode === 'navigate' || shellKeys.has(key)) {
+      // The app's own files: this build's copy, always. New files come with a new build.
+      const hit = await c.match(key) || await c.match(req, { ignoreSearch: true }) || (req.mode === 'navigate' ? await c.match('./') || await c.match('index.html') : null);
+      if (hit) return hit;
+      const r = await fetch(req); if (r.ok) c.put(key, r.clone()); return r;
+    }
+    // Anything else of ours: cached copy at once, refreshed in the background.
     const hit = await c.match(req, { ignoreSearch: true });
     const net = fetch(req).then(r => { if (r.ok) c.put(req, r.clone()); return r; }).catch(() => hit);
     return hit || net;

@@ -7,7 +7,8 @@ import { displayPanel, prefsSummary } from '../a11y.js';
 import { calendarPanel, calState } from '../calendar.js';
 import { openInstallHelp, installState } from '../install.js';
 import { startTour } from '../tour.js';
-import { VERSION, REPO } from '../version.js';
+import { VERSION, BUILD, BUILT, REPO } from '../version.js';
+import { updatePanel } from '../update.js';
 import * as notify from '../notify.js';
 import { templatesPanel } from '../workflow.js';
 import { securityPanel, enabled as lockEnabled, config as lockConfig } from '../lock.js';
@@ -19,7 +20,7 @@ const loc = () => { try { return JSON.parse(LS.get('logi-loc')); } catch { retur
 export const settings = {
   id: 'settings', label: 'Settings', icon: '⚙️',
   render(root) {
-    const panels = [storagePanel(), calendarPanel(), securityPanel()];
+    const panels = [storagePanel(), calendarPanel(), securityPanel(), updatePanel()];
     const display = displayPanel({ onTour: () => startTour() });
     const section = (title, status, body, open = false) => h('details', { class: 'settings-section', open },
       h('summary', null, h('span', { class: 'ss-title' }, title), status && h('span', { class: 'ss-status muted small' }, status)),
@@ -43,8 +44,9 @@ export const settings = {
         h('p', { class: 'small muted' }, 'Vdex runs in the browser as it is. Installing adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline.'),
         h('button', { class: 'btn primary', onclick: () => { const b = document.getElementById('installBtn'); if (b && !b.hidden) b.click(); else openInstallHelp(); } }, '⤓ Install Vdex'))),
       section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
-      section('About', 'v' + VERSION, h('div', { class: 'stack' },
-        h('p', { class: 'small muted' }, `Vdex ${VERSION}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link.`),
+      section('About', 'v' + VERSION + (BUILD !== 'dev' ? ' · ' + BUILD : ''), h('div', { class: 'stack' },
+        h('p', { class: 'small muted' }, `Vdex ${VERSION}${BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ' (' + BUILT + ')' : ''}` : ''}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link.`),
+        panels[3].el,
         h('div', { class: 'actions' },
           h('button', { class: 'btn ghost', onclick: () => startTour() }, '🧭 Take the tour'),
           h('a', { class: 'btn ghost', href: 'vendor/LICENSES.md', target: '_blank', rel: 'noopener' }, 'Open-source licences'),

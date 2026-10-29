@@ -2,6 +2,7 @@
 // http://localhost:47831 so it behaves exactly as it does in Chrome: service worker, saved data, sign-ins.
 'use strict';
 const { app, BrowserWindow, Menu, dialog, screen, session, shell } = require('electron');
+const { initUpdater } = require('./updater.js');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -89,7 +90,7 @@ function createWindow() {
     minWidth: 360, minHeight: 600,
     title: 'Vdex', backgroundColor: '#14110f', autoHideMenuBar: true, show: false,
     icon: path.join(ROOT, 'icons', 'icon-512.png'),
-    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, spellcheck: true },
   });
   if (readState().maximized) win.maximize();
   win.once('ready-to-show', () => {
@@ -148,4 +149,5 @@ app.whenReady().then(async () => {
   setPermissions();
   setMenu();
   createWindow();
+  initUpdater(() => win);
 });

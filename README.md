@@ -219,6 +219,9 @@ No. Vdex is your side of the job: you record their feedback and send them the do
 **I deleted something by mistake.**
 Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
 
+**Does it update by itself?**
+Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *About* shows the version and has **Check for updates**.
+
 **Can I start over?**
 Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
 
@@ -419,6 +422,9 @@ No. Vdex is your side of the job: you record their feedback and send them the do
 **I deleted something by mistake.**
 Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
 
+**Does it update by itself?**
+Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *About* shows the version and has **Check for updates**.
+
 **Can I start over?**
 Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
 
@@ -451,6 +457,7 @@ The installed app opens in its own window, works offline, and keeps its data on 
 - Break notifications pop up like any other app's. They have no buttons; clicking one brings Vdex to the front.
 - Backups, call sheets and exports save through a normal Save dialog instead of a share sheet.
 - The PIN lock works the same way (Settings → *Security*), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
+- **Updates:** the desktop app checks GitHub for a new release when it starts and every few hours. Windows and Linux download it in the background and install it on the next restart (Settings → *About* shows progress and has **Restart to update**). A Mac shows a notice with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
 - To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 - Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.
 
@@ -508,6 +515,8 @@ python3 -m http.server 8000   # then open http://localhost:8000
 ```
 Camera, microphone, location, notifications and installing need https or `localhost`.
 
+**Releasing updates.** Pushing to `main` deploys the web app: the Pages workflow first runs `tools/stamp-build.mjs`, which writes the commit into `js/version.js` and `sw.js` and regenerates the service worker's offline file list from the tree, so every deploy is one versioned set of files and every installed web copy picks it up on its next open (the page checks on start, when it comes to the front, when the network returns and hourly, then offers a reload). For the desktop apps, bump `VERSION` in `js/version.js`, commit, and push a tag such as `v1.2.0`: the workflow builds the installers plus the `latest*.yml` update metadata and attaches them to a release, which installed Windows and Linux apps fetch by themselves through electron-updater (`desktop/updater.js`); Macs are told and sent to the download.
+
 **Making the installers.** `npm install` once, then `npm run dist -- --win`, `--mac` or `--linux` builds `Vdex-Setup-<version>.exe`, `Vdex-<version>.pkg` or `Vdex-<version>.AppImage` into `dist/`, each on its own kind of computer (a Windows build on Linux also needs Wine). `.github/workflows/desktop.yml` builds all three on GitHub: open the **Actions** tab → **Build desktop installers** → **Run workflow**, then download them from the run's Artifacts; pushing a tag such as `v1.1.0` attaches them to a release of that name. The builds are unsigned; electron-builder picks up certificates through its `CSC_*` variables if you have them. The version comes from `js/version.js`.
 
 **The desktop app** is `desktop/main.js`: Electron serving these same files from `http://localhost:47831`, so the service worker, storage and sign-ins behave exactly as in Chrome. Sign-in pop-ups and the print window stay inside the app; every other link opens in the system browser. Electron has no service-worker notifications, so `js/notify.js` shows plain ones there, and `js/install.js` treats the app as already installed.
@@ -547,7 +556,8 @@ js/link.js       phone–laptop link over WebRTC with clock-offset measurement  
 js/suncalc.js    sun and Polaris     js/range.js   range finder (WebXR + tilt)     js/map.js   map preview and directions
 js/a11y.js       themes, text size, motion, accessibility     js/tour.js   first-run tour     js/install.js   install prompt
 js/lock.js       PIN / biometric lock and the encrypted vault     js/crypto.js   WebCrypto helpers     js/backup.js   backup health, encrypted backups, cloud restore, asset register
-desktop/         the desktop app (main.js), its icon, and the version sync used by the installers
+js/update.js     service worker registration, update checks, the "new version" bar     tools/stamp-build.mjs   stamps a deploy
+desktop/         the desktop app (main.js), its preload bridge, the GitHub-release updater, its icon, and the version sync used by the installers
 vendor/          qrcode-generator (MIT), jsQR (Apache-2.0); see vendor/LICENSES.md
 ```
 

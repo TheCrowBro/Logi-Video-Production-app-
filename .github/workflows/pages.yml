@@ -20,6 +20,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - run: node tools/stamp-build.mjs   # stamps this commit into the app so installed copies notice the update
+        env:
+          BUILD_SHA: ${{ github.sha }}
       - uses: actions/configure-pages@v5
         with:
           enablement: true   # switches Pages on for the repo the first time

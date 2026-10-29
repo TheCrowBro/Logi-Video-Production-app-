@@ -1,5 +1,5 @@
 # Builds the one-click installers: Vdex-Setup-<version>.exe (Windows), Vdex-<version>.pkg (Mac) and
-# Vdex-<version>.AppImage (Linux). Run it from the Actions tab (Run workflow) and download the files from the
+# Vdex-<version>.AppImage (Linux), plus the latest*.yml update metadata that installed apps read. Run it from the Actions tab (Run workflow) and download the files from the
 # run's Artifacts, or push a tag such as v1.1.0 and the installers are attached to a release of that name.
 name: Build desktop installers
 on:
@@ -28,6 +28,9 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: node tools/stamp-build.mjs
+        env:
+          BUILD_SHA: ${{ github.sha }}
       - run: npm run dist -- ${{ matrix.args }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"   # unsigned builds: no Apple or Windows certificate needed
@@ -38,6 +41,8 @@ jobs:
             dist/*.exe
             dist/*.pkg
             dist/*.AppImage
+            dist/*.yml
+            dist/*.blockmap
           if-no-files-found: error
   release:
     if: startsWith(github.ref, 'refs/tags/v')

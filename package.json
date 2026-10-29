@@ -1,7 +1,7 @@
 {
   "name": "vdex",
   "productName": "Vdex",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Production deck for freelance videographers: bookings, crew, kit, venues, insurance, a shoot-day clock, timecode notes and field tools.",
   "private": true,
   "main": "desktop/main.js",
@@ -9,7 +9,8 @@
   "author": "TheCrowBro",
   "scripts": {
     "start": "node desktop/sync-version.js && electron .",
-    "dist": "node desktop/sync-version.js && electron-builder --publish never"
+    "dist": "node desktop/sync-version.js && electron-builder --publish never",
+    "stamp": "node tools/stamp-build.mjs"
   },
   "devDependencies": {
     "electron": "^45.1.0",
@@ -31,11 +32,20 @@
       "icons/**",
       "js/**",
       "vendor/**",
-      "desktop/main.js"
+      "desktop/main.js",
+      "desktop/preload.js",
+      "desktop/updater.js"
     ],
     "asar": true,
     "win": {
-      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "Vdex-Setup-${version}.${ext}"
     },
     "nsis": {
@@ -47,7 +57,14 @@
       "deleteAppDataOnUninstall": false
     },
     "mac": {
-      "target": [{ "target": "pkg", "arch": ["universal"] }],
+      "target": [
+        {
+          "target": "pkg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
       "category": "public.app-category.video",
       "identity": null,
       "artifactName": "Vdex-${version}.${ext}",
@@ -62,10 +79,25 @@
       "isRelocatable": false
     },
     "linux": {
-      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "category": "AudioVideo",
       "artifactName": "Vdex-${version}.${ext}",
       "synopsis": "Production deck for videographers"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "TheCrowBro",
+      "repo": "Logi-Video-Production-app-"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.11"
   }
 }
