@@ -475,3 +475,17 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 html[data-motion=off] .lock.shake .pin-dots { animation: none; }
 .sheet-back.behind-lock { visibility: hidden; }
 .pin-input { font-size: 1.3rem; letter-spacing: .3em; text-align: center; }
+
+/* ------------------------------ call sheet ------------------------------ */
+.cs-paper { background: var(--paper); color: var(--paper-ink); border-radius: 10px; padding: 14px; font-size: .84rem; line-height: 1.4; overflow: auto; max-height: 60vh; border: 1px solid var(--line); }
+.cs-paper .cs-head { display: flex; justify-content: space-between; gap: 12px; border-bottom: 2px solid currentColor; padding-bottom: 6px; }
+.cs-paper .cs-brand { font-weight: 700; } .cs-paper .cs-kicker { font-size: .68rem; letter-spacing: .2em; opacity: .7; }
+.cs-paper .cs-when { text-align: right; font-size: .78rem; opacity: .8; } .cs-paper .cs-when b { display: block; font-size: .9rem; opacity: 1; }
+.cs-paper h2 { margin: 10px 0 2px; font-size: 1.2rem; } .cs-paper .cs-sub { opacity: .8; margin-bottom: 6px; }
+.cs-paper .cs-times { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px; margin: 8px 0; }
+.cs-paper .cs-time { border: 1px solid #0003; border-radius: 8px; padding: 6px 8px; } .cs-paper .cs-time span { display: block; font-size: .66rem; text-transform: uppercase; letter-spacing: .08em; opacity: .7; } .cs-paper .cs-time b { font-size: 1.05rem; }
+.cs-paper .cs-sec { margin-top: 12px; } .cs-paper .cs-sec h4 { margin: 0 0 4px; font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; opacity: .7; border-bottom: 1px solid #0002; padding-bottom: 2px; }
+.cs-paper .cs-kv { display: grid; grid-template-columns: 110px 1fr; gap: 8px; padding: 2px 0; } .cs-paper .cs-kv span { opacity: .7; } .cs-paper .cs-kv a { color: inherit; word-break: break-all; }
+.cs-paper table { width: 100%; border-collapse: collapse; margin: 2px 0 6px; } .cs-paper th, .cs-paper td { text-align: left; vertical-align: top; padding: 4px 5px; border-bottom: 1px solid #0002; font-size: .8rem; } .cs-paper th { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
+.cs-paper .cs-day { font-weight: 700; margin: 6px 0 2px; } .cs-paper .cs-pre { white-space: pre-wrap; margin: 3px 0; } .cs-paper .cs-foot { margin-top: 14px; padding-top: 6px; border-top: 1px solid #0002; font-size: .72rem; opacity: .75; }
+.sheet .crew-line { margin-bottom: 6px; }

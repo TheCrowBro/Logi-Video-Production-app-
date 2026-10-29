@@ -40,7 +40,7 @@ export function nudgeIfStale() {
   setTimeout(() => toast(hl.level === 'none' ? 'Your data only exists on this device. Settings → Backups & data.' : `No off-device copy for ${hl.days} days. Settings → Backups & data.`), 1500);
 }
 
-async function saveOrShare(text, name, type) {
+export async function saveOrShare(text, name, type) {
   const file = new File([text], name, { type });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], title: name }); return true; } catch (e) { if (e.name === 'AbortError') return false; }

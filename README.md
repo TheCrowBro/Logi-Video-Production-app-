@@ -69,7 +69,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 
 | Card | What it's for |
 |------|---------------|
-| **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, and its pre/post-production checklist. |
+| **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, its call sheet, and its pre/post-production checklist. |
 | **Crew** | The freelancers you trust: role, phone, email, a link to their work, and which of your bookings they're on. |
 | **Equipment** | Everything you own, with serial numbers, values and quantities, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). |
 | **Venues** | Places you shoot: map pin and directions, access and parking notes, nearest hospital, contact, and the rules (tripods, lighting, haze, drones… allowed, needs approval, or not allowed). |
@@ -94,7 +94,7 @@ Vdex warns when the same piece of kit is needed on two overlapping jobs.
 - On the day, a **clock bar** appears under the Rolodex with the booking's name. **● Start work** starts the clock; **■ Stop work** logs the hours.
 - **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar keeps a running total against the break length approved for that production and warns when it's used up.
 - **Notifications on an iPhone.** Turn them on under Settings → *Hours & breaks* (installed app only). Vdex counts the break only while it is on screen: the moment you switch to another app or lock the phone, iPhone pauses Vdex, so a "break's up" alert can't go off in the background. It shows the moment you reopen Vdex instead. For a reliable alarm on a long break, leave Vdex open with *Keep the screen on during breaks* switched on, or set a timer in the Clock app as well.
-- **📋 Call sheet** on the booking page builds one from the booking, venue, crew (with each person's call time), kit, hires and the day's sunrise and sunset. **Share** opens the iPhone share sheet (Messages, Mail, AirDrop, WhatsApp…); you can also copy it, email it or print it with AirPrint.
+- **📋 Call sheets.** Bookings → **📋 Call sheets** lists every upcoming shoot and whether its sheet has gone out; the booking page has the same button for one shoot. Each sheet starts from what Vdex already knows (venue address, access and parking, nearest hospital, crew with their call times and phones, kit, hires, sunrise and sunset) and **✏️ Edit details** adds the rest: general call, lunch, wrap, a schedule line by line, who is on set from the client, weather, dress code, the emergency contact and special instructions. Then **✉ Email crew** opens a message addressed to everyone on the shoot, **📤 Share** uses the iPhone share sheet (Messages, WhatsApp, AirDrop…), **🖨 Print / PDF** gives a clean page to print or save as PDF, and **💾 Save as web page** makes a file that opens on any phone. The list shows ✅ once it has gone out and ⚠ if you changed it afterwards.
 - The **shot list** on the booking page is there to tick off as you cover it.
 
 ### Take timecode notes
@@ -269,7 +269,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 
 | Card | What it's for |
 |------|---------------|
-| **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, and its pre/post-production checklist. |
+| **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, its call sheet, and its pre/post-production checklist. |
 | **Crew** | The freelancers you trust: role, phone, email, a link to their work, and which of your bookings they're on. |
 | **Equipment** | Everything you own, with serial numbers, values and quantities, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). |
 | **Venues** | Places you shoot: map pin and directions, access and parking notes, nearest hospital, contact, and the rules (tripods, lighting, haze, drones… allowed, needs approval, or not allowed). |
@@ -294,7 +294,7 @@ Vdex warns when the same piece of kit is needed on two overlapping jobs.
 - On the day, a **clock bar** appears under the Rolodex with the booking's name. **● Start work** starts the clock; **■ Stop work** logs the hours.
 - **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar keeps a running total against the break length approved for that production and warns when it's used up.
 - **Notifications on Android.** Turn them on under Settings → *Hours & breaks*. When a break is up, Android shows a notification with **▶ Back to work** and **5 more min** buttons, even while you're in another app, plus a two-minute warning. Android keeps Vdex counting in the background for a few minutes and may then pause it to save battery, in which case the alert arrives when you open Vdex again. For long breaks, switch on *Keep the screen on during breaks*, or stop Android pausing Chrome (phone **Settings → Apps → Chrome → Battery → Unrestricted**).
-- **📋 Call sheet** on the booking page builds one from the booking, venue, crew (with each person's call time), kit, hires and the day's sunrise and sunset. **Share** opens the Android share sheet (WhatsApp, Gmail, Messages…); you can also copy it, email it or print it.
+- **📋 Call sheets.** Bookings → **📋 Call sheets** lists every upcoming shoot and whether its sheet has gone out; the booking page has the same button for one shoot. Each sheet starts from what Vdex already knows (venue address, access and parking, nearest hospital, crew with their call times and phones, kit, hires, sunrise and sunset) and **✏️ Edit details** adds the rest: general call, lunch, wrap, a schedule line by line, who is on set from the client, weather, dress code, the emergency contact and special instructions. Then **✉ Email crew** opens a message addressed to everyone on the shoot, **📤 Share** uses the Android share sheet (WhatsApp, Gmail, Messages…), **🖨 Print / PDF** gives a clean page to print or save as PDF, and **💾 Save as web page** makes a file that opens on any phone. The list shows ✅ once it has gone out and ⚠ if you changed it afterwards.
 - The **shot list** on the booking page is there to tick off as you cover it.
 
 ### Take timecode notes
@@ -539,7 +539,7 @@ js/storage-ui.js storage panel and backups
 js/form.js       schema-driven edit forms
 js/pages/        one file per Rolodex card (bookings, crew, gear, venues, insurance, me, field, tcnotes, settings)
 js/workflow.js   stages, checklist templates, pipeline, hires, shot list, media log, deliverables, licences
-js/callsheet.js  call sheet text
+js/callsheet.js  call sheets: details editor, printable document, list, email to crew
 js/hours.js      shifts, breaks, statistics, chart     js/clock.js   the shoot-day clock bar     js/notify.js  break notifications
 js/calendar.js   .ics, add-to-calendar links, live feed, two-way sync
 js/timecode.js   SMPTE timecode maths (drop-frame aware)     js/docx.js   .docx reader and script line classification
