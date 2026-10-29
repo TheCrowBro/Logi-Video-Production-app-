@@ -489,3 +489,18 @@ html[data-motion=off] .lock.shake .pin-dots { animation: none; }
 .cs-paper table { width: 100%; border-collapse: collapse; margin: 2px 0 6px; } .cs-paper th, .cs-paper td { text-align: left; vertical-align: top; padding: 4px 5px; border-bottom: 1px solid #0002; font-size: .8rem; } .cs-paper th { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
 .cs-paper .cs-day { font-weight: 700; margin: 6px 0 2px; } .cs-paper .cs-pre { white-space: pre-wrap; margin: 3px 0; } .cs-paper .cs-foot { margin-top: 14px; padding-top: 6px; border-top: 1px solid #0002; font-size: .72rem; opacity: .75; }
 .sheet .crew-line { margin-bottom: 6px; }
+
+.cs-page .cs-paper { max-height: none; }
+.cs-paper.editing { border: 2px dashed var(--accent); }
+.cs-paper .cs-in { font: inherit; font-size: .85rem; padding: 5px 7px; border: 1px solid #0004; border-radius: 6px; background: #fff9; color: inherit; width: 100%; box-sizing: border-box; min-height: 36px; }
+.cs-paper .cs-time .cs-in { font-weight: 700; font-size: 1rem; }
+.cs-paper .cs-sched-edit .row-edit { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center; margin-bottom: 6px; }
+.cs-paper .cs-sched-edit .row-edit input { font: inherit; font-size: .85rem; padding: 5px 7px; border: 1px solid #0004; border-radius: 6px; background: #fff9; color: inherit; min-width: 0; min-height: 36px; }
+.cs-paper .cs-sched-edit .row-edit input[type=date] { grid-column: 1 / -1; }
+.cs-paper .cs-sched-edit .icon-btn { color: inherit; }
+.cs-paper .cs-hint { font-size: .74rem; opacity: .7; margin: 4px 0; }
+.cs-paper .cs-include { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; margin: 8px 0 4px; font-size: .82rem; }
+.cs-paper .cs-toggle { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+.cs-paper .cs-toggle input { width: 22px; height: 22px; min-height: 0; flex: none; margin: 0; accent-color: var(--accent); }
+.cs-paper td .cs-in { min-width: 92px; }
+@media print { #print-root { display: block; } }

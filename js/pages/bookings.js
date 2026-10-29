@@ -7,7 +7,7 @@ import { mapButtons } from '../map.js';
 import { openCalendarSheet, openAddToCalendar, shareBooking, mailtoLink } from '../calendar.js';
 import { openHoursSheet, editShift, stats, fmtHm, defaultBreak, startShift, running } from '../hours.js';
 import { STATUSES as WF_STATUSES, TYPES, slugStatus, workflowBlock, openPipeline, hiresBlock, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, stageIndex } from '../workflow.js';
-import { openCallSheet, openCallSheets, sheetState } from '../callsheet.js';
+import { callSheetPage, openCallSheets, sheetState, commitDraft } from '../callsheet.js';
 import { getTimes } from '../suncalc.js';
 
 const STATUSES = WF_STATUSES;
@@ -19,12 +19,14 @@ const pill = s => h('span', { class: 'pill st-' + slugStatus(s) }, s);
 export const bookings = {
   id: 'bookings', label: 'Bookings', icon: '📅',
   render(root) {
-    const go = patch => { Object.assign(S, patch); draw(); window.scrollTo({ top: 0 }); };
+    const go = patch => { if (patch.view && patch.view !== 'callsheet') commitDraft(); Object.assign(S, patch); draw(); window.scrollTo({ top: 0 }); };
     const draw = () => {
-      if (S.view === 'booking' && !byId('bookings', S.id)) S.view = 'day';
-      root.replaceChildren(S.view === 'month' ? month(go) : S.view === 'day' ? day(go) : detail(go));
+      if ((S.view === 'booking' || S.view === 'callsheet') && !byId('bookings', S.id)) S.view = 'day';
+      root.replaceChildren(S.view === 'month' ? month(go) : S.view === 'day' ? day(go) : S.view === 'callsheet' ? callSheetPage(byId('bookings', S.id), go) : detail(go));
     };
     draw();
+    // Leaving the tab while a call sheet is being edited saves the draft (a re-render of this same tab does not).
+    return () => { queueMicrotask(() => { if (!document.querySelector('.cs-page')) commitDraft(); }); };
   },
 };
 
@@ -101,7 +103,7 @@ function month(go) {
     h('div', { class: 'page-head' },
       h('h1', null, 'Bookings'),
       h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New')),
-    h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date })) }, '🗂 Pipeline'), h('button', { class: 'btn ghost small', onclick: () => openCallSheets() }, '📋 Call sheets'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet() }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: openCalendarSheet }, '📆 Calendar & email')),
+    h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date })) }, '🗂 Pipeline'), h('button', { class: 'btn ghost small', onclick: () => openCallSheets(b => go({ view: 'callsheet', id: b.id, day: b.date })) }, '📋 Call sheets'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet() }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: openCalendarSheet }, '📆 Calendar & email')),
     h('div', { class: 'cal-nav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Previous month', onclick: () => go({ cursor: new Date(y, m - 1, 1) }) }, '‹'),
       h('div', { class: 'cal-title' }, new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
@@ -175,10 +177,10 @@ function detail(go) {
     workflowBlock(b, {
       crew: () => document.getElementById('bk-crew')?.scrollIntoView({ block: 'start' }), venue: () => (b.venueId ? openVenue(b.venueId) : window.logiGo('venues')), insurance: () => window.logiGo('insurance'),
       hires: () => document.getElementById('bk-hires')?.scrollIntoView({ block: 'start' }), shots: () => document.getElementById('bk-shots')?.scrollIntoView({ block: 'start' }), tcnotes: () => window.logiGo('tcnotes'),
-      callsheet: () => openCallSheet(b), kit: () => document.getElementById('bk-kit')?.scrollIntoView({ block: 'start' }), field: () => window.logiGo('field'), media: () => document.getElementById('bk-media')?.scrollIntoView({ block: 'start' }),
+      callsheet: () => go({ view: 'callsheet', id: b.id }), kit: () => document.getElementById('bk-kit')?.scrollIntoView({ block: 'start' }), field: () => window.logiGo('field'), media: () => document.getElementById('bk-media')?.scrollIntoView({ block: 'start' }),
       hours: () => openHoursSheet(b.id), licences: () => document.getElementById('bk-licences')?.scrollIntoView({ block: 'start' }), deliverables: () => document.getElementById('bk-deliverables')?.scrollIntoView({ block: 'start' }),
     }),
-    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openCallSheet(b) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`)),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`)),
     venueBlock(b, gear),
     sunLine(b.date),
     section('Stakeholders', (b.stakeholders || []).length
