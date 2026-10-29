@@ -1,0 +1,54 @@
+const { chromium } = require('playwright');
+const URL = process.env.VDEX_URL || 'http://localhost:8123/';
+const S = process.env.S;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
+(async () => {
+  const browser = await chromium.launch();
+  const ctx = await browser.newContext({ viewport: { width: 420, height: 860 } });
+  await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' })); // no live weather calls in tests
+  await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+  const page = await ctx.newPage();
+  const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (/Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
+  page.on('dialog', d => d.accept());
+  await page.goto(URL); await page.waitForSelector('#rolodex .drum-btn');
+  await page.evaluate(() => import('./js/store.js').then(s => s.loadSample()));
+  const ls = k => page.evaluate(k => localStorage.getItem(k), k);
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send('WebAuthn.enable', { enableUI: false });
+  const add = hasPrf => cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', ctap2Version: 'ctap2_1', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, hasPrf } }).then(r => r.authenticatorId);
+  const a1 = await add(true);
+  await page.evaluate(() => import('./js/lock.js').then(l => l.setPin('135790')));
+  ok('platform authenticator reported available', await page.evaluate(() => import('./js/lock.js').then(l => l.bioAvailable())));
+  const mode = await page.evaluate(() => import('./js/lock.js').then(l => l.enrolBio()).catch(e => 'error: ' + e.message));
+  ok('biometric enrolled with a PRF-capable authenticator', mode === 'prf', 'mode = ' + mode);
+  const cfg = await page.evaluate(() => JSON.parse(localStorage.getItem('logi-lock')));
+  ok('config stores a wrapped key, not the PIN or the data key', !!(cfg.bio && cfg.bio.wrap && cfg.pin && cfg.pin.ct) && !/135790/.test(JSON.stringify(cfg)));
+  await page.locator('#lockBtn').click(); await page.waitForSelector('.lock');
+  ok('lock screen shows the biometric option', (await page.locator('.lock .lock-bio').count()) === 1 && (await ls('logi-db-v1')) === null);
+  await page.screenshot({ path: S + '/lock-bio.png' });
+  await page.waitForFunction(() => !document.querySelector('.lock'), null, { timeout: 15000 }).then(() => ok('biometric prompt on the lock screen unlocked it (PRF key)', true)).catch(() => ok('biometric unlock on lock screen', false, 'still locked'));
+  ok('plaintext restored after biometric unlock', (await ls('logi-db-v1')) !== null);
+  await page.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('logi-vault')).v === 1; } catch { return false; } });
+  await page.reload(); await page.waitForSelector('.lock');
+  ok('after reload the lock gate is up and data sealed', (await ls('logi-db-v1')) === null);
+  await page.waitForFunction(() => !!document.querySelector('#rolodex .drum-btn'), null, { timeout: 15000 }).then(() => ok('biometric unlock at boot, app drawn', true)).catch(() => ok('biometric unlock at boot', false));
+  const n = await page.evaluate(() => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.length);
+  ok('data intact', n === 8, n + ' bookings');
+  // A device without PRF: the biometric gates a key kept on the device, and the assertion signature is verified.
+  await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: a1 });
+  const a2 = await add(false);
+  const mode2 = await page.evaluate(() => import('./js/lock.js').then(async l => { await l.forgetBio(); return l.enrolBio(); }).catch(e => 'error: ' + e.message));
+  ok('enrolment on a non-PRF authenticator falls back to the device key', mode2 === 'device', 'mode = ' + mode2);
+  await page.locator('#lockBtn').click(); await page.waitForSelector('.lock');
+  await page.waitForFunction(() => !document.querySelector('.lock'), null, { timeout: 15000 }).then(() => ok('device-key biometric unlock works (signature verified)', true)).catch(async () => ok('device-key biometric unlock', false, await page.locator('.lock-msg').innerText()));
+  // The wrong authenticator (a different device) must not unlock.
+  await cdp.send('WebAuthn.removeVirtualAuthenticator', { authenticatorId: a2 });
+  await add(false);
+  await page.locator('#lockBtn').click(); await page.waitForSelector('.lock'); await sleep(2500);
+  ok('a different authenticator cannot unlock', (await page.locator('.lock').count()) === 1, await page.locator('.lock-msg').innerText());
+  await page.keyboard.type('135790'); await page.waitForFunction(() => !document.querySelector('.lock'), null, { timeout: 15000 });
+  ok('PIN still works as the fallback', true);
+  ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
+  await browser.close();
+})().catch(e => { console.error('TEST CRASHED', e); process.exit(1); });

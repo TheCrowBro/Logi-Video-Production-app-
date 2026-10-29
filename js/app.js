@@ -105,5 +105,6 @@ function openStorage() {
 
 store.initCloud();
 backup.nudgeIfStale();
+import('./pages/gear.js').then(m => m.serviceNudge());
 if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
 initUpdates(); // service worker, offline copy, and the "new version" bar

@@ -11,20 +11,28 @@ import { VERSION, BUILD, BUILT, REPO } from '../version.js';
 import { updatePanel } from '../update.js';
 import * as notify from '../notify.js';
 import { templatesPanel, projectTemplatesPanel, projectTemplates } from '../workflow.js';
+import { billingPanel, billing } from '../money.js';
 import { securityPanel, enabled as lockEnabled, config as lockConfig } from '../lock.js';
 import { health as backupHealth } from '../backup.js';
 
 const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null || v === '' ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* ignore */ } } };
 const loc = () => { try { return JSON.parse(LS.get('logi-loc')); } catch { return null; } };
 
+const OPEN = new Set();
+
 export const settings = {
   id: 'settings', label: 'Settings', icon: '⚙️',
   render(root) {
     const panels = [storagePanel(), calendarPanel(), securityPanel(), updatePanel()];
     const display = displayPanel({ onTour: () => startTour() });
-    const section = (title, status, body, open = false) => h('details', { class: 'settings-section', open },
-      h('summary', null, h('span', { class: 'ss-title' }, title), status && h('span', { class: 'ss-status muted small' }, status)),
-      h('div', { class: 'ss-body' }, body));
+    // Sections remember whether you opened or closed them, so a saved setting or a sync does not fold the page up.
+    const section = (title, status, body, open = false) => {
+      const el = h('details', { class: 'settings-section', open: OPEN.has(title) || (open && !OPEN.has('!' + title)) },
+        h('summary', null, h('span', { class: 'ss-title' }, title), status && h('span', { class: 'ss-status muted small' }, status)),
+        h('div', { class: 'ss-body' }, body));
+      el.addEventListener('toggle', () => { if (el.open) { OPEN.add(title); OPEN.delete('!' + title); } else { OPEN.delete(title); OPEN.add('!' + title); } });
+      return el;
+    };
     const c = store.cloud, cs = db.calSync || {}, l = loc();
     const calStatus = cs.provider ? `${cs.provider === 'google' ? 'Google' : 'Microsoft'} · ${calState.status}` : cs.feed ? 'live feed on' : 'not linked';
     root.append(
@@ -38,6 +46,7 @@ export const settings = {
         h('div', { class: 'field' }, h('label', null, 'Standard day (hours)'), h('input', { type: 'number', min: 1, max: 24, step: 0.5, value: LS.get('logi-stdday') || 10, 'aria-label': 'Standard day in hours', onchange: e => { LS.set('logi-stdday', e.target.value); toast('Saved'); } }), h('small', { class: 'muted' }, 'Anything beyond this on a day counts as overtime in the statistics.')),
         notifyPanel(),
         h('div', { class: 'field' }, h('label', null, 'Default approved break (minutes per day)'), h('input', { type: 'number', min: 0, step: 5, value: LS.get('logi-breakdefault') || 30, 'aria-label': 'Default approved break in minutes', onchange: e => { LS.set('logi-breakdefault', e.target.value); toast('Saved'); } }), h('small', { class: 'muted' }, 'Used when a booking doesn’t set its own.')))),
+      section('Quotes & invoices', billing().dayRate ? `day rate ${db.profile.currency || '$'}${billing().dayRate}` : 'rates not set', billingPanel()),
       section('Project templates', projectTemplates().length ? `${projectTemplates().length} of yours` : 'none yet', projectTemplatesPanel()),
       section('Workflow templates', Object.keys(db.templates || {}).filter(k => k !== 'updatedAt').length ? 'customised' : 'defaults', templatesPanel()),
       section('Profile', db.profile.name || 'not set', profilePanel()),

@@ -13,6 +13,7 @@ const blank = () => ({
   calSync: { provider: null, calendarId: null, events: {}, feed: false, updatedAt: 0 }, // calendar link + event ids per booking
   templates: {}, // per job type: edited checklist lines per stage
   projectTemplates: [], // the user's own job types: defaults for a new booking (times, kit, crew, deliverables, schedule…)
+  billing: { updatedAt: 0 }, // rates, numbering, tax and payment terms for quotes and invoices
 });
 
 function load() {
@@ -40,6 +41,7 @@ function normalise(raw) {
     calSync: { ...b.calSync, ...(raw.calSync && typeof raw.calSync === 'object' ? raw.calSync : {}), events: raw.calSync?.events && typeof raw.calSync.events === 'object' ? raw.calSync.events : {} },
     templates: raw.templates && typeof raw.templates === 'object' ? raw.templates : {},
     projectTemplates: Array.isArray(raw.projectTemplates) ? raw.projectTemplates : [],
+    billing: raw.billing && typeof raw.billing === 'object' ? raw.billing : { updatedAt: 0 },
   };
 }
 
@@ -282,6 +284,7 @@ export function mergeDb(local, remote) {
     out.calSync = { ...base, events };
   }
   out.templates = ts(remote.templates) > ts(local.templates) ? remote.templates : local.templates;
+  out.billing = ts(remote.billing) > ts(local.billing) ? remote.billing : local.billing;
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }

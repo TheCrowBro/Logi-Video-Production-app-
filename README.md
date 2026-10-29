@@ -114,6 +114,18 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 
 **iPhone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
+### Quotes and invoices
+
+Every booking has a **Money** block with a quote and an invoice. **From the booking** suggests the lines: shoot days at your day rate, each crew member at their own day rate (set on their card on the Crew page), the equipment package, and the deliverables; edit anything, then **Mark as sent**. The invoice starts from the quote, from the hours the clock bar logged (shoot days, editing hours and overtime at your rates), or from the booking. Quotes and invoices print from the app, save as PDF, and email to the contacts on the booking (give a stakeholder an email address). Marking a quote sent or an invoice paid ticks the matching pipeline items. Bookings → **💰 Money** shows what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, and exports the invoices as a spreadsheet for the accountant. Rates, tax, numbering, payment terms and bank details live under Settings → **Quotes & invoices**.
+
+### Weather on the shoot day
+
+Up to 16 days ahead, the booking page and the call sheet show the forecast for the shoot day at the venue, or at your saved location: conditions, temperature range, chance of rain and wind. **Add to call sheet** copies it onto the sheet so it prints. The forecast comes from Open-Meteo, a free service with no account; only the coordinates and the date are sent.
+
+### Looking after the kit
+
+Each item on the Equipment page has a **🔧 service log**: services, sensor and lens cleans, calibrations, checks, repairs and firmware updates, with dates, notes and costs. Give an item a service interval and a warranty date (Edit) and the page warns when a service is overdue or a warranty is about to end; Vdex also reminds you once in a while at start-up. The asset register export includes the warranty, firmware and last service.
+
 ### Keep track of a project
 
 - Every booking has a **stage**: Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. The strip on the booking page shows where it is; tap a stage to move it.
@@ -323,6 +335,18 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 
 **Phone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
+### Quotes and invoices
+
+Every booking has a **Money** block with a quote and an invoice. **From the booking** suggests the lines: shoot days at your day rate, each crew member at their own day rate (set on their card on the Crew page), the equipment package, and the deliverables; edit anything, then **Mark as sent**. The invoice starts from the quote, from the hours the clock bar logged (shoot days, editing hours and overtime at your rates), or from the booking. Quotes and invoices print from the app, save as PDF, and email to the contacts on the booking (give a stakeholder an email address). Marking a quote sent or an invoice paid ticks the matching pipeline items. Bookings → **💰 Money** shows what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, and exports the invoices as a spreadsheet for the accountant. Rates, tax, numbering, payment terms and bank details live under Settings → **Quotes & invoices**.
+
+### Weather on the shoot day
+
+Up to 16 days ahead, the booking page and the call sheet show the forecast for the shoot day at the venue, or at your saved location: conditions, temperature range, chance of rain and wind. **Add to call sheet** copies it onto the sheet so it prints. The forecast comes from Open-Meteo, a free service with no account; only the coordinates and the date are sent.
+
+### Looking after the kit
+
+Each item on the Equipment page has a **🔧 service log**: services, sensor and lens cleans, calibrations, checks, repairs and firmware updates, with dates, notes and costs. Give an item a service interval and a warranty date (Edit) and the page warns when a service is overdue or a warranty is about to end; Vdex also reminds you once in a while at start-up. The asset register export includes the warranty, firmware and last service.
+
 ### Keep track of a project
 
 - Every booking has a **stage**: Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. The strip on the booking page shows where it is; tap a stage to move it.
@@ -527,6 +551,10 @@ python3 -m http.server 8000   # then open http://localhost:8000
 ```
 Camera, microphone, location, notifications and installing need https or `localhost`.
 
+**Tests.** `npm install`, then `npx playwright install chromium` once and `npm test`: the browser specs in `tests/specs` run against a scratch copy of the app (the lock and vault, biometric unlock through a virtual authenticator, the call sheet builder and PDF, the update cycle, templates and themes, performance, money, weather and the service log). `npm run test:desktop` launches the desktop app (under `xvfb-run` on Linux). `.github/workflows/tests.yml` runs both on every push and pull request.
+
+**Signing the desktop apps (optional).** Add these repository secrets and the installers come out signed; without them they are unsigned, as before. Mac: `MAC_CERT_P12` (a Developer ID Application certificate exported as .p12 and base64-encoded), `MAC_CERT_PASSWORD`, and for notarization `APPLE_ID`, `APPLE_APP_PASSWORD` (an app-specific password) and `APPLE_TEAM_ID`; a signed and notarized Mac build updates itself through the same release metadata as Windows and Linux, and loses the “unidentified developer” warning. Windows: `WIN_CERT_PFX` (base64) and `WIN_CERT_PASSWORD`. The Mac build uses the hardened runtime with the entitlements in `desktop/build/entitlements.mac.plist`.
+
 **Releasing updates.** Pushing to `main` deploys the web app: the Pages workflow first runs `tools/stamp-build.mjs`, which writes the commit into `js/version.js` and `sw.js` and regenerates the service worker's offline file list from the tree, so every deploy is one versioned set of files and every installed web copy picks it up on its next open (the page checks on start, when it comes to the front, when the network returns and hourly, then offers a reload). For the desktop apps, bump `VERSION` in `js/version.js`, commit, and push a tag such as `v1.2.0`: the workflow builds the installers plus the `latest*.yml` update metadata and attaches them to a release, which installed Windows and Linux apps fetch by themselves through electron-updater (`desktop/updater.js`); Macs are told and sent to the download.
 
 **Making the installers.** `npm install` once, then `npm run dist -- --win`, `--mac` or `--linux` builds `Vdex-Setup-<version>.exe`, `Vdex-<version>.pkg` or `Vdex-<version>.AppImage` into `dist/`, each on its own kind of computer (a Windows build on Linux also needs Wine). `.github/workflows/desktop.yml` builds all three on GitHub: open the **Actions** tab → **Build desktop installers** → **Run workflow**, then download them from the run's Artifacts; pushing a tag such as `v1.1.0` attaches them to a release of that name. The builds are unsigned; electron-builder picks up certificates through its `CSC_*` variables if you have them. The version comes from `js/version.js`.
@@ -558,7 +586,7 @@ js/store.js      the database, record-by-record merging, cloud sync engine
 js/providers.js  Dropbox, Google Drive, OneDrive, WebDAV and local-file adapters; Google and Microsoft sign-in
 js/storage-ui.js storage panel and backups
 js/form.js       schema-driven edit forms
-js/pages/        one file per Rolodex card (bookings, crew, gear, venues, insurance, me, field, tcnotes, settings)
+js/pages/        one file per Rolodex card (bookings, crew, gear with the service log, venues, insurance, me, field, tcnotes, settings)
 js/workflow.js   stages, checklist templates, project templates, pipeline, hires, shot list, media log, deliverables, licences
 js/callsheet.js  call sheets: in-place editor, document, in-app printing, PDF, web page, list     js/pdf.js   small PDF writer (no library)
 js/hours.js      shifts, breaks, statistics, chart     js/clock.js   the shoot-day clock bar     js/notify.js  break notifications
@@ -569,6 +597,7 @@ js/suncalc.js    sun and Polaris     js/range.js   range finder (WebXR + tilt)  
 js/a11y.js       themes, text size, motion, accessibility     js/tour.js   first-run tour     js/install.js   install prompt
 js/lock.js       PIN / biometric lock and the encrypted vault     js/crypto.js   WebCrypto helpers     js/backup.js   backup health, encrypted backups, cloud restore, asset register
 js/update.js     service worker registration, update checks, the "new version" bar     tools/stamp-build.mjs   stamps a deploy
+js/money.js      quotes and invoices: suggested lines, documents, PDF, overview, billing settings     js/weather.js   Open-Meteo day forecast
 desktop/         the desktop app (main.js), its preload bridge, the GitHub-release updater, its icon, and the version sync used by the installers
 vendor/          qrcode-generator (MIT), jsQR (Apache-2.0); see vendor/LICENSES.md
 ```

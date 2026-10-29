@@ -7,7 +7,7 @@ import * as C from './crypto.js';
 import { haptic } from './a11y.js';
 
 const CFG = 'logi-lock', VAULT = 'logi-vault', DB = 'logi-db-v1';
-const SEALED = ['logi-dbx-token', 'logi-webdav', 'logi-loc']; // secrets and private settings that live outside the database
+const SEALED = ['logi-dbx-token', 'logi-webdav', 'logi-loc', 'logi-wx']; // secrets and private settings that live outside the database
 export const AUTO_LOCK = [[0, 'Straight away'], [1, 'After 1 minute'], [5, 'After 5 minutes'], [15, 'After 15 minutes'], [-1, 'Only when Vdex is closed']];
 const WAITS = [[12, 900], [9, 300], [7, 60], [5, 30]]; // wrong attempts → seconds before the next try
 export const WIPE_AT = 10;

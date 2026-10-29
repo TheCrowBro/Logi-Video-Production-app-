@@ -14,6 +14,7 @@ function edit(c = {}) {
       { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' },
       { key: 'phone', label: 'Phone', type: 'tel' },
       { key: 'email', label: 'Email', type: 'email' },
+      { key: 'rate', label: 'Day rate', type: 'number', min: 0, hint: 'Used for the suggested lines on quotes.' },
       { key: 'link', label: 'Link to their work', type: 'url', placeholder: 'https://… showreel / portfolio' },
       { key: 'rate', label: 'Day / hourly rate' },
       { key: 'notes', label: 'Notes', type: 'textarea' },

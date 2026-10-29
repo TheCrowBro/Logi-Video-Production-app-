@@ -10,11 +10,14 @@
   "scripts": {
     "start": "node desktop/sync-version.js && electron .",
     "dist": "node desktop/sync-version.js && electron-builder --publish never",
-    "stamp": "node tools/stamp-build.mjs"
+    "stamp": "node tools/stamp-build.mjs",
+    "test": "node tests/run.mjs",
+    "test:desktop": "node tests/desktop.mjs"
   },
   "devDependencies": {
     "electron": "^45.1.0",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "playwright": "^1.63.0"
   },
   "build": {
     "appId": "app.vdex.desktop",
@@ -63,16 +66,26 @@
           "arch": [
             "universal"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "universal"
+          ]
         }
       ],
       "category": "public.app-category.video",
-      "identity": null,
       "artifactName": "Vdex-${version}.${ext}",
       "extendInfo": {
         "NSCameraUsageDescription": "Vdex uses the camera to scan timecode, read white balance and scan link codes.",
         "NSMicrophoneUsageDescription": "Vdex uses the microphone for the noise meter.",
         "NSLocationWhenInUseUsageDescription": "Vdex uses your location for sunrise, sunset and Polaris."
-      }
+      },
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "desktop/build/entitlements.mac.plist",
+      "entitlementsInherit": "desktop/build/entitlements.mac.plist",
+      "notarize": false
     },
     "pkg": {
       "installLocation": "/Applications",

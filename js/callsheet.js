@@ -7,6 +7,7 @@ import { db, byId, endOf, upsert, activeBookings } from './store.js';
 import { getTimes } from './suncalc.js';
 import { setCheck, itemId } from './workflow.js';
 import { saveOrShare } from './backup.js';
+import { forecastLine } from './weather.js';
 
 const INCLUDE = { kit: true, rules: true, sun: true, contacts: true, notes: true };
 const BLANK = { generalCall: '', lunch: '', wrap: '', schedule: [], attendees: '', weather: '', dress: '', emergency: '', notes: '', version: 0, editedAt: 0, sentAt: 0 };
@@ -31,7 +32,7 @@ export function callSheetData(b, cs = sheetOf(b), crewCall = b.crewCall || {}) {
   const days = multiDay(b) ? [...new Set([b.date, ...schedule.map(r => r.date).filter(Boolean)])].sort() : [b.date];
   const producer = [p.name, p.business].filter(Boolean).join(' · ') || 'Vdex';
   const producerLine = `${producer}${p.phone ? ' · ' + p.phone : ''}${p.email ? ' · ' + p.email : ''}`;
-  return { b, p, v, cs, crew, kit, hires: b.hires || [], sun, address, schedule, days, producer, producerLine, generalCall: cs.generalCall || b.start || '', wrap: cs.wrap || b.end || '', breaks: [b.breakMinutes && b.breakMinutes + ' min approved', b.breakNote].filter(Boolean).join(' · ') };
+  return { b, p, v, cs, crew, kit, hires: b.hires || [], sun, loc, address, schedule, days, producer, producerLine, generalCall: cs.generalCall || b.start || '', wrap: cs.wrap || b.end || '', breaks: [b.breakMinutes && b.breakMinutes + ' min approved', b.breakNote].filter(Boolean).join(' · ') };
 }
 
 /* ----------------------------------- text ----------------------------------- */
@@ -132,11 +133,14 @@ const RULES = [
   ['.cs-kv', 'display:grid;grid-template-columns:140px 1fr;gap:8px;padding:3px 0'], ['.cs-kv span', 'color:#666'], ['.cs-kv a', 'color:#1a4e8a;word-break:break-all'],
   ['table', 'width:100%;border-collapse:collapse;margin:4px 0 8px'], ['th,td', 'text-align:left;vertical-align:top;padding:5px 6px;border-bottom:1px solid #e3e3e3;font-size:12.5px'],
   ['th', 'font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#666'],
+  ['.money-parties', 'display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0'], ['.money-parties h4', 'margin:0 0 4px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#555'],
+  ['.money-totals', 'margin:8px 0 0 auto;max-width:320px'], ['.money-totals .cs-kv', 'grid-template-columns:1fr auto;text-align:right'], ['.money-totals .total b', 'font-size:15px'], ['th.num,td.num', 'text-align:right;white-space:nowrap'],
   ['.cs-day', 'font-weight:700;margin:8px 0 2px'], ['.cs-pre', 'white-space:pre-wrap;margin:4px 0'], ['.cs-foot', 'margin-top:22px;padding-top:8px;border-top:1px solid #ddd;font-size:11px;color:#666'],
 ];
 export const docCss = prefix => RULES.map(([sel, decl]) => `${sel ? sel.split(',').map(s => prefix + s.trim()).join(',') : (prefix.trim() || 'body')}{${decl}}`).join('\n');
 const escHtml = s => String(s).replace(/[<>&]/g, c => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]));
-export const callSheetHtml = b => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Call sheet — ${escHtml(b.title)}</title><style>${docCss('')}\n@page{margin:14mm}@media print{.cs-doc{padding:0}}</style></head><body>${renderDoc(b).outerHTML}</body></html>`;
+export const htmlDocument = (title, el) => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${escHtml(title)}</title><style>${docCss('')}\n@page{margin:14mm}@media print{.cs-doc{padding:0}}</style></head><body>${el.outerHTML}</body></html>`;
+export const callSheetHtml = b => htmlDocument(`Call sheet — ${b.title}`, renderDoc(b));
 
 /* ------------------------------------ PDF ------------------------------------ */
 export async function callSheetPdf(b) {
@@ -183,9 +187,10 @@ function ensurePrintCss() {
   document.head.append(h('style', { id: 'cs-print-css' }, `#print-root{display:none}@media print{@page{margin:14mm}body.print-cs>*:not(#print-root){display:none!important}body.print-cs{background:#fff}body.print-cs #print-root{display:block}${docCss('#print-root ')}#print-root .cs-doc{padding:0;max-width:none}}`));
 }
 // Prints from the app itself: no pop-up window, so it works in the installed app and the desktop app too.
-export function printCallSheet(b) {
+export function printCallSheet(b) { printElement(renderDoc(b)); }
+export function printElement(el) {
   ensurePrintCss();
-  const root = h('div', { id: 'print-root' }, renderDoc(b));
+  const root = h('div', { id: 'print-root' }, el);
   document.body.append(root); document.body.classList.add('print-cs');
   let done = false;
   const finish = () => { if (done) return; done = true; root.remove(); document.body.classList.remove('print-cs'); window.removeEventListener('afterprint', finish); };
@@ -243,6 +248,7 @@ export function callSheetPage(b, go) {
     h('div', { class: 'card-row' },
       h('p', { class: 'status-line', 'data-state': state === 'sent' ? 'synced' : state === 'changed' ? 'error' : '' }, `${state === 'sent' ? '✅' : state === 'changed' ? '⚠' : '📝'} ${STATE_LABEL[state]}${cs.sentAt ? ' · sent ' + new Date(cs.sentAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''}${cs.version ? ' · v' + cs.version : ''}`),
       !editing && state !== 'sent' && hasContent(cs) && h('button', { class: 'btn ghost small', onclick: () => markSent(b.id) }, 'Mark as sent')),
+    !editing && forecastLine(callSheetData(b).loc, b.date, { onUse: txt => { const cur = byId('bookings', b.id); upsert('bookings', { ...cur, callSheet: { ...sheetOf(cur), weather: txt, editedAt: Date.now() } }); toast('Forecast added to the sheet'); } }),
     editing
       ? h('p', { class: 'small muted' }, 'Change anything directly on the sheet: times, the schedule, who is on set, weather, the emergency contact, instructions, and each person’s call time. Done saves a new version.')
       : h('div', { class: 'actions' },

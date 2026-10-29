@@ -98,13 +98,14 @@ export async function restoreFromCloud() {
 export async function exportAssetRegister() {
   const sym = store.db.profile.currency || '$';
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const rows = [['Item', 'Category', 'Serial number', 'Quantity', `Value each (${sym})`, `Total (${sym})`, 'Purchased', 'Notes'].map(q).join(',')];
+  const lastService = g => (g.log || []).filter(e => ['service', 'clean', 'calibration', 'check'].includes(e.kind) && e.date).map(e => e.date).sort().pop() || '';
+  const rows = [['Item', 'Category', 'Serial number', 'Quantity', `Value each (${sym})`, `Total (${sym})`, 'Purchased', 'Warranty until', 'Firmware', 'Last service', 'Notes'].map(q).join(',')];
   let total = 0;
   const gear = [...store.db.gear].sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.name || '').localeCompare(b.name || ''));
   for (const g of gear) {
     const qty = store.qtyOf(g), each = store.unitValue(g); total += each * qty;
-    rows.push([g.name, g.category || '', g.serial || '', qty, each || '', each * qty || '', g.purchased || '', (g.notes || '').replace(/\r?\n/g, ' ')].map(q).join(','));
+    rows.push([g.name, g.category || '', g.serial || '', qty, each || '', each * qty || '', g.purchased || '', g.warranty || '', g.firmware || '', lastService(g), (g.notes || '').replace(/\r?\n/g, ' ')].map(q).join(','));
   }
-  rows.push(['', '', '', '', 'Total', total, '', `Vdex asset register, ${new Date().toLocaleDateString()}${store.db.profile.business ? ', ' + store.db.profile.business : ''}`].map(q).join(','));
+  rows.push(['', '', '', '', 'Total', total, '', '', '', '', `Vdex asset register, ${new Date().toLocaleDateString()}${store.db.profile.business ? ', ' + store.db.profile.business : ''}`].map(q).join(','));
   if (await saveOrShare('﻿' + rows.join('\r\n'), `vdex-asset-register-${todayISO()}.csv`, 'text/csv')) toast('Asset register saved');
 }

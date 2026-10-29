@@ -22,8 +22,8 @@ jobs:
             args: --linux
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
@@ -31,16 +31,34 @@ jobs:
       - run: node tools/stamp-build.mjs
         env:
           BUILD_SHA: ${{ github.sha }}
-      - run: npm run dist -- ${{ matrix.args }}
+      # Signing is optional: add the secrets named in the README and the builds come out signed (and the Mac one
+      # notarized, which lets it update itself). Without them the installers are unsigned, as before.
+      - id: certs
+        shell: bash
+        run: |
+          echo "mac=$([ -n "$MAC_P12" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "notarize=$([ -n "$MAC_P12" ] && [ -n "$APPLE_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"   # unsigned builds: no Apple or Windows certificate needed
-      - uses: actions/upload-artifact@v4
+          MAC_P12: ${{ secrets.MAC_CERT_P12 }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+      - run: npm run dist -- ${{ matrix.args }} ${{ matrix.os == 'macos-latest' && steps.certs.outputs.notarize == 'true' && '--config.mac.notarize=true' || '' }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.certs.outputs.mac }}
+          CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CERT_PFX }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vdex-${{ matrix.os }}
           path: |
             dist/*.exe
             dist/*.pkg
             dist/*.AppImage
+            dist/*.zip
             dist/*.yml
             dist/*.blockmap
           if-no-files-found: error
@@ -51,10 +69,10 @@ jobs:
     permissions:
       contents: write   # only this job creates the release
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: installers
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           files: installers/*

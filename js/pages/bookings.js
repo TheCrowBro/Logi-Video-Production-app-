@@ -8,6 +8,8 @@ import { openCalendarSheet, openAddToCalendar, shareBooking, mailtoLink } from '
 import { openHoursSheet, editShift, stats, fmtHm, defaultBreak, startShift, running } from '../hours.js';
 import { STATUSES as WF_STATUSES, typeOptions, templateById, applyTemplateDefaults, applyTemplateExtras, saveBookingAsTemplate, pickTemplate, typeLabel, slugStatus, workflowBlock, openPipeline, hiresBlock, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, stageIndex } from '../workflow.js';
 import { callSheetPage, openCallSheets, sheetState, commitDraft } from '../callsheet.js';
+import { moneyPage, openMoney, moneyBlock } from '../money.js';
+import { forecastLine, locationFor } from '../weather.js';
 import { getTimes } from '../suncalc.js';
 
 const STATUSES = WF_STATUSES;
@@ -21,8 +23,8 @@ export const bookings = {
   render(root) {
     const go = patch => { if (patch.view && patch.view !== 'callsheet') commitDraft(); Object.assign(S, patch); draw(); window.scrollTo({ top: 0 }); };
     const draw = () => {
-      if ((S.view === 'booking' || S.view === 'callsheet') && !byId('bookings', S.id)) S.view = 'day';
-      root.replaceChildren(S.view === 'month' ? month(go) : S.view === 'day' ? day(go) : S.view === 'callsheet' ? callSheetPage(byId('bookings', S.id), go) : detail(go));
+      if ((S.view === 'booking' || S.view === 'callsheet' || S.view === 'money') && !byId('bookings', S.id)) S.view = 'day';
+      root.replaceChildren(S.view === 'month' ? month(go) : S.view === 'day' ? day(go) : S.view === 'callsheet' ? callSheetPage(byId('bookings', S.id), go) : S.view === 'money' ? moneyPage(byId('bookings', S.id), S.kind || 'quote', go) : detail(go));
     };
     draw();
     // Leaving the tab while a call sheet is being edited saves the draft (a re-render of this same tab does not).
@@ -46,7 +48,7 @@ function editBooking(b, go) {
       { key: 'end', label: 'Finish', type: 'time' },
       ...(db.venues.length ? [{ key: 'venueId', label: 'Venue', type: 'select', options: [['', 'No saved venue'], ...db.venues.map(v => [v.id, v.name])], hint: 'Fills in the address and checks your equipment against the venue’s rules.' }] : []),
       { key: 'address', label: 'Location / address', type: 'textarea', rows: 2 },
-      { key: 'stakeholders', label: 'Stakeholders & contacts', type: 'rows', columns: [{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'phone', label: 'Phone', type: 'tel' }] },
+      { key: 'stakeholders', label: 'Stakeholders & contacts', type: 'rows', columns: [{ key: 'name', label: 'Name' }, { key: 'role', label: 'Role' }, { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' }] },
       { key: 'crew', label: 'Crew', type: 'checks', options: db.crew.map(c => ({ value: c.id, label: c.name, hint: c.role })), empty: 'Add people on the Crew page first.' },
       ...(db.kits.length ? [{ key: 'kits', label: 'Kits', type: 'checks', hint: 'Ticking a kit adds its equipment below. You can still adjust the list.', options: db.kits.map(k => ({ value: k.id, label: k.name, hint: `${(k.gear || []).length} items`, adds: { gear: k.gear || [] }, addsQty: k.gearQty || {} })) }] : []),
       { key: 'gear', qtyKey: 'gearQty', label: 'Equipment', type: 'checks', hint: db.kits.length ? 'Tick a kit above to load a whole set, then adjust here.' : 'Tip: save kits on the Equipment page to load a whole set in one tap.', options: db.gear.map(g => ({ value: g.id, label: g.name, group: g.category || 'Other', qtyMax: qtyOf(g), hint: qtyOf(g) > 1 ? `(${qtyOf(g)} owned)` : '' })).sort((a, b) => a.group.localeCompare(b.group)), empty: 'Add kit on the Equipment page first.' },
@@ -104,7 +106,7 @@ function month(go) {
     h('div', { class: 'page-head' },
       h('h1', null, 'Bookings'),
       h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => pickTemplate(t => editBooking(applyTemplateDefaults(blankBooking(today), t), go)) }, '📐 From template'), h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New'))),
-    h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date })) }, '🗂 Pipeline'), h('button', { class: 'btn ghost small', onclick: () => openCallSheets(b => go({ view: 'callsheet', id: b.id, day: b.date })) }, '📋 Call sheets'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet() }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: openCalendarSheet }, '📆 Calendar & email')),
+    h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date })) }, '🗂 Pipeline'), h('button', { class: 'btn ghost small', onclick: () => openCallSheets(b => go({ view: 'callsheet', id: b.id, day: b.date })) }, '📋 Call sheets'), h('button', { class: 'btn ghost small', onclick: () => openMoney(b => go({ view: 'money', id: b.id, kind: b.invoice && !b.quote ? 'invoice' : 'quote', day: b.date })) }, '💰 Money'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet() }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: openCalendarSheet }, '📆 Calendar & email')),
     h('div', { class: 'cal-nav' },
       h('button', { class: 'icon-btn', 'aria-label': 'Previous month', onclick: () => go({ cursor: new Date(y, m - 1, 1) }) }, '‹'),
       h('div', { class: 'cal-title' }, new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
@@ -130,11 +132,11 @@ function bookingCard(b, onclick, showDate) {
 }
 
 /* -------------------------------- day -------------------------------- */
-function sunLine(iso) {
-  let loc; try { loc = JSON.parse(localStorage.getItem('logi-loc')); } catch { /* none */ }
+function sunLine(iso, b) {
+  const loc = locationFor(b || null);
   if (!loc) return null;
   const t = getTimes(new Date(parseISO(iso).getTime() + 12 * 36e5), loc.lat, loc.lon);
-  return h('div', { class: 'sunline muted' }, `☀ Rise ${fmtTime(t.sunrise)} · Set ${fmtTime(t.sunset)} · Golden hour ${fmtTime(t.goldenHour)}`);
+  return [h('div', { class: 'sunline muted' }, `☀ Rise ${fmtTime(t.sunrise)} · Set ${fmtTime(t.sunset)} · Golden hour ${fmtTime(t.goldenHour)}`), forecastLine(loc, iso)];
 }
 
 function day(go) {
@@ -172,20 +174,21 @@ function detail(go) {
     h('div', { class: 'card hero' },
       h('div', { class: 'card-row' }, h('h2', null, b.title), pill(b.status)),
       h('div', { class: 'muted' }, [dateRange(b, fmtLong), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`, typeLabel(b.type)].filter(Boolean).join(' · ')),
+      (b.stakeholders || []).some(s => s.email) && h('div', { class: 'muted small' }, '✉ ' + b.stakeholders.filter(s => s.email).map(s => s.email).join(', ')),
       b.client && h('div', null, '🏢 ', b.client),
       b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address)),
       h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openAddToCalendar(b) }, '📆 Add to calendar'), h('button', { class: 'btn ghost small', onclick: () => shareBooking(b) }, '📤 Share'), h('a', { class: 'btn ghost small', href: mailtoLink(b) }, '✉ Email'))),
     workflowBlock(b, {
       crew: () => document.getElementById('bk-crew')?.scrollIntoView({ block: 'start' }), venue: () => (b.venueId ? openVenue(b.venueId) : window.logiGo('venues')), insurance: () => window.logiGo('insurance'),
       hires: () => document.getElementById('bk-hires')?.scrollIntoView({ block: 'start' }), shots: () => document.getElementById('bk-shots')?.scrollIntoView({ block: 'start' }), tcnotes: () => window.logiGo('tcnotes'),
-      callsheet: () => go({ view: 'callsheet', id: b.id }), kit: () => document.getElementById('bk-kit')?.scrollIntoView({ block: 'start' }), field: () => window.logiGo('field'), media: () => document.getElementById('bk-media')?.scrollIntoView({ block: 'start' }),
+      callsheet: () => go({ view: 'callsheet', id: b.id }), quote: () => go({ view: 'money', id: b.id, kind: 'quote' }), invoice: () => go({ view: 'money', id: b.id, kind: 'invoice' }), kit: () => document.getElementById('bk-kit')?.scrollIntoView({ block: 'start' }), field: () => window.logiGo('field'), media: () => document.getElementById('bk-media')?.scrollIntoView({ block: 'start' }),
       hours: () => openHoursSheet(b.id), licences: () => document.getElementById('bk-licences')?.scrollIntoView({ block: 'start' }), deliverables: () => document.getElementById('bk-deliverables')?.scrollIntoView({ block: 'start' }),
     }),
     h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
       h('button', { class: 'btn ghost small', onclick: () => saveBookingAsTemplate(b, t => t && toast(`Saved as the “${t.name}” template`)) }, '📐 Save as template'),
       templateById(b.type) && h('button', { class: 'btn ghost small', onclick: () => { const n = applyTemplateExtras(b.id, templateById(b.type)); toast(n ? `${n} item${n === 1 ? '' : 's'} added from the template` : 'Nothing missing from the template'); } }, '↻ Apply template items')),
     venueBlock(b, gear),
-    sunLine(b.date),
+    sunLine(b.date, b),
     section('Stakeholders', (b.stakeholders || []).length
       ? h('div', { class: 'list' }, b.stakeholders.map(s => h('div', { class: 'card-row card' },
         h('div', null, h('strong', null, s.name || '—'), h('div', { class: 'muted' }, s.role || '')),
@@ -216,6 +219,7 @@ function detail(go) {
     h('div', { id: 'bk-media' }, mediaBlock(b)),
     h('div', { id: 'bk-deliverables' }, deliverablesBlock(b)),
     h('div', { id: 'bk-licences', class: 'block' }, licencesBlock(b)),
+    moneyBlock(b, go),
     hoursBlock(b),
     b.notes && section('Notes', h('p', { class: 'prewrap' }, b.notes)));
 }

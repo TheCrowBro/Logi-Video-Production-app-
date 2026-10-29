@@ -536,3 +536,12 @@ body.has-update-bar #page { padding-bottom: 110px; }
 @media (max-width: 480px) { .update-bar { flex-wrap: wrap; justify-content: center; border-radius: 16px; } }
 
 .theme-group { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; display: flex; flex-direction: column; gap: 2px; } .theme-group .twirl-sub { text-transform: none; letter-spacing: 0; }
+
+.cs-paper .money-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 10px 0; }
+.cs-paper .money-parties h4 { margin: 0 0 4px; font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
+.cs-paper .money-totals { margin: 8px 0 0 auto; max-width: 320px; } .cs-paper .money-totals .cs-kv { grid-template-columns: 1fr auto; text-align: right; } .cs-paper .money-totals .total b { font-size: 1rem; }
+.cs-paper th.num, .cs-paper td.num { text-align: right; white-space: nowrap; }
+.money-pills { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+.stat.bad b { color: var(--danger); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; } @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+.wxline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 4px 0 8px; }

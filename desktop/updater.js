@@ -32,7 +32,7 @@ function offerRestart(win, version) {
 }
 async function check() {
   if (!app.isPackaged) return state;
-  if (process.platform === 'darwin' || !updater) return checkGitHub();
+  if (!updater) return checkGitHub();
   try { await updater.checkForUpdates(); } catch (e) { set({ status: 'error', error: e.message || String(e) }); }
   return state;
 }
@@ -43,7 +43,6 @@ function initUpdater(getWindow) {
   ipcMain.handle('updates:install', () => { if (updater && state.status === 'ready') { setImmediate(() => updater.quitAndInstall()); return true; } return false; });
   ipcMain.handle('updates:open', () => shell.openExternal(/^https:\/\/github\.com\//.test(state.url || '') ? state.url : RELEASES));
   if (!app.isPackaged) { set({ status: 'dev' }); return; }
-  if (process.platform === 'darwin') { setTimeout(checkGitHub, 8000); setInterval(checkGitHub, 4 * 3600e3); return; }
   try {
     ({ autoUpdater: updater } = require('electron-updater'));
     updater.autoDownload = true; updater.autoInstallOnAppQuit = true; updater.logger = null;
@@ -52,7 +51,11 @@ function initUpdater(getWindow) {
     updater.on('update-not-available', () => set({ status: 'current', available: null }));
     updater.on('download-progress', p => set({ status: 'downloading', progress: Math.round(p.percent || 0) }));
     updater.on('update-downloaded', info => { set({ status: 'ready', available: info.version, progress: 100 }); offerRestart(getWindow(), info.version); });
-    updater.on('error', e => set({ status: 'error', error: (e && e.message) || String(e) }));
+    updater.on('error', e => {
+      // An unsigned Mac build cannot update itself: fall back to telling the user about the release.
+      if (process.platform === 'darwin') { updater = null; checkGitHub(); return; }
+      set({ status: 'error', error: (e && e.message) || String(e) });
+    });
     setTimeout(() => updater.checkForUpdates().catch(() => {}), 8000);
     setInterval(() => updater.checkForUpdates().catch(() => {}), 4 * 3600e3);
   } catch (e) { set({ status: 'error', error: e.message || String(e) }); }

@@ -129,12 +129,12 @@ export function projectTemplatesPanel() {
 // Default checklists. An entry is "text" or { t: text, a: action } where the action opens the matching tool.
 const BASE = {
   Enquiry: ['Brief received: objectives, audience, deliverables', 'Budget range known', 'Dates and location pencilled', 'Crew and kit availability checked'],
-  Quoted: ['Quote / estimate sent', 'Terms and contract sent', 'Deliverables and deadlines agreed', 'Usage / licensing term agreed'],
+  Quoted: [{ t: 'Quote / estimate sent', a: 'quote' }, 'Terms and contract sent', 'Deliverables and deadlines agreed', 'Usage / licensing term agreed'],
   Confirmed: ['Deposit received', 'Booking in the calendar', { t: 'Crew asked and confirmed', a: 'crew' }, { t: 'Venue confirmed, permits requested', a: 'venue' }, { t: 'Insurance certificate sent', a: 'insurance' }, { t: 'Hires booked', a: 'hires' }],
   Prepped: [{ t: 'Shot list / storyboard done', a: 'shots' }, { t: 'Script loaded for notes', a: 'tcnotes' }, { t: 'Call sheet sent', a: 'callsheet' }, { t: 'Kit packed, batteries charged', a: 'kit' }, 'Cards formatted', 'Release forms prepared', 'Risk assessment done', { t: 'Weather and sun checked', a: 'field' }],
   Shot: [{ t: 'Shot list covered', a: 'shots' }, { t: 'Media offloaded and backed up', a: 'media' }, 'Cards cleared only after two copies', { t: 'Hours logged', a: 'hours' }, 'Releases signed and filed'],
   'In post': ['Media organised and synced', 'Assembly cut', 'Rough cut sent for review (v1)', 'Feedback received', 'Fine cut', 'Grade', 'Sound mix', { t: 'Music and stock licences logged', a: 'licences' }],
-  Delivered: [{ t: 'Deliverables sent', a: 'deliverables' }, 'Client approved', 'Final invoice sent', 'Paid'],
+  Delivered: [{ t: 'Deliverables sent', a: 'deliverables' }, 'Client approved', { t: 'Final invoice sent', a: 'invoice' }, { t: 'Paid', a: 'invoice' }],
   Archived: ['Project archived, location noted', 'Portfolio / testimonial asked', 'Drives cleared for reuse'],
 };
 const EXTRA = {
