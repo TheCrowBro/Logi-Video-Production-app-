@@ -1,9 +1,12 @@
-# Publishes the app to GitHub Pages. Runs on every push to main, or on demand from the Actions tab
-# ("Run workflow" works on any branch, including a feature branch, for a preview deployment).
+# Publishes the app to GitHub Pages. Runs on every push to the working branch or to main, once the
+# browser tests in the same run have passed, or on demand from the Actions tab ("Run workflow" works
+# on any branch, for a preview deployment).
 name: Deploy to GitHub Pages
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - claude/videographer-gear-app-xlg8eb
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +16,23 @@ concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
+  test:
+    # The site only updates when the browser specs pass, so a broken push never reaches people's phones.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     environment:
       name: github-pages
