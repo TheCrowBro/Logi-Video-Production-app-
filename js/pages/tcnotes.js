@@ -287,7 +287,7 @@ function logView(log, setTimer) {
 
   const notes = [...log.notes].sort((a, b) => (a.frames ?? -1) - (b.frames ?? -1) || a.at.localeCompare(b.at));
   return h('div', null,
-    h('div', { class: 'page-head' },
+    h('div', { class: 'page-head tc-log-head' },
       h('button', { class: 'btn ghost small', onclick: () => { S.id = null; S.target = null; try { localStorage.removeItem('logi-tclog'); } catch { /* ignore */ } S.redraw(); } }, '‹ Logs'),
       h('div', { class: 'actions' },
         h('button', { class: 'btn ghost small' + (link.link.status === 'connected' ? ' linked-pill' : ''), onclick: () => openLink(log) }, link.link.status === 'connected' ? `🔗 ${link.link.peer?.name || 'Linked'}` : '🔗 Link device'),

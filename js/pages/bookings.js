@@ -184,7 +184,7 @@ function detail(go) {
       callsheet: () => go({ view: 'callsheet', id: b.id }), quote: () => go({ view: 'money', id: b.id, kind: 'quote' }), invoice: () => go({ view: 'money', id: b.id, kind: 'invoice' }), kit: () => document.getElementById('bk-kit')?.scrollIntoView({ block: 'start' }), field: () => window.logiGo('field'), media: () => document.getElementById('bk-media')?.scrollIntoView({ block: 'start' }),
       hours: () => openHoursSheet(b.id), licences: () => document.getElementById('bk-licences')?.scrollIntoView({ block: 'start' }), deliverables: () => document.getElementById('bk-deliverables')?.scrollIntoView({ block: 'start' }),
     }),
-    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
+    h('div', { class: 'actions bk-tools' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
       h('button', { class: 'btn ghost small', onclick: () => saveBookingAsTemplate(b, t => t && toast(`Saved as the “${t.name}” template`)) }, '📐 Save as template'),
       templateById(b.type) && h('button', { class: 'btn ghost small', onclick: () => { const n = applyTemplateExtras(b.id, templateById(b.type)); toast(n ? `${n} item${n === 1 ? '' : 's'} added from the template` : 'Nothing missing from the template'); } }, '↻ Apply template items')),
     venueBlock(b, gear),
@@ -227,7 +227,7 @@ function detail(go) {
 function hoursBlock(b) {
   const shifts = db.shifts.filter(s => s.bookingId === b.id);
   const st = stats(shifts);
-  return h('section', { class: 'block' }, h('h3', null, 'Hours'),
+  return h('section', { class: 'block', id: 'bk-hours' }, h('h3', null, 'Hours'),
     h('div', { class: 'card' },
       shifts.length
         ? h('div', { class: 'card-row' }, h('div', null, h('strong', null, fmtHm(st.worked)), h('div', { class: 'muted small' }, `${st.days} day${st.days === 1 ? '' : 's'} · breaks ${fmtHm(st.breaks)}${st.overtime ? ' · overtime ' + fmtHm(st.overtime) : ''}`)))
@@ -240,7 +240,7 @@ function venueBlock(b, gear) {
   const v = b.venueId && byId('venues', b.venueId);
   if (!v) return null;
   const warns = venueWarnings(v, gear);
-  return h('section', { class: 'block' }, h('h3', null, 'Venue'),
+  return h('section', { class: 'block', id: 'bk-venue' }, h('h3', null, 'Venue'),
     h('div', { class: 'card' },
       h('div', { class: 'card-row' }, h('strong', null, v.name), h('button', { class: 'btn ghost small', onclick: () => openVenue(v.id) }, 'Rules & details →')),
       warns.map(w => h('div', { class: 'warn' }, '⚠ ' + w.text)),

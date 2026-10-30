@@ -10,6 +10,7 @@ import { initClockBar } from './clock.js';
 import * as lock from './lock.js';
 import * as backup from './backup.js';
 import { initUpdates } from './update.js';
+import { openTutorial } from './tutorials.js';
 
 applyPrefs();
 await lock.gate(); // with a PIN set, nothing below runs until the lock screen is passed
@@ -19,6 +20,7 @@ const paintLock = () => { if (lockBtn) lockBtn.hidden = !lock.enabled(); };
 paintLock(); lock.onChange(paintLock);
 lockBtn && lockBtn.addEventListener('click', () => lock.lockNow());
 document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);
+document.getElementById('helpBtn')?.addEventListener('click', () => openTutorial());
 initInstall(document.getElementById('installBtn'));
 initClockBar(document.getElementById('clockbar'));
 import { bookings } from './pages/bookings.js';
@@ -71,6 +73,7 @@ try { start = Math.min(tabs.length - 1, Math.max(0, Number(localStorage.getItem(
 const rolodex = createRolodex(document.getElementById('rolodex'), tabs, { start, onSelect: (i, dir) => show(i, dir) });
 show(start);
 window.logiGo = i => rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); // lets pages jump between sections
+window.logiPage = () => (tabs[current] ? tabs[current].id : null); // which section is open (the page tutorials use it)
 
 // A file shared to the app (Android share sheet) is parked by the service worker; hand it to TC Notes.
 if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in window) {

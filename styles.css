@@ -545,3 +545,6 @@ body.has-update-bar #page { padding-bottom: 110px; }
 .stat.bad b { color: var(--danger); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; } @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
 .wxline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 4px 0 8px; }
+
+#helpBtn .cloud-ico { font-weight: 800; }
+.tour-actions .spacer { flex: 1; }

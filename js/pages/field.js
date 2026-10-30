@@ -50,7 +50,7 @@ function locBar(onChange) {
   };
   paint();
   return h('div', { class: 'locbar' }, h('div', { class: 'card-row' }, label,
-    h('span', null, h('button', { class: 'btn ghost small', onclick: gps }, 'Use GPS'), ' ', h('button', { class: 'btn ghost small', onclick: () => { manual.hidden = !manual.hidden; } }, 'Enter'))), manual);
+    h('span', { class: 'loc-actions' }, h('button', { class: 'btn ghost small', onclick: gps }, 'Use GPS'), ' ', h('button', { class: 'btn ghost small', onclick: () => { manual.hidden = !manual.hidden; } }, 'Enter'))), manual);
 }
 
 const needLoc = () => h('div', { class: 'empty' }, h('p', null, 'Set your location (GPS or coordinates) to calculate.'));

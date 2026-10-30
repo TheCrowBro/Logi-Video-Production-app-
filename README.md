@@ -59,9 +59,9 @@ If you tapped **Don't Allow** by mistake: the camera and microphone are asked fo
 
 ### The first time you open it
 
-1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**.
+1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
-3. The top bar has three buttons: **Install** (until it's installed), **Aa** (text size, theme, accessibility) and **☁** (storage and sync).
+3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage and sync) and **🔒** once a PIN is set.
 
 ### What's on the Rolodex
 
@@ -280,9 +280,9 @@ If you tapped **Don't allow** by mistake: long-press the Vdex icon → **App inf
 
 ### The first time you open it
 
-1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**.
+1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
-3. The top bar has three buttons: **Install** (until it's installed), **Aa** (text size, theme, accessibility) and **☁** (storage and sync).
+3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage and sync) and **🔒** once a PIN is set.
 
 ### What's on the Rolodex
 
@@ -594,7 +594,7 @@ js/calendar.js   .ics, add-to-calendar links, live feed, two-way sync
 js/timecode.js   SMPTE timecode maths (drop-frame aware)     js/docx.js   .docx reader and script line classification
 js/link.js       phone–laptop link over WebRTC with clock-offset measurement     js/qr.js   QR generate / decode
 js/suncalc.js    sun and Polaris     js/range.js   range finder (WebXR + tilt)     js/map.js   map preview and directions
-js/a11y.js       themes, text size, motion, accessibility     js/tour.js   first-run tour     js/install.js   install prompt
+js/a11y.js       themes, text size, motion, accessibility     js/tour.js   spotlight walkthrough engine, first-run tour     js/tutorials.js   per-page tutorials behind the ? button     js/install.js   install prompt
 js/lock.js       PIN / biometric lock and the encrypted vault     js/crypto.js   WebCrypto helpers     js/backup.js   backup health, encrypted backups, cloud restore, asset register
 js/update.js     service worker registration, update checks, the "new version" bar     tools/stamp-build.mjs   stamps a deploy
 js/money.js      quotes and invoices: suggested lines, documents, PDF, overview, billing settings     js/weather.js   Open-Meteo day forecast

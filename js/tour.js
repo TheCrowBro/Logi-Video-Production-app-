@@ -15,15 +15,19 @@ const done = () => { try { localStorage.setItem('logi-tour', 'done'); } catch { 
 export const tourSeen = () => { try { return !!localStorage.getItem('logi-tour'); } catch { return true; } };
 
 let active = null;
-export function startTour(from = 0) {
+export const tourActive = () => !!active;
+export function startTour(from = 0) { return runTour(STEPS, { remember: true, from }); }
+// Runs any list of steps: { title, text, target: [selectors], go?: tabId }. Steps whose target is not on screen are skipped.
+export function runTour(steps, { remember = false, from = 0, footer = null } = {}) {
   if (active) return;
+  const STEPS = steps;
   const app = document.getElementById('app');
   const spot = h('div', { class: 'tour-spot', 'aria-hidden': 'true' });
   const card = h('div', { class: 'tour-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title' });
   const layer = h('div', { class: 'tour' }, spot, card);
   document.body.append(layer); if (app) app.inert = true;
   let i = from, target = null;
-  const stop = () => { if (!active) return; active = null; layer.remove(); if (app) app.inert = false; window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys); done(); };
+  const stop = () => { if (!active) return; active = null; layer.remove(); if (app) app.inert = false; window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys); if (remember) done(); };
   active = { stop };
   const keys = e => { if (e.key === 'Escape') stop(); else if (e.key === 'ArrowRight' || e.key === 'Enter') next(); else if (e.key === 'ArrowLeft') show(i - 1); };
   const place = () => {
@@ -47,7 +51,7 @@ export function startTour(from = 0) {
       h('div', { class: 'tour-step muted small' }, `${n + 1} / ${STEPS.length}`),
       h('h2', { id: 'tour-title' }, s.title), h('p', null, s.text),
       h('div', { class: 'tour-actions' },
-        h('button', { class: 'btn ghost small', onclick: stop }, 'Skip'), h('span', { class: 'spacer' }),
+        h('button', { class: 'btn ghost small', onclick: stop }, 'Skip'), footer && footer(n, stop), h('span', { class: 'spacer' }),
         n > 0 && h('button', { class: 'btn ghost', onclick: () => show(n - 1) }, 'Back'),
         h('button', { class: 'btn primary', onclick: next }, n === STEPS.length - 1 ? 'Done' : 'Next')));
     spot.classList.remove('tour-pulse'); void spot.offsetWidth; spot.classList.add('tour-pulse');
