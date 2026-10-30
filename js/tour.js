@@ -18,18 +18,19 @@ let active = null;
 export const tourActive = () => !!active;
 export function startTour(from = 0) { return runTour(STEPS, { remember: true, from }); }
 // Runs any list of steps: { title, text, target: [selectors], go?: tabId }. Steps whose target is not on screen are skipped.
-export function runTour(steps, { remember = false, from = 0, footer = null } = {}) {
+export function runTour(steps, { remember = false, from = 0, footer = null, root = null } = {}) {
   if (active) return;
   const STEPS = steps;
   const app = document.getElementById('app');
   const spot = h('div', { class: 'tour-spot', 'aria-hidden': 'true' });
   const card = h('div', { class: 'tour-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title' });
   const layer = h('div', { class: 'tour' }, spot, card);
+  const wasInert = !!(app && app.inert);
   document.body.append(layer); if (app) app.inert = true;
-  let i = from, target = null;
-  const stop = () => { if (!active) return; active = null; layer.remove(); if (app) app.inert = false; window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys); if (remember) done(); };
+  let i = from, target = null, dir = 1;
+  const stop = () => { if (!active) return; active = null; layer.remove(); if (app) app.inert = wasInert; window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
   active = { stop };
-  const keys = e => { if (e.key === 'Escape') stop(); else if (e.key === 'ArrowRight' || e.key === 'Enter') next(); else if (e.key === 'ArrowLeft') show(i - 1); };
+  const keys = e => { if (e.key === 'Escape') { e.stopPropagation(); stop(); } else if (e.key === 'ArrowRight') { e.stopPropagation(); next(); } else if (e.key === 'ArrowLeft') { e.stopPropagation(); dir = -1; show(i - 1); } };
   const place = () => {
     if (!target) { spot.classList.add('center'); card.classList.add('center'); return; }
     spot.classList.remove('center'); card.classList.remove('center');
@@ -39,27 +40,31 @@ export function runTour(steps, { remember = false, from = 0, footer = null } = {
     const below = r.bottom + 16, cardH = card.offsetHeight, fits = below + cardH + 16 < innerHeight;
     card.style.top = (fits ? below : Math.max(16, r.top - 16 - cardH)) + 'px';
   };
-  const show = async n => {
+  let busy = false; // a tap during a transition must not double-advance
+  const show = async n => { if (busy) return; busy = true; try { await step(n); } finally { busy = false; } };
+  const step = async n => {
     if (n < 0) return;
     if (n >= STEPS.length) return stop();
     i = n; const s = STEPS[n];
     if (s.go) { window.logiGo?.(s.go); await new Promise(r => setTimeout(r, 650)); }
-    target = s.target ? s.target.map(sel => document.querySelector(sel)).find(el => el && el.offsetParent !== null) || null : null;
-    if (s.target && !target) return show(n + (n >= i ? 1 : -1)); // nothing to point at here, skip
+    if (s.before) { try { await s.before(); } catch { /* the step still shows */ } await new Promise(r => setTimeout(r, 250)); }
+    const scope = (root && root()) || document;
+    target = s.target ? s.target.map(sel => { try { return scope.querySelector(sel); } catch { return null; } }).find(el => el && el.offsetParent !== null) || null : null;
+    if (s.target && !target) return step(n + dir); // nothing to point at here, skip
     if (target) { target.scrollIntoView({ block: 'center', inline: 'nearest' }); await new Promise(r => setTimeout(r, 250)); }
     card.replaceChildren(
       h('div', { class: 'tour-step muted small' }, `${n + 1} / ${STEPS.length}`),
       h('h2', { id: 'tour-title' }, s.title), h('p', null, s.text),
       h('div', { class: 'tour-actions' },
         h('button', { class: 'btn ghost small', onclick: stop }, 'Skip'), footer && footer(n, stop), h('span', { class: 'spacer' }),
-        n > 0 && h('button', { class: 'btn ghost', onclick: () => show(n - 1) }, 'Back'),
+        n > 0 && h('button', { class: 'btn ghost', onclick: () => { dir = -1; show(n - 1); } }, 'Back'),
         h('button', { class: 'btn primary', onclick: next }, n === STEPS.length - 1 ? 'Done' : 'Next')));
     spot.classList.remove('tour-pulse'); void spot.offsetWidth; spot.classList.add('tour-pulse');
     place();
     card.querySelector('.btn.primary')?.focus();
   };
-  const next = () => show(i + 1);
-  window.addEventListener('resize', place); window.addEventListener('scroll', place, true); document.addEventListener('keydown', keys);
+  const next = () => { dir = 1; show(i + 1); };
+  window.addEventListener('resize', place); window.addEventListener('scroll', place, true); document.addEventListener('keydown', keys, true);
   show(i);
   return stop;
 }

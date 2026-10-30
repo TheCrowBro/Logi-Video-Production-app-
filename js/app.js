@@ -21,6 +21,7 @@ paintLock(); lock.onChange(paintLock);
 lockBtn && lockBtn.addEventListener('click', () => lock.lockNow());
 document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);
 document.getElementById('helpBtn')?.addEventListener('click', () => openTutorial());
+window.logiHelp = () => openTutorial(); // sheets show a ? too
 initInstall(document.getElementById('installBtn'));
 initClockBar(document.getElementById('clockbar'));
 import { bookings } from './pages/bookings.js';

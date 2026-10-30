@@ -90,7 +90,7 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   };
   const box = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
-    h('div', { class: 'sheet-head' }, h('h2', null, title), h('button', { class: 'icon-btn', 'aria-label': 'Close', onclick: close }, '✕')),
+    h('div', { class: 'sheet-head' }, h('h2', null, title), h('div', { class: 'sheet-tools' }, window.logiHelp && h('button', { class: 'icon-btn sheet-help', 'aria-label': 'Tutorial for this', title: 'Tutorial', onclick: () => window.logiHelp() }, '?'), h('button', { class: 'icon-btn', 'aria-label': 'Close', onclick: close }, '✕'))),
     h('div', { class: 'sheet-body' }, body));
   back.append(box);
   if (dismissOnBackdrop) back.addEventListener('pointerdown', e => { if (e.target === back) close(); });

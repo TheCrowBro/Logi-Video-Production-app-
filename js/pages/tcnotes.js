@@ -174,7 +174,7 @@ function openSync(log) {
       h('p', { class: 'small muted' }, 'Point the phone at the camera’s timecode display. The reading is taken the moment you tap Scan, so a slow read doesn’t put you out.'),
       h('div', { class: 'cam-wrap tc-cam' }, video, h('div', { class: 'tc-reticle', 'aria-hidden': 'true' })),
       h('div', { class: 'actions' }, camBtn, scanBtn), result),
-    log.sync && h('button', { class: 'btn ghost', onclick: () => { upsert('logs', { ...byId('logs', log.id), sync: null }); toast('Sync cleared'); } }, 'Clear sync'));
+    log.sync && h('button', { class: 'btn ghost tc-clear', onclick: () => { upsert('logs', { ...byId('logs', log.id), sync: null }); toast('Sync cleared'); } }, 'Clear sync'));
 
   const { close } = sheet('Sync timecode', body, { onClose: () => { clearInterval(iv); cancelAnimationFrame(raf); stream && stream.getTracks().forEach(t => t.stop()); ocr && ocr.terminate().catch(() => {}); } });
   closeSheet = close;
@@ -405,7 +405,7 @@ function openImport(log, preset) {
     h('div', { class: 'card' }, h('strong', null, 'Google Docs'),
       h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on Android (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
       paste, h('button', { class: 'btn ghost small', onclick: () => { const lines = textToLines(paste.value); lines.length ? show('Pasted script', lines) : fail(new Error('Nothing pasted yet')); } }, 'Use pasted text')),
-    h('button', { class: 'btn ghost small', onclick: () => show('Sample script', textToLines(SAMPLE_SCRIPT)) }, 'Try a sample script'),
+    h('button', { class: 'btn ghost small tc-sample', onclick: () => show('Sample script', textToLines(SAMPLE_SCRIPT)) }, 'Try a sample script'),
     preview,
     log.script && h('p', { class: 'small muted' }, 'Replacing the script keeps your notes and their quoted lines, but they are no longer pinned to a line.'),
     useBtn);

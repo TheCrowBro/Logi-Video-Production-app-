@@ -4,7 +4,9 @@
 import { h, sheet, toast } from './util.js';
 import { runTour, startTour } from './tour.js';
 
-const T = (title, text, ...target) => ({ title, text, target });
+const T = (title, text, ...rest) => { const opts = rest.length && typeof rest[rest.length - 1] === 'object' ? rest.pop() : {}; return { title, text, target: rest, ...opts }; };
+const tab = n => () => { const b = document.querySelector(`.tc-views button:nth-child(${n})`); if (b) b.click(); };
+const topSheet = () => { const all = document.querySelectorAll('.sheet'); return all[all.length - 1] || document; };
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
 export const TUTORIALS = {
@@ -101,16 +103,47 @@ export const TUTORIALS = {
     T('Live readings', 'Numbers update as you move the phone.', '.readouts'),
     T('Accuracy', 'Phones estimate; the warning says how far to trust each tool.', '#page .warn'),
   ] },
-  tcnotes: { name: 'Timecode notes', page: 'tcnotes', steps: [
-    T('Logs and linking', '+ New log starts a log for a camera or a shoot day. Link device pairs this phone with a laptop so both take notes on the same log.', '#page .page-head .actions'),
-    T('Your logs', 'One per camera or day. Open one to sync it and take notes.', '#page .list', '#page .empty'),
-    T('Sync', '‹ Logs goes back. Sync matches the phone to the camera’s timecode: type what the camera shows, or scan its display.', '.tc-log-head'),
-    T('The clock', 'The camera’s timecode as the phone follows it. In record run it holds between takes.', '.tc-clock'),
-    T('Roll and cut', 'In record run, tap these with the camera; each take is logged with its length.', '.rollcut'),
-    T('Notes and script', 'Switch between the notes and the script (side by side on a wide screen).', '.tc-views'),
-    T('Take a note', 'Each note is stamped with the timecode the moment you start typing. Mark now drops a stamp to fill in later.', '.tc-composer'),
-    T('Your notes', 'Every note with its timecode; export them as text or a spreadsheet for the edit.', '.tc-notes'),
-    T('The script', 'Add a Word file or paste text, then tap a line (or press and hold to select words) and Mark to pin a stamp to it.', '.tc-pane:nth-of-type(2)', '.tc-script'),
+  tcnotes: { name: 'Timecode notes: your logs', page: 'tcnotes', steps: [
+    T('One log per camera or day', '+ New log starts one: name it (camera, card, day), pick the frame rate, say whether the camera’s timecode is free run (always counting) or record run (counts only while recording), and tie it to a booking.', '#page .page-head .actions .btn.primary', '#page .page-head'),
+    T('Link device', 'Pairs this phone with a laptop on the same Wi‑Fi or hotspot, with no internet or account. One shows a code, the other scans it, then they swap. While linked, the open log, its sync, Roll/Cut and every note stay identical on both.', '#page .page-head .actions button:first-child'),
+    T('The idea', 'Sync the phone to the camera’s timecode once. After that every note is stamped with the camera’s timecode the moment you start typing, ready for the edit.', '#page .page-head + p', '#page p.muted.small'),
+    T('Your logs', 'Each card shows when it was made, its frame rate, whether it is synced and how many notes it holds. Tap one to open it. Logs travel with your cloud storage like everything else.', '#page .list', '#page .empty'),
+  ] },
+  tclog: { name: 'Timecode notes: a log', page: 'tcnotes', steps: [
+    T('Link, export, settings', '🔗 links another device so you both write on this log. Export shares the notes as text or a spreadsheet. ⚙ changes the log’s frame rate, free run or record run, and whether each take is logged as a note.', '.tc-log-head .actions'),
+    T('Sync', 'Once per log: tap Sync and match the camera, by typing the timecode it shows or by scanning its display. Re-sync after a battery change or if the camera was reset.', '.tc-head .card-row .btn'),
+    T('The clock', 'The camera’s timecode as this phone follows it, drop-frame aware. Dashes mean not synced yet. In record run it holds between takes.', '.tc-clock'),
+    T('State', 'Frame rate, mode, and when and how it was synced, by hand or by camera scan. In record run it says which take is recording.', '.tc-head > .muted.small'),
+    T('Roll and cut', 'Record run only. Tap Roll as the camera rolls and Cut as it stops: the clock pauses between takes and each take is logged with its length.', '.rollcut'),
+    T('Notes or script', 'Switch between your notes and the script. On a wide screen they sit side by side.', '.tc-views', { before: tab(1) }),
+    T('Take a note', 'The timecode is captured the moment you start typing, not when you finish, so the stamp is the moment you saw it. Enter adds the note. ⏺ Mark now drops a stamp with no text for a fast moment; type the words later.', '.tc-composer'),
+    T('Your notes', 'Tap a note’s text to edit it, its timecode to correct it, and a quoted line to jump to where it sits in the script. Notes sync to a linked device and to your cloud storage.', '.tc-notes'),
+    T('The script', 'Add a Word file, paste text, or try the sample. Then mark it: tap a line, or press and hold to select words, and Mark pins a stamp to that spot.', '.script', '.tc-pane .empty', '#page .empty', { before: tab(2) }),
+    T('Replace or remove', 'The script’s name, how many lines and marks it has, and Replace or Remove. Replacing keeps your notes and their quotes.', '.sc-head', { before: tab(2) }),
+    T('Mark a line', 'What you selected shows here with the live timecode. Mark stamps it; Mark + note stamps it with a note.', '.sc-bar', { before: tab(2) }),
+    T('Back to the notes', 'Everything you mark on the script also appears in the notes list, with its quote.', '.tc-views', { before: tab(1) }),
+    T('More walkthroughs', 'Tap ? inside the Sync, Link device, Add script and Export sheets for their own steps.', '.tc-log-head .actions'),
+  ] },
+  tcsync: { name: 'Timecode: syncing', page: null, sheet: true, steps: [
+    T('What the phone thinks', 'If this log is already synced, this is the timecode the phone expects the camera to show right now. Compare them, and re-sync if it has drifted.', '.tc-live'),
+    T('Recording right now?', 'Record run: tick if the camera is rolling as you sync; leave it unticked if the camera is stopped and holding its last timecode.', 'label.check.card'),
+    T('Type it', 'Read the camera’s display, type the timecode, and tap Sync at the exact instant the camera shows that value. A second out matters; the frame does not.', '.row-edit'),
+    T('Scan it', 'Use camera, point the phone at the camera’s timecode display and tap Scan: the reading is taken the moment you tap, so a slow read does not put you out. The text reader downloads once, so do that with a connection.', '.tc-cam', '.cam-wrap'),
+    T('Start again', 'Clear sync forgets the sync so you can redo it.', '.tc-clear'),
+  ] },
+  tclink: { name: 'Timecode: linking devices', page: null, sheet: true, steps: [
+    T('A direct link', 'Phone to laptop on the same Wi‑Fi or hotspot, with no internet and no account. The link ends when either side closes the app; your cloud copy carries on regardless.', '.sheet-body p.small.muted'),
+    T('Two scans', 'Show a code on one device. On the other tap Scan a code and scan it; it shows a reply; scan the reply with the first device. No camera on a laptop? Copy the code and paste it on the other side.', '.actions.center', '.link-code'),
+    T('Linked', 'The clocks are measured against each other, so timecode stamps agree to a few milliseconds. The open log, its sync, Roll/Cut and every note stay identical on both. Unlink stops it.', '.link-state[data-s=connected]'),
+  ] },
+  tcimport: { name: 'Timecode: adding a script', page: null, sheet: true, steps: [
+    T('Word document', 'A .docx from Word or Pages, a Google Doc downloaded as Word, or plain text and Fountain files. Each line becomes a tappable paragraph.', '.card'),
+    T('Google Docs', 'Google does not let an app read a Doc directly: download it as Word, share it to Vdex from the Docs app on Android, or copy and paste the text here.', '.card ~ .card'),
+    T('Try a sample', 'A short sample script, to see how marking works.', '.tc-sample'),
+    T('What was found', 'The lines Vdex read. Use this script loads them; replacing a script keeps your notes and their quotes.', '.import-preview'),
+  ] },
+  tcexport: { name: 'Timecode: exporting notes', page: null, sheet: true, steps: [
+    T('Text or spreadsheet', 'Share as text for anyone, or as a spreadsheet (CSV) with the timecode, the note, the script line and the time it was captured, for the edit suite.', '.sheet-body'),
   ] },
   settings: { name: 'Settings', page: 'settings', dynamic: () => {
     const blurbs = { 'Storage & sync': 'Link one cloud storage and every device shares one database.', 'Security': 'A PIN, fingerprint or face unlock, and encrypted data whenever Vdex is locked or in the background.', 'Calendar & email': 'Send bookings to your calendar once, subscribe to a live feed, or keep a two-way sync.', 'Display & accessibility': 'Text size, bigger buttons, contrast, animation and the colour theme, including camera-brand themes.', 'Field tool defaults': 'Your location, units, range-finder camera height and noise-meter calibration.', 'Hours & breaks': 'Standard day, break notifications, default approved break.', 'Quotes & invoices': 'Your rates, tax, numbering, payment terms and bank details.', 'Project templates': 'Your own job types: what a new booking of that kind starts with.', 'Workflow templates': 'The checklists for each job type and each stage.', 'Profile': 'Your details for call sheets, quotes and the Me page.', 'Install': 'Add Vdex to your home screen or desktop.', 'Backups & data': 'Export and import backups, restore an automatic cloud backup, load sample data, erase everything.', 'About': 'Version, updates, the tour and the licences.' };
@@ -122,7 +155,11 @@ export const TUTORIALS = {
 export function currentContext() {
   const q = s => !!document.querySelector(s);
   const page = (window.logiPage && window.logiPage()) || 'bookings';
+  const sheets = document.querySelectorAll('.sheet[aria-label]'), title = sheets.length ? sheets[sheets.length - 1].getAttribute('aria-label') : '';
+  const bySheet = { 'Sync timecode': 'tcsync', 'Link another device': 'tclink', 'Add script': 'tcimport', 'Replace script': 'tcimport', 'Export notes': 'tcexport' }[title];
+  if (bySheet) return bySheet;
   if (page === 'bookings') return q('.money-page') ? 'money' : q('.cs-page') ? 'callsheet' : q('.bk-detail') ? 'booking' : q('.bk-month') ? 'bookings' : 'day';
+  if (page === 'tcnotes') return q('.tc-log-head') ? 'tclog' : 'tcnotes';
   return TUTORIALS[page] ? page : 'around';
 }
 const stepsFor = key => { const t = TUTORIALS[key]; return t.dynamic ? t.dynamic() : t.steps; };
@@ -131,13 +168,15 @@ export function openTutorial(key = currentContext()) {
   const t = TUTORIALS[key]; if (!t) return;
   const steps = stepsFor(key);
   if (!steps.length) return toast('Nothing to show here yet');
-  runTour(steps, { footer: (n, stop) => n === 0 && h('button', { class: 'btn ghost small', onclick: () => { stop(); openChooser(); } }, 'Other pages…') });
+  runTour(steps, { root: t.sheet ? topSheet : null, footer: (n, stop) => n === 0 && !t.sheet && h('button', { class: 'btn ghost small', onclick: () => { stop(); openChooser(); } }, 'Other pages…') });
 }
 
 // Reaches a page (and, for a booking, a call sheet or money, the first booking) before running its tutorial.
 async function reach(key) {
   const t = TUTORIALS[key];
   if (t.page) { window.logiGo?.(t.page); await wait(650); }
+  if (key === 'tcnotes' && document.querySelector('.tc-log-head')) { click('.tc-log-head .btn.ghost.small'); await wait(300); }
+  if (key === 'tclog' && !document.querySelector('.tc-log-head')) { if (!click('#page .list .card.tap')) { toast('Create a log first with + New log, then tap ? inside it.'); return false; } await wait(350); }
   const click = sel => { const el = document.querySelector(sel); if (el) { el.click(); return true; } return false; };
   if (['booking', 'callsheet', 'money', 'day'].includes(key)) {
     // from wherever the Bookings page is, go to the month view first
@@ -154,7 +193,7 @@ export function openChooser() {
   let close = () => {};
   const body = h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'A short walkthrough of any page. Each one highlights the boxes on that page with a line about what they do.'),
-    h('div', { class: 'list' }, ...Object.entries(TUTORIALS).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: async () => { close(); if (await reach(key)) openTutorial(key); } }, h('strong', null, t.name)))),
+    h('div', { class: 'list' }, ...Object.entries(TUTORIALS).filter(([, t]) => !t.sheet).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: async () => { close(); if (await reach(key)) openTutorial(key); } }, h('strong', null, t.name)))),
     h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { close(); startTour(); } }, '🧭 The welcome tour again')));
   ({ close } = sheet('Tutorials', body));
 }

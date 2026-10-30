@@ -548,3 +548,6 @@ body.has-update-bar #page { padding-bottom: 110px; }
 
 #helpBtn .cloud-ico { font-weight: 800; }
 .tour-actions .spacer { flex: 1; }
+
+.sheet-tools { display: flex; gap: 4px; align-items: center; }
+.sheet-help { font-weight: 800; }

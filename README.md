@@ -112,6 +112,8 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 5. **Adding the script on an iPhone.** Tap **Script → Word document** and pick a `.docx` from the Files app (iCloud Drive, Google Drive and Dropbox all show up in Files). For a Google Doc, open it in the Docs app, tap ⋮ → *Share & export → Send a copy → Word* and save it to Files first, or select all, copy, and paste the text into Vdex. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
 6. **Export** shares the notes as text or a spreadsheet, to Mail, AirDrop, Files or anywhere else in the share sheet.
 
+**Walkthroughs:** tap **?** at the top of the timecode page for a tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets for their own step-by-step walkthroughs.
+
 **iPhone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
 ### Quotes and invoices
@@ -332,6 +334,8 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 4. In record run, tap **● Roll** and **■ Cut** with the camera; each take is logged with its length.
 5. **Adding the script on Android.** Share it straight into Vdex: in the Google Docs app tap ⋮ → *Share & export → Send a copy → Word*, then choose **Vdex** in the share sheet. Any `.docx` can be shared to Vdex the same way, or picked with **Script → Word document**. You can also paste the text. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
 6. **Export** shares the notes as text or a spreadsheet, to Gmail, Drive or anywhere else in the share sheet.
+
+**Walkthroughs:** tap **?** at the top of the timecode page for a tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets for their own step-by-step walkthroughs.
 
 **Phone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
