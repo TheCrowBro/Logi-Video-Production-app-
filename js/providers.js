@@ -1,5 +1,5 @@
 // Cloud storage adapters. Each exposes: name, ready() -> bool, read() -> object|null, write(text).
-// Dropbox and Google Drive need an app key / client ID you create once (see README); they are stored on this device only.
+// Dropbox and Google Drive need an app key / client ID you create once (see docs/connections.md); they are stored on this device only.
 
 const LS = {
   get: k => { try { return localStorage.getItem(k); } catch { return null; } },
