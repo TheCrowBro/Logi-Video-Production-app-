@@ -57,7 +57,8 @@ export const TUTORIALS = {
     T('State and total', 'Draft, sent, accepted or paid, the total, and overdue when an invoice passes its due date unpaid.', '.money-page .status-line'),
     T('Build it', 'Edit the lines by hand, or add suggested lines: from the booking (shoot days, crew at their day rates, kit, deliverables), from the quote, or from the hours logged. Mark as sent, accepted or paid ticks the pipeline.', '.money-page .actions'),
     T('Send it', 'Print, Save PDF, Email client (to the contacts on the booking), Share, Web page, Copy text.', '.money-page .actions ~ .actions'),
-    T('The document', 'Your details from the Me page, the client, the lines, tax and totals, and the terms and payment details from Settings → Quotes & invoices.', '.money-page .cs-paper'),
+    T('Get paid', 'Link for the client opens the document as a web page with Pay buttons for the balance; record payments as they arrive, and send a reminder when an invoice is overdue. Your PayPal, Venmo, Cash App, payment page, UPI and bank details live under Settings → Quotes & invoices.', '.money-page .pay-actions'),
+    T('The document', 'Your details from the Me page, the client, the lines, tax and totals, the terms, and on an invoice the Pay buttons, bank details and a bank QR code from Settings → Quotes & invoices.', '.money-page .cs-paper'),
     T('Start one', 'From the booking suggests the lines at your rates; an invoice can also start from the quote or from the hours logged; or start blank.', '.money-page .stack .actions'),
   ] },
   crew: { name: 'Crew', page: 'crew', steps: [

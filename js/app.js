@@ -123,6 +123,6 @@ function openStorage() {
 store.initCloud();
 backup.nudgeIfStale();
 const idle = window.requestIdleCallback ? fn => requestIdleCallback(fn, { timeout: 2500 }) : fn => setTimeout(fn, 1200);
-idle(() => import('./pages/gear.js').then(m => m.serviceNudge())); // service reminders, once the first paint is out of the way
+idle(() => { import('./pages/gear.js').then(m => m.serviceNudge()); import('./money.js').then(m => m.moneyNudge()); }); // service and overdue-invoice reminders, once the first paint is out of the way
 if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
 initUpdates(); // service worker, offline copy, and the "new version" bar

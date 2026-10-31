@@ -30,6 +30,7 @@
     "files": [
       "index.html",
       "privacy.html",
+      "invoice.html",
       "styles.css",
       "sw.js",
       "manifest.webmanifest",

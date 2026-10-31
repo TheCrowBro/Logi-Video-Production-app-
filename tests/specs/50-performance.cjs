@@ -57,7 +57,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const preloads = [...fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').matchAll(/rel="modulepreload" href="([^"]+)"/g)].map(m => m[1]);
   const wanted = graph.filter(f => f !== 'js/app.js').sort(), have = [...preloads].sort();
   ok('index.html preloads exactly the start-up modules', JSON.stringify(wanted) === JSON.stringify(have), `missing: ${wanted.filter(f => !have.includes(f)).join(', ') || 'none'}; extra: ${have.filter(f => !wanted.includes(f)).join(', ') || 'none'}`);
-  ok(`the start-up graph stays small (${graph.length} modules)`, graph.length <= 30);
+  ok(`the start-up graph stays small (${graph.length} modules)`, graph.length <= 32); // 31 with the money documents; raise this only for a reason
   const lazy = ['js/pages/tcnotes.js', 'js/pages/field.js', 'js/pages/settings.js', 'js/pages/crew.js', 'js/tutorials.js'];
   ok('other sections and the tutorials are not loaded at startup', !reqs.some(r => lazy.includes(r.url) && r.type === 'script'), reqs.filter(r => lazy.includes(r.url)).map(r => r.url + ':' + r.type).join(', '));
   await page.evaluate(() => window.logiGo('tcnotes'));

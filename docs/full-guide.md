@@ -255,6 +255,18 @@ On the phone, yes once a PIN is set: whenever Vdex is locked, in the background 
 
 ---
 
+### Getting paid
+
+Vdex has no payment processor in the middle, and no fees. Instead, every invoice carries the ways you already get paid, and a link the client can open.
+
+1. **Tell Vdex how you get paid**, once: Settings → Quotes & invoices → Getting paid. Fill in whichever you use: your PayPal.Me name, Venmo, Cash App $cashtag, UPI ID, a payment page of your own (a Stripe or Square payment link, Revolut, Monzo, Wise…), and your bank details. Pick the currency for the links.
+2. **Every invoice then carries Pay buttons** for the balance due, your bank details, a QR code that European banking apps scan to fill in the transfer, and the invoice number as the reference. They are on the printed invoice, in the PDF, in the email and on the client's page.
+3. **Send the client a link.** On the invoice (or the quote), tap **Link for the client**. The whole document is packed inside the link, so nothing is stored online and nothing can go missing. Copy it, share it, email it, or let the client scan the QR code. It opens as a web page with the Pay buttons, Print and Save PDF.
+4. **Record payments** as they arrive with **Record a payment**: the amount proposed is the balance, so a full payment is one tap. Part payments show as "part paid" with the balance; when the balance reaches zero the invoice is marked paid and the pipeline is ticked. The Pay buttons always ask for what is still owed.
+5. **Chase gently.** An unpaid invoice past its due date shows as overdue, Vdex mentions it once a day when you open the app, and **Send a reminder** writes the email for you, with the balance, the date and the link.
+
+The Money overview (Bookings → Money) adds up what is invoiced and unpaid, what is overdue, what is quoted, and what you received this year; the CSV for your accountant has the paid amount and the balance per invoice.
+
 ## Android guide
 
 ### Install it on your Android phone

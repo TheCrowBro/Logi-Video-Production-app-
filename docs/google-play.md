@@ -129,7 +129,7 @@ CALL SHEETS
 Built in the app from the booking, with the schedule, the weather and the sunset time, the crew list and the venue notes. Edit it on the spot, then email it to the crew or print it.
 
 QUOTES AND INVOICES
-Vdex suggests the lines from the shoot: days, crew rates, kit, deliverables. Send as a PDF or by email, and see what is still unpaid.
+Vdex suggests the lines from the shoot: days, crew rates, kit, deliverables. Send the client a link that opens the invoice with Pay buttons for PayPal, Venmo, Cash App, your card payment page or a bank transfer, record payments as they arrive, and see what is still unpaid.
 
 CREW, EQUIPMENT, VENUES, INSURANCE
 Your people and how to reach them. Everything you own, with serial numbers, values, warranties and a service log. Kits for the jobs you do often. The places you film, with access notes and a map. Your policies and their renewal dates.

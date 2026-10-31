@@ -22,6 +22,8 @@ Camera, microphone, location, notifications and installing need https or `localh
 
 **Start-up and storage costs.** Only the Bookings section and the shared modules load with the app (28 modules, about 350 KB unminified); the other eight sections and the tutorials are fetched the first time they are opened, and `index.html` lists the start-up modules as `modulepreload` hints so a first visit fetches them in one go instead of discovering the import chain level by level. The service worker registers after the page has loaded and precaches with `cache: 'no-cache'`, so the offline copy costs revalidations rather than a second download. Store writes are coalesced: a burst of changes in one task is serialised and written once, and sealing flushes first. Spec 50 keeps all of this honest: the preload list must equal the real start-up graph, the lazy sections must not load at start-up, and a burst of writes must store once.
 
+**Getting paid** is built around links rather than a processor. `js/pay.js` turns the settings into Pay buttons with the balance and the invoice number filled in (PayPal.Me takes `name/amountCODE`, Venmo and Cash App take the amount in the address, any payment page gets `{amount}` and `{reference}` substituted), plus bank lines and an EPC069-12 payload for the bank QR (euro amounts only, as the standard requires). `snapshot(b, kind)` in `js/money.js` is the self-contained copy of a document that everything renders from; `shareLink` packs it with `js/link-pack.js` into `invoice.html#1.<base64url deflate-raw>` (`0.` when the browser has no CompressionStream), and `js/invoice-page.js` unpacks and draws it with the same `money-doc.js` renderer, so the client's page and the app can never disagree. The fragment never leaves the browser, which is why no server is involved. Payments live on the invoice as `payments[]`; `calc()` derives paid and balance, and an invoice marked Paid with nothing recorded counts as paid in full, which keeps older records right. Spec 90 covers settings, buttons, QR, payments, the link, the public page, reminders, the overview and the CSV.
+
 **The desktop app** is `desktop/main.js`: Electron serving these same files from `http://localhost:47831`, so the service worker, storage and sign-ins behave exactly as in Chrome. Sign-in pop-ups and the print window stay inside the app; every other link opens in the system browser. Electron has no service-worker notifications, so `js/notify.js` shows plain ones there, and `js/install.js` treats the app as already installed.
 
 **Security notes**
@@ -44,6 +46,12 @@ Camera, microphone, location, notifications and installing need https or `localh
 ```
 index.html  styles.css  sw.js  manifest.webmanifest   app shell, styles, service worker (offline, share target, notifications), install manifest
 js/app.js        startup, Rolodex tabs, header; every section but Bookings loads the first time it is opened
+js/money.js      quotes and invoices: settings, suggested lines, payments and balances, the client's link, reminders, the overview
+js/money-doc.js  the document itself from a self-contained snapshot (page, print, PDF, email text, public page)
+js/pay.js        payment links (PayPal.Me, Venmo, Cash App, any payment page, UPI), bank lines, the EPC bank QR
+js/link-pack.js  packs a document into a link (deflate + base64url in the URL fragment) and unpacks it
+js/doc-css.js    print and standalone styles shared by the call sheet, the money documents and the public page
+invoice.html     the page a client opens: js/invoice-page.js renders the packed document with Pay buttons
 js/rolodex.js    the 3D drum
 js/store.js      the database, record-by-record merging, cloud sync engine
 js/providers.js  Dropbox, Google Drive, OneDrive, WebDAV and local-file adapters; Google and Microsoft sign-in

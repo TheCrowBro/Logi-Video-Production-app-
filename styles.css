@@ -551,3 +551,14 @@ body.has-update-bar #page { padding-bottom: 110px; }
 
 .sheet-tools { display: flex; gap: 4px; align-items: center; }
 .sheet-help { font-weight: 800; }
+
+/* Getting paid: Pay buttons, bank QR and payments on the Money page and inside the document */
+.cs-paper .pay-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+.cs-paper .pay-btn { display: inline-block; padding: 9px 14px; border: 1.5px solid #1a4e8a; border-radius: 10px; color: #1a4e8a; font-weight: 700; text-decoration: none; font-size: 13px; }
+.cs-paper .pay-qr { display: flex; gap: 14px; align-items: center; margin: 8px 0; }
+.cs-paper .pay-qr svg { width: 112px; height: 112px; flex: none; background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 3px; }
+.cs-paper .pay-ref { margin: 6px 0 0; font-size: 12px; color: #444; }
+.cs-paper .paid-stamp { display: inline-block; margin: 8px 0; padding: 6px 12px; border: 2px solid #2a8a4a; border-radius: 8px; color: #2a8a4a; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.pay-list .card-row + .card-row { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
+.share-link { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
+.share-qr svg { width: 180px; height: 180px; background: #fff; padding: 6px; border-radius: 10px; display: block; margin: 0 auto; }
