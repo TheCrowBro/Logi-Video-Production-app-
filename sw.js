@@ -10,9 +10,10 @@ const SHELL = [
 const shellKeys = new Set(SHELL.map(p => new URL(p, self.registration.scope).href));
 const keyOf = req => { const u = new URL(req.url); u.search = ''; u.hash = ''; return u.href; };
 
-// Precache straight from the server (cache: 'reload'), never from the browser's HTTP cache, so a build is never a mix.
+// Precache with cache: 'no-cache': every file is revalidated with the server (a cheap 304 when the page just fetched it),
+// never taken from the browser's HTTP cache on trust, so a build is never a mix and nothing is downloaded twice.
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'no-cache' })))).then(() => self.skipWaiting()));
 });
 const dropOld = () => caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== 'logi-share').map(k => caches.delete(k))));
 self.addEventListener('activate', e => {

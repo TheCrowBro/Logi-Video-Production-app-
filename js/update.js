@@ -55,7 +55,9 @@ export function initUpdates() {
     controlled = true;
     setTimeout(() => { try { navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage('cleanup'); } catch { /* ignore */ } }, 3000);
   });
-  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => { S.reg = reg; S.last = Date.now(); emit(); if (reg.waiting) reg.waiting.postMessage('skip-waiting'); }).catch(() => {});
+  // Registered once the page has loaded, so a first visit's own downloads are not competing with the offline copy.
+  const register = () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => { S.reg = reg; S.last = Date.now(); emit(); if (reg.waiting) reg.waiting.postMessage('skip-waiting'); }).catch(() => {});
+  if (document.readyState === 'complete') register(); else window.addEventListener('load', register, { once: true });
   const check = () => { if (S.reg && !S.ready && Date.now() - S.last > 10 * 60000) { S.last = Date.now(); S.reg.update().catch(() => {}); } };
   setInterval(check, 60 * 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });

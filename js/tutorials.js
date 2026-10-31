@@ -174,7 +174,7 @@ export function openTutorial(key = currentContext()) {
 // Reaches a page (and, for a booking, a call sheet or money, the first booking) before running its tutorial.
 async function reach(key) {
   const t = TUTORIALS[key];
-  if (t.page) { window.logiGo?.(t.page); await wait(650); }
+  if (t.page) { await window.logiGo?.(t.page); await wait(650); }
   if (key === 'tcnotes' && document.querySelector('.tc-log-head')) { click('.tc-log-head .btn.ghost.small'); await wait(300); }
   if (key === 'tclog' && !document.querySelector('.tc-log-head')) { if (!click('#page .list .card.tap')) { toast('Create a log first with + New log, then tap ? inside it.'); return false; } await wait(350); }
   const click = sel => { const el = document.querySelector(sel); if (el) { el.click(); return true; } return false; };

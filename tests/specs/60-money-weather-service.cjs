@@ -109,7 +109,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await lf.locator('textarea[data-key="note"]').fill('Sensor clean at the shop');
   await lf.locator('input[data-key="cost"]').fill('45');
   await lf.locator('input[data-key="firmware"]').fill('2.10');
-  await lf.locator('button[type=submit]').click(); await sleep(400);
+  await lf.locator('button[type=submit]').click();
+  await page.waitForFunction(() => import('./js/store.js').then(s => (s.byId('gear', window.__g).log || []).length === 1), null, { timeout: 8000 }).catch(() => {}); // the save is synchronous, but a loaded machine can be slow to get there
   const g = await page.evaluate(() => import('./js/store.js').then(s => s.byId('gear', window.__g)));
   ok('log entry saved and firmware updated', g.log.length === 1 && g.log[0].kind === 'clean' && g.firmware === '2.10');
   const due = await page.evaluate(() => import('./js/pages/gear.js').then(m => import('./js/store.js').then(s => m.serviceDue(s.byId('gear', window.__g)))));

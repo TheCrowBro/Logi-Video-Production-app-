@@ -51,18 +51,26 @@ let sealed = false, dirty = false, pendingSync = false, rev = 0;
 export const revision = () => rev;
 export const isSealed = () => sealed;
 export const serialize = () => JSON.stringify(db);
-export function setSealed(on) { sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; schedulePush(); } } }
-export function flush() { persistLocal(); }
+export function setSealed(on) { if (on && writeQueued) writeNow(); sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; schedulePush(); } } }
+export function flush() { rev++; writeNow(); }
 export function reload() { db = load(); rev++; emit(); }
 export const touch = () => { rev++; emit(); };
 const subs = new Set();
 export const subscribe = fn => { subs.add(fn); return () => subs.delete(fn); };
 const emit = (reason = 'data') => subs.forEach(fn => fn(reason)); // 'data' after a change, 'status' for cloud status only
 
+// Writes are coalesced: a burst of changes in one task (an import, a template, a merge) is serialised and written once,
+// at the end of that task. Sealing flushes first, so nothing plain is ever written after the lock has taken over.
+let writeQueued = false;
+function writeNow() {
+  writeQueued = false;
+  if (sealed) { dirty = true; return; }
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { console.warn('localStorage full?', e); }
+}
 function persistLocal() {
   rev++;
   if (sealed) { dirty = true; return; }
-  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { console.warn('localStorage full?', e); }
+  if (!writeQueued) { writeQueued = true; queueMicrotask(writeNow); }
 }
 
 // Mutate the db inside fn, then save + sync.

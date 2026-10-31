@@ -10,7 +10,6 @@ import { initClockBar } from './clock.js';
 import * as lock from './lock.js';
 import * as backup from './backup.js';
 import { initUpdates } from './update.js';
-import { openTutorial } from './tutorials.js';
 
 applyPrefs();
 await lock.gate(); // with a PIN set, nothing below runs until the lock screen is passed
@@ -20,34 +19,46 @@ const paintLock = () => { if (lockBtn) lockBtn.hidden = !lock.enabled(); };
 paintLock(); lock.onChange(paintLock);
 lockBtn && lockBtn.addEventListener('click', () => lock.lockNow());
 document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);
-document.getElementById('helpBtn')?.addEventListener('click', () => openTutorial());
-window.logiHelp = () => openTutorial(); // sheets show a ? too
+const help = () => import('./tutorials.js').then(m => m.openTutorial()); // the tutorials load on first use
+document.getElementById('helpBtn')?.addEventListener('click', help);
+window.logiHelp = help; // sheets show a ? too
 initInstall(document.getElementById('installBtn'));
 initClockBar(document.getElementById('clockbar'));
 import { bookings } from './pages/bookings.js';
-import { crew } from './pages/crew.js';
-import { gear } from './pages/gear.js';
-import { insurance } from './pages/insurance.js';
-import { venues } from './pages/venues.js';
-import { tcnotes, receiveSharedFile } from './pages/tcnotes.js';
-import { settings } from './pages/settings.js';
-import { me } from './pages/me.js';
-import { field } from './pages/field.js';
 
-const tabs = [bookings, crew, gear, venues, insurance, me, field, tcnotes, settings];
+// The Bookings card is the usual start, so it loads with the app. Every other section is fetched and parsed the first
+// time it is opened (the service worker keeps them all offline regardless), which keeps the start-up parse small.
+const section = (id, label, icon, load) => ({ id, label, icon, load });
+const tabs = [
+  { id: bookings.id, label: bookings.label, icon: bookings.icon, page: bookings },
+  section('crew', 'Crew', '👥', () => import('./pages/crew.js').then(m => m.crew)),
+  section('gear', 'Equipment', '🎥', () => import('./pages/gear.js').then(m => m.gear)),
+  section('venues', 'Venues', '📍', () => import('./pages/venues.js').then(m => m.venues)),
+  section('insurance', 'Insurance', '🛡️', () => import('./pages/insurance.js').then(m => m.insurance)),
+  section('me', 'Me', '🪪', () => import('./pages/me.js').then(m => m.me)),
+  section('field', 'Field', '☀️', () => import('./pages/field.js').then(m => m.field)),
+  section('tcnotes', 'TC Notes', '⏱️', () => import('./pages/tcnotes.js').then(m => m.tcnotes)),
+  section('settings', 'Settings', '⚙️', () => import('./pages/settings.js').then(m => m.settings)),
+];
+const pageOf = t => (t.page ? Promise.resolve(t.page) : (t.loading || (t.loading = t.load().then(p => { t.page = p; return p; }))));
 const page = document.getElementById('page');
 let current = -1;
 let cleanup = null;
 
+let showing = Promise.resolve(), showToken = 0;
 function show(i, dir = 0) {
-  cleanup && cleanup();
-  cleanup = null;
+  const token = ++showToken;
   current = i;
-  const t = tabs[i];
-  const holder = h('section', { class: 'page-card' + (dir ? ' fade-in' : ''), 'aria-label': t.label });
-  page.replaceChildren(holder);
-  cleanup = t.render(holder) || null;
   try { localStorage.setItem('logi-tab', String(i)); } catch { /* private mode */ }
+  showing = pageOf(tabs[i]).then(p => {
+    if (token !== showToken) return; // the drum moved on while this section was loading
+    cleanup && cleanup();
+    cleanup = null;
+    const holder = h('section', { class: 'page-card' + (dir ? ' fade-in' : ''), 'aria-label': p.label });
+    page.replaceChildren(holder);
+    cleanup = p.render(holder) || null;
+  }).catch(e => { console.error(e); toast('That section could not be loaded. Check the connection and try again.'); });
+  return showing;
 }
 
 // Re-render the active page when data changes (field tools keep their own live state).
@@ -55,12 +66,14 @@ function show(i, dir = 0) {
 let redrawQueued = false;
 function redraw() {
   redrawQueued = false;
-  if (current < 0 || !tabs[current] || tabs[current].static) return;
+  const p = current >= 0 && tabs[current] && tabs[current].page;
+  if (!p || p.static) return; // a section still loading draws itself fresh when it arrives
   const y = window.scrollY;
-  cleanup && cleanup();
   const holder = page.firstElementChild;
+  if (!holder) return;
+  cleanup && cleanup();
   holder.replaceChildren();
-  cleanup = tabs[current].render(holder) || null;
+  cleanup = p.render(holder) || null;
   window.scrollTo(0, y);
 }
 store.subscribe(reason => {
@@ -73,7 +86,7 @@ let start = 0;
 try { start = Math.min(tabs.length - 1, Math.max(0, Number(localStorage.getItem('logi-tab')) || 0)); } catch { /* ignore */ }
 const rolodex = createRolodex(document.getElementById('rolodex'), tabs, { start, onSelect: (i, dir) => show(i, dir) });
 show(start);
-window.logiGo = i => rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); // lets pages jump between sections
+window.logiGo = i => { rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); return showing; }; // lets pages jump between sections; resolves once the section is drawn
 window.logiPage = () => (tabs[current] ? tabs[current].id : null); // which section is open (the page tutorials use it)
 
 // A file shared to the app (Android share sheet) is parked by the service worker; hand it to TC Notes.
@@ -84,7 +97,7 @@ if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in win
     const name = decodeURIComponent(r.headers.get('X-Name') || 'shared.docx');
     const file = new File([await r.blob()], name, { type: r.headers.get('Content-Type') || '' });
     await c.delete('shared-file');
-    receiveSharedFile(file);
+    import('./pages/tcnotes.js').then(m => m.receiveSharedFile(file));
   }).catch(() => {});
 }
 
@@ -109,6 +122,7 @@ function openStorage() {
 
 store.initCloud();
 backup.nudgeIfStale();
-import('./pages/gear.js').then(m => m.serviceNudge());
+const idle = window.requestIdleCallback ? fn => requestIdleCallback(fn, { timeout: 2500 }) : fn => setTimeout(fn, 1200);
+idle(() => import('./pages/gear.js').then(m => m.serviceNudge())); // service reminders, once the first paint is out of the way
 if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
 initUpdates(); // service worker, offline copy, and the "new version" bar
