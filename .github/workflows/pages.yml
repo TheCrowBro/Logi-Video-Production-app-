@@ -1,6 +1,10 @@
-# Publishes the app to GitHub Pages. Runs on every push to the working branch or to main, once the
-# browser tests in the same run have passed, or on demand from the Actions tab ("Run workflow" works
-# on any branch, for a preview deployment).
+# Publishes the app to GitHub Pages.
+#
+# How a change reaches the site: a push to the working branch runs the browser tests; when they pass, the
+# "mirror" job moves main to that same commit and starts this workflow again on main, where the "deploy" job
+# stamps the build and publishes. GitHub's github-pages environment only accepts deployments made from main,
+# which is why the deploy always happens from there, and why main is always exactly what is live.
+# "Run workflow" on main from the Actions tab publishes on demand.
 name: Deploy to GitHub Pages
 on:
   push:
@@ -14,7 +18,7 @@ permissions:
   id-token: write
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false   # runs queue up; the newest pending one replaces older pending ones
 jobs:
   test:
     # The site only updates when the browser specs pass, so a broken push never reaches people's phones.
@@ -31,8 +35,24 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npx playwright install --with-deps chromium
       - run: npm test
+  mirror:
+    # A tested push to the working branch becomes main, and main publishes.
+    needs: test
+    if: github.ref == 'refs/heads/claude/videographer-gear-app-xlg8eb'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # to move main
+      actions: write    # to start the publish run on main
+    steps:
+      - name: Move main to this commit (fast-forward only) and publish it
+        run: |
+          gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/heads/main" -f sha="$GITHUB_SHA"
+          gh workflow run pages.yml --ref main --repo "$GITHUB_REPOSITORY"
+        env:
+          GH_TOKEN: ${{ github.token }}
   deploy:
     needs: test
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
