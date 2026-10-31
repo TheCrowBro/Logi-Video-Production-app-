@@ -1,0 +1,70 @@
+{
+  "packageId": "io.github.thecrowbro.vdex",
+  "host": "thecrowbro.github.io",
+  "name": "Vdex",
+  "launcherName": "Vdex",
+  "display": "standalone",
+  "themeColor": "#14110F",
+  "themeColorDark": "#14110F",
+  "navigationColor": "#14110F",
+  "navigationColorDark": "#14110F",
+  "navigationDividerColor": "#3A332B",
+  "navigationDividerColorDark": "#3A332B",
+  "backgroundColor": "#14110F",
+  "enableNotifications": true,
+  "startUrl": "/Logi-Video-Production-app-/index.html",
+  "iconUrl": "https://thecrowbro.github.io/Logi-Video-Production-app-/icons/icon-512.png",
+  "maskableIconUrl": "https://thecrowbro.github.io/Logi-Video-Production-app-/icons/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./upload-key.keystore",
+    "alias": "vdex"
+  },
+  "appVersionName": "1.2.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://thecrowbro.github.io/Logi-Video-Production-app-/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "minSdkVersion": 26,
+  "shareTarget": {
+    "action": "/Logi-Video-Production-app-/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "files": [
+        {
+          "name": "file",
+          "accept": [
+            ".docx",
+            ".txt",
+            ".md",
+            ".fountain",
+            "text/plain",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          ]
+        }
+      ]
+    }
+  },
+  "orientation": "default",
+  "fingerprints": [
+    {
+      "name": "Upload key",
+      "value": "3B:7A:61:49:18:F5:56:94:70:52:6B:D1:34:2D:90:01:2E:DA:49:E6:FC:7D:1C:D0:E2:AE:8A:16:C3:04:A5:C4"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "displayOverride": [],
+  "appVersion": "1.2.0"
+}

@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="dark light">
+<title>Vdex privacy policy</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+  :root { --bg: #14110f; --card: #25201b; --line: #3a332b; --text: #f1e6cf; --muted: #a09584; --accent: #e0a43a; color-scheme: dark; }
+  @media (prefers-color-scheme: light) { :root { --bg: #efe8da; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; color-scheme: light; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  header img { width: 56px; height: 56px; border-radius: 14px; flex: none; }
+  h1 { font-size: 1.7rem; line-height: 1.2; margin: 0; }
+  .meta { color: var(--muted); margin: 0 0 24px; font-size: 0.95rem; }
+  h2 { font-size: 1.25rem; margin: 36px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 22px 0 6px; }
+  p, li { max-width: 68ch; }
+  ul { padding-left: 1.2em; }
+  li { margin: 6px 0; }
+  a { color: var(--accent); }
+  .summary { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 0 0 8px; }
+  .summary h2 { border: 0; margin: 0 0 8px; padding: 0; font-size: 1.1rem; }
+  .summary ul { margin: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; margin: 12px 0; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  @media (max-width: 560px) { table, thead, tbody, tr, th, td { display: block; } thead { display: none; } tr { padding: 10px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; } td[data-h]::before { content: attr(data-h) ": "; color: var(--muted); } }
+  .back { display: inline-block; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/icon.svg" alt="">
+    <h1>Vdex privacy policy</h1>
+  </header>
+  <p class="meta">Last updated 31 October 2026. Applies to the Vdex web app, the Vdex desktop app for Windows, Mac and Linux, and the Vdex app on Google Play.</p>
+
+  <section class="summary">
+    <h2>The short version</h2>
+    <ul>
+      <li>Vdex has no accounts, no servers of its own, no advertising, no analytics and no tracking.</li>
+      <li>Everything you type stays on your phone or computer. The people who make Vdex never receive it.</li>
+      <li>Information leaves your device only when you use a feature that needs it: linking your own cloud storage or calendar, looking up the weather or an address, scanning a page, or sharing something. Every case is listed below.</li>
+    </ul>
+  </section>
+
+  <h2>1. Who is responsible</h2>
+  <p>Vdex is made and published by its developer, TheCrowBro, as an open-source project. The complete source code is public at <a href="https://github.com/TheCrowBro/Logi-Video-Production-app-">github.com/TheCrowBro/Logi-Video-Production-app-</a>, so anyone can check what the app does. Questions about this policy can be asked by opening an issue on that page.</p>
+
+  <h2>2. What Vdex stores, and where</h2>
+  <p>Vdex keeps the information you enter in the app's own storage on your device: the browser's storage for the web app, and the app's folder for the desktop app. That information can include:</p>
+  <ul>
+    <li>Bookings: the job, the client and their contacts, addresses, dates, the schedule, notes, and the hours you worked.</li>
+    <li>Call sheets, quotes and invoices made from those bookings.</li>
+    <li>Crew: names, roles, phone numbers, email addresses and day rates.</li>
+    <li>Equipment: items, serial numbers, values, warranties and service history.</li>
+    <li>Venues: addresses, access notes and map coordinates.</li>
+    <li>Insurance policies and their dates.</li>
+    <li>Your own profile: your name, contact details and the QR contact card made from them.</li>
+    <li>Timecode notes, scripts you import, and your settings.</li>
+  </ul>
+  <p>None of this is sent to us. You can see, export or erase all of it at any time under Settings → Backups &amp; data.</p>
+
+  <h2>3. Your PIN and fingerprint or face unlock</h2>
+  <p>If you set a PIN, Vdex encrypts its storage with a key derived from that PIN using AES-256-GCM. The PIN itself is never stored, and nobody, including us, can recover it. Fingerprint or face unlock uses your device's own system (WebAuthn). Vdex never sees your fingerprint or your face; it only receives the device's confirmation that it was you.</p>
+
+  <h2>4. When information leaves your device</h2>
+  <p>Each of the following is optional. You switch it on, or trigger it, yourself.</p>
+
+  <h3>Cloud storage you link</h3>
+  <p>You can link Dropbox, Google Drive, Microsoft OneDrive, a WebDAV server of your choosing, or a folder on your computer. Vdex then saves its backup files into your own account, so your other devices can read them and a copy survives a lost phone. That content is held by the provider under its own privacy policy. We have no access to it. Sign-in tokens stay on your device and are encrypted while Vdex is locked. You can unlink the storage in Vdex at any time and withdraw Vdex's access in your provider's account settings.</p>
+
+  <h3>Calendar sync and calendar feeds</h3>
+  <p>If you switch on calendar sync, Vdex creates and updates events for your bookings in your own Google Calendar or Microsoft Outlook calendar: the title, dates, location and description. The "Add to calendar" buttons open your calendar app with the same details. If you create a calendar feed, Vdex saves a calendar file to your linked storage and asks that provider for a share link. Anyone who has that link can read the feed, so share it only with the people you want.</p>
+
+  <h3>Weather</h3>
+  <p>For a booking with a location, Vdex asks Open-Meteo (open-meteo.com) for the forecast. It sends the map coordinates of the shoot location and nothing else: no names, no account and no identifier.</p>
+
+  <h3>Addresses and maps</h3>
+  <p>When you look up a venue or press "Find on map", Vdex sends the address text to OpenStreetMap's Nominatim service to turn it into coordinates, and loads map images for the area shown from OpenStreetMap's tile servers. Directions buttons open Google Maps or Apple Maps on your device with the address.</p>
+
+  <h3>Scanning a printed script</h3>
+  <p>Text recognition runs on your device. The first time you use it, the app downloads the recognition library and its English language data from public content delivery networks (cdnjs by Cloudflare, jsDelivr and the Tesseract.js project). The photo of the page never leaves your device.</p>
+
+  <h3>Signing in to Google or Microsoft</h3>
+  <p>When you link Google Drive or Google Calendar, the sign-in library from Google loads and the sign-in happens with Google directly. The same applies to Microsoft when you link OneDrive or Outlook; its library loads from jsDelivr. Vdex receives only a token that lets it reach the files and calendars you allowed.</p>
+
+  <h3>Sharing</h3>
+  <p>When you email a call sheet, a quote or an invoice, Vdex opens your mail app with the text ready to send. Printing and the share sheet hand the document to the app you choose. Vdex sends nothing itself.</p>
+
+  <h3>The website, updates and the app stores</h3>
+  <p>Vdex's files are served by GitHub Pages. When you open the app, or it checks for a new version, your browser requests files from GitHub, which keeps ordinary web server logs such as your IP address, browser type and the time, under GitHub's privacy statement. The desktop app checks GitHub for new versions in the same way. If you installed Vdex from Google Play, Google gives us overall install and crash statistics. Those are not linked to anything inside Vdex.</p>
+
+  <h3>The services Vdex may contact</h3>
+  <table>
+    <thead><tr><th>Service</th><th>When</th><th>What it receives</th></tr></thead>
+    <tbody>
+      <tr><td data-h="Service"><a href="https://www.dropbox.com/privacy">Dropbox</a>, <a href="https://policies.google.com/privacy">Google</a>, <a href="https://privacy.microsoft.com/privacystatement">Microsoft</a></td><td data-h="When">Only if you link them</td><td data-h="What it receives">Your backup files, calendar events, and your sign-in</td></tr>
+      <tr><td data-h="Service"><a href="https://open-meteo.com/en/terms">Open-Meteo</a></td><td data-h="When">Bookings with a location</td><td data-h="What it receives">The shoot location's coordinates</td></tr>
+      <tr><td data-h="Service"><a href="https://osmfoundation.org/wiki/Privacy_Policy">OpenStreetMap</a></td><td data-h="When">Address lookups and maps</td><td data-h="What it receives">The address text and the map area shown</td></tr>
+      <tr><td data-h="Service"><a href="https://www.cloudflare.com/privacypolicy/">cdnjs (Cloudflare)</a>, <a href="https://www.jsdelivr.com/terms/privacy-policy">jsDelivr</a>, Tesseract.js</td><td data-h="When">First use of script scanning or Microsoft sign-in</td><td data-h="What it receives">A request for a code library, like any web page</td></tr>
+      <tr><td data-h="Service"><a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub</a></td><td data-h="When">Opening the app and checking for updates</td><td data-h="What it receives">Ordinary web server logs</td></tr>
+    </tbody>
+  </table>
+
+  <h2>5. Device permissions and why Vdex asks for them</h2>
+  <ul>
+    <li><strong>Camera:</strong> the white balance reader, the range finder, QR code scanning and script scanning. Images are processed on the device as you look at them.</li>
+    <li><strong>Microphone:</strong> the sound level meter and timecode sync listen live. Nothing is recorded or stored.</li>
+    <li><strong>Location:</strong> sunrise and sunset times, the weather, and the "use my location" button for a venue. A position is kept only where you save it, such as in a venue.</li>
+    <li><strong>Notifications:</strong> reminders for shoots and equipment service are scheduled on your device. There is no push server.</li>
+    <li><strong>Motion and orientation:</strong> the level and the range finder.</li>
+    <li><strong>Files:</strong> importing and exporting backups, saving PDFs, and scripts you share into Vdex.</li>
+    <li><strong>Fingerprint or face:</strong> unlocking, as described above.</li>
+  </ul>
+  <p>Each permission is asked for the first time a feature needs it, and can be withdrawn at any time in your device's settings.</p>
+
+  <h2>6. Children</h2>
+  <p>Vdex is a tool for working film and video professionals. It is not directed at children under 13, or under the age of digital consent where you live, and we do not knowingly hold any information about them.</p>
+
+  <h2>7. Your choices</h2>
+  <ul>
+    <li>Export or back up everything, or erase everything, under Settings → Backups &amp; data.</li>
+    <li>Unlink a cloud storage or calendar in Vdex, and withdraw Vdex's access in that provider's account settings.</li>
+    <li>Deny or withdraw any device permission in your device's settings.</li>
+    <li>Uninstalling Vdex removes everything it stored on that device. Copies you placed in your own cloud storage stay there until you delete them.</li>
+  </ul>
+
+  <h2>8. Security</h2>
+  <p>Vdex is delivered over HTTPS, runs only code from the addresses listed above, and stores nothing on any server of ours. With a PIN set, your information is encrypted on the device whenever Vdex is locked, hidden or closed. The source code is open for anyone to review.</p>
+
+  <h2>9. Changes to this policy</h2>
+  <p>When this policy changes, the date at the top changes with it, and the full history is visible in the project's public repository.</p>
+
+  <h2>10. Contact</h2>
+  <p>Open an issue at <a href="https://github.com/TheCrowBro/Logi-Video-Production-app-/issues">github.com/TheCrowBro/Logi-Video-Production-app-/issues</a>.</p>
+
+  <a class="back" href="./">← Back to Vdex</a>
+</main>
+</body>
+</html>

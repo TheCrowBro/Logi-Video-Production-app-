@@ -14,7 +14,7 @@ const build = sha.slice(0, 7), built = new Date().toISOString().slice(0, 10);
 
 const walk = dir => readdirSync(dir).sort().flatMap(n => { const p = path.join(dir, n); return statSync(p).isDirectory() ? walk(p) : [p]; });
 const rel = p => path.relative(root, p).split(path.sep).join('/');
-const files = ['index.html', 'styles.css', 'manifest.webmanifest', ...['js', 'vendor', 'icons'].flatMap(d => walk(path.join(root, d)).map(rel))].filter(p => !/(^|\/)\./.test(p));
+const files = ['index.html', 'styles.css', 'manifest.webmanifest', 'privacy.html', ...['js', 'vendor', 'icons'].flatMap(d => walk(path.join(root, d)).map(rel))].filter(p => !/(^|\/)\./.test(p));
 const shell = ['./', ...files];
 
 const vPath = path.join(root, 'js', 'version.js');

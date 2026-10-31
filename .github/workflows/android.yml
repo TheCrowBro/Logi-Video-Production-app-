@@ -1,0 +1,79 @@
+# Builds the Android app for Google Play: a Trusted Web Activity that opens the live Vdex website inside a real
+# app (android/, generated with Bubblewrap). Runs when the Android project changes, or by hand from the Actions tab.
+#
+# Signing: the upload key lives in android/upload-key.keystore.enc, unlocked with the ANDROID_KEY_PASSPHRASE
+# repository secret. Without that secret the build is signed with a throwaway key: fine for trying the .apk on a
+# phone, not accepted by Google Play. Either way the .aab (for Play) and the .apk (for phones) are attached to the
+# rolling "android-latest" pre-release so they have a stable download address.
+name: Android app
+on:
+  push:
+    branches: [claude/videographer-gear-app-xlg8eb, main]
+    paths: ['android/**', '.github/workflows/android.yml']
+  workflow_dispatch:
+permissions:
+  contents: write   # publishes the android-latest pre-release
+concurrency:
+  group: android
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Use JDK 17 and the preinstalled Android SDK
+        run: |
+          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
+          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+      - name: Unlock the upload key, or make a throwaway test key
+        env:
+          ANDROID_KEY_PASSPHRASE: ${{ secrets.ANDROID_KEY_PASSPHRASE }}
+        run: |
+          cd android
+          if [ -n "$ANDROID_KEY_PASSPHRASE" ]; then
+            openssl enc -d -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -in upload-key.keystore.enc -out upload-key.keystore -pass env:ANDROID_KEY_PASSPHRASE
+            echo "KEY_KIND=upload key" >> "$GITHUB_ENV"
+          else
+            keytool -genkeypair -keystore upload-key.keystore -storetype PKCS12 -alias vdex -keyalg RSA -keysize 2048 -validity 10000 -storepass testing-only -keypass testing-only -dname "CN=Vdex test build"
+            echo "KEY_KIND=temporary test key (add the ANDROID_KEY_PASSPHRASE secret for a Play-ready build)" >> "$GITHUB_ENV"
+          fi
+      - name: Build the bundle and the apk
+        run: cd android && chmod +x gradlew && ./gradlew --no-daemon --quiet bundleRelease assembleRelease
+      - name: Sign them
+        env:
+          PASS: ${{ secrets.ANDROID_KEY_PASSPHRASE || 'testing-only' }}
+        run: |
+          cd android
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          cp app/build/outputs/bundle/release/app-release.aab vdex-android.aab
+          jarsigner -sigalg SHA256withRSA -digestalg SHA-256 -keystore upload-key.keystore -storepass "$PASS" -keypass "$PASS" vdex-android.aab vdex > /dev/null
+          jarsigner -verify vdex-android.aab > /dev/null
+          "$BT/zipalign" -f -p 4 app/build/outputs/apk/release/app-release-unsigned.apk aligned.apk
+          "$BT/apksigner" sign --ks upload-key.keystore --ks-key-alias vdex --ks-pass "pass:$PASS" --key-pass "pass:$PASS" --out vdex-android.apk aligned.apk
+          "$BT/apksigner" verify --print-certs vdex-android.apk | grep -i "SHA-256" | sed 's/.*: //' > fingerprint.txt
+          echo "Signed with the $KEY_KIND. Certificate SHA-256: $(cat fingerprint.txt)"
+          rm -f upload-key.keystore aligned.apk
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vdex-android
+          path: |
+            android/vdex-android.aab
+            android/vdex-android.apk
+      - name: Publish the rolling android-latest pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd android
+          VER=$(python3 -c "import json; m=json.load(open('twa-manifest.json')); print(m['appVersionName'] + ' (build ' + str(m['appVersionCode']) + ')')")
+          NOTES="Android app ${VER}, built from ${GITHUB_SHA::7}.
+
+          - **vdex-android.aab** is the file Google Play takes (Create release → upload).
+          - **vdex-android.apk** installs directly on an Android phone for testing.
+
+          Signed with the ${KEY_KIND}. Certificate SHA-256: $(cat fingerprint.txt)
+
+          The app is a thin shell that opens the live website, so it updates whenever the website does; a new shell build is only needed when the icon, address, name or permissions change."
+          gh release delete android-latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
+          gh release create android-latest vdex-android.aab vdex-android.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Android app ${VER}" --notes "$NOTES"

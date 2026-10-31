@@ -29,6 +29,7 @@
     },
     "files": [
       "index.html",
+      "privacy.html",
       "styles.css",
       "sw.js",
       "manifest.webmanifest",

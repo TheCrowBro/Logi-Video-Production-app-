@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.thecrowbro.vdex",
+      "sha256_cert_fingerprints": [
+        "3B:7A:61:49:18:F5:56:94:70:52:6B:D1:34:2D:90:01:2E:DA:49:E6:FC:7D:1C:D0:E2:AE:8A:16:C3:04:A5:C4"
+      ]
+    }
+  }
+]

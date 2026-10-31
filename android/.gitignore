@@ -1,0 +1,9 @@
+# Build output and local machine files
+build/
+.gradle/
+app/build/
+local.properties
+*.aab
+*.apk
+# The real upload key never goes into the repository; only the encrypted copy (upload-key.keystore.enc) does.
+upload-key.keystore
