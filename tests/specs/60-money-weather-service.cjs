@@ -119,6 +119,19 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.keyboard.press('Escape'); await sleep(200);
   const [csv2] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Asset register (CSV)' }).click()]);
   ok('asset register carries warranty, firmware and last service', /Warranty until/.test(fs.readFileSync(await csv2.path(), 'utf8')) && /2\.10/.test(fs.readFileSync(await csv2.path(), 'utf8')));
+  // where it is
+  await page.locator(`.gear-card:has-text("${gName}") .loc-chip`).click(); await page.waitForSelector('.sheet form');
+  await page.locator('.sheet form input[data-key="location"]').fill('Van'); await page.locator('.sheet form button[type=submit]').click();
+  await page.waitForFunction(() => import('./js/store.js').then(s => s.byId('gear', window.__g).location === 'Van'), null, { timeout: 8000 });
+  await sleep(300);
+  ok('the item shows where it is', /📍 Van/.test(await page.locator(`.gear-card:has-text("${gName}")`).innerText()));
+  await page.locator('.loc-chips .chip:has-text("Van")').click(); await sleep(300);
+  const shown = await page.locator('.gear-card').allInnerTexts();
+  ok('the place chip filters the list to items in that place', shown.length >= 1 && shown.every(t => /📍 Van/.test(t)), shown.length + ' cards');
+  await page.locator('.loc-chips .chip:has-text("Anywhere")').click(); await sleep(300);
+  const [csv3] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Asset register' }).click()]);
+  const reg = fs.readFileSync(await csv3.path(), 'utf8');
+  ok('the asset register has a Where column with the place', /"Where"/.test(reg) && new RegExp(`"${gName}".*"Van"`).test(reg));
   await page.screenshot({ path: S + '/features.png' });
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();

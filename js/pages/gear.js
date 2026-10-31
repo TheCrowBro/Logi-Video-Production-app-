@@ -4,7 +4,10 @@ import { db, upsert, remove, gearBookings, endOf, qtyOf, usedQty, totalValue, by
 import { openForm } from '../form.js';
 
 export const CATEGORIES = ['Camera', 'Lens', 'Lighting', 'Audio', 'Support', 'Grip', 'Drone', 'Monitoring', 'Power', 'Media', 'Accessories', 'Other'];
-const S = { q: '', cat: '', view: 'items' };
+const S = { q: '', cat: '', loc: '', view: 'items' };
+// Every place an item has been put: offered as you type, and as filter chips.
+const locations = () => [...new Set(db.gear.map(g => (g.location || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+const PLACE_HINT = 'e.g. Studio shelf B, Van, Flight case 2, With Jo, At the repair shop';
 
 function edit(g = {}) {
   openForm({
@@ -14,6 +17,7 @@ function edit(g = {}) {
       { key: 'name', label: 'Item', required: true, placeholder: 'e.g. Sony FX6 body' },
       { key: 'category', label: 'Category', list: CATEGORIES },
       { key: 'serial', label: 'Serial number' },
+      { key: 'location', label: 'Where it is', list: locations(), placeholder: PLACE_HINT, hint: 'Shelf, case, vehicle, person or shop. Your earlier answers are offered as you type.' },
       { key: 'qty', label: 'Quantity owned', type: 'number', min: 1, hint: 'Bought 4 of the same light? Enter 4 here.' },
       { key: 'value', label: 'Replacement value (each)', type: 'number' },
       { key: 'purchased', label: 'Purchased', type: 'date' },
@@ -72,7 +76,7 @@ export const gear = {
       const today = todayISO();
       const cats = [...new Set(db.gear.map(g => g.category || 'Other'))].sort();
       const q = S.q.toLowerCase();
-      const list = db.gear.filter(g => (!S.cat || (g.category || 'Other') === S.cat) && (!q || `${g.name} ${g.serial} ${g.notes}`.toLowerCase().includes(q)));
+      const list = db.gear.filter(g => (!S.cat || (g.category || 'Other') === S.cat) && (!S.loc || (g.location || '').trim() === S.loc) && (!q || `${g.name} ${g.serial} ${g.notes} ${g.location || ''}`.toLowerCase().includes(q)));
       const groups = [...groupBy(list, g => g.category || 'Other')].sort((a, b) => a[0].localeCompare(b[0]));
       const total = db.gear.reduce((s, g) => s + totalValue(g), 0);
       const units = db.gear.reduce((s, g) => s + qtyOf(g), 0);
@@ -88,10 +92,13 @@ export const gear = {
         serviceAlerts().length > 0 && h('div', { class: 'warn small' }, h('strong', null, '🔧 Due: '), serviceAlerts().map(x => `${x.g.name} (${x.states.map(st => st.text.toLowerCase()).join(', ')})`).join(' · ')),
         db.gear.length > 0 && h('div', { class: 'stats' },
           stat(units, 'items'), stat(money(total, sym), 'total value'), stat(out, 'booked ahead')),
-        db.gear.length > 5 && h('input', { class: 'search', type: 'search', placeholder: 'Search kit or serial…', value: S.q, 'aria-label': 'Search equipment', oninput: e => { S.q = e.target.value; draw(); const i = root.querySelector('.search'); i.focus(); i.setSelectionRange(S.q.length, S.q.length); } }),
+        db.gear.length > 5 && h('input', { class: 'search', type: 'search', placeholder: 'Search kit, serial or place…', value: S.q, 'aria-label': 'Search equipment', oninput: e => { S.q = e.target.value; draw(); const i = root.querySelector('.search'); i.focus(); i.setSelectionRange(S.q.length, S.q.length); } }),
         cats.length > 1 && h('div', { class: 'chips' },
           h('button', { class: 'chip' + (!S.cat ? ' on' : ''), 'aria-pressed': !S.cat, onclick: () => { S.cat = ''; draw(); } }, 'All'),
           cats.map(c => h('button', { class: 'chip' + (S.cat === c ? ' on' : ''), 'aria-pressed': S.cat === c, onclick: () => { S.cat = S.cat === c ? '' : c; draw(); } }, c))),
+        locations().length > 0 && h('div', { class: 'chips loc-chips', 'aria-label': 'Filter by place' },
+          h('button', { class: 'chip' + (!S.loc ? ' on' : ''), 'aria-pressed': !S.loc, onclick: () => { S.loc = ''; draw(); } }, 'Anywhere'),
+          locations().map(l => h('button', { class: 'chip' + (S.loc === l ? ' on' : ''), 'aria-pressed': S.loc === l, onclick: () => { S.loc = S.loc === l ? '' : l; draw(); } }, '📍 ' + l))),
         groups.length
           ? groups.map(([cat, items]) => h('section', { class: 'block' }, h('h3', null, cat),
             h('div', { class: 'list' }, items.sort((a, b) => a.name.localeCompare(b.name)).map(item => card(item, today, sym)))))
@@ -152,13 +159,20 @@ export function serviceNudge() {
 }
 
 
+// Where an item is right now. Tapping the place on its card changes it in one go, for loading the van or lending a lens.
+export function moveItem(g) {
+  openForm({ title: `Where is ${g.name}?`, values: { location: g.location || '' }, saveLabel: 'Save',
+    fields: [{ key: 'location', label: 'Where it is', list: locations(), placeholder: PLACE_HINT, hint: 'Leave it empty when there is nothing to say.' }],
+    onSave: v => { const place = (v.location || '').trim(); upsert('gear', { ...byId('gear', g.id), location: place }); toast(place ? `${g.name}: ${place}` : 'Place cleared'); } });
+}
 function card(g, today, sym) {
   const all = gearBookings(g.id);
   const ahead = all.filter(b => endOf(b) >= today);
   const past = all.length - ahead.length;
   return h('div', { class: 'card gear-card' },
     h('div', { class: 'card-row' },
-      h('div', { class: 'grow' }, h('strong', null, g.name), h('div', { class: 'muted small' }, [qtyOf(g) > 1 && `${qtyOf(g)} owned`, g.serial && 'S/N ' + g.serial, g.value !== '' && g.value != null && money(g.value, sym) + (qtyOf(g) > 1 ? ' each' : '')].filter(Boolean).join(' · '))),
+      h('div', { class: 'grow' }, h('strong', null, g.name), h('div', { class: 'muted small' }, [qtyOf(g) > 1 && `${qtyOf(g)} owned`, g.serial && 'S/N ' + g.serial, g.value !== '' && g.value != null && money(g.value, sym) + (qtyOf(g) > 1 ? ' each' : '')].filter(Boolean).join(' · ')),
+        h('button', { class: 'chip loc-chip' + (g.location ? '' : ' empty'), type: 'button', 'aria-label': `Where ${g.name} is`, title: 'Change where it is', onclick: () => moveItem(g) }, g.location ? '📍 ' + g.location : '📍 Where is it?')),
       h('span', { class: 'pill ' + (ahead.length ? 'st-confirmed' : 'st-delivered') }, ahead.length ? `${ahead.length} booked` : 'Free'),
       h('button', { class: 'icon-btn', 'aria-label': 'Service log for ' + g.name, title: 'Service log', onclick: () => serviceSheet(g) }, '🔧'),
       h('button', { class: 'icon-btn', 'aria-label': 'Edit ' + g.name, onclick: () => edit(g) }, '✎')),

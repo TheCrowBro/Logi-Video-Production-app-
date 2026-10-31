@@ -562,3 +562,8 @@ body.has-update-bar #page { padding-bottom: 110px; }
 .pay-list .card-row + .card-row { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
 .share-link { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
 .share-qr svg { width: 180px; height: 180px; background: #fff; padding: 6px; border-radius: 10px; display: block; margin: 0 auto; }
+
+/* Where an item is */
+.loc-chip { margin-top: 6px; }
+.loc-chip.empty { opacity: .65; }
+.gear-line .muted { text-align: right; }

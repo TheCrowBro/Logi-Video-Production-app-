@@ -169,6 +169,7 @@ export function loadSample() {
     g('Sennheiser MKH 416', 'Audio', 1000), g('Sound Devices MixPre-6 II', 'Audio', 900), g('Sachtler Flowtech 75 tripod', 'Support', 1400),
     g('DJI Mavic 3 Pro', 'Drone', 2200), g('Atomos Ninja V+', 'Monitoring', 900),
   ];
+  ['Flight case 1', 'Flight case 1', 'Flight case 1', 'Van', 'Van', 'Audio bag', 'Audio bag', 'Van', 'Studio', 'Flight case 1'].forEach((place, i) => { if (gear[i]) gear[i].location = place; });
   const crew = [
     { id: uid(), name: 'Sam Rivera', role: 'Sound Recordist', phone: '+1 555 0101', email: 'sam@example.com', link: 'https://example.com/sam', rate: '$450/day', notes: '' },
     { id: uid(), name: 'Jo Chen', role: '1st AC', phone: '+1 555 0102', email: 'jo@example.com', link: 'https://example.com/jo', rate: '$400/day', notes: '' },

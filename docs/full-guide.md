@@ -73,7 +73,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 |------|---------------|
 | **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, its call sheet, and its pre/post-production checklist. |
 | **Crew** | The freelancers you trust: role, phone, email, a link to their work, and which of your bookings they're on. |
-| **Equipment** | Everything you own, with serial numbers, values and quantities, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). |
+| **Equipment** | Everything you own, with serial numbers, values, quantities and where each item is, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). |
 | **Venues** | Places you shoot: map pin and directions, access and parking notes, nearest hospital, contact, and the rules (tripods, lighting, haze, drones… allowed, needs approval, or not allowed). |
 | **Insurance** | Your policies, claims lines and renewal dates, with a warning if your kit is worth more than it's insured for. |
 | **Me** | Your details and a QR code that hands your contact card, or your website, to anyone who scans it. |
@@ -129,6 +129,8 @@ Up to 16 days ahead, the booking page and the call sheet show the forecast for t
 ### Looking after the kit
 
 Each item on the Equipment page has a **🔧 service log**: services, sensor and lens cleans, calibrations, checks, repairs and firmware updates, with dates, notes and costs. Give an item a service interval and a warranty date (Edit) and the page warns when a service is overdue or a warranty is about to end; Vdex also reminds you once in a while at start-up. The asset register export includes the warranty, firmware and last service.
+
+Each item also has a **Where it is** field: a shelf, a case, the van, a person or the repair shop. It shows on the item's card (tap it to move the item in one go), in search, as 📍 filter chips, on the booking page's equipment list, and in the asset register. Places you have typed before are offered as you type.
 
 ### Keep track of a project
 
@@ -308,7 +310,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 |------|---------------|
 | **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, its call sheet, and its pre/post-production checklist. |
 | **Crew** | The freelancers you trust: role, phone, email, a link to their work, and which of your bookings they're on. |
-| **Equipment** | Everything you own, with serial numbers, values and quantities, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). |
+| **Equipment** | Everything you own, with serial numbers, values, quantities and where each item is, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). |
 | **Venues** | Places you shoot: map pin and directions, access and parking notes, nearest hospital, contact, and the rules (tripods, lighting, haze, drones… allowed, needs approval, or not allowed). |
 | **Insurance** | Your policies, claims lines and renewal dates, with a warning if your kit is worth more than it's insured for. |
 | **Me** | Your details and a QR code that hands your contact card, or your website, to anyone who scans it. |
@@ -364,6 +366,8 @@ Up to 16 days ahead, the booking page and the call sheet show the forecast for t
 ### Looking after the kit
 
 Each item on the Equipment page has a **🔧 service log**: services, sensor and lens cleans, calibrations, checks, repairs and firmware updates, with dates, notes and costs. Give an item a service interval and a warranty date (Edit) and the page warns when a service is overdue or a warranty is about to end; Vdex also reminds you once in a while at start-up. The asset register export includes the warranty, firmware and last service.
+
+Each item also has a **Where it is** field: a shelf, a case, the van, a person or the repair shop. It shows on the item's card (tap it to move the item in one go), in search, as 📍 filter chips, on the booking page's equipment list, and in the asset register. Places you have typed before are offered as you type.
 
 ### Keep track of a project
 

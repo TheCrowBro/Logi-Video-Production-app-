@@ -207,7 +207,7 @@ function detail(go) {
             const c = gearClash(b, g.id);
             return h('div', { class: 'card-row gear-line' + (c.length ? ' clash' : '') },
               h('span', null, g.name, usedQty(b, g.id) > 1 && h('b', { class: 'qty' }, ` ×${usedQty(b, g.id)}`), c.length > 0 && h('em', { class: 'clash-note' }, ' ⚠ also on: ' + c.map(x => x.title).join(', '))),
-              h('span', { class: 'muted' }, g.serial || ''));
+              h('span', { class: 'muted' }, [g.location && '📍 ' + g.location, g.serial].filter(Boolean).join(' · ')));
           })))
         : h('p', { class: 'muted' }, 'No equipment selected.'),
       gear.length > 0 && h('div', { class: 'muted small' }, `Kit value on this shoot: ${(db.profile.currency || '$')}${total.toLocaleString()}`),
