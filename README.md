@@ -58,7 +58,7 @@ Everything can be changed later. Nothing is ever lost by tapping the wrong thing
 
 ## Need help?
 
-- **Tap ?** at the top of any page, or inside any pop-up panel, for a walkthrough of what you're looking at.
+- **Tap ?** at the top of any page, or inside any pop-up panel, for a walkthrough of what you're looking at. Timecode is the trickiest part, so its page also has a **📖 Guide** with a start-to-finish walkthrough on a practice log.
 - **Settings → About → Take the tour** shows you around the whole app again.
 - **[The complete guide](docs/full-guide.md)** explains every button, separately for iPhone, Android and computers, with answers to common questions.
 

@@ -10,7 +10,7 @@ import { stats, workedMs } from './hours.js';
 import { saveOrShare } from './backup.js';
 import { printElement, htmlDocument } from './callsheet.js';
 import { KINDS, calc, renderDoc, docText, pdfBlocks, docTitle, payButtons } from './money-doc.js';
-import { CURRENCIES, codeFor, amountStr } from './pay.js';
+import { CURRENCIES, codeFor, amountStr, PAY_TYPES, typeOf, summaryOf, methodsOf } from './pay.js';
 // The QR library and the link packer load only when a document with a bank QR is drawn or a link is made.
 const qrSvg = (text, opts) => import('./qr.js').then(m => m.qrSvg(text, opts));
 const pack = obj => import('./link-pack.js').then(m => m.pack(obj));
@@ -18,7 +18,9 @@ import { SITE } from './version.js';
 export { KINDS };
 
 const DEF = { quotePrefix: 'Q-', invoicePrefix: 'INV-', nextQuote: 1, nextInvoice: 1, taxLabel: 'VAT', taxRate: 0, validDays: 30, dueDays: 14, terms: 'Payment within 14 days of the invoice date.', payment: '', dayRate: '', hourRate: '', overtimeRate: '', kitRate: '',
-  currencyCode: '', paypalMe: '', venmo: '', cashtag: '', payLink: '', payLinkLabel: '', upi: '', accountName: '', iban: '', bic: '' };
+  currencyCode: '', payMethods: null, paypalMe: '', venmo: '', cashtag: '', payLink: '', payLinkLabel: '', upi: '', accountName: '', iban: '', bic: '' };
+// The ways to get paid as a list (older fixed fields are read into it).
+export const payMethods = () => methodsOf(billing());
 export const billing = () => ({ ...DEF, ...(db.billing || {}) });
 export const setBilling = patch => update(d => { d.billing = { ...DEF, ...(d.billing || {}), ...patch, updatedAt: Date.now() }; });
 const sym = () => db.profile.currency || '$';
@@ -110,7 +112,7 @@ export function snapshot(b, kind) {
     lines: (doc.lines || []).map(({ desc, qty, unit, price }) => ({ desc, qty, unit, price })), taxLabel: doc.taxLabel || bl.taxLabel, taxRate: doc.taxRate, deposit: doc.deposit,
     payments: (doc.payments || []).map(({ date, amount, method }) => ({ date, amount, method: methodLabel(method) })), notes: doc.notes,
     currency: sym(), code: code(), payee: p.business || p.name || '', email: p.email || '',
-    pay: kind === 'invoice' ? { paypalMe: bl.paypalMe, venmo: bl.venmo, cashtag: bl.cashtag, payLink: bl.payLink, payLinkLabel: bl.payLinkLabel, upi: bl.upi, accountName: bl.accountName, iban: bl.iban, bic: bl.bic, payment: bl.payment } : {},
+    pay: kind === 'invoice' ? { methods: payMethods(), payment: bl.payment } : {},
   };
 }
 export const renderMoneyDoc = (b, kind) => renderDoc(snapshot(b, kind), { qr: qrSvg });
@@ -152,16 +154,16 @@ export async function openShareSheet(b, kind) {
 }
 
 /* ---------------------------------- payments ---------------------------------- */
-const METHODS = [['transfer', 'Bank transfer'], ['paypal', 'PayPal'], ['venmo', 'Venmo'], ['cashapp', 'Cash App'], ['link', 'Online payment'], ['upi', 'UPI'], ['card', 'Card'], ['cash', 'Cash'], ['cheque', 'Cheque'], ['other', 'Other']];
-export const methodLabel = m => (METHODS.find(([k]) => k === m) || [m, m])[1] || '';
+const LEGACY_METHODS = { transfer: 'Bank transfer', paypal: 'PayPal', venmo: 'Venmo', cashapp: 'Cash App', link: 'Online payment', upi: 'UPI', card: 'Card', cash: 'Cash', cheque: 'Cheque', other: 'Other' };
+export const methodLabel = m => LEGACY_METHODS[m] || m || '';
+const methodNames = () => [...new Set([...payMethods().map(m => typeOf(m.type).name), 'Bank transfer', 'Card', 'Cash', 'Cheque', 'Other'])];
 export function recordPayment(b, onDone) {
   b = current(b);
   const doc = docOf(b, 'invoice'); if (!doc) return;
-  const t = totals(doc), bl = billing();
-  const options = METHODS.filter(([k]) => !({ paypal: !bl.paypalMe, venmo: !bl.venmo, cashapp: !bl.cashtag, link: !bl.payLink, upi: !bl.upi })[k]).map(([k, l]) => [k, k === 'link' && bl.payLinkLabel ? bl.payLinkLabel : l]);
+  const t = totals(doc), names = methodNames(), options = names.map(n => [n, n]);
   openForm({
     title: `Payment on ${doc.number}`, saveLabel: 'Record',
-    values: { date: todayISO(), amount: t.balance > 0 ? amountStr(t.balance) : '', method: 'transfer', note: '' },
+    values: { date: todayISO(), amount: t.balance > 0 ? amountStr(t.balance) : '', method: names[0], note: '' },
     fields: [{ key: 'date', label: 'Date received', type: 'date', required: true }, { key: 'amount', label: `Amount (${sym()})`, type: 'number', min: 0, required: true, hint: t.balance > 0 ? `Balance due ${fmtMoney(t.balance)}` : 'Nothing outstanding' }, { key: 'method', label: 'How it arrived', type: 'select', options }, { key: 'note', label: 'Reference / note' }],
     onSave: v => {
       const amount = Math.round((Number(v.amount) || 0) * 100) / 100; if (!(amount > 0)) return toast('Enter the amount received');
@@ -286,6 +288,28 @@ export function openMoney(onOpen) {
 }
 
 /* --------------------------------- settings --------------------------------- */
+// The list of ways to get paid: edit, remove, and add from the catalogue.
+function payMethodsList() {
+  const methods = payMethods();
+  const save = list => setBilling({ payMethods: list });
+  const edit = (m, i) => {
+    const T = typeOf(m.type), fields = T.fields
+      ? [{ key: 'accountName', label: 'Account name', required: true }, { key: 'iban', label: 'IBAN or account number', required: true }, { key: 'bic', label: 'BIC / SWIFT / sort code' }]
+      : [{ key: 'value', label: T.ask, type: T.text ? 'textarea' : 'text', required: true, placeholder: T.placeholder || '', rows: T.text ? 3 : undefined, hint: T.blurb }, ...(T.label ? [{ key: 'label', label: 'Button label', placeholder: 'Pay by card' }] : [])];
+    openForm({ title: (i >= 0 ? 'Edit ' : 'Add ') + T.name, values: { value: '', label: '', accountName: '', iban: '', bic: '', ...m }, fields, saveLabel: i >= 0 ? 'Save' : 'Add',
+      onSave: v => { const next = { ...m, ...v, type: m.type }; const list = methods.slice(); if (i >= 0) list[i] = next; else list.push(next); save(list); toast(`${T.name} ${i >= 0 ? 'saved' : 'added'}`); },
+      onDelete: i >= 0 ? () => { save(methods.filter((_, j) => j !== i)); toast(`${T.name} removed`); } : null });
+  };
+  const add = () => { let close = () => {}; ({ close } = sheet('Add a way to pay', h('div', { class: 'stack' },
+    h('p', { class: 'small muted' }, 'Pick one. You can add as many as you like, and edit or remove them later.'),
+    h('div', { class: 'list' }, ...PAY_TYPES.map(T => h('button', { class: 'card tap', type: 'button', onclick: () => { close(); edit({ type: T.id }, -1); } }, h('strong', null, T.name), h('div', { class: 'muted small' }, T.blurb))))))); };
+  return h('div', { class: 'stack pay-methods' },
+    methods.length ? h('div', { class: 'list' }, ...methods.map((m, i) => h('div', { class: 'card card-row' }, h('div', null, h('strong', null, typeOf(m.type).name), h('div', { class: 'muted small' }, summaryOf(m) || '—')),
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => edit(m, i) }, 'Edit'), h('button', { class: 'icon-btn', 'aria-label': `Remove ${typeOf(m.type).name}`, onclick: () => { if (confirm('Remove this way to pay?')) { save(methods.filter((_, j) => j !== i)); toast('Removed'); } } }, '✕')))))
+      : h('p', { class: 'muted small' }, 'No ways to pay yet: invoices show only the free text below until you add one.'),
+    h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: add }, '+ Add a way to pay')));
+}
+
 export function billingPanel() {
   const wrap = h('div', { class: 'stack' });
   const bl = billing();
@@ -298,12 +322,9 @@ export function billingPanel() {
     h('div', { class: 'grid2' }, field('Tax name', 'taxLabel'), field('Tax rate (%)', 'taxRate', 'number', { min: 0 }), field('Quote number prefix', 'quotePrefix'), field('Next quote number', 'nextQuote', 'number', { min: 1 }), field('Invoice number prefix', 'invoicePrefix'), field('Next invoice number', 'nextInvoice', 'number', { min: 1 }), field('Quotes valid for (days)', 'validDays', 'number', { min: 1 }), field('Invoices due in (days)', 'dueDays', 'number', { min: 0 })),
     field('Payment terms (on every invoice)', 'terms', 'textarea'),
     h('h4', { class: 'pay-head' }, 'Getting paid'),
-    h('p', { class: 'small muted' }, 'Fill in whichever you use. Every invoice then carries Pay buttons with the balance filled in, your bank details and a QR code that banking apps can scan, and the link you send a client opens the invoice with the same buttons.'),
-    h('div', { class: 'grid2' },
-      h('div', { class: 'field' }, h('label', null, 'Currency for payment links'), h('select', { 'aria-label': 'Currency for payment links', onchange: e => setBilling({ currencyCode: e.target.value }) }, ...CURRENCIES.map(([c, sy]) => h('option', { value: c, selected: c === code() ? 'selected' : null }, `${c} ${sy.trim()}`)))),
-      field('PayPal.Me username', 'paypalMe', 'text', { placeholder: 'yourname', autocomplete: 'off' }), field('Venmo username', 'venmo', 'text', { placeholder: 'yourname', autocomplete: 'off' }), field('Cash App $cashtag', 'cashtag', 'text', { placeholder: 'yourname', autocomplete: 'off' }), field('UPI ID', 'upi', 'text', { placeholder: 'name@bank', autocomplete: 'off' }),
-      field('Payment page link (Stripe, Square, Revolut, Monzo…)', 'payLink', 'url', { placeholder: 'https://… — {amount} is filled in if you put it in the link' }), field('Label for that button', 'payLinkLabel', 'text', { placeholder: 'Pay by card' })),
-    h('div', { class: 'grid2' }, field('Account name', 'accountName'), field('IBAN or account number', 'iban'), field('BIC / SWIFT / sort code', 'bic')),
+    h('p', { class: 'small muted' }, 'Add the ways you like to be paid, as many as you want. Every invoice then carries a Pay button for each one that has a link, with the balance filled in, plain instructions for the ones that do not, bank details with a QR code banking apps can scan, and the invoice number as the reference. The link you send a client opens the invoice with the same buttons.'),
+    h('div', { class: 'field' }, h('label', null, 'Currency for payment links'), h('select', { 'aria-label': 'Currency for payment links', onchange: e => setBilling({ currencyCode: e.target.value }) }, ...CURRENCIES.map(([c, sy]) => h('option', { value: c, selected: c === code() ? 'selected' : null }, `${c} ${sy.trim()}`)))),
+    payMethodsList(),
     field('How to pay, in your own words (printed on every invoice)', 'payment', 'textarea'));
   return wrap;
 }

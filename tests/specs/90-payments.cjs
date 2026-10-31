@@ -17,12 +17,20 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   // Payment settings
   await page.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); s.update(d => { d.profile.currency = '€'; d.profile.business = 'Portside Films'; d.profile.email = 'me@example.com'; }); }));
-  await page.evaluate(() => import('./js/money.js').then(m => m.setBilling({ currencyCode: 'EUR', paypalMe: 'portsidefilms', cashtag: 'portside', payLink: 'https://pay.example.com/portside?amt={amount}&ref={reference}', payLinkLabel: 'Pay by card', accountName: 'Portside Films', iban: 'DE89 3704 0044 0532 0130 00', bic: 'COBADEFFXXX', payment: 'Reference: the invoice number.' })));
+  await page.evaluate(() => import('./js/money.js').then(m => m.setBilling({ currencyCode: 'EUR', payMethods: [{ type: 'paypal', value: 'portsidefilms' }, { type: 'cashapp', value: 'portside' }, { type: 'link', value: 'https://pay.example.com/portside?amt={amount}&ref={reference}', label: 'Pay by card' }, { type: 'bank', accountName: 'Portside Films', iban: 'DE89 3704 0044 0532 0130 00', bic: 'COBADEFFXXX' }, { type: 'zelle', value: 'pay@portsidefilms.example' }], payment: 'Reference: the invoice number.' })));
   await page.evaluate(() => window.logiGo('settings'));
   await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) > summary').click();
   const settingsText = await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices"))').innerText();
-  ok('Settings → Quotes & invoices has a Getting paid section', /Getting paid/.test(settingsText) && /PayPal\.Me/.test(settingsText) && /IBAN/.test(settingsText));
-  ok('the saved PayPal name is shown', (await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) input[aria-label="PayPal.Me username"]').inputValue()) === 'portsidefilms');
+  ok('Settings → Quotes & invoices lists the ways to pay', /Getting paid/.test(settingsText) && /PayPal/.test(settingsText) && /Bank transfer/.test(settingsText) && /Zelle/.test(settingsText) && /portsidefilms/.test(settingsText) && /DE89/.test(settingsText));
+  await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) button:has-text("Add a way to pay")').click(); await page.waitForSelector('.sheet .list');
+  const cat = await page.locator('.sheet').last().innerText();
+  ok('the catalogue offers the common systems and a custom one', /Venmo/.test(cat) && /Stripe/.test(cat) && /Square/.test(cat) && /Revolut/.test(cat) && /Monzo/.test(cat) && /Wise/.test(cat) && /UPI/.test(cat) && /Interac/.test(cat) && /Any other payment page/.test(cat) && /Other instructions/.test(cat));
+  await page.locator('.sheet .card:has-text("Venmo")').click(); await page.waitForSelector('.sheet form');
+  await page.locator('.sheet form input[data-key="value"]').fill('portside-films'); await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
+  const types = await page.evaluate(() => import('./js/money.js').then(m => m.payMethods().map(x => x.type)));
+  ok('a way added from the catalogue is saved', types.join(',') === 'paypal,cashapp,link,bank,zelle,venmo', types.join(','));
+  const legacy = await page.evaluate(() => import('./js/pay.js').then(p => p.methodsOf({ paypalMe: 'old', iban: 'GB00', payLink: 'https://x.test/{amount}', payLinkLabel: 'Card' }).map(m => m.type)));
+  ok('older fixed settings are read as a list', legacy.join(',') === 'paypal,link,bank', legacy.join(','));
 
   // An invoice on a delivered booking, open on its Money page
   const id = await page.evaluate(() => import('./js/store.js').then(s => { const b = s.db.bookings.find(x => x.title === 'Corporate headshots'); const iso = off => { const x = new Date(); x.setDate(x.getDate() + off); return x.toISOString().slice(0, 10); };
@@ -34,9 +42,9 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const status = await page.locator('.money-page .status-line').innerText();
   ok('status line shows overdue and the balance after the deposit', /overdue/.test(status) && /balance €1,120\.00/.test(status), status);
   const hrefs = await page.evaluate(() => [...document.querySelectorAll('.money-page .cs-paper .pay-btn')].map(a => [a.dataset.pay, a.getAttribute('href')]));
-  ok('invoice carries Pay buttons for the balance: PayPal, Cash App and the card page', hrefs.length === 3 && hrefs.some(([k, u]) => k === 'paypal' && u === 'https://paypal.me/portsidefilms/1120.00EUR') && hrefs.some(([k, u]) => k === 'cashapp' && u === 'https://cash.app/$portside/1120.00') && hrefs.some(([k, u]) => k === 'link' && u === 'https://pay.example.com/portside?amt=1120.00&ref=INV-0041'), JSON.stringify(hrefs));
+  ok('invoice carries Pay buttons for the balance: PayPal, Cash App, the card page and Venmo', hrefs.length === 4 && hrefs.some(([k, u]) => k === 'paypal' && u === 'https://paypal.me/portsidefilms/1120.00EUR') && hrefs.some(([k, u]) => k === 'cashapp' && u === 'https://cash.app/$portside/1120.00') && hrefs.some(([k, u]) => k === 'link' && u === 'https://pay.example.com/portside?amt=1120.00&ref=INV-0041') && hrefs.some(([k, u]) => k === 'venmo' && u === 'https://venmo.com/portside-films?txn=pay&amount=1120.00&note=INV-0041'), JSON.stringify(hrefs));
   const paper = await page.locator('.money-page .cs-paper').innerText();
-  ok('bank details and the reference are on the invoice', /IBAN \/ account: DE89/.test(paper) && /quote INV-0041 as the reference/.test(paper));
+  ok('bank details, the Zelle instruction and the reference are on the invoice', /IBAN \/ account: DE89/.test(paper) && /Zelle: pay@portsidefilms\.example/.test(paper) && /Reference: the invoice number/.test(paper) && /quote INV-0041 as the reference/.test(paper));
   await page.waitForSelector('.money-page .cs-paper .pay-qr svg', { timeout: 10000 }).catch(() => {});
   const epc = await page.evaluate(() => import('./js/pay.js').then(m => m.epcPayload({ iban: 'DE89 3704 0044 0532 0130 00', bic: 'COBADEFFXXX', accountName: 'Portside Films' }, { amount: 1120, code: 'EUR', reference: 'INV-0041' })));
   ok('a bank QR (EPC) is drawn with the euro amount and the reference', (await page.locator('.money-page .cs-paper .pay-qr svg').count()) === 1 && epc.split('\n').slice(0, 8).join('|') === 'BCD|002|1|SCT|COBADEFFXXX|Portside Films|DE89370400440532013000|EUR1120.00' && /INV-0041$/.test(epc));

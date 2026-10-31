@@ -115,7 +115,7 @@ function openSync(log) {
       loadOcr().then(() => { result.textContent = 'Fill the box with the camera’s timecode display, then tap Scan.'; }).catch(e => { result.textContent = 'Text reader unavailable (' + (e.message || 'needs a connection the first time') + '). Type the timecode instead.'; });
     } catch (e) { result.textContent = 'Camera unavailable: ' + (e.message || e.name) + '. Type the timecode instead.'; }
   };
-  const camBtn = h('button', { class: 'btn ghost', onclick: startCam }, '📷 Use camera');
+  const camBtn = h('button', { class: 'btn ghost tc-cam-btn', onclick: startCam }, '📷 Use camera');
 
   async function loadOcr() {
     if (ocr) return ocr;
@@ -161,7 +161,7 @@ function openSync(log) {
         h('button', { class: 'btn ghost', onclick: () => { manual.value = best.tc; manual.focus(); } }, 'Edit first')));
   }
 
-  body.append(
+  body.append(...nodes( // the native append would print a false as text on a free-run log
     live,
     record && h('label', { class: 'check card' }, rollingBox, h('span', null, 'The camera is recording right now', h('em', null, ' — leave unticked if it is stopped and the display is holding its last timecode'))),
     h('div', { class: 'card' },
@@ -174,7 +174,7 @@ function openSync(log) {
       h('p', { class: 'small muted' }, 'Point the phone at the camera’s timecode display. The reading is taken the moment you tap Scan, so a slow read doesn’t put you out.'),
       h('div', { class: 'cam-wrap tc-cam' }, video, h('div', { class: 'tc-reticle', 'aria-hidden': 'true' })),
       h('div', { class: 'actions' }, camBtn, scanBtn), result),
-    log.sync && h('button', { class: 'btn ghost tc-clear', onclick: () => { upsert('logs', { ...byId('logs', log.id), sync: null }); toast('Sync cleared'); } }, 'Clear sync'));
+    log.sync && h('button', { class: 'btn ghost tc-clear', onclick: () => { upsert('logs', { ...byId('logs', log.id), sync: null }); toast('Sync cleared'); } }, 'Clear sync')));
 
   const { close } = sheet('Sync timecode', body, { onClose: () => { clearInterval(iv); cancelAnimationFrame(raf); stream && stream.getTracks().forEach(t => t.stop()); ocr && ocr.terminate().catch(() => {}); } });
   closeSheet = close;
@@ -232,6 +232,7 @@ function picker() {
   const logs = [...db.logs].sort((a, b) => (b.created || '').localeCompare(a.created || ''));
   return h('div', null,
     h('div', { class: 'page-head' }, h('h1', null, 'Timecode notes'), h('div', { class: 'actions' },
+      h('button', { class: 'btn ghost small tc-guide', onclick: openGuide }, '📖 Guide'),
       h('button', { class: 'btn ghost' + (link.link.status === 'connected' ? ' linked-pill' : ''), onclick: () => openLink(null) }, link.link.status === 'connected' ? `🔗 ${link.link.peer?.name || 'Linked'}` : '🔗 Link device'),
       h('button', { class: 'btn primary', onclick: newLog }, '+ New log'))),
     h('p', { class: 'muted small' }, 'Sync the phone to your camera’s timecode once, then every note you jot down is stamped with the camera’s timecode for the edit.'),
@@ -371,6 +372,29 @@ function setScript(log, script) {
   });
 }
 
+// A practice log for the walkthrough and for trying things out: synced ten minutes ago at 01:00:00:00, with a few
+// notes and the sample script, so every part of the page can be used without a camera. Delete it from ⚙ when done.
+export function openPracticeLog() {
+  let log = db.logs.find(l => l.practice);
+  if (!log) {
+    const r = rate('23.976'), now = Date.now(), base = tcToFrames('01:00:00:00', r), fps = r.nominal * r.scale;
+    const at = secAgo => new Date(now - secAgo * 1000).toISOString();
+    const script = buildScript('Sample script', textToLines(SAMPLE_SCRIPT));
+    const para = script && script.paras && script.paras[Math.min(2, script.paras.length - 1)];
+    log = { id: uid(), title: 'Practice log (delete when done)', practice: true, created: todayISO(), rate: '23.976', mode: 'free', camera: 'Practice camera', autoTakes: true, take: 0,
+      sync: { frames: base, ms: now - 600 * 1000, how: 'typed' }, script,
+      notes: [
+        { id: uid(), frames: base + Math.round(42 * fps), text: 'Plane overhead, wait for it to pass', at: at(558) },
+        { id: uid(), frames: base + Math.round(185 * fps), text: 'Great take, use this one', at: at(415) },
+        { id: uid(), frames: base + Math.round(301 * fps), text: 'Boom in shot for a second at the top', at: at(299) },
+        para ? { id: uid(), frames: base + Math.round(420 * fps), text: 'Marked from the script', at: at(180), para: para.id, quote: quoteOf(para) } : null,
+      ].filter(Boolean) };
+    upsert('logs', log);
+  }
+  S.id = log.id; S.view = 'notes'; S.target = null; try { localStorage.setItem('logi-tclog', log.id); } catch { /* ignore */ }
+  if (window.logiPage && window.logiPage() !== 'tcnotes') window.logiGo('tcnotes'); else S.redraw && S.redraw();
+}
+const openGuide = () => import('../tutorials.js').then(m => m.openTcGuide());
 export function receiveSharedFile(file) { S.shared = file; S.view = 'script'; window.logiGo('tcnotes'); S.redraw(); } // redraw covers the case where this tab is already open
 
 function openImport(log, preset) {

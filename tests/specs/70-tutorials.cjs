@@ -14,9 +14,10 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('the ? button is in the top bar', await page.locator('#helpBtn').isVisible());
   // Walk a tutorial: count the steps that resolved to a highlighted box, and that Done closes it
   const walk = async (btn = '#helpBtn') => {
-    await page.locator(btn).last().click(); await page.waitForSelector('.tour-card');
+    if (btn) await page.locator(btn).last().click();
+    await page.waitForSelector('.tour-card');
     let spots = 0, cards = 0, titles = [];
-    for (let i = 0; i < 25; i++) {
+    for (let i = 0; i < 40; i++) {
       const h2 = page.locator('.tour-card h2');
       if (!(await h2.count())) { await sleep(600); if (!(await h2.count())) break; } // the tour closed by itself: nothing to point at
       cards++;
@@ -74,13 +75,31 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card');
   await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet');
   const names = await page.locator('.sheet .card.tap').allInnerTexts();
-  ok('chooser lists every page tutorial (sheet walkthroughs live behind the sheets’ own ?)', names.length === 15 && names.some(n => /a log/.test(n)), names.join(', '));
+  ok('chooser lists every page tutorial (sheet walkthroughs live behind the sheets’ own ?)', names.length === 16 && names.some(n => /a log/.test(n)) && names.some(n => /start to finish/.test(n)), names.join(', '));
   await page.locator('.sheet .card.tap', { hasText: 'A booking' }).click();
   await page.waitForSelector('.tour-card', { timeout: 10000 });
   ok('choosing “A booking” opens a booking and starts its tutorial', (await page.locator('.bk-detail').count()) === 1 && /booking/i.test(await page.locator('.tour-card h2').innerText()));
   await page.keyboard.press('Escape'); await sleep(200);
   ok('Escape closes the tutorial and the page is usable again', (await page.locator('.tour').count()) === 0 && !(await page.evaluate(() => document.getElementById('app').inert)));
   await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card'); await page.screenshot({ path: S + '/tutorial.png' }); await page.keyboard.press('Escape');
+  // Timecode, start to finish: on the practice log, with the sheets opening and closing along the way
+  await page.evaluate(() => import('./js/pages/tcnotes.js').then(m => m.openPracticeLog())); await sleep(700);
+  ok('the practice log exists, synced, with notes and a script', await page.evaluate(() => import('./js/store.js').then(s => { const l = s.db.logs.find(x => x.practice); return !!(l && l.sync && l.notes.length >= 3 && l.script); })));
+  ok('the practice log is open with a running clock', /^01:1\d:\d\d/.test(await page.locator('.tc-clock').innerText()), await page.locator('.tc-clock').innerText());
+  await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('tccourse')));
+  const course = await walk(null);
+  ok(`Timecode, start to finish: ${course.cards} steps, ${course.spots} highlighted, closes on Done`, course.cards >= 24 && course.spots >= 15 && course.closed, course.titles.join(' · '));
+  ok('the course visited the sync, link and export sheets', ['What the phone thinks', 'Type what the camera shows', 'Link a laptop', 'Export for the editor'].every(t => course.titles.includes(t)));
+  ok('no sheet is left open after the course', (await page.locator('.sheet').count()) === 0);
+  await page.evaluate(() => { document.querySelector('.tc-log-head .btn.ghost.small')?.click(); }); await sleep(300);
+  await page.locator('#page button:has-text("Guide")').first().click(); await page.waitForSelector('.sheet .tc-guide-body');
+  const guide = await page.locator('.sheet').last().innerText();
+  ok('the timecode guide reads through the whole job', /What timecode is/i.test(guide) && /Before the shoot/i.test(guide) && /Syncing/i.test(guide) && /During the shoot/i.test(guide) && /Scripts/i.test(guide) && /After the shoot/i.test(guide) && /looks wrong/i.test(guide) && /drop frame/i.test(guide)); // headings are shown in capitals
+  ok('the guide offers the walkthrough and the practice log', (await page.locator('.sheet button:has-text("Walk me through it")').count()) === 1 && (await page.locator('.sheet button:has-text("practice log")').count()) === 1);
+  await page.keyboard.press('Escape'); await sleep(300);
+  await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card .tour-actions');
+  ok('the timecode page tutorials offer the guide', (await page.locator('.tour-card button:has-text("Guide")').count()) === 1);
+  await page.keyboard.press('Escape'); await sleep(200);
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.error('TEST CRASHED', e); process.exit(1); });

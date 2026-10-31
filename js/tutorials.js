@@ -8,6 +8,17 @@ const T = (title, text, ...rest) => { const opts = rest.length && typeof rest[re
 const tab = n => () => { const b = document.querySelector(`.tc-views button:nth-child(${n})`); if (b) b.click(); };
 const topSheet = () => { const all = document.querySelectorAll('.sheet'); return all[all.length - 1] || document; };
 const wait = ms => new Promise(r => setTimeout(r, ms));
+// A card with no box to point at: a short read between the highlighted steps.
+const C = (title, text) => ({ title, text, target: null });
+const clickQ = sel => { const el = document.querySelector(sel); if (el) { el.click(); return true; } return false; };
+const closeSheet = () => { const all = document.querySelectorAll('.sheet'); const top = all[all.length - 1]; if (top) top.querySelector('.sheet-tools button:last-child')?.click(); };
+const closeSheets = async () => { for (let i = 0; i < 4 && document.querySelector('.sheet'); i++) { closeSheet(); await wait(120); } };
+const toLogs = async () => { await closeSheets(); if (document.querySelector('.tc-log-head')) clickQ('.tc-log-head .btn.ghost.small'); };
+const openPractice = async () => { await closeSheets(); const m = await import('./pages/tcnotes.js'); m.openPracticeLog(); await wait(300); };
+const openSyncSheet = async () => { await closeSheets(); await wait(100); clickQ('.tc-head .card-row .btn'); };
+const openLinkSheet = async () => { await closeSheets(); await wait(100); clickQ('.tc-log-head .actions button:nth-child(1)'); };
+const openExportSheet = async () => { await closeSheets(); await wait(100); clickQ('.tc-log-head .actions button:nth-child(2)'); };
+const backToNotes = async () => { await closeSheets(); tab(1)(); };
 
 export const TUTORIALS = {
   around: { name: 'Getting around', page: null, steps: [
@@ -104,6 +115,35 @@ export const TUTORIALS = {
     T('Live readings', 'Numbers update as you move the phone.', '.readouts'),
     T('Accuracy', 'Phones estimate; the warning says how far to trust each tool.', '#page .warn'),
   ] },
+  tccourse: { name: 'Timecode, start to finish', page: 'tcnotes', course: true, steps: [
+    C('Timecode, start to finish', 'About five minutes, on a practice log that Vdex creates for you, so you can try every part without a camera. Delete the practice log afterwards from its ⚙ settings. Next moves on, Back re-reads, Skip leaves at any point.'),
+    C('What timecode is', 'A camera stamps every frame with a running clock: hours, minutes, seconds and frames, like 01:04:22:15, and the editor sees the same stamp on the footage. If your notes carry the camera’s timecode, “the good take” or “plane overhead” is one search away in the edit, however many cards and cameras there were.'),
+    C('Free run or record run', 'Free run: the camera’s clock always counts, like a wall clock, even between takes. Most documentary, event and corporate work. Record run: it counts only while recording, so each take carries on from where the last one stopped; common on drama, and the default on some cameras. Vdex handles both, but it must know which: check the camera’s timecode menu.'),
+    C('Frame rate', 'Pick the camera’s timecode frame rate, which is not always the sensor or project rate: 23.976 for most mirrorless and cinema cameras shooting 24p, 25 in PAL regions, 29.97 for NTSC broadcast. 29.97 and 59.94 come in drop frame (DF, shown with a semicolon) and non-drop; the camera menu says which. A wrong rate makes stamps drift by a few seconds every hour.'),
+    T('Start a log', '+ New log: one per camera and per shoot day. Name it clearly (job, day, camera), set the frame rate and the mode to match the camera, and tie it to the booking. The practice log for this walkthrough is already in the list.', '#page .page-head .actions .btn.primary', { before: toLogs }),
+    T('Your logs', 'Each card shows the date, the frame rate, the camera and how many notes it holds; the green pill means it is synced. Tap one to open it. Logs travel with your cloud storage, so a laptop linked to the same storage sees them too.', '#page .list'),
+    T('Inside a log', 'The header: ‹ Logs goes back, 🔗 links another device, Export shares the notes, and ⚙ opens the log’s settings: frame rate, mode, whether each take is logged, and delete.', '.tc-log-head', { before: openPractice }),
+    T('Sync', 'Once per log, Vdex has to learn what the camera’s clock says. That is Sync (Re-sync once it is done). The next four steps go through the sheet it opens.', '.tc-head .card-row .btn'),
+    T('What the phone thinks', 'When a log is already synced, the top of the sheet shows the timecode the phone expects the camera to show right now. Hold the phone next to the camera and compare. A difference of a second or more means drift: sync again.', '.sheet .tc-live', { before: openSyncSheet }),
+    T('Recording right now?', 'Record run only. Tick it if the camera is rolling while you sync, so the phone counts from the moment you tap; leave it unticked if the camera is stopped and holding a timecode.', '.sheet label.check.card'),
+    T('Type what the camera shows', 'Read the camera’s timecode display, type it, and tap Sync at the exact moment the display shows that value. A trick: type the next round number, say 01:05:00:00, and tap Sync as the camera reaches it. Being a second out matters; the frame does not.', '.sheet .row-edit'),
+    T('Or scan the display', 'Use camera turns on the phone’s camera. Point it at the camera’s timecode display and tap Scan: the reading is taken at the instant you tap and the digits are worked out afterwards, so a slow read never puts you out. The text reader downloads once, so do that with a connection, and check the digits before you accept them.', '.sheet .tc-cam-btn', '.sheet .tc-cam', '.sheet .cam-wrap'),
+    T('Start again', 'Clear sync forgets the sync. Re-sync after a battery change, after the camera has been off, or whenever the comparison at the top looks out.', '.sheet .tc-clear'),
+    T('The clock', 'Back on the log: the camera’s timecode as the phone follows it, frame by frame. Dashes mean not synced yet. In record run it holds still between takes.', '.tc-clock', { before: closeSheets }),
+    T('State', 'The frame rate, the mode, and when and how the sync was done: by hand or by camera scan. In record run it names the take that is recording.', '.tc-head > .muted.small'),
+    C('Roll and cut', 'In record run the log shows ● Roll and ■ Cut. Tap Roll as the camera starts and Cut as it stops: the clock pauses between takes and each take is logged as a note with its length, so the editor gets a take list for free. The practice log is free run, so they are not shown here.'),
+    T('Take a note', 'Type what you see: “plane overhead”, “great take”, “boom in shot”. The timecode is captured the moment you start typing, not when you finish, so the stamp is the moment you noticed it. Enter adds the note.', '.tc-composer', { before: backToNotes }),
+    T('Mark now', '⏺ Mark now drops a stamp with no words for a fast moment; tap the note later to add the text. Next note at shows the stamp the next note will get.', '.tc-composer .card-row'),
+    T('Your notes', 'In timecode order. Tap the text to edit it, the timecode to correct it (a note taken before syncing says unsynced and can be fixed here), and a quoted line to jump to that spot in the script.', '.tc-notes'),
+    T('The script', 'Add the script and tap any line, or press and hold to select words, to pin a stamp to it. Word documents, Google Docs (downloaded as Word, or shared to Vdex on Android), plain text and Fountain all work, and Try a sample script shows how.', '.script', '#page .tc-pane .empty', { before: tab(2) }),
+    T('Mark a line', 'What you selected shows here with the live timecode. Mark stamps it; Mark + note stamps it with a note. The badge on the line shows its stamp; tap it to read the note.', '.sc-bar'),
+    T('Replace or remove', 'The script’s name and counts. Replace swaps the document and keeps your notes and their quotes.', '.sc-head'),
+    T('Link a laptop', 'Two devices, one log: show a code on one, scan it on the other, then scan the reply. Same Wi‑Fi or hotspot, no internet, no account. Their clocks are measured against each other, so stamps agree to a few milliseconds. Typing on a laptop while the phone sits by the camera is the comfortable set-up.', '.sheet .actions.center', '.sheet .link-code', '.sheet .link-state', { before: openLinkSheet }),
+    T('Export for the editor', 'Share as text for anyone, or as a spreadsheet (CSV) with the timecode, the note, the script line and the time it was captured, which an editor turns into markers.', '.sheet .sheet-body', { before: openExportSheet }),
+    T('Log settings', '⚙ changes the frame rate, free or record run, whether each take is logged as a note, and deletes the log. The practice log can go once you are done.', '.tc-log-head .actions .icon-btn', { before: closeSheets }),
+    C('On set, in order', '1. A new log per camera, matching its frame rate and mode. 2. Sync next to the camera; re-check after lunch and battery changes. 3. Notes as things happen; Mark now for fast moments. 4. Record run: Roll and Cut with the camera. 5. Script marks for scripted work. 6. Export the CSV for the editor the same evening, while it is fresh.'),
+    C('When something looks wrong', 'Stamps a few seconds out: the frame rate is wrong or the camera drifted; fix the rate in ⚙ and re-sync. The clock shows dashes: not synced yet. Notes say unsynced: they were taken before the sync; tap their timecode to correct them. Two cameras: one log each, synced separately. Phone and laptop disagree: link them. The 📖 Guide on the logs page goes into all of it.'),
+  ] },
   tcnotes: { name: 'Timecode notes: your logs', page: 'tcnotes', steps: [
     T('One log per camera or day', '+ New log starts one: name it (camera, card, day), pick the frame rate, say whether the camera’s timecode is free run (always counting) or record run (counts only while recording), and tie it to a booking.', '#page .page-head .actions .btn.primary', '#page .page-head'),
     T('Link device', 'Pairs this phone with a laptop on the same Wi‑Fi or hotspot, with no internet or account. One shows a code, the other scans it, then they swap. While linked, the open log, its sync, Roll/Cut and every note stay identical on both.', '#page .page-head .actions button:first-child'),
@@ -169,7 +209,7 @@ export function openTutorial(key = currentContext()) {
   const t = TUTORIALS[key]; if (!t) return;
   const steps = stepsFor(key);
   if (!steps.length) return toast('Nothing to show here yet');
-  runTour(steps, { root: t.sheet ? topSheet : null, footer: (n, stop) => n === 0 && !t.sheet && h('button', { class: 'btn ghost small', onclick: () => { stop(); openChooser(); } }, 'Other pages…') });
+  runTour(steps, { root: t.sheet ? topSheet : null, footer: (n, stop) => n === 0 && !t.sheet && [h('button', { class: 'btn ghost small', onclick: () => { stop(); openChooser(); } }, 'Other pages…'), key.startsWith('tc') && h('button', { class: 'btn ghost small', onclick: () => { stop(); openTcGuide(); } }, '📖 Guide')] });
 }
 
 // Reaches a page (and, for a booking, a call sheet or money, the first booking) before running its tutorial.
@@ -195,6 +235,30 @@ export function openChooser() {
   const body = h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'A short walkthrough of any page. Each one highlights the boxes on that page with a line about what they do.'),
     h('div', { class: 'list' }, ...Object.entries(TUTORIALS).filter(([, t]) => !t.sheet).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: async () => { close(); if (await reach(key)) openTutorial(key); } }, h('strong', null, t.name)))),
-    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { close(); startTour(); } }, '🧭 The welcome tour again')));
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { close(); openTcGuide(); } }, '📖 Timecode guide'), h('button', { class: 'btn ghost small', onclick: () => { close(); startTour(); } }, '🧭 The welcome tour again')));
   ({ close } = sheet('Tutorials', body));
+}
+
+/* ------------------------------ the timecode guide ------------------------------ */
+// A read-through of the whole job, for the section new users find hardest. Opened from the 📖 button on the
+// timecode page, from the tutorials chooser, and from the timecode walkthroughs.
+const GUIDE = [
+  ['What timecode is, and why notes need it', ['A camera stamps every frame with a running clock: hours, minutes, seconds and frames, written 01:04:22:15. The editor sees that same stamp on every clip. A note that carries the camera’s timecode therefore points at an exact frame, on any card from any camera, months later.', 'Vdex does not touch the camera. It learns what the camera’s clock says once (the sync), follows it on the phone, and stamps every note with it.']],
+  ['Before the shoot', ['One log per camera and per shoot day. Name it so it still makes sense in a year: job, day, camera.', 'Frame rate: the camera’s timecode rate, from its timecode menu, which is not always the recording rate. Most mirrorless and cinema cameras shooting 24p use 23.976; PAL regions use 25; NTSC broadcast uses 29.97. 29.97 and 59.94 come in drop frame (DF, written with a semicolon, 01:04:22;15) and non-drop; the camera menu says which.', 'Mode: free run means the clock always counts, like a wall clock, even between takes; record run means it counts only while recording. Documentary, event and corporate work is usually free run; drama and some camera defaults are record run. On most cameras this lives under a menu called Timecode, TC/UB or TC Setup, as TC Run or Run Mode.', 'A wrong rate or mode is the usual cause of stamps that drift: 23.976 taken as 24 drifts about 3.6 seconds every hour.']],
+  ['Syncing', ['Tap Sync on the log. Type the timecode the camera shows and tap Sync at the exact moment it shows that value, or point the phone at the camera’s display and tap Scan. A trick for typing: enter the next round number, say 01:05:00:00, and tap as the camera reaches it. Being a second out matters; the frame does not.', 'The scan takes its reading at the instant you tap, then works out the digits, so a slow read never puts you out. It downloads the text reader the first time, so do that with a connection. Check the digits it read before accepting them.', 'In record run, tick Recording right now? if the camera is rolling while you sync; leave it unticked if the camera is stopped and holding a timecode.', 'Once synced, the sheet shows the timecode the phone expects the camera to show. Compare them now and then, and after lunch, battery changes or the camera being switched off: a second or more of difference means re-sync.', 'Several cameras: one log each, each synced to its own camera. If the cameras are jam-synced to one timecode generator, one sync serves them all; keep a log per camera anyway, for the editor’s sake.']],
+  ['During the shoot', ['Type what you see, as it happens: “plane overhead”, “great take”, “boom in shot”. The stamp is taken the moment you start typing, not when you finish, so it is the moment you noticed it. Enter adds the note.', '⏺ Mark now drops a stamp with no words for a fast moment; add the words later by tapping the note.', 'Record run: tap ● Roll as the camera starts and ■ Cut as it stops. The clock pauses between takes and each take is logged with its length.', 'Tap a note’s text to edit it, its timecode to correct it, a quoted line to jump to the script. Notes taken before the sync say unsynced; correct them by hand from the camera’s display.']],
+  ['Scripts', ['Add the script to mark lines rather than describe them. Word documents (.docx), plain text and Fountain files open directly; a Google Doc is downloaded as Word, shared to Vdex from the Docs app on Android, or pasted as text. Try a sample script shows how it works.', 'Tap a line, or press and hold to select words, then Mark to stamp it or Mark + note to stamp it with a note. The badge on the line shows its stamp. Replacing the script keeps the notes and their quotes.']],
+  ['A phone and a laptop together', ['Link device on both: one shows a code, the other scans it, then they swap. Same Wi‑Fi or hotspot, no internet, no account. The clocks are measured against each other, so stamps from either device agree to a few milliseconds. A laptop without a camera uses Copy code and paste instead.', 'While linked, the open log, its sync, Roll and Cut and every note stay identical on both. The comfortable set-up: the phone by the camera for syncing and quick marks, the laptop for typing.']],
+  ['After the shoot', ['Export shares the notes as text for anyone, or as a spreadsheet (CSV) with the timecode, the note, the script line and the time of day it was captured. Editors turn the CSV into markers in their editing software, or simply search it. Send it the same evening, while it is fresh.', 'Logs travel with your cloud storage like everything else in Vdex, so they are on your computer too.']],
+  ['When something looks wrong', ['Stamps are a few seconds out: the frame rate or mode is wrong, or the camera drifted. Fix the rate in ⚙ and re-sync.', 'The clock shows dashes: the log is not synced yet.', 'Notes say unsynced: they were taken before the sync. Tap their timecode to correct them.', 'The phone and the laptop disagree: link them, or sync each to the camera separately.', 'Drop-frame confusion: a timecode with a semicolon is drop frame; set the log to the DF rate and type the semicolon, or let the scan read it.', 'A practice log, with a sync, a few notes and the sample script, lets you try all of this without a camera: Walk me through it below makes one.']],
+];
+export function openTcGuide() {
+  let close = () => {};
+  const body = h('div', { class: 'stack tc-guide-body' },
+    h('p', { class: 'small muted' }, 'Everything about timecode notes in one read, in the order of a shoot day. Five minutes.'),
+    ...GUIDE.map(([head, paras]) => h('section', null, h('h3', null, head), ...paras.map(t => h('p', null, t)))),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', onclick: async () => { close(); if (await reach('tccourse')) openTutorial('tccourse'); } }, '🎓 Walk me through it'),
+      h('button', { class: 'btn ghost', onclick: async () => { close(); const m = await import('./pages/tcnotes.js'); m.openPracticeLog(); } }, '🧪 Open the practice log')));
+  ({ close } = sheet('Timecode guide', body));
 }

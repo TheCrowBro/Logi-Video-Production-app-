@@ -114,7 +114,7 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 5. **Adding the script on an iPhone.** Tap **Script → Word document** and pick a `.docx` from the Files app (iCloud Drive, Google Drive and Dropbox all show up in Files). For a Google Doc, open it in the Docs app, tap ⋮ → *Share & export → Send a copy → Word* and save it to Files first, or select all, copy, and paste the text into Vdex. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
 6. **Export** shares the notes as text or a spreadsheet, to Mail, AirDrop, Files or anywhere else in the share sheet.
 
-**Walkthroughs:** tap **?** at the top of the timecode page for a tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets for their own step-by-step walkthroughs.
+**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job, from choosing the frame rate to exporting for the editor, with a **Walk me through it** button that runs *Timecode, start to finish*: about 25 steps on a practice log Vdex makes for you (synced, with notes and a sample script, so there is nothing to set up and no camera needed; delete it from ⚙ when you are done). The **?** at the top gives the short tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps.
 
 **iPhone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
@@ -259,7 +259,7 @@ On the phone, yes once a PIN is set: whenever Vdex is locked, in the background 
 
 Vdex has no payment processor in the middle, and no fees. Instead, every invoice carries the ways you already get paid, and a link the client can open.
 
-1. **Tell Vdex how you get paid**, once: Settings → Quotes & invoices → Getting paid. Fill in whichever you use: your PayPal.Me name, Venmo, Cash App $cashtag, UPI ID, a payment page of your own (a Stripe or Square payment link, Revolut, Monzo, Wise…), and your bank details. Pick the currency for the links.
+1. **Tell Vdex how you get paid**, once: Settings → Quotes & invoices → Getting paid → **+ Add a way to pay**, as many as you like: PayPal, Venmo, Cash App, Zelle, a Stripe or Square payment link, Wise, Revolut, Monzo, Interac e-Transfer, UPI, a bank account, any other payment page, or plain instructions (cheque, cash, crypto…). Edit or remove them any time, and pick the currency for the links.
 2. **Every invoice then carries Pay buttons** for the balance due, your bank details, a QR code that European banking apps scan to fill in the transfer, and the invoice number as the reference. They are on the printed invoice, in the PDF, in the email and on the client's page.
 3. **Send the client a link.** On the invoice (or the quote), tap **Link for the client**. The whole document is packed inside the link, so nothing is stored online and nothing can go missing. Copy it, share it, email it, or let the client scan the QR code. It opens as a web page with the Pay buttons, Print and Save PDF.
 4. **Record payments** as they arrive with **Record a payment**: the amount proposed is the balance, so a full payment is one tap. Part payments show as "part paid" with the balance; when the balance reaches zero the invoice is marked paid and the pipeline is ticked. The Pay buttons always ask for what is still owed.
@@ -349,7 +349,7 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 5. **Adding the script on Android.** Share it straight into Vdex: in the Google Docs app tap ⋮ → *Share & export → Send a copy → Word*, then choose **Vdex** in the share sheet. Any `.docx` can be shared to Vdex the same way, or picked with **Script → Word document**. You can also paste the text. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
 6. **Export** shares the notes as text or a spreadsheet, to Gmail, Drive or anywhere else in the share sheet.
 
-**Walkthroughs:** tap **?** at the top of the timecode page for a tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets for their own step-by-step walkthroughs.
+**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job and a **Walk me through it** button that runs *Timecode, start to finish* on a practice log (no camera needed; delete it from ⚙ when done). The **?** at the top gives the short tour, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps.
 
 **Phone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 

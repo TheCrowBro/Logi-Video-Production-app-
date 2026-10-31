@@ -2,7 +2,7 @@
 // makes the PDF and the email text from it, and packs it into the link the client opens; the public invoice page
 // renders the very same snapshot. Nothing here touches the store.
 import { h, fmtShort } from './util.js';
-import { payLinks, bankLines, epcPayload } from './pay.js';
+import { payLinks, payTexts, epcPayload } from './pay.js';
 
 export const KINDS = { quote: { label: 'Quote', statuses: ['Draft', 'Sent', 'Accepted', 'Declined'], dateLabel: 'Valid until', dateKey: 'until' }, invoice: { label: 'Invoice', statuses: ['Draft', 'Sent', 'Paid', 'Void'], dateLabel: 'Due', dateKey: 'due' } };
 export const fmt = (n, sym = '$') => { const v = Number(n) || 0; return (v < 0 ? '-' : '') + sym + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
@@ -24,7 +24,7 @@ const isPaid = snap => snap.kind === 'invoice' && (snap.status === 'Paid' || cal
 // The "How to pay" section: buttons, bank details, a bank QR when there is an IBAN, the reference to quote.
 function paySection(snap, { qr } = {}) {
   if (snap.kind !== 'invoice' || snap.status === 'Void') return null;
-  const t = calc(snap), pay = snap.pay || {}, buttons = payButtons(snap), bank = bankLines(pay), ctx = payContext(snap);
+  const t = calc(snap), pay = snap.pay || {}, buttons = payButtons(snap), bank = payTexts(pay), ctx = payContext(snap);
   const epc = epcPayload(pay, ctx), kids = [];
   if (isPaid(snap)) kids.push(h('div', { class: 'paid-stamp' }, 'Paid, thank you'));
   if (!buttons.length && !bank.length) return kids.length ? h('section', { class: 'cs-sec pay-sec' }, h('h4', null, 'Payment'), ...kids) : null;
@@ -61,7 +61,7 @@ export function renderDoc(snap, opts = {}) {
 }
 
 export function docText(snap) {
-  const K = KINDS[snap.kind], t = calc(snap), sym = snap.currency || '$', buttons = payButtons(snap), bank = snap.kind === 'invoice' ? bankLines(snap.pay || {}) : [];
+  const K = KINDS[snap.kind], t = calc(snap), sym = snap.currency || '$', buttons = payButtons(snap), bank = snap.kind === 'invoice' ? payTexts(snap.pay || {}) : [];
   const out = [`${K.label.toUpperCase()} ${snap.number} — ${snap.title}`, `From: ${(snap.from || []).join(' · ')}`, `To: ${(snap.to || []).join(', ')}`, `Date: ${fmtShort(snap.date)}${snap[K.dateKey] ? ` · ${K.dateLabel}: ${fmtShort(snap[K.dateKey])}` : ''}`, '',
     ...t.lines.map(l => `${l.desc}  ${l.qty ?? ''} ${l.unit || ''} × ${fmt(l.price, sym)} = ${fmt(l.amount, sym)}`), '',
     `Subtotal: ${fmt(t.subtotal, sym)}`, t.rate > 0 ? `${snap.taxLabel || 'Tax'} ${t.rate}%: ${fmt(t.tax, sym)}` : null, `Total: ${fmt(t.total, sym)}`,
@@ -74,7 +74,7 @@ export function docText(snap) {
 }
 
 export function pdfBlocks(snap) {
-  const K = KINDS[snap.kind], t = calc(snap), sym = snap.currency || '$', buttons = payButtons(snap), bank = snap.kind === 'invoice' ? bankLines(snap.pay || {}) : [];
+  const K = KINDS[snap.kind], t = calc(snap), sym = snap.currency || '$', buttons = payButtons(snap), bank = snap.kind === 'invoice' ? payTexts(snap.pay || {}) : [];
   const blocks = [{ type: 'title', text: `${K.label} ${snap.number}` }, { type: 'subtitle', text: [fmtShort(snap.date), snap[K.dateKey] && `${K.dateLabel} ${fmtShort(snap[K.dateKey])}`, snap.status !== 'Draft' && snap.status].filter(Boolean).join('   ·   ') },
     { type: 'heading', text: 'From' }, { type: 'text', text: (snap.from || []).join('\n') }, { type: 'heading', text: 'To' }, { type: 'text', text: (snap.to || []).join('\n') || '—' },
     { type: 'heading', text: snap.title }, { type: 'text', text: snap.when || '', gray: 0.4 },
