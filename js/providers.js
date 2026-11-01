@@ -10,14 +10,23 @@ const LS = {
   set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } },
   del: k => { try { localStorage.removeItem(k); } catch { /* ignore */ } },
 };
-const OWN = { dropbox: 'logi-dropbox-key', google: 'logi-gdrive-id', microsoft: 'logi-ms-id' };
+const OWN = { dropbox: 'logi-own-dropbox', google: 'logi-own-google', microsoft: 'logi-own-microsoft' };
+// The old "paste your key" boxes saved on every keystroke, so a half-finished attempt could leave a wrong key behind.
+// Keep an old key only where a sign-in was actually made with it; otherwise the built-in apps are used.
+(() => {
+  const OLD = { dropbox: 'logi-dropbox-key', google: 'logi-gdrive-id', microsoft: 'logi-ms-id' };
+  const used = { dropbox: () => !!LS.get('logi-dbx-token'), google: () => LS.get('logi-gdrive-on') === '1', microsoft: () => LS.get('logi-provider') === 'onedrive' }; // an old Microsoft cache alone proves nothing
+  for (const [svc, k] of Object.entries(OLD)) { const v = (LS.get(k) || '').trim(); if (v && used[svc]() && !LS.get(OWN[svc])) LS.set(OWN[svc], v); LS.del(k); }
+})();
 const own = svc => (LS.get(OWN[svc]) || '').trim();
 const builtIn = svc => String(CLOUD_APPS[svc] || '').trim();
 // Can this service be connected here, and through whose app?
 export const signIn = {
-  available: svc => !!(own(svc) || builtIn(svc)),
+  available: svc => (svc === 'google-calendar' ? !!(own('google') || (builtIn('google') && CLOUD_APPS.googleCalendar !== false)) : !!(own(svc) || builtIn(svc))),
   builtIn: svc => !!builtIn(svc),
   usingOwn: svc => !!own(svc),
+  // Which app the current Dropbox sign-in was made with: devices only share a copy when they use the same one.
+  dropboxOwn: () => { try { const t = JSON.parse(LS.get('logi-dbx-token')); return !!(t && t.client && t.client !== builtIn('dropbox')); } catch { return false; } },
 };
 export const settings = {
   dropboxKey: () => own('dropbox') || builtIn('dropbox'),
@@ -26,15 +35,15 @@ export const settings = {
   ownDropboxKey: () => own('dropbox'), ownGdriveId: () => own('google'), ownMsId: () => own('microsoft'),
   webdav: () => { try { return JSON.parse(LS.get('logi-webdav')) || {}; } catch { return {}; } },
   setWebdav: v => v ? LS.set('logi-webdav', JSON.stringify(v)) : LS.del('logi-webdav'),
-  setMsId: v => (v.trim() ? LS.set('logi-ms-id', v.trim()) : LS.del('logi-ms-id')),
-  setDropboxKey: v => (v.trim() ? LS.set('logi-dropbox-key', v.trim()) : LS.del('logi-dropbox-key')),
-  setGdriveId: v => (v.trim() ? LS.set('logi-gdrive-id', v.trim()) : LS.del('logi-gdrive-id')),
+  setMsId: v => (v.trim() ? LS.set(OWN.microsoft, v.trim()) : LS.del(OWN.microsoft)),
+  setDropboxKey: v => (v.trim() ? LS.set(OWN.dropbox, v.trim()) : LS.del(OWN.dropbox)),
+  setGdriveId: v => (v.trim() ? LS.set(OWN.google, v.trim()) : LS.del(OWN.google)),
 };
 // Where a sign-in comes back to. With Vdex's own apps it is always the app's folder (…/Logi-Video-Production-app-/,
 // or http://localhost:47831/ in the desktop app), however the app was opened, so only those two addresses have to be
 // registered. A developer's own app keeps the address the page was opened at, as it always did.
 export const redirectUri = svc => (svc && !own(svc) ? new URL('./', location.href).href : location.origin + location.pathname);
-const notOn = name => new Error(`${name} sign-in is not switched on in this copy of Vdex yet. Whoever looks after Vdex turns it on once (see “Turning on sign-in” in the guide), or use your own developer app under Advanced.`);
+const notOn = name => new Error(`${name} sign-in isn't ready in Vdex yet. Until it is, use Other ways to keep a copy, or save a backup file.`);
 const FILE = 'vdex-production-db.json';
 
 const parse = text => {
@@ -56,16 +65,17 @@ export const fileAdapter = (handle, aux = null) => ({
 
 /* -------------------------------- Dropbox -------------------------------- */
 const b64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const STALE = name => `That ${name} sign-in was out of date, perhaps because Connect was tapped twice. Tap Connect once more and finish only the newest sign-in page.`;
 const pkce = async () => { const verifier = b64url(crypto.getRandomValues(new Uint8Array(48))); return { verifier, challenge: b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))) }; };
 // A sign-in page opens in place in the browser, and in the person's own web browser from the desktop app (Dropbox,
 // Google and Microsoft ask apps not to show their sign-in pages inside an app window); the desktop app hands the
 // answer back. Returns 'browser' when the sign-in carries on in the web browser.
 // The desktop app's sign-ins are registered at its usual address; on a stand-in port they would be refused.
 const desktopAway = () => window.vdexDesktop && location.port && location.port !== '47831';
-const AWAY = 'Sign-in needs Vdex at its usual address. Another program is using it right now: close that program, reopen Vdex, and try again.';
+const AWAY = 'Vdex can’t open the sign-in page because another program on this computer is using the connection Vdex needs. Restart the computer, open Vdex first, and try again. Until then, Other ways to keep a copy still work.';
 async function openSignIn(url) {
   if (desktopAway()) throw new Error(AWAY);
-  if (window.vdexDesktop?.openSignIn) { await window.vdexDesktop.openSignIn(url); return 'browser'; }
+  if (window.vdexDesktop?.openSignIn) { if (!(await window.vdexDesktop.openSignIn(url))) throw new Error(AWAY); return 'browser'; }
   location.href = url; return 'page';
 }
 
@@ -90,15 +100,15 @@ export async function dropboxFinish() {
   if (!state || !state.startsWith('vdex-')) return false;
   history.replaceState(null, '', location.pathname);
   const expected = LS.get('logi-dbx-state'); LS.del('logi-dbx-state');
-  if (!expected || state !== expected) throw new Error('Dropbox sign-in did not come from this device; try again');
+  if (!expected || state !== expected) throw new Error(STALE('Dropbox'));
   const code = p.get('code');
-  if (!code) throw new Error(p.get('error_description') || 'Dropbox sign-in cancelled');
+  if (!code) throw new Error(p.get('error') === 'access_denied' ? 'Dropbox sign-in was cancelled. Tap Connect when you’re ready to try again.' : 'Dropbox sign-in didn’t finish. Tap Connect to try again.');
   const r = await fetch('https://api.dropboxapi.com/oauth2/token', {
     method: 'POST',
     body: new URLSearchParams({ code, grant_type: 'authorization_code', client_id: dropboxClient(), code_verifier: LS.get('logi-dbx-verifier') || '', redirect_uri: LS.get('logi-dbx-redirect') || redirectUri('dropbox') }),
   });
   const t = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(t.error_description || 'Dropbox sign-in could not be finished; try Connect again');
+  if (!r.ok) throw new Error('Dropbox sign-in didn’t finish. Tap Connect to try again.');
   LS.del('logi-dbx-verifier'); LS.del('logi-dbx-redirect');
   LS.set('logi-dbx-token', JSON.stringify({ refresh: t.refresh_token, access: t.access_token, exp: Date.now() + t.expires_in * 1000 - 60000, client: dropboxClient() }));
   dropboxWho().catch(() => {});
@@ -167,7 +177,9 @@ export const dropboxAdapter = () => ({
 });
 
 /* ----------------------------- Google Drive ----------------------------- */
-let gisPromise; const gTokens = {}; // one token per scope set
+// Tokens are kept for their hour across visits, so reopening Vdex within the hour needs no tap; the lock seals them.
+let gisPromise; const gTokens = (() => { try { return JSON.parse(LS.get('logi-google-tokens')) || {}; } catch { return {}; } })();
+const saveGTokens = () => { const now = Date.now(), keep = Object.fromEntries(Object.entries(gTokens).filter(([, t]) => t && t.exp > now)); Object.keys(gTokens).forEach(k => { if (!keep[k]) delete gTokens[k]; }); Object.keys(keep).length ? LS.set('logi-google-tokens', JSON.stringify(keep)) : LS.del('logi-google-tokens'); };
 export const loadGIS = () => gisPromise || (gisPromise = new Promise((res, rej) => {
   if (window.google?.accounts?.oauth2) return res();
   const s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.onload = res; s.onerror = () => rej(new Error('Could not load Google sign-in')); document.head.append(s);
@@ -184,16 +196,18 @@ const liveToken = scopeStr => { // one token that covers every scope in the stri
 export async function googleToken(scope, interactive) {
   const have = liveToken(scope);
   if (have) return have;
-  if (!interactive) throw new Error('Google wants you to sign in again — tap Sign in again');
+  if (!interactive) { const e = new Error('Google wants you to sign in again'); e.name = 'NotAllowedError'; throw e; }
   const id = settings.gdriveId();
   if (!id) throw notOn('Google');
   const wanted = [...new Set([...scope.split(' ').filter(Boolean), ...grantedScopes()])], hint = LS.get('logi-google-email');
   const take = (r, res, rej) => {
+    if (r.error === 'replaced') { const e = new Error('A newer sign-in took over'); e.name = 'AbortError'; return rej(e); } // Connect was tapped again: the new one carries on
     if (r.error) return rej(new Error(GOOGLE_ERR[r.error] || r.error_description || r.error));
     const got = new Set(String(r.scope || wanted.join(' ')).split(' ').filter(Boolean));
-    if (scope.split(' ').some(p => !got.has(p))) return rej(new Error('Google did not give Vdex the permission it needs. Tap Connect again and leave the boxes ticked.'));
+    if (scope.split(' ').some(p => !got.has(p))) return rej(new Error('Google didn’t give Vdex the permission it needs. Try again and leave the boxes ticked.'));
     const t = { value: r.access_token, exp: Date.now() + Number(r.expires_in || 3600) * 1000 - 60000 };
     for (const g of got) gTokens[g] = t;
+    saveGTokens();
     LS.set('logi-google-scopes', [...new Set([...grantedScopes(), ...got])].join(' '));
     LS.set('logi-gdrive-on', '1');
     res(r.access_token);
@@ -201,7 +215,7 @@ export async function googleToken(scope, interactive) {
   // The desktop app: Google's page opens in the web browser and the answer comes back to the app.
   if (window.vdexDesktop?.googleSignIn) {
     if (desktopAway()) throw new Error(AWAY);
-    toast('Finish signing in to Google in your web browser, then come back here');
+    toast('Carry on in your web browser: sign in to Google there, then come back to Vdex.');
     const r = await window.vdexDesktop.googleSignIn({ client: id, scope: wanted.join(' '), hint });
     return new Promise((res, rej) => take(r || { error: 'failed' }, res, rej));
   }
@@ -215,21 +229,21 @@ export async function googleToken(scope, interactive) {
     client.requestAccessToken(hint ? { prompt: '', login_hint: hint } : { prompt: '' });
   });
 }
-const GOOGLE_ERR = { access_denied: 'Google sign-in was cancelled', popup_closed: 'The Google window was closed before signing in', popup_failed_to_open: 'The Google window was blocked. Allow pop-ups for Vdex and tap again', timed_out: 'The Google sign-in in your web browser was not finished. Tap again to retry.', failed: 'Google sign-in did not work. Tap again to retry.' };
-export const forgetGoogleToken = scope => { for (const p of scope.split(' ')) delete gTokens[p]; };
+const GOOGLE_ERR = { address_taken: 'Vdex can’t open the sign-in page because another program on this computer is using the connection Vdex needs. Restart the computer, open Vdex first, and try again. Until then, Other ways to keep a copy still work.', access_denied: 'Google sign-in was cancelled', popup_closed: 'The Google window was closed before signing in', popup_failed_to_open: 'The Google window was blocked. Allow pop-ups for Vdex and tap again', timed_out: 'The Google sign-in in your web browser wasn’t finished. Tap Connect to try again.', failed: 'Google sign-in did not work. Tap again to retry.' };
+export const forgetGoogleToken = scope => { for (const p of scope.split(' ')) delete gTokens[p]; saveGTokens(); };
 const DRIVE_APP = 'https://www.googleapis.com/auth/drive.appdata', DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
-const driveScope = () => LS.get('logi-feed-drive') === '1' ? DRIVE_APP + ' ' + DRIVE_FILE : DRIVE_APP;
-const gdriveToken = interactive => googleToken(driveScope(), interactive);
-const hasToken = () => !!liveToken(driveScope());
+// Storage needs only Vdex's private area (drive.appdata); the calendar feed's visible file asks for drive.file on its own.
+const gdriveToken = (interactive, scope = DRIVE_APP) => googleToken(scope, interactive);
+const hasToken = () => !!liveToken(DRIVE_APP);
 // The account, for the panel and for skipping Google's account chooser next time.
 async function googleWho(token) {
   try { const r = await fetch('https://www.googleapis.com/drive/v3/about?fields=user(displayName,emailAddress)', { headers: { Authorization: 'Bearer ' + token } });
     if (!r.ok) return; const u = (await r.json()).user || {}; if (u.emailAddress) LS.set('logi-google-email', u.emailAddress); setWho([u.displayName, u.emailAddress].filter(Boolean).join(' · ')); } catch { /* name only */ }
 }
 
-async function gfetch(url, init = {}, interactive = false) {
-  const r = await fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: 'Bearer ' + await gdriveToken(interactive) } });
-  if (r.status === 401) { forgetGoogleToken(driveScope()); const e = new Error('Google wants you to sign in again'); e.name = 'NotAllowedError'; throw e; }
+async function gfetch(url, init = {}, interactive = false, scope = DRIVE_APP) {
+  const r = await fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: 'Bearer ' + await gdriveToken(interactive, scope) } });
+  if (r.status === 401) { forgetGoogleToken(scope); const e = new Error('Google wants you to sign in again'); e.name = 'NotAllowedError'; throw e; }
   return r;
 }
 
@@ -273,7 +287,7 @@ export const gdriveAdapter = () => {
       if (!r.ok) throw new Error('Drive write failed (' + r.status + ')');
     },
     // The feed lives as a visible file in Drive (drive.file scope: only files this app made), shared read-only by link.
-    enableFeed: async () => { LS.set('logi-feed-drive', '1'); await gdriveToken(true); },
+    enableFeed: async () => { await gdriveToken(true, DRIVE_FILE); LS.set('logi-feed-drive', '1'); }, // only once Google has said yes
     writeExtra: async (name, text) => {
       const id = await findExtra(name);
       let r;
@@ -295,12 +309,12 @@ export const gdriveAdapter = () => {
     writeAux: async ({ name, text }) => {
       if (LS.get('logi-feed-drive') !== '1') return;
       let fid = LS.get('logi-gdrive-feed');
-      if (!fid) { const r = await gfetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`name='${name}' and trashed=false`)}&fields=files(id)`); fid = (await r.json()).files?.[0]?.id || null; }
+      if (!fid) { const r = await gfetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(`name='${name}' and trashed=false`)}&fields=files(id)`, {}, false, DRIVE_FILE); fid = (await r.json()).files?.[0]?.id || null; }
       let r;
-      if (fid) r = await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${fid}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'text/calendar' }, body: text });
+      if (fid) r = await gfetch(`https://www.googleapis.com/upload/drive/v3/files/${fid}?uploadType=media`, { method: 'PATCH', headers: { 'Content-Type': 'text/calendar' }, body: text }, false, DRIVE_FILE);
       else {
         const boundary = 'logi' + Date.now();
-        r = await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ name, mimeType: 'text/calendar' })}\r\n--${boundary}\r\nContent-Type: text/calendar\r\n\r\n${text}\r\n--${boundary}--` });
+        r = await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body: `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ name, mimeType: 'text/calendar' })}\r\n--${boundary}\r\nContent-Type: text/calendar\r\n\r\n${text}\r\n--${boundary}--` }, false, DRIVE_FILE);
         if (r.ok) fid = (await r.json()).id;
       }
       if (!r.ok) throw new Error('Drive feed write failed (' + r.status + ')');
@@ -308,11 +322,11 @@ export const gdriveAdapter = () => {
     },
     shareLink: async () => {
       const fid = LS.get('logi-gdrive-feed'); if (!fid) throw new Error('The feed file has not been written yet — add or edit a booking first');
-      const r = await gfetch(`https://www.googleapis.com/drive/v3/files/${fid}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) });
+      const r = await gfetch(`https://www.googleapis.com/drive/v3/files/${fid}/permissions`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ role: 'reader', type: 'anyone' }) }, true, DRIVE_FILE);
       if (!r.ok) throw new Error('Could not share the feed file (' + r.status + ')');
       return `https://drive.google.com/uc?export=download&id=${fid}`;
     },
-    signOut: () => { forgetGoogleToken(driveScope()); LS.del('logi-gdrive-file'); LS.del('logi-gdrive-feed'); LS.del('logi-gdrive-on'); LS.del('logi-google-email'); setWho(''); const left = [...grantedScopes()].filter(g => !g.includes('/auth/drive')); left.length ? LS.set('logi-google-scopes', left.join(' ')) : LS.del('logi-google-scopes'); },
+    signOut: () => { forgetGoogleToken(DRIVE_APP + ' ' + DRIVE_FILE); LS.del('logi-gdrive-file'); LS.del('logi-gdrive-feed'); LS.del('logi-feed-drive'); LS.del('logi-gdrive-on'); LS.del('logi-google-email'); setWho(''); const left = [...grantedScopes()].filter(g => !g.includes('/auth/drive')); left.length ? LS.set('logi-google-scopes', left.join(' ')) : LS.del('logi-google-scopes'); },
   };
 };
 
@@ -327,7 +341,7 @@ const msSave = t => (t ? LS.set('logi-ms-token', JSON.stringify(t)) : LS.del('lo
 const msKey = scopes => [...scopes].sort().join(' ');
 const claims = jwt => { try { return JSON.parse(decodeURIComponent(escape(atob(jwt.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))))); } catch { return {}; } };
 const msError = (code, text = '') => {
-  if (code === 'access_denied' || /AADSTS65004|declined/i.test(text)) return 'Microsoft sign-in was cancelled';
+  if (code === 'access_denied' || /AADSTS65004|declined/i.test(text)) return 'Microsoft sign-in was cancelled. Tap Connect when you’re ready to try again.';
   if (/AADSTS90094|AADSTS90095|admin/i.test(text)) return 'Your work or school account needs your IT department to approve Vdex first. A personal Microsoft account works straight away.';
   return text ? 'Microsoft sign-in did not work: ' + text.split(/\r?\n/)[0].replace(/^AADSTS\d+:\s*/, '') : 'Microsoft sign-in did not work; try Connect again';
 };
@@ -350,7 +364,7 @@ export async function microsoftFinish() {
   let pk = null; try { pk = JSON.parse(LS.get('logi-ms-pkce')); } catch { /* none */ }
   LS.del('logi-ms-pkce');
   const fail = msg => { const e = new Error(msg); e.intent = pk && pk.intent; e.first = !!(pk && pk.first); return e; };
-  if (!pk || pk.state !== state) throw fail('Microsoft sign-in did not come from this device; try again');
+  if (!pk || pk.state !== state) throw fail(STALE('Microsoft'));
   if (!p.get('code')) throw fail(msError(p.get('error'), p.get('error_description') || ''));
   const r = await fetch(MS + 'token', { method: 'POST', body: new URLSearchParams({ client_id: pk.client, grant_type: 'authorization_code', code: p.get('code'), redirect_uri: pk.redirect, code_verifier: pk.verifier, scope: ['openid', 'profile', 'offline_access', ...pk.scopes].join(' ') }) });
   const j = await r.json().catch(() => ({}));
@@ -373,7 +387,7 @@ export async function microsoftToken(scopes, interactive, intent = 'onedrive') {
     else if (!r) throw new Error('Microsoft could not be reached; check the connection');
   }
   if (!interactive) { const e = new Error('Microsoft wants you to sign in again'); e.name = 'NotAllowedError'; throw e; }
-  if ((await microsoftBegin(scopes, intent)) === 'browser') { const e = new Error('Finish signing in to Microsoft in your web browser, then come back here'); e.name = 'NotAllowedError'; e.handoff = true; throw e; }
+  if ((await microsoftBegin(scopes, intent)) === 'browser') { const e = new Error('Carry on in your web browser: sign in to Microsoft there, then come back to Vdex.'); e.name = 'NotAllowedError'; e.handoff = true; throw e; }
   return new Promise(() => {}); // the page is on its way to Microsoft
 }
 export const microsoftAccount = () => { const t = msTok(); return t ? { name: t.name, username: t.username } : null; };
@@ -386,13 +400,25 @@ async function odfetch(path, init = {}, interactive = false) {
   if (r.status === 401) { const e = new Error('Microsoft wants you to sign in again'); e.name = 'NotAllowedError'; throw e; }
   return r;
 }
+// Downloading: Graph's /content answers with a redirect that browsers refuse to follow with a sign-in attached, so
+// ask for the item's ready-made download address instead, which needs no sign-in and allows browsers.
+async function odRead(name) {
+  const r = await odfetch(`${name}?select=id,@microsoft.graph.downloadUrl`);
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error('OneDrive read failed (' + r.status + ')');
+  const url = (await r.json())['@microsoft.graph.downloadUrl'];
+  if (!url) throw new Error('OneDrive did not give a download address');
+  const d = await fetch(url);
+  if (!d.ok) throw new Error('OneDrive download failed (' + d.status + ')');
+  return d.text();
+}
 export const onedriveAdapter = () => ({
   id: 'onedrive', label: 'OneDrive', where: 'the folder Apps › Vdex',
-  ready: async ask => { try { await microsoftToken([MS_FILES], ask); return true; } catch (e) { if (ask && (e.name !== 'NotAllowedError' || e.handoff)) throw e; return false; } },
-  read: async () => { const r = await odfetch(`${FILE}:/content`); if (r.status === 404) return null; if (!r.ok) throw new Error('OneDrive read failed (' + r.status + ')'); return parse(await r.text()); },
+  ready: async ask => { try { await microsoftToken([MS_FILES], ask); if (!who()) { const a = microsoftAccount(); if (a) setWho([a.name, a.username].filter(Boolean).join(' · ')); } return true; } catch (e) { if (ask && (e.name !== 'NotAllowedError' || e.handoff)) throw e; return false; } },
+  read: async () => { const t = await odRead(FILE); return t == null ? null : parse(t); },
   write: async text => { const r = await odfetch(`${FILE}:/content`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: text }); if (!r.ok) throw new Error('OneDrive write failed (' + r.status + ')'); },
   writeExtra: async (name, text) => { const r = await odfetch(`${name}:/content`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: text }); if (!r.ok) throw new Error('OneDrive backup write failed (' + r.status + ')'); },
-  readExtra: async name => { const r = await odfetch(`${name}:/content`); if (r.status === 404) return null; if (!r.ok) throw new Error('OneDrive read failed (' + r.status + ')'); return r.text(); },
+  readExtra: name => odRead(name),
   writeAux: async ({ name, text }) => { const r = await odfetch(`${name}:/content`, { method: 'PUT', headers: { 'Content-Type': 'text/calendar' }, body: text }); if (!r.ok) throw new Error('OneDrive feed write failed (' + r.status + ')'); },
   shareLink: async name => {
     const r = await odfetch(`${name}:/createLink`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'view', scope: 'anonymous' }) });
@@ -437,4 +463,4 @@ export const webdavAdapter = () => {
 };
 
 // Forget this device's Microsoft sign-in (the calendar link uses it too, so keep it while that is connected).
-export function microsoftSignOut({ keepToken = false } = {}) { setWho(''); if (!keepToken) msSave(null); }
+export function microsoftSignOut({ keepToken = false, keepWho = false } = {}) { if (!keepWho) setWho(''); if (!keepToken) msSave(null); }

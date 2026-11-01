@@ -51,7 +51,8 @@ let sealed = false, dirty = false, pendingSync = false, rev = 0;
 export const revision = () => rev;
 export const isSealed = () => sealed;
 export const serialize = () => JSON.stringify(db);
-export function setSealed(on) { if (on && writeQueued) writeNow(); sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; schedulePush(); } } }
+// Unlocking runs what waited: deferred work is a full sync, which reads and merges what is in the cloud before writing.
+export function setSealed(on) { if (on && writeQueued) writeNow(); sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; sync({ quiet: true }); } } }
 export function flush() { rev++; writeNow(); }
 export function reload() { db = load(); rev++; emit(); }
 export const touch = () => { rev++; emit(); };
@@ -311,14 +312,21 @@ export function mergeDb(local, remote) {
 }
 
 // Merge the remote copy in, then push if anything here isn't in it yet. `quiet` skips the "Saving…" flicker (background polls).
-let syncing = false;
-export async function sync({ ask = false, quiet = false } = {}) {
-  const a = cloud.adapter;
+// One sync at a time. A sync asked for while another is running waits for it and then runs, so a fresh link (or a
+// change made meanwhile) is never skipped.
+let syncing = null;
+export async function sync(opts = {}) {
+  while (syncing) await syncing.catch(() => {});
   if (sealed) { pendingSync = true; return; }
-  if (!a || syncing) return;
-  syncing = true;
+  if (!cloud.adapter) return;
+  syncing = runSync(opts);
+  try { return await syncing; } finally { syncing = null; }
+}
+async function runSync({ ask = false, quiet = false } = {}) {
+  const a = cloud.adapter;
   try {
     if (!(await a.ready(ask))) return setStatus('needs-permission');
+    if (sealed) { pendingSync = true; return; } // locked while the sign-in was open: nothing is copied until it is unlocked
     if (!quiet) setStatus('saving');
     const remote = await a.read();
     if (!remote) return await push();
@@ -328,7 +336,6 @@ export async function sync({ ask = false, quiet = false } = {}) {
     if (localChanged) { db = merged; persistLocal(); emit(); }
     if (remoteStale) await push(); else { lsSet('logi-sync-at', String(Date.now())); setStatus('synced'); }
   } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
-  finally { syncing = false; }
 }
 
 let auxWriter = null;
@@ -390,13 +397,16 @@ function schedulePush() {
   timer = setTimeout(push, 800);
 }
 
-export const reconnect = () => sync({ ask: true });
+export async function reconnect() { const a = cloud.adapter; if (!a) return; if (!(await a.ready(true))) return setStatus('needs-permission'); cloud.notice = ''; return sync(); }
 
+// Sign in first, outside the sync lock, and link only once that has worked: a cancelled, abandoned or still-open
+// sign-in leaves nothing half-linked, and tapping Connect again simply starts a fresh one.
 async function link(adapter, provider, handle) {
-  cloud.adapter = adapter;
+  if (!(await adapter.ready(true))) throw new Error('The sign-in didn’t finish. Tap Connect to try again.');
+  cloud.adapter = adapter; cloud.notice = '';
   lsSet('logi-provider', provider);
   if (handle) await kv('readwrite', s => s.put(handle, 'fileHandle'));
-  await sync({ ask: true });
+  await sync();
 }
 
 export async function createCloudFile() {

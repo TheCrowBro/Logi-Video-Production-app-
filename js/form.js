@@ -139,5 +139,5 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     close();
     onSave(out);
   });
-  setTimeout(() => form.querySelector('input,textarea,select')?.focus(), 50);
+  setTimeout(() => { if (!form.contains(document.activeElement)) form.querySelector('input,textarea,select')?.focus(); }, 50); // never take the cursor from a box someone is already typing in
 }

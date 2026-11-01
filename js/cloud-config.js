@@ -6,4 +6,5 @@ export const CLOUD_APPS = {
   dropbox: '',   // Dropbox App key (App Console → your app → Settings)
   google: '',    // Google OAuth client ID, ends in .apps.googleusercontent.com
   microsoft: '', // Microsoft Application (client) ID, looks like 00000000-0000-0000-0000-000000000000
+  googleCalendar: true, // false while Google treats the calendar permission as "sensitive" (docs/turn-on-sign-in.md, Google step 6)
 };

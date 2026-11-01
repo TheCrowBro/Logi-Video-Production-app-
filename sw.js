@@ -38,6 +38,7 @@ self.addEventListener('notificationclick', e => {
 
 self.addEventListener('fetch', e => {
   const req = e.request;
+  if (new URL(req.url).pathname.includes('/__vdex/')) return; // the desktop app's sign-in pages are never the app
   // Web Share Target: a file shared to the app arrives as a POST; park it and send the app to pick it up.
   if (req.method === 'POST' && new URL(req.url).pathname.endsWith('/share')) {
     e.respondWith((async () => {

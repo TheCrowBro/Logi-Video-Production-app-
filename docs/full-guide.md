@@ -157,8 +157,8 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 | On an iPhone you can link | Notes |
 |---|---|
 | **Dropbox** | Sign in once. Stays connected. |
-| **Google Drive** | Sign in once. After about an hour away, Google wants one tap to carry on: tap **Sign in again**. |
-| **OneDrive** | Personal or work account. Sign in once. Stays connected. |
+| **Google Drive** | Sign in once. About once an hour Google wants one tap: **Sign in again**. |
+| **OneDrive** | Personal or work account. Sign in once. About once a day Microsoft wants one tap: **Sign in again**. |
 | **Nextcloud and other WebDAV servers** | Under *Other ways*: your Nextcloud address, username and an app password. |
 
 There is no iCloud Drive option: iPhones don't let web apps keep a file in a synced folder. The four above work on your iPhone and on your computer, so pick one and link it everywhere.
@@ -229,7 +229,7 @@ Only the installed app can show them, on iOS 16.4 or later. Open Vdex from the H
 They need the installed app or a secure (https) address, iOS 16.4 or later, and your permission when asked. If you refused once, see *Let Vdex use the camera…* above.
 
 **Google keeps asking me to sign in again.**
-That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Sign in again** or **Sync now**; if you are still signed in to Google, the window closes by itself. Dropbox and Microsoft stay connected.
+That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Sign in again** or **Sync now**; if you are still signed in to Google, the window closes by itself. Microsoft asks about once a day; Dropbox stays connected. Nothing is lost meanwhile: changes wait on the device.
 
 **My iPhone and laptop won't link.**
 Put both on the same Wi‑Fi or on the iPhone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
@@ -393,9 +393,9 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 | On Android you can link | Notes |
 |---|---|
-| **Google Drive** | Sign in once. After about an hour away, Google wants one tap to carry on: tap **Sign in again**. |
+| **Google Drive** | Sign in once. About once an hour Google wants one tap: **Sign in again**. |
 | **Dropbox** | Sign in once. Stays connected. |
-| **OneDrive** | Personal or work account. Sign in once. Stays connected. |
+| **OneDrive** | Personal or work account. Sign in once. About once a day Microsoft wants one tap: **Sign in again**. |
 | **Nextcloud and other WebDAV servers** | Under *Other ways*: your Nextcloud address, username and an app password. |
 
 The *file in a synced folder* option you may see on a computer doesn't appear on Android: phones don't let web apps keep a file in a synced folder. The four above work on your phone and on your computer, so pick one and link it everywhere.
@@ -466,7 +466,7 @@ Your phone has no ARCore support, or you're not in Chrome. Use the tilt method i
 Calibrate the compass by moving the phone in a figure of eight, and keep it away from magnets, cases with magnets and car mounts.
 
 **Google keeps asking me to sign in again.**
-That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Sign in again** or **Sync now**; if you are still signed in to Google, the window closes by itself. Dropbox and Microsoft stay connected.
+That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Sign in again** or **Sync now**; if you are still signed in to Google, the window closes by itself. Microsoft asks about once a day; Dropbox stays connected. Nothing is lost meanwhile: changes wait on the device.
 
 **My phone and laptop won't link.**
 Put both on the same Wi‑Fi or on the phone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.

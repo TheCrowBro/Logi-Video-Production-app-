@@ -112,7 +112,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await lf.locator('button[type=submit]').click();
   await page.waitForFunction(() => import('./js/store.js').then(s => (s.byId('gear', window.__g).log || []).length === 1), null, { timeout: 8000 }).catch(() => {}); // the save is synchronous, but a loaded machine can be slow to get there
   const g = await page.evaluate(() => import('./js/store.js').then(s => s.byId('gear', window.__g)));
-  ok('log entry saved and firmware updated', g.log.length === 1 && g.log[0].kind === 'clean' && g.firmware === '2.10');
+  ok('log entry saved and firmware updated', g.log && g.log.length === 1 && g.log[0].kind === 'clean' && g.firmware === '2.10', JSON.stringify({ log: g.log, fw: g.firmware, sheets: await page.locator('.sheet').count(), toast: await page.evaluate(() => (document.querySelector('.toast') || {}).textContent || '') }));
   const due = await page.evaluate(() => import('./js/pages/gear.js').then(m => import('./js/store.js').then(s => m.serviceDue(s.byId('gear', window.__g)))));
   const d0 = new Date(), pad2 = n => String(n).padStart(2, '0');
   ok('next service is a year after the clean', due === `${d0.getFullYear() + 1}-${pad2(d0.getMonth() + 1)}-${pad2(d0.getDate())}`, due);

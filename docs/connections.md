@@ -14,8 +14,10 @@ Do the same on your other devices with the same account. That's all.
 | Service | How long the sign-in lasts | Where Vdex keeps its copy |
 |---|---|---|
 | **Dropbox** | Stays connected | The folder *Apps › Vdex* |
-| **Google Drive** | About an hour at a time: then one tap on **Sign in again**, and if you're still signed in to Google the window closes by itself | A private area of your Drive that only Vdex can see |
-| **OneDrive** | On computers and Android it stays connected; on an iPhone, Microsoft wants one tap to carry on after a day away | The folder *Apps › Vdex* |
+| **Google Drive** | About an hour at a time. Then one tap on **Sign in again**; if you're still signed in to Google, the window closes by itself | A private area of your Drive that only Vdex can see |
+| **OneDrive** | About a day at a time, on every device. Then one tap on **Sign in again** | The folder *Apps › Vdex* |
+
+Until you tap, nothing is lost: your changes wait safely on the device and are copied as soon as you do.
 
 **In the desktop app** the sign-in opens in your normal web browser, because these services don't allow it inside an app window. Sign in there, then come back to Vdex.
 
@@ -47,7 +49,7 @@ For another WebDAV server, pick **Other WebDAV** and give the full address of a 
 2. Tap **Get the subscription link** (Dropbox, Google Drive, OneDrive), or with a synced folder on a computer, pick where the file goes and share it from your sync app as a direct-download link.
 3. Subscribe once: Google Calendar on the web *Other calendars → + → From URL*; Apple Calendar *File → New Calendar Subscription*; iPhone *Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar*; Outlook *Add calendar → Subscribe from web*. How often it refreshes is up to the calendar app.
 
-Two-way sync with Google Calendar or Outlook is in the same panel: tap **Connect** and sign in, as above.
+Two-way sync with Google Calendar or Outlook is in the same panel: tap **Connect** and sign in, as above. Google asks again about once an hour and Microsoft about once a day; when it does, Vdex says so, and **Sync now** in that panel carries on.
 
 ## Using your own developer apps
 

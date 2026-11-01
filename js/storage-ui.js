@@ -11,12 +11,23 @@ export const OWN_APPS = REPO + '/blob/main/docs/connections.md#using-your-own-de
 export function preloadSignIn() {
   if (providers.signIn.available('google')) providers.loadGIS().catch(() => {});
 }
-const STATUS = { synced: 'Up to date', saving: 'Saving…', 'needs-permission': 'Needs you to sign in again', error: 'Could not reach it', off: '' };
+const STATUS = { synced: 'Up to date', saving: 'Saving…', 'needs-permission': 'Needs you to sign in again', error: 'Could not reach it', off: 'Not copied yet' };
+export const BROWSER = 'Carry on in your web browser: sign in there, then come back to Vdex.';
 
 export function storagePanel() {
   const el = h('div', { class: 'storage' });
   preloadSignIn();
-  const run = (fn, done) => async () => { try { await fn(); draw(); if (store.cloud.adapter && done !== false) toast(done || 'Connected'); } catch (e) { if (e.name !== 'AbortError') toast(e.message); draw(); } };
+  // Say what actually happened: only "up to date" when the copy really was made.
+  const run = (fn, done) => async () => {
+    try {
+      const r = await fn(); draw();
+      if (r === 'browser') return toast(BROWSER);
+      const c = store.cloud; if (done === false || !c.adapter) return;
+      if (c.status === 'synced') toast(done || `Connected to ${c.adapter.label}. Up to date.`);
+      else if (c.status === 'needs-permission') toast(`${c.adapter.label} wants you to sign in again.`);
+      else if (c.error) toast(`Not copied yet: ${c.error}. Your changes are safe on this device.`);
+    } catch (e) { if (e.name !== 'AbortError') toast(e.message); draw(); }
+  };
   const draw = () => el.replaceChildren(store.cloud.adapter ? linked() : choices());
 
   // Connected: who, where, how it is going, and the three things you can do.
@@ -26,26 +37,29 @@ export function storagePanel() {
       h('div', { class: 'card stack' },
         h('div', { class: 'cloud-head' }, h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, ICON[a.id] || '☁'), h('div', null, h('strong', null, `Connected to ${a.label}`), who && h('div', { class: 'small muted' }, 'Signed in as ' + who))),
         h('p', { class: 'status-line', 'data-state': c.status }, [STATUS[c.status] || c.status, c.error && c.status !== 'synced' ? c.error : ''].filter(Boolean).join(' · ')),
-        a.where && h('p', { class: 'small muted' }, `Vdex keeps its copy in ${a.where}, and nothing else of yours is touched. Your phone and computer share it when both are connected the same way.`),
+        ownApp(a) ? h('p', { class: 'small muted' }, 'This sign-in uses your own developer app (from Advanced), so the copy is in that app’s folder. Every device has to use the same app to share it.')
+          : a.where && h('p', { class: 'small muted' }, `Vdex keeps its copy in ${a.where}, and nothing else of yours is touched. Your phone and computer share it when both are connected the same way.`),
         h('div', { class: 'actions' },
-          c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: run(async () => { const r = await (a.id === 'dropbox' ? store.connectDropbox() : store.reconnect()); if (r === 'browser') toast('Finish signing in in your web browser, then come back here'); }, 'Signed in again') }, 'Sign in again'),
-          h('button', { class: 'btn ' + (c.status === 'needs-permission' ? 'ghost' : 'primary'), onclick: run(() => store.sync({ ask: true }), 'Synced') }, 'Sync now'),
+          c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: run(() => (a.id === 'dropbox' ? store.connectDropbox() : store.reconnect()), 'Signed in again. Up to date.') }, 'Sign in again'),
+          h('button', { class: 'btn ' + (c.status === 'needs-permission' ? 'ghost' : 'primary'), onclick: run(() => store.reconnect(), 'Up to date. Your copy is saved.') }, 'Sync now'),
           h('button', { class: 'btn ghost', onclick: run(store.unlinkCloud, false) }, 'Disconnect'))),
       h('p', { class: 'small muted' }, 'Disconnecting stops the copying. Everything stays on this device, and the copy in your storage stays where it is.'));
   }
 
+  const ownApp = a => (a.id === 'dropbox' ? providers.signIn.dropboxOwn() : a.id === 'gdrive' ? providers.signIn.usingOwn('google') : a.id === 'onedrive' ? providers.signIn.usingOwn('microsoft') : false);
   // Not connected: three sign-in buttons first, the rest tucked away.
   const ICON = { dropbox: '📦', gdrive: '🟢', onedrive: '🔷', webdav: '🌐', file: '🗂️' };
   const service = (id, svc, name, sub, connect) => {
     const on = providers.signIn.available(svc);
     return h('div', { class: 'card cloud-choice' + (on ? '' : ' off'), 'data-svc': id },
       h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, ICON[id]),
-      h('div', { class: 'grow' }, h('strong', null, name), h('div', { class: 'small muted' }, on ? sub : 'Not switched on in this copy of Vdex yet.', !on && [' ', h('a', { href: SWITCH_ON, target: '_blank', rel: 'noopener' }, 'How to switch it on')])),
-      h('button', { class: 'btn primary', disabled: !on, onclick: run(async () => { if ((await connect()) === 'browser') toast('Finish signing in in your web browser, then come back here'); }), 'aria-label': `Connect ${name}` }, 'Connect'));
+      h('div', { class: 'grow' }, h('strong', null, name), h('div', { class: 'small muted' }, on ? sub : `Not ready yet: sign-in for ${name} is still being set up for Vdex. Until then, use Other ways below.`, !on && [' ', h('a', { href: SWITCH_ON, target: '_blank', rel: 'noopener', class: 'publisher-link' }, 'For the Vdex publisher: how to switch it on')])),
+      h('button', { class: 'btn primary', disabled: !on, onclick: run(connect), 'aria-label': `Connect ${name}` }, 'Connect'));
   };
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const field = (label, get, set, ph, type = 'text') => h('label', { class: 'field' }, h('span', null, label), h('input', { type, placeholder: ph, 'aria-label': label, value: get(), autocomplete: type === 'password' ? 'current-password' : 'off', spellcheck: false, autocapitalize: 'off', oninput: e => set(e.target.value) }));
-  const opened = new Set(); // sections stay open when the panel redraws (a tab tapped, a key saved)
+  // Sections stay open when the panel redraws (a tab tapped, a key saved). While no sign-in is ready, Other ways starts open.
+  const opened = new Set(['dropbox', 'google', 'microsoft'].some(providers.signIn.available) ? [] : ['Other ways to keep a copy']);
   const more = (title, sub, body) => { const d = h('details', { class: 'twirl', open: opened.has(title) }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, title), sub && h('span', { class: 'twirl-sub' }, sub))), h('div', { class: 'twirl-body stack' }, body));
     d.addEventListener('toggle', () => { if (d.open) opened.add(title); else opened.delete(title); }); return d; };
 
@@ -59,8 +73,8 @@ export function storagePanel() {
       h('p', { class: 'small muted' }, 'Vdex only uses a folder of its own. It cannot see, change or share any of your other files.'),
       h('div', { class: 'stack cloud-choices' },
         service('dropbox', 'dropbox', 'Dropbox', 'Sign in and tap Allow. Stays connected.', () => store.connectDropbox()),
-        service('gdrive', 'google', 'Google Drive', 'Sign in and tap Allow. After about an hour away, one tap to carry on.', store.connectGdrive),
-        service('onedrive', 'microsoft', 'OneDrive', 'Sign in and tap Accept. On an iPhone, one tap to carry on after a day away.', store.connectOneDrive)),
+        service('gdrive', 'google', 'Google Drive', 'Sign in and tap Allow. About once an hour Google asks again: one tap.', store.connectGdrive),
+        service('onedrive', 'microsoft', 'OneDrive', 'Sign in and tap Accept. About once a day Microsoft asks again: one tap.', store.connectOneDrive)),
       h('p', { class: 'small muted' }, 'Use the same one on every device. Nothing is shared with anyone else.'),
       more('Other ways to keep a copy', 'Nextcloud, your own server, a synced folder, or backup files', [
         h('div', { class: 'card stack' }, h('strong', null, '☁ Nextcloud, ownCloud or another WebDAV server'),

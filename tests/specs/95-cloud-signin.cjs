@@ -9,6 +9,7 @@ const IDS = { dropbox: 'dbxTestKey123', google: '123-test.apps.googleusercontent
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
 const json = (route, status, body) => route.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(body) });
 const synced = page => page.waitForFunction(() => document.getElementById('cloudBtn')?.dataset.state === 'synced', null, { timeout: 15000 }).then(() => true, () => false);
+const roundTrip = async (page, act) => { await Promise.all([page.waitForEvent('framenavigated', { predicate: f => f === page.mainFrame() && /[?&]state=/.test(f.url()), timeout: 20000 }), act()]); await page.waitForSelector('#rolodex .drum-btn'); await sleep(300); };
 const preflight = route => route.request().method() === 'OPTIONS' && (route.fulfill({ status: 204, headers: CORS }), true);
 
 (async () => {
@@ -18,10 +19,10 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     const ctx = await browser.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' });
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
     if (ids) await ctx.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: `export const CLOUD_APPS = ${JSON.stringify(ids)};` }));
-    await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+    await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); window.__toasts = []; addEventListener('DOMContentLoaded', () => new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true })); }); // every message, even one that has faded
     if (stubs) await ctx.addInitScript(() => {
       // Google Identity Services, standing in for the sign-in window
-      window.google = { accounts: { oauth2: { initTokenClient: cfg => { window.__gcfg = cfg; return { requestAccessToken: o => { window.__greq = o; setTimeout(() => window.__gfail ? cfg.callback({ error: 'access_denied' }) : cfg.callback({ access_token: 'gtok' + Math.random(), expires_in: 3600, scope: window.__gdeny ? '' : cfg.scope }), 10); } }; } } } };
+      window.google = { accounts: { oauth2: { initTokenClient: cfg => { window.__gcfg = cfg; return { requestAccessToken: o => { window.__greq = o; setTimeout(() => window.__gfail ? cfg.callback({ error: 'access_denied' }) : cfg.callback({ access_token: 'gtok' + Math.random(), expires_in: 3600, scope: window.__gdeny ? 'https://www.googleapis.com/auth/drive.appdata' : cfg.scope }), 10); } }; } } } };
     });
     const page = await ctx.newPage();
     page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if ((m.type() === 'error' && !/^Failed to load resource: the server responded with a status of (400|404|409)/.test(m.text())) || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); }); // 404/409: the services' normal "no file yet" on a first connect; 400: Microsoft asking for consent to the calendar
@@ -39,8 +40,18 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     const disabled = await page.evaluate(() => ['dropbox', 'gdrive', 'onedrive'].map(s => document.querySelector(`.sheet .cloud-choice[data-svc="${s}"] button`).disabled));
     ok('without built-in apps the three Connect buttons are greyed out', disabled.every(Boolean), JSON.stringify(disabled));
     const text = await page.locator('.sheet .storage').innerText();
-    ok('…and say plainly that sign-in is not switched on, with a link to how', /Not switched on in this copy of Vdex yet/.test(text) && (await page.locator('.sheet a[href$="docs/turn-on-sign-in.md"]').count()) >= 3);
+    ok('…and say plainly it isn’t ready yet, with the other ways opened and the publisher’s link kept apart', /Not ready yet/.test(text) && (await page.locator('.sheet a.publisher-link[href$="docs/turn-on-sign-in.md"]').count()) === 3 && (await page.locator('.sheet details[open] summary:has-text("Other ways")').count()) === 1);
     ok('no developer key boxes are in sight', (await page.locator('.sheet input[aria-label="Dropbox app key"]').isVisible()) === false);
+    await ctx.close(); }
+
+  // --- a key left in one of the old "paste your key" boxes ---
+  { const { ctx, page } = await newPage();
+    await ctx.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('logi-dropbox-key', 'x7k2oldsecret'); } });
+    let used = null; await ctx.route('https://www.dropbox.com/oauth2/authorize**', r => { used = new URL(r.request().url()).searchParams.get('client_id'); r.fulfill({ status: 200, body: 'stop' }); });
+    await page.goto(BASE); await page.waitForSelector('#rolodex .drum-btn');
+    const leftover = await page.evaluate(() => [localStorage.getItem('logi-dropbox-key'), localStorage.getItem('logi-own-dropbox')]);
+    await openCloud(page); await card(page, 'dropbox').locator('button').click(); await sleep(800);
+    ok('a key left in an old box, never used for a sign-in, no longer overrides the built-in app', used === IDS.dropbox && leftover[0] === null && leftover[1] === null, JSON.stringify({ used, leftover }));
     await ctx.close(); }
 
   // --- with the built-in apps ---
@@ -76,8 +87,10 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   let gfiles = 0;
   await ctx.route('https://www.googleapis.com/**', route => { if (preflight(route)) return; const u = route.request().url(); if (/upload\/drive/.test(u)) { gfiles++; return json(route, 200, { id: 'file1' }); } if (/drive\/v3\/about/.test(u)) return json(route, 200, { user: { displayName: 'Gee Test', emailAddress: 'gee@example.com' } }); if (/alt=media/.test(u)) return json(route, 404, {}); return json(route, 200, { files: [] }); }); // a download finds no copy, so the next sync writes one again
   await page.evaluate(() => { window.__gfail = true; });
-  await card(page, 'gdrive').locator('button').click(); await sleep(600);
-  ok('a cancelled Google sign-in leaves nothing half-linked and says why', !(await page.evaluate(() => localStorage.getItem('logi-provider'))) && (await card(page, 'gdrive').count()) === 1 && /cancelled/i.test(await page.evaluate(() => (document.querySelector('.toast') || {}).textContent || '')));
+  await card(page, 'gdrive').locator('button').click();
+  await page.waitForFunction(() => window.__toasts.some(t => /cancelled/i.test(t)), null, { timeout: 8000 }).catch(() => {});
+  const gc = await page.evaluate(() => ({ p: localStorage.getItem('logi-provider'), toast: window.__toasts.filter(t => /Google/.test(t)).join(' | ') }));
+  ok('a cancelled Google sign-in leaves nothing half-linked and says why', !gc.p && (await card(page, 'gdrive').count()) === 1 && /cancelled/i.test(gc.toast), JSON.stringify(gc));
   await page.evaluate(() => { window.__gfail = false; });
   await card(page, 'gdrive').locator('button').click();
   const gSynced = await synced(page);
@@ -98,6 +111,12 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   await page.locator('.sheet button:has-text("Sync now")').click(); await synced(page);
   ok('one Google window renews Drive and Calendar together', /drive\.appdata/.test(await page.evaluate(() => window.__gcfg.scope)) && /calendar\.app\.created/.test(await page.evaluate(() => window.__gcfg.scope)));
   ok('…and the calendar is then covered without another window', await page.evaluate(async () => { const p = await import('./js/providers.js'); return !!(await p.googleToken('https://www.googleapis.com/auth/calendar.app.created', false)); }));
+  await page.evaluate(() => { window.__gdeny = true; });
+  const feedErr = await page.evaluate(async () => { try { await (await import('./js/store.js')).setFeed(true); return 'no error'; } catch (e) { return e.message; } });
+  await page.evaluate(() => { window.__gdeny = false; });
+  ok('turning down the feed permission says why and does not switch the feed on', /permission/.test(feedErr) && !(await page.evaluate(() => localStorage.getItem('logi-feed-drive'))), feedErr);
+  await page.evaluate(async () => (await import('./js/store.js')).sync());
+  ok('…and Google Drive storage carries on regardless', await synced(page));
   await page.locator('.sheet button:has-text("Disconnect")').click(); await sleep(300);
 
   // OneDrive: Microsoft's page and back, as with Dropbox; a cancel first, then a sign-in
@@ -105,9 +124,16 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
   await ctx.route('https://login.microsoftonline.com/common/oauth2/v2.0/authorize**', route => { msAuth = new URL(route.request().url()); const back = new URL(msAuth.searchParams.get('redirect_uri')); back.searchParams.set('state', msAuth.searchParams.get('state')); if (msCancel) { back.searchParams.set('error', 'access_denied'); back.searchParams.set('error_description', 'AADSTS65004: User declined to consent.'); } else back.searchParams.set('code', 'MSCODE'); route.fulfill({ status: 302, headers: { location: back.href } }); });
   await ctx.route('https://login.microsoftonline.com/common/oauth2/v2.0/token', route => { if (preflight(route)) return; const body = new URLSearchParams(route.request().postData()); msTokenReqs.push(Object.fromEntries(body)); if (body.get('grant_type') === 'refresh_token' && /Calendars/.test(body.get('scope')) && !msAuth.searchParams.get('scope').includes('Calendars')) return json(route, 400, { error: 'invalid_grant', error_description: 'AADSTS65001: The user or administrator has not consented.' }); json(route, 200, { access_token: 'mtok' + msTokenReqs.length, refresh_token: 'mref' + msTokenReqs.length, expires_in: 3600, scope: body.get('scope'), id_token: b64({ alg: 'none' }) + '.' + b64({ name: 'Sam Test', preferred_username: 'sam@contoso.example' }) + '.sig' }); });
-  await ctx.route('https://graph.microsoft.com/**', route => { if (preflight(route)) return; if (route.request().method() === 'PUT') { odPuts++; return json(route, 201, {}); } if (/\/me\/calendars/.test(route.request().url())) return json(route, route.request().method() === 'POST' ? 201 : 200, route.request().method() === 'POST' ? { id: 'cal1' } : { value: [] }); return json(route, 404, {}); });
-  await card(page, 'onedrive').locator('button').click();
-  await page.waitForURL(u => !/state=/.test(u.toString()) && /127\.0\.0\.1|localhost/.test(u.toString()), { timeout: 15000 }); await page.waitForSelector('#rolodex .drum-btn'); await sleep(900);
+  // OneDrive keeps what was written; reading asks for the item's download address, as browsers must, then fetches that
+  const odFiles = {}; let odDownloads = 0;
+  await ctx.route('https://graph.microsoft.com/**', route => { if (preflight(route)) return; const r = route.request(), path = decodeURIComponent(new URL(r.url()).pathname);
+    if (/\/me\/calendars/.test(path)) return json(route, r.method() === 'POST' ? 201 : 200, r.method() === 'POST' ? { id: 'cal1' } : { value: [] });
+    const name = (path.match(/approot:\/([^:]+)/) || [])[1];
+    if (r.method() === 'PUT') { odPuts++; odFiles[name] = r.postData(); return json(route, 201, {}); }
+    if (/\/content$/.test(path)) return route.fulfill({ status: 302, headers: { location: 'https://dl.example.test/' + name } }); // what Graph does; browsers refuse it with a sign-in attached
+    return name && odFiles[name] ? json(route, 200, { id: 'i1', '@microsoft.graph.downloadUrl': 'https://dl.example.test/' + encodeURIComponent(name) }) : json(route, 404, {}); });
+  await ctx.route('https://dl.example.test/**', route => { odDownloads++; route.fulfill({ status: 200, headers: { 'access-control-allow-origin': '*', 'content-type': 'application/json' }, body: odFiles[decodeURIComponent(new URL(route.request().url()).pathname.slice(1))] || '' }); });
+  await roundTrip(page, () => card(page, 'onedrive').locator('button').click()); await sleep(600);
   ok('a cancelled Microsoft sign-in leaves OneDrive unlinked and says why', !(await page.evaluate(() => localStorage.getItem('logi-provider'))) && /cancelled/i.test(await page.evaluate(() => (document.querySelector('.toast') || {}).textContent || '')));
   msCancel = false;
   await openCloud(page);
@@ -126,18 +152,16 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   await page.evaluate(async () => (await import('./js/store.js')).sync());
   await page.waitForFunction(() => document.getElementById('cloudBtn')?.dataset.state === 'needs-permission', null, { timeout: 8000 }).catch(() => {});
   await openCloud(page);
-  await page.locator('.sheet button:has-text("Sign in again")').click();
-  await page.waitForURL(u => !/state=/.test(u.toString()), { timeout: 15000 }); await page.waitForSelector('#rolodex .drum-btn');
+  await roundTrip(page, () => page.locator('.sheet button:has-text("Sign in again")').click());
   ok('signing in again names the account instead of asking which one', msAuth.searchParams.get('login_hint') === 'sam@contoso.example' && !msAuth.searchParams.get('prompt'));
-  ok('…and OneDrive carries on', await synced(page));
+  ok('…and OneDrive carries on, reading its copy back through the download address', (await synced(page)) && odDownloads >= 1, 'downloads ' + odDownloads);
   // Outlook calendar on top: the OneDrive sign-in is reused, consent for the calendar is asked once
   await page.evaluate(() => import('./js/calendar.js').then(m => m.openCalendarSheet())); await page.waitForSelector('.sheet .cloud-choice');
-  await page.locator('.sheet .cloud-choice[data-svc="microsoft"] button').click();
-  await page.waitForURL(u => !/state=/.test(u.toString()), { timeout: 15000 }); await page.waitForSelector('#rolodex .drum-btn');
-  await page.waitForFunction(() => import('./js/store.js').then(s => s.db.calSync && s.db.calSync.provider === 'microsoft' && !!s.db.calSync.calendarId), null, { timeout: 15000 }).catch(() => {});
-  const cs = await page.evaluate(() => import('./js/store.js').then(s => s.db.calSync));
+  await roundTrip(page, () => page.locator('.sheet .cloud-choice[data-svc="microsoft"] button').click());
+  let cs = {}; for (let i = 0; i < 60; i++) { cs = await page.evaluate(() => import('./js/store.js').then(s => s.db.calSync || {})); if (cs.calendarId) break; await sleep(250); }
+  const calErr = await page.evaluate(() => import('./js/calendar.js').then(m => m.calState.status + ' ' + m.calState.error));
   ok('connecting Outlook asks for the calendar and keeps the OneDrive permission', /Calendars\.ReadWrite/.test(msAuth.searchParams.get('scope')) && /Files\.ReadWrite\.AppFolder/.test(msAuth.searchParams.get('scope')));
-  ok('…and comes back with the calendar connected and made', cs.provider === 'microsoft' && cs.calendarId === 'cal1', JSON.stringify({ p: cs.provider, c: cs.calendarId }));
+  ok('…and comes back with the calendar connected and made', cs.provider === 'microsoft' && cs.calendarId === 'cal1', JSON.stringify({ p: cs.provider, c: cs.calendarId, calErr }));
   await page.evaluate(async () => { (await import('./js/calendar.js')).disconnectCalendar(); });
   ok('disconnecting Outlook keeps the OneDrive sign-in', !!(await page.evaluate(() => localStorage.getItem('logi-ms-token'))));
   await page.evaluate(async () => (await import('./js/store.js')).unlinkCloud()); await sleep(300);
@@ -153,7 +177,8 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   await page.waitForFunction(() => localStorage.getItem('logi-provider') === 'dropbox', null, { timeout: 15000 });
   ok('a developer key replaces the built-in one and keeps its own return address', authUrl && authUrl.searchParams.get('client_id') === 'myOwnKey' && authUrl.searchParams.get('redirect_uri') === BASE + 'index.html', authUrl && authUrl.searchParams.get('redirect_uri'));
   ok('…and the exchange matches it', tokenBody.get('client_id') === 'myOwnKey' && tokenBody.get('redirect_uri') === BASE + 'index.html');
-  await page.evaluate(async () => { localStorage.removeItem('logi-dropbox-key'); (await import('./js/store.js')).unlinkCloud(); }); await sleep(300);
+  await synced(page); // let its first copy finish before disconnecting
+  await page.evaluate(async () => { localStorage.removeItem('logi-own-dropbox'); (await import('./js/store.js')).unlinkCloud(); }); await sleep(300);
 
   // Nextcloud: only the address, the folder made on connect
   const dav = [];
@@ -165,8 +190,8 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   await page.locator('.sheet input[aria-label="Username"]').fill('jo');
   await page.locator('.sheet input[aria-label="App password"]').fill('app-pass');
   await page.locator('.sheet .card:has-text("Nextcloud") button:has-text("Connect")').click();
-  await page.waitForFunction(() => localStorage.getItem('logi-provider') === 'webdav', null, { timeout: 15000 }).catch(() => {});
-  ok('Nextcloud needs only the address: the Vdex folder is made in the user’s files', dav.includes('MKCOL /remote.php/dav/files/jo/Vdex/') && dav.some(x => x === 'PUT /remote.php/dav/files/jo/Vdex/vdex-production-db.json'), dav.join(', '));
+  await synced(page); // provider is set first, the first copy a moment later
+  ok('Nextcloud needs only the address: the Vdex folder is made in the user’s files', dav.includes('MKCOL /remote.php/dav/files/jo/Vdex/') && dav.some(x => x === 'PUT /remote.php/dav/files/jo/Vdex/vdex-production-db.json'), dav.join(', ') + ' ' + JSON.stringify(await page.evaluate(() => import('./js/store.js').then(s => ({ status: s.cloud.status, error: s.cloud.error, notice: s.cloud.notice, adapter: s.cloud.adapter && s.cloud.adapter.id, provider: localStorage.getItem('logi-provider'), toast: (document.querySelector('.toast') || {}).textContent })))));
   ok('the panel names it Nextcloud', /Connected to Nextcloud \(cloud\.example\.test\)/.test(await page.locator('.sheet .storage').innerText()));
   await closeSheet(page);
 
@@ -175,6 +200,18 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   const cal = await page.evaluate(() => [...document.querySelectorAll('.sheet .cloud-choice')].map(c => [c.dataset.svc, !c.querySelector('button').disabled]));
   ok('the calendar panel offers Google and Outlook as one-tap connections', JSON.stringify(cal) === '[["google",true],["microsoft",true]]' && (await page.locator('.sheet input[aria-label*="client"]').count()) === 0, JSON.stringify(cal));
 
+  // A copy that waited behind the lock is merged with the cloud's copy on unlock, never written over it
+  const merged = await page.evaluate(async () => {
+    const s = await import('./js/store.js');
+    let written = null; const remote = { ...JSON.parse(s.serialize()), bookings: [{ id: 'from-other-device', title: 'Made on the phone', date: '2026-12-01', status: 'Confirmed', updatedAt: Date.now() }] };
+    s.update(d => { d.bookings.push({ id: 'made-here', title: 'Made on this device', date: '2026-12-02', status: 'Confirmed', updatedAt: Date.now() }); });
+    s.cloud.adapter = { id: 'fake', label: 'Fake', ready: async () => true, read: async () => remote, write: async t => { written = JSON.parse(t); } };
+    s.setSealed(true); await s.sync(); s.setSealed(false);
+    for (let i = 0; i < 40 && !written; i++) await new Promise(r => setTimeout(r, 50));
+    s.cloud.adapter = null;
+    return { local: !!s.byId('bookings', 'from-other-device'), remoteKept: !!(written && written.bookings.some(b => b.id === 'from-other-device') && written.bookings.some(b => b.id === 'made-here')) };
+  });
+  ok('a copy that waited behind the lock is merged with the cloud copy, not written over it', merged.local && merged.remoteKept, JSON.stringify(merged));
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

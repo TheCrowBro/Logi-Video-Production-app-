@@ -21,22 +21,28 @@ signin.refusesOthers = (await win.evaluate(() => window.vdexDesktop.openSignIn('
 signin.opens = (await win.evaluate(() => window.vdexDesktop.openSignIn('https://www.dropbox.com/oauth2/authorize?client_id=k&state=vdex-desktoptest'))) === true
   && (await app.evaluate(() => global.__vdexLastExternal)).startsWith('https://www.dropbox.com/');
 const stranger = await fetch(base + '/?state=vdex-unknown&code=x');
-signin.ignoresUnknown = stranger.ok && /<title>Vdex<\/title>/.test(await stranger.text());
+signin.ignoresUnknown = stranger.ok && /has expired/.test(await stranger.text()); // never the app itself in the web browser
 const back = await fetch(base + '/?state=vdex-desktoptest&code=abc');
 signin.tellsTab = back.ok && /close this tab/.test(await back.text());
 await win.waitForURL(u => /code=abc/.test(u.toString()) || !/state=/.test(u.toString()), { timeout: 15000 }).catch(() => {});
 await win.waitForLoadState('domcontentloaded'); await new Promise(r => setTimeout(r, 800));
 if (await win.locator('.lock').count()) await win.keyboard.type('2468'); // a PIN left in this computer's test profile asks again after the reload
 await win.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
-signin.handsBack = !/state=vdex-desktoptest/.test(win.url()) && /did not come from this device/.test(await win.evaluate(() => import('./js/store.js').then(s => s.cloud.notice))); 
-signin.onceOnly = /<title>Vdex<\/title>/.test(await (await fetch(base + '/?state=vdex-desktoptest&code=abc')).text());
+signin.handsBack = !/state=vdex-desktoptest/.test(win.url()) && /out of date/.test(await win.evaluate(() => import('./js/store.js').then(s => s.cloud.notice))); 
+signin.onceOnly = /has expired/.test(await (await fetch(base + '/?state=vdex-desktoptest&code=abc')).text());
+signin.noWorkerHere = (await fetch(base + '/sw.js')).status === 404;
 await win.evaluate(() => { window.__g = window.vdexDesktop.googleSignIn({ client: 'c.apps.googleusercontent.com', scope: 'https://www.googleapis.com/auth/drive.appdata', hint: 'h@example.com' }); });
 await new Promise(r => setTimeout(r, 300));
 const gUrl = await app.evaluate(() => global.__vdexLastExternal);
 const gPage = await fetch(gUrl);
 const gHtml = await gPage.text();
 signin.googlePage = gPage.ok && /Continue with Google/.test(gHtml) && /h@example\.com/.test(gHtml) && /script-src 'nonce-/.test(gPage.headers.get('content-security-policy') || '');
-const post = await fetch(gUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ access_token: 'gt', expires_in: 3600, scope: 'https://www.googleapis.com/auth/drive.appdata' }) });
+const key = (gHtml.match(/"key":"([^"]+)"/) || [])[1];
+const answer = JSON.stringify({ access_token: 'gt', expires_in: 3600, scope: 'https://www.googleapis.com/auth/drive.appdata' });
+signin.googleNeedsPage = (await fetch(gUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base }, body: answer })).status === 403
+  && (await fetch(gUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example', 'X-Vdex-Key': key }, body: answer })).status === 403
+  && (await fetch(gUrl)).status === 404; // the page is served once
+const post = await fetch(gUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, 'X-Vdex-Key': key }, body: answer });
 const got = await win.evaluate(() => window.__g);
 signin.googleAnswer = post.status === 204 && got.access_token === 'gt';
 signin.googleOnce = (await fetch(gUrl)).status === 404 && (await fetch(base + '/__vdex/google?n=guess')).status === 404;
