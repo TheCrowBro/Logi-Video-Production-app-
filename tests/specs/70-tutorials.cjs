@@ -37,7 +37,9 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const expect = async (name, min, btn) => { const r = await walk(btn); ok(`${name}: ${r.cards} steps, ${r.spots} highlighted, closes on Done`, r.cards >= min && r.spots >= min && r.closed, r.titles.join(' · ')); };
   await page.evaluate(() => window.logiGo('bookings')); await sleep(400); await expect('Bookings calendar', 4);
   await page.evaluate(() => document.querySelector('.bk-month .cal .day.has')?.click()); await sleep(400); await expect('A day', 2);
-  await page.evaluate(() => { document.querySelectorAll('.card.tap').forEach(c => { if (/Harbour/.test(c.textContent)) c.click(); }); }); await page.waitForSelector('.bk-detail'); await expect('A booking', 8);
+  // open the Harbour booking whatever today's date is: back to the month, then its card in Next up (or its day)
+  await page.evaluate(() => { const back = [...document.querySelectorAll('#page .page-head button')].find(b => /Calendar/.test(b.textContent)); if (back) back.click(); }); await sleep(300);
+  await page.evaluate(() => { const c = [...document.querySelectorAll('#page .card.tap')].find(x => /Harbour/.test(x.textContent)); if (c) c.click(); }); await page.waitForSelector('.bk-detail'); await expect('A booking', 8);
   await page.locator('.bk-tools button').first().click(); await page.waitForSelector('.cs-page'); await expect('Call sheet', 3);
   await page.getByRole('button', { name: '‹ Booking' }).click(); await sleep(300);
   await page.locator('#bk-money button').first().click(); await page.waitForSelector('.money-page'); await expect('Money', 2);

@@ -52,7 +52,7 @@ Everything can be changed later. Nothing is ever lost by tapping the wrong thing
 ## Keep your things safe
 
 - **Set a PIN** in Settings → Security. Then Vdex locks when you put the phone down, and you can open it with your fingerprint or face. While it's locked, your information is scrambled so no one else can read it.
-- **Link a cloud storage** with the ☁ button at the top: Dropbox, Google Drive or OneDrive. Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
+- **Connect your cloud storage:** tap ☁ at the top, tap **Connect** next to Dropbox, Google Drive or OneDrive, and sign in to your own account. Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
 - **Nothing is sent anywhere by itself.** The [privacy policy](https://thecrowbro.github.io/Logi-Video-Production-app-/privacy.html) says in plain words what stays on your device and what leaves it, and when.
 - **Save a backup now and then:** Settings → Backups & data → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.
 
@@ -65,14 +65,16 @@ Everything can be changed later. Nothing is ever lost by tapping the wrong thing
 ### If something isn't working
 
 - **The camera, microphone or location won't start.** Your phone asked for permission once and you said no. Open your phone's Settings, find Vdex or your browser, and allow it.
-- **My shoots aren't on my other device.** Link the same cloud storage on both devices with the ☁ button, or export a backup on one and import it on the other.
+- **My shoots aren't on my other device.** Connect the same storage, with the same account, on both devices with the ☁ button, or export a backup on one and import it on the other.
+- **The Connect buttons are grey.** Sign-in hasn't been switched on in this copy of Vdex yet. The person who looks after the tech does it once: see [Turning on sign-in](docs/turn-on-sign-in.md).
 - **I forgot my PIN.** It can't be recovered. Tap **Forgot PIN?** on the lock screen, erase this device, then link your storage or import a backup and everything comes back.
 - **Something looks out of date.** Close Vdex fully and open it again. New versions arrive by themselves; a bar at the bottom offers to reload when one has.
 - **The link says “404” or “not found”.** The website hasn't been switched on yet. The person who looks after the tech can do that in a minute: see [For developers](docs/developers.md).
 
 ## For the person who looks after the tech
 
-- [Connecting Dropbox, Google, Microsoft or your own server](docs/connections.md): one-time setup, needed only for those links.
+- [Turning on sign-in](docs/turn-on-sign-in.md): the one-time job that lets everyone connect Dropbox, Google Drive and OneDrive by signing in. About 45 minutes, once.
+- [Connecting your storage](docs/connections.md): how connecting works for everyone, plus Nextcloud, synced folders and the calendar feed.
 - [For developers](docs/developers.md): running Vdex yourself, the tests, making the installers, signing, releasing updates, and how it is built.
 - [Security](SECURITY.md): what protects your data and what doesn't.
 - [Vdex on Google Play](docs/google-play.md): the step-by-step checklist for putting the Android app in the store, with the texts to paste.

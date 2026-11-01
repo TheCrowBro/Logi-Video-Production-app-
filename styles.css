@@ -567,3 +567,16 @@ body.has-update-bar #page { padding-bottom: 110px; }
 .loc-chip { margin-top: 6px; }
 .loc-chip.empty { opacity: .65; }
 .gear-line .muted { text-align: right; }
+
+/* Connecting a cloud storage or calendar: one card per service, sign in with one tap */
+.cloud-choices { gap: 8px; }
+.cloud-choice { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.cloud-choice .grow { flex: 1 1 auto; min-width: 0; }
+.stack .cloud-choice .btn { flex: none; width: auto; min-width: 6.5rem; } /* not the full-width buttons of other panels */
+.cloud-choice.off { opacity: .75; }
+.cloud-choice.off .btn { opacity: .6; }
+.cloud-ico { font-size: 1.6rem; width: 2rem; text-align: center; flex: none; }
+.cloud-head { display: flex; align-items: center; gap: 12px; }
+.storage label.field > span { font-size: .85rem; color: var(--muted); }
+.storage .twirl > summary { grid-template-columns: minmax(0, 1fr) auto; }
+@media (max-width: 340px) { .cloud-choice { flex-wrap: wrap; } .stack .cloud-choice .btn { width: 100%; } }

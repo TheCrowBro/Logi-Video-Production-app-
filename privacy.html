@@ -88,8 +88,8 @@
   <h3>Scanning a printed script</h3>
   <p>Text recognition runs on your device. The first time you use it, the app downloads the recognition library and its English language data from public content delivery networks (cdnjs by Cloudflare, jsDelivr and the Tesseract.js project). The photo of the page never leaves your device.</p>
 
-  <h3>Signing in to Google or Microsoft</h3>
-  <p>When you link Google Drive or Google Calendar, the sign-in library from Google loads and the sign-in happens with Google directly. The same applies to Microsoft when you link OneDrive or Outlook; its library loads from jsDelivr. Vdex receives only a token that lets it reach the files and calendars you allowed.</p>
+  <h3>Signing in to Dropbox, Google or Microsoft</h3>
+  <p>When you connect Dropbox, Google Drive, Google Calendar, OneDrive or Outlook, you sign in on that service's own page, so Vdex never sees your password. For Google, Google's sign-in library loads from Google. In the desktop app the sign-in page opens in your web browser and the answer comes back to Vdex through the app's own address on your computer. Vdex receives only a token that lets it reach the files and calendars you allowed.</p>
 
   <h3>Sharing</h3>
   <p>When you email a call sheet, a quote or an invoice, Vdex opens your mail app with the text ready to send. Printing and the share sheet hand the document to the app you choose. Vdex sends nothing itself.</p>
@@ -107,7 +107,7 @@
       <tr><td data-h="Service"><a href="https://www.dropbox.com/privacy">Dropbox</a>, <a href="https://policies.google.com/privacy">Google</a>, <a href="https://privacy.microsoft.com/privacystatement">Microsoft</a></td><td data-h="When">Only if you link them</td><td data-h="What it receives">Your backup files, calendar events, and your sign-in</td></tr>
       <tr><td data-h="Service"><a href="https://open-meteo.com/en/terms">Open-Meteo</a></td><td data-h="When">Bookings with a location</td><td data-h="What it receives">The shoot location's coordinates</td></tr>
       <tr><td data-h="Service"><a href="https://osmfoundation.org/wiki/Privacy_Policy">OpenStreetMap</a></td><td data-h="When">Address lookups and maps</td><td data-h="What it receives">The address text and the map area shown</td></tr>
-      <tr><td data-h="Service"><a href="https://www.cloudflare.com/privacypolicy/">cdnjs (Cloudflare)</a>, <a href="https://www.jsdelivr.com/terms/privacy-policy">jsDelivr</a>, Tesseract.js</td><td data-h="When">First use of script scanning or Microsoft sign-in</td><td data-h="What it receives">A request for a code library, like any web page</td></tr>
+      <tr><td data-h="Service"><a href="https://www.cloudflare.com/privacypolicy/">cdnjs (Cloudflare)</a>, <a href="https://www.jsdelivr.com/terms/privacy-policy">jsDelivr</a>, Tesseract.js</td><td data-h="When">First use of script or timecode scanning</td><td data-h="What it receives">A request for a code library, like any web page</td></tr>
       <tr><td data-h="Service"><a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub</a></td><td data-h="When">Opening the app and checking for updates</td><td data-h="What it receives">Ordinary web server logs</td></tr>
     </tbody>
   </table>

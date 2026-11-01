@@ -1,8 +1,8 @@
 // Single JSON database. Lives in localStorage for speed/offline, and is mirrored to a
 // file you pick inside any cloud-synced folder (Google Drive, Dropbox, OneDrive, iCloud Drive...)
 // using the File System Access API where available. Export/Import covers everything else.
-import { uid, ymd } from './util.js';
-import { fileAdapter, dropboxAdapter, gdriveAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish } from './providers.js';
+import { uid, ymd, toast } from './util.js';
+import { fileAdapter, dropboxAdapter, gdriveAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish, microsoftFinish } from './providers.js';
 
 const KEY = 'logi-db-v1';
 const blank = () => ({
@@ -211,6 +211,7 @@ export function loadSample() {
 /* ------------------------------ cloud sync ------------------------------ */
 
 export const cloud = {
+  notice: '', // why the last sign-in did not finish, shown in the storage panel
   supported: typeof window.showSaveFilePicker === 'function', // local-file linking
   adapter: null,
   auxName: '', feedUrl: '', feedError: '', // calendar feed (see calendar.js)
@@ -238,9 +239,20 @@ function setStatus(status, error = '') { cloud.status = status; cloud.error = er
 
 export async function initCloud() {
   cloud.feedUrl = lsGet('logi-feed-url') || '';
+  // Coming back from a sign-in page: finish it, or say why it did not work and leave nothing half-linked.
+  const say = msg => setTimeout(() => toast(msg), 700);
   try {
-    if (await dropboxFinish()) { lsSet('logi-provider', 'dropbox'); }
-  } catch (e) { setStatus('error', e.message); }
+    if (await dropboxFinish()) { lsSet('logi-provider', 'dropbox'); cloud.notice = ''; say('Connected to Dropbox'); }
+  } catch (e) { cloud.notice = e.message; say(e.message); }
+  try {
+    const intent = await microsoftFinish();
+    if (intent === 'onedrive') { lsSet('logi-provider', 'onedrive'); cloud.notice = ''; say('Connected to OneDrive'); }
+    else if (intent === 'calendar') { update(d => { d.calSync = { ...d.calSync, provider: 'microsoft', updatedAt: Date.now() }; }); say('Connected to Outlook'); import('./calendar.js').then(m => m.syncCalendar({ interactive: false })).catch(() => {}); }
+  } catch (e) {
+    cloud.notice = e.message; say(e.message);
+    if (e.intent === 'onedrive' && e.first && lsGet('logi-provider') === 'onedrive') lsSet('logi-provider', null);
+    if (e.intent === 'calendar' && !db.calSync?.calendarId) update(d => { d.calSync = { ...d.calSync, provider: null, updatedAt: Date.now() }; });
+  }
   try {
     const provider = lsGet('logi-provider');
     if (provider === 'dropbox') cloud.adapter = dropboxAdapter();
@@ -400,12 +412,18 @@ export async function openCloudFile() {
 }
 
 export const connectDropbox = () => dropboxBegin(); // redirects away; initCloud finishes the link on return
-export const connectGdrive = () => link(gdriveAdapter(), 'gdrive');
-export const connectOneDrive = () => link(onedriveAdapter(), 'onedrive');
-export async function connectWebdav() { const a = webdavAdapter(); if (!(await a.ready())) throw new Error('Enter the server address and username first'); await link(a, 'webdav'); if (cloud.status === 'error') { const msg = cloud.error; cloud.adapter = null; lsSet('logi-provider', null); setStatus('off'); throw new Error(msg); } }
+// Link, and if the first sync fails (sign-in cancelled, window blocked, wrong password) go back to unlinked and say why.
+async function linkOrUndo(a, provider) {
+  cloud.notice = '';
+  await link(a, provider);
+  if (cloud.status === 'error' || cloud.status === 'needs-permission') { const msg = cloud.error || 'Sign-in did not finish'; cloud.adapter = null; lsSet('logi-provider', null); setStatus('off'); throw new Error(msg); }
+}
+export const connectGdrive = () => linkOrUndo(gdriveAdapter(), 'gdrive');
+export const connectOneDrive = () => linkOrUndo(onedriveAdapter(), 'onedrive');
+export async function connectWebdav() { const a = webdavAdapter(); if (!(await a.ready())) throw new Error('Enter the server address, your username and the app password first'); await a.ensureFolder(); await linkOrUndo(a, 'webdav'); }
 
 export async function unlinkCloud() {
-  cloud.adapter?.signOut?.();
+  cloud.adapter?.signOut?.({ keepToken: db.calSync?.provider === 'microsoft' }); // the Outlook link shares the Microsoft sign-in
   cloud.adapter = null; cloud.auxName = ''; cloud.feedUrl = ''; lsSet('logi-feed-url', null);
   await kv('readwrite', s => s.delete('auxHandle'));
   lsSet('logi-provider', null);

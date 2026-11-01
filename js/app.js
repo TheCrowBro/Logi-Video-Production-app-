@@ -107,7 +107,7 @@ const cloudLabel = document.getElementById('cloudLabel');
 
 function paintCloud() {
   const s = store.cloud.status;
-  const text = { off: 'Local', synced: 'Synced', saving: 'Saving…', 'needs-permission': 'Reconnect', error: 'Sync error' }[s];
+  const text = { off: 'Local', synced: 'Synced', saving: 'Saving…', 'needs-permission': 'Sign in', error: 'Sync error' }[s];
   cloudLabel.textContent = text;
   cloudBtn.dataset.state = s;
 }
@@ -123,6 +123,8 @@ function openStorage() {
 store.initCloud();
 backup.nudgeIfStale();
 const idle = window.requestIdleCallback ? fn => requestIdleCallback(fn, { timeout: 2500 }) : fn => setTimeout(fn, 1200);
-idle(() => { import('./pages/gear.js').then(m => m.serviceNudge()); import('./money.js').then(m => m.moneyNudge()); }); // service and overdue-invoice reminders, once the first paint is out of the way
+idle(() => { import('./pages/gear.js').then(m => m.serviceNudge()); import('./money.js').then(m => m.moneyNudge()); });
+// Google's sign-in window has to open straight from a tap, so have its library ready before anyone taps "Sign in again".
+if (localStorage.getItem('logi-provider') === 'gdrive' || store.db.calSync?.provider === 'google') import('./providers.js').then(p => p.signIn.available('google') && p.loadGIS()).catch(() => {}); // service and overdue-invoice reminders, once the first paint is out of the way
 if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
 initUpdates(); // service worker, offline copy, and the "new version" bar

@@ -1,7 +1,8 @@
 // Vdex desktop: the web app in its own window. The app is served from a small local web server at
 // http://localhost:47831 so it behaves exactly as it does in Chrome: service worker, saved data, sign-ins.
 'use strict';
-const { app, BrowserWindow, Menu, dialog, screen, session, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, screen, session, shell, ipcMain } = require('electron');
+const crypto = require('crypto');
 const { initUpdater } = require('./updater.js');
 const http = require('http');
 const fs = require('fs');
@@ -9,7 +10,9 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');            // the web app (inside app.asar once packaged)
 const DEFAULT_PORT = 47831;                           // part of the address the browser stores data under, so it stays fixed
-const AUTH_HOSTS = new Set(['accounts.google.com', 'login.microsoftonline.com', 'login.live.com', 'login.microsoft.com', 'www.dropbox.com']);
+// Sign-in pages open in the person's own web browser (Dropbox, Google and Microsoft ask apps not to show them in an
+// app window); the answer comes back to this local server and is handed to the Vdex window.
+const SIGNIN_HOSTS = new Set(['www.dropbox.com', 'login.microsoftonline.com']);
 const GUIDE = 'https://github.com/TheCrowBro/Logi-Video-Production-app-#readme';
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
@@ -25,11 +28,78 @@ let win = null;
 let origin = '';
 let busy = null; // set when the usual port was taken and another had to be used
 
+/* --------------------------------- sign-ins --------------------------------- */
+const signinStates = new Set();   // Dropbox/Microsoft sign-ins this app started and is waiting for
+const googlePending = new Map();  // one-time code -> a Google sign-in page waiting in the web browser
+const openOut = url => { global.__vdexLastExternal = url; if (!process.env.VDEX_TEST_NO_BROWSER) shell.openExternal(url).catch(() => {}); };
+const fromApp = e => { try { return isOurs(new URL(e.senderFrame.url).origin); } catch { return false; } };
+function bringBack() { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function note(res, title, text) {
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'X-Content-Type-Options': 'nosniff' });
+  res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title><body style="font:17px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px;text-align:center"><h1 style="font-size:1.4rem">${esc(title)}</h1><p>${esc(text)}</p></body>`);
+}
+// The Google page runs in the web browser at this app's address (which Google knows), signs in with Google's own
+// window, and posts the answer back here with the one-time code.
+function googlePage(res, nonce, { client, scope, hint }) {
+  const sn = crypto.randomBytes(16).toString('base64');
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${sn}' https://accounts.google.com/gsi/client; style-src 'unsafe-inline' https://accounts.google.com/gsi/style; frame-src https://accounts.google.com/gsi/; connect-src 'self' https://accounts.google.com/gsi/; img-src https: data:` });
+  const cfg = JSON.stringify({ client, scope, hint: hint || '', nonce }).replace(/</g, '\\u003c');
+  res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in to Google for Vdex</title>
+<body style="font:17px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px;text-align:center"><h1 style="font-size:1.4rem">Sign in to Google for Vdex</h1>
+<p id="t">Tap the button, sign in and tap Allow. Vdex only uses a private area of your Google Drive of its own.</p>
+<button id="go" style="font:inherit;font-weight:700;padding:12px 22px;border-radius:10px;border:0;background:#1a73e8;color:#fff;cursor:pointer" disabled>Continue with Google</button>
+<script nonce="${sn}" src="https://accounts.google.com/gsi/client"></script>
+<script nonce="${sn}">
+const C = ${cfg}, t = document.getElementById('t'), go = document.getElementById('go');
+const send = r => fetch('/__vdex/google?n=' + encodeURIComponent(C.nonce), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(r) })
+  .then(x => { go.hidden = true; t.textContent = r.error ? 'Sign-in was not finished. Go back to Vdex to try again.' : 'Signed in. Go back to Vdex; this tab can be closed.'; })
+  .catch(() => { t.textContent = 'Vdex has closed, or this sign-in has expired. Open Vdex and try again.'; });
+const ready = () => { go.disabled = false; go.onclick = () => google.accounts.oauth2.initTokenClient({ client_id: C.client, scope: C.scope, callback: r => send(r), error_callback: e => send({ error: e.type || 'failed' }) }).requestAccessToken(C.hint ? { prompt: '', login_hint: C.hint } : { prompt: '' }); };
+window.google && google.accounts ? ready() : addEventListener('load', ready);
+</script></body>`);
+}
+ipcMain.handle('signin:open', (e, url) => {
+  if (!fromApp(e)) return false;
+  let u; try { u = new URL(url); } catch { return false; }
+  if (u.protocol !== 'https:' || !SIGNIN_HOSTS.has(u.hostname)) return false;
+  const state = u.searchParams.get('state'); if (state) { signinStates.add(state); setTimeout(() => signinStates.delete(state), 30 * 60e3); }
+  openOut(u.href); return true;
+});
+ipcMain.handle('signin:google', (e, opts = {}) => new Promise(resolve => {
+  if (!fromApp(e)) return resolve({ error: 'refused' });
+  const nonce = crypto.randomBytes(24).toString('base64url');
+  const timer = setTimeout(() => { googlePending.delete(nonce); resolve({ error: 'timed_out' }); }, 15 * 60e3);
+  googlePending.set(nonce, { opts: { client: String(opts.client || ''), scope: String(opts.scope || ''), hint: String(opts.hint || '') }, resolve: r => { clearTimeout(timer); googlePending.delete(nonce); resolve(r); } });
+  openOut(`${origin}/__vdex/google?n=${encodeURIComponent(nonce)}`);
+}));
+
 /* ------------------------------- local server ------------------------------- */
 function handler(req, res) {
+  let u; try { u = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400); return res.end(); }
+  // Google: the sign-in page, and its answer.
+  if (u.pathname === '/__vdex/google') {
+    const p = googlePending.get(u.searchParams.get('n') || '');
+    if (!p) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('This sign-in has expired. Open Vdex and try again.'); }
+    if (req.method === 'GET') return googlePage(res, u.searchParams.get('n'), p.opts);
+    if (req.method === 'POST') {
+      let body = ''; req.setEncoding('utf8');
+      req.on('data', c => { body += c; if (body.length > 65536) req.destroy(); });
+      req.on('end', () => { let r; try { r = JSON.parse(body); } catch { r = { error: 'unreadable' }; } p.resolve(r && typeof r === 'object' ? r : { error: 'unreadable' }); res.writeHead(204); res.end(); bringBack(); });
+      return;
+    }
+  }
+  // Dropbox and Microsoft: the sign-in coming back in the web browser. Hand it to the Vdex window; the tab can close.
+  const state = u.searchParams.get('state') || '';
+  if (req.method === 'GET' && u.pathname === '/' && signinStates.has(state) && (u.searchParams.has('code') || u.searchParams.has('error'))) {
+    signinStates.delete(state);
+    if (win) { const back = new URL(origin + '/'); u.searchParams.forEach((v, k) => back.searchParams.set(k, v)); win.loadURL(back.href); bringBack(); }
+    return note(res, 'Signed in', 'You can close this tab and go back to Vdex.');
+  }
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   let pathname;
-  try { pathname = decodeURIComponent(new URL(req.url, 'http://localhost').pathname); } catch { res.writeHead(400); return res.end(); }
+  try { pathname = decodeURIComponent(u.pathname); } catch { res.writeHead(400); return res.end(); }
   if (pathname === '/' || pathname === '') pathname = '/index.html';
   let file = path.normalize(path.join(ROOT, pathname));
   if (!file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }
@@ -67,12 +137,11 @@ const writeState = patch => { try { fs.writeFileSync(stateFile(), JSON.stringify
 
 const external = url => { try { const u = new URL(url); if (['http:', 'https:', 'mailto:', 'tel:', 'sms:'].includes(u.protocol)) shell.openExternal(url); } catch { /* not a link */ } };
 const isOurs = url => url === origin || url.startsWith(origin + '/');
-const isAuth = url => { try { return AUTH_HOSTS.has(new URL(url).hostname); } catch { return false; } };
 
-// Pop-ups: sign-in windows and the print window stay inside the app; everything else goes to the system browser.
+// Pop-ups: the print window stays inside the app; everything else, sign-in pages included, goes to the web browser.
 function policeWindowOpen(contents) {
   contents.setWindowOpenHandler(({ url }) => {
-    if (!url || url === 'about:blank' || isOurs(url) || isAuth(url)) return { action: 'allow', overrideBrowserWindowOptions: { width: 560, height: 720, autoHideMenuBar: true, backgroundColor: '#ffffff' } };
+    if (!url || url === 'about:blank' || isOurs(url)) return { action: 'allow', overrideBrowserWindowOptions: { width: 560, height: 720, autoHideMenuBar: true, backgroundColor: '#ffffff' } };
     external(url);
     return { action: 'deny' };
   });
@@ -104,8 +173,8 @@ function createWindow() {
   win.on('close', () => { writeState({ bounds: win.getNormalBounds(), maximized: win.isMaximized() }); });
   win.on('closed', () => { win = null; });
   policeWindowOpen(win.webContents);
-  // Links the page navigates to itself (maps, tel:, mailto:) open outside; sign-in pages that come back to Vdex stay inside.
-  win.webContents.on('will-navigate', (e, url) => { if (isOurs(url) || isAuth(url)) return; e.preventDefault(); external(url); });
+  // Links the page navigates to itself (maps, tel:, mailto:) open outside.
+  win.webContents.on('will-navigate', (e, url) => { if (isOurs(url)) return; e.preventDefault(); external(url); });
   win.loadURL(origin + '/');
 }
 

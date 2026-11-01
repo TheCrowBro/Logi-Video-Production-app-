@@ -17,7 +17,7 @@ This is the long version. The short one is the [README](../README.md).
 | 📱 **iPhone or iPad** | [iPhone guide](#iphone-guide) |
 | 🤖 **Android phone or tablet** | [Android guide](#android-guide) |
 | 💻 **Windows, Mac or Linux computer** | [Using Vdex on a computer](#using-vdex-on-a-computer): one-click installers, or the browser |
-| 🔌 Linking Dropbox, Google, Microsoft or your own server | [Connecting Dropbox, Google, Microsoft or your own server](connections.md), done once from any device |
+| 🔌 Linking Dropbox, Google Drive, OneDrive or your own server | Tap **☁** at the top and sign in. More in [Connecting your storage](connections.md) |
 | 🧑‍💻 Running the app yourself | [For developers](developers.md) |
 
 The two phone guides cover the same ground in the same order, so a crew with both kinds of phone can follow along together. Where the phones behave differently, the guide for that phone says so.
@@ -152,14 +152,14 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Backups.** Settings → *Backups & data* → **Export backup** opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
 
-**Using Vdex on more than one device.** Link **one** cloud storage under **☁** (or Settings → *Storage & sync*). Every device linked to the same storage then shares one database, and changes made on two devices at once are merged rather than overwriting each other.
+**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Dropbox, Google Drive or OneDrive, sign in to your own account and tap **Allow**. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a folder of its own and cannot see your other files.
 
 | On an iPhone you can link | Notes |
 |---|---|
-| **Dropbox** | Needs a one-time setup, see [the connection guides](connections.md). Stays signed in. |
-| **Google Drive** | Needs a one-time setup. Google makes you sign in again about once an hour; tap **Reconnect** when asked. |
-| **OneDrive** | Needs a one-time setup. Stays signed in. |
-| **WebDAV** | Your own Nextcloud, ownCloud, Synology or similar server. |
+| **Dropbox** | Sign in once. Stays connected. |
+| **Google Drive** | Sign in once. After about an hour away, Google wants one tap to carry on: tap **Sign in again**. |
+| **OneDrive** | Personal or work account. Sign in once. Stays connected. |
+| **Nextcloud and other WebDAV servers** | Under *Other ways*: your Nextcloud address, username and an app password. |
 
 There is no iCloud Drive option: iPhones don't let web apps keep a file in a synced folder. The four above work on your iPhone and on your computer, so pick one and link it everywhere.
 
@@ -229,7 +229,7 @@ Only the installed app can show them, on iOS 16.4 or later. Open Vdex from the H
 They need the installed app or a secure (https) address, iOS 16.4 or later, and your permission when asked. If you refused once, see *Let Vdex use the camera…* above.
 
 **Google keeps asking me to sign in again.**
-That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Reconnect** or **Sync now**. Dropbox and Microsoft stay signed in.
+That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Sign in again** or **Sync now**; if you are still signed in to Google, the window closes by itself. Dropbox and Microsoft stay connected.
 
 **My iPhone and laptop won't link.**
 Put both on the same Wi‑Fi or on the iPhone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
@@ -389,14 +389,14 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Backups.** Settings → *Backups & data* → **Export backup** opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
 
-**Using Vdex on more than one device.** Link **one** cloud storage under **☁** (or Settings → *Storage & sync*). Every device linked to the same storage then shares one database, and changes made on two devices at once are merged rather than overwriting each other.
+**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Dropbox, Google Drive or OneDrive, sign in to your own account and tap **Allow**. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a folder of its own and cannot see your other files.
 
 | On Android you can link | Notes |
 |---|---|
-| **Google Drive** | Needs a one-time setup, see [the connection guides](connections.md). Google makes you sign in again about once an hour; tap **Reconnect** when asked. |
-| **Dropbox** | Needs a one-time setup. Stays signed in. |
-| **OneDrive** | Needs a one-time setup. Stays signed in. |
-| **WebDAV** | Your own Nextcloud, ownCloud, Synology or similar server. |
+| **Google Drive** | Sign in once. After about an hour away, Google wants one tap to carry on: tap **Sign in again**. |
+| **Dropbox** | Sign in once. Stays connected. |
+| **OneDrive** | Personal or work account. Sign in once. Stays connected. |
+| **Nextcloud and other WebDAV servers** | Under *Other ways*: your Nextcloud address, username and an app password. |
 
 The *file in a synced folder* option you may see on a computer doesn't appear on Android: phones don't let web apps keep a file in a synced folder. The four above work on your phone and on your computer, so pick one and link it everywhere.
 
@@ -466,7 +466,7 @@ Your phone has no ARCore support, or you're not in Chrome. Use the tilt method i
 Calibrate the compass by moving the phone in a figure of eight, and keep it away from magnets, cases with magnets and car mounts.
 
 **Google keeps asking me to sign in again.**
-That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Reconnect** or **Sync now**. Dropbox and Microsoft stay signed in.
+That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Sign in again** or **Sync now**; if you are still signed in to Google, the window closes by itself. Dropbox and Microsoft stay connected.
 
 **My phone and laptop won't link.**
 Put both on the same Wi‑Fi or on the phone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
