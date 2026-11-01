@@ -76,3 +76,5 @@ vendor/          qrcode-generator (MIT), jsQR (Apache-2.0); see vendor/LICENSES.
 ```
 
 **Versions.** The current version is shown under Settings → About. Version 1.0.0 (before the workflow features) is kept on the branch `claude/backup-v1.0.0`.
+
+**The website at crowmade.app.** The Vdex and Valheim Easy Server pages, and the home page that lists every app, are in `crowmade/` (written by `tools/build-crowmade.mjs`). Always publish the site with `tools/deploy-crowmade.sh`: it builds Little Log's pages from the Children-Schedule-App repository, adds these on top and uploads all of them to the Cloudflare Pages project `crowmade` in one go. A Pages deployment replaces the whole site, so publishing from Children-Schedule-App on its own (`npm run site:deploy`) removes `/vdex/` and `/valheim/` until this script is run again.
