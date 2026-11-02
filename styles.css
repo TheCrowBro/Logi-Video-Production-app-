@@ -323,7 +323,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
   .bk-month .day { min-height: 110px; }
   /* booking detail: two columns of sections under the header */
   .bk-detail { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
-  .bk-detail > .page-head, .bk-detail > .hero, .bk-detail > .sunline { grid-column: 1 / -1; }
+  .bk-detail > .page-head, .bk-detail > .hero, .bk-detail > .sunline, .bk-detail > .bk-tools { grid-column: 1 / -1; }
   .bk-detail .block .list { grid-template-columns: 1fr; }
   /* timecode notes: script beside notes */
   .tc-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0 28px; align-items: start; }
@@ -667,3 +667,8 @@ html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .s
 .sb-ghost { box-shadow: 0 10px 28px #0007; opacity: .72; }
 body.sb-dragging { -webkit-user-select: none; user-select: none; cursor: grabbing; }
 .sb-cast-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+/* Booking tools (Call sheet, Stripboard, Share with crew, templates): an even grid under the booking's summary,
+   two equal buttons to a row on a phone and four on a wider screen. */
+.actions.bk-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.actions.bk-tools > .btn { width: 100%; min-width: 0; justify-content: center; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+@media (min-width: 700px) { .actions.bk-tools { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

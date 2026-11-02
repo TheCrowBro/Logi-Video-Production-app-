@@ -187,17 +187,18 @@ function detail(go) {
       b.client && h('div', null, '🏢 ', b.client),
       b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address)),
       h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openAddToCalendar(b) }, '📆 Add to calendar'), h('button', { class: 'btn ghost small', onclick: () => shareBooking(b) }, '📤 Share'), h('a', { class: 'btn ghost small', href: mailtoLink(b) }, '✉ Email'))),
+    // The booking's tools, right under its summary: an even grid, two to a row on a phone.
+    h('div', { class: 'actions bk-tools' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
+      h('button', { class: 'btn ghost small sb-open', onclick: () => go({ view: 'strips', id: b.id }) }, `🎬 Stripboard${sceneCount(b) ? ` · ${sceneCount(b)} scene${sceneCount(b) === 1 ? '' : 's'}` : ''}`),
+      h('button', { class: 'btn ghost small', onclick: () => import('../crew-link.js').then(m => m.openCrewShare(b)).catch(e => toast('Could not open sharing: ' + (e.message || e))) }, '👥 Share with crew'),
+      h('button', { class: 'btn ghost small', onclick: () => saveBookingAsTemplate(b, t => t && toast(`Saved as the “${t.name}” template`)) }, '📐 Save as template'),
+      templateById(b.type) && h('button', { class: 'btn ghost small', onclick: () => { const n = applyTemplateExtras(b.id, templateById(b.type)); toast(n ? `${n} item${n === 1 ? '' : 's'} added from the template` : 'Nothing missing from the template'); } }, '↻ Apply template items')),
     workflowBlock(b, {
       crew: () => document.getElementById('bk-crew')?.scrollIntoView({ block: 'start' }), venue: () => (b.venueId ? openVenue(b.venueId) : window.logiGo('venues')), insurance: () => window.logiGo('insurance'),
       hires: () => document.getElementById('bk-hires')?.scrollIntoView({ block: 'start' }), shots: () => document.getElementById('bk-shots')?.scrollIntoView({ block: 'start' }), tcnotes: () => window.logiGo('tcnotes'),
       callsheet: () => go({ view: 'callsheet', id: b.id }), quote: () => go({ view: 'money', id: b.id, kind: 'quote' }), invoice: () => go({ view: 'money', id: b.id, kind: 'invoice' }), kit: () => document.getElementById('bk-kit')?.scrollIntoView({ block: 'start' }), field: () => window.logiGo('field'), media: () => document.getElementById('bk-media')?.scrollIntoView({ block: 'start' }),
       hours: () => openHoursSheet(b.id), licences: () => document.getElementById('bk-licences')?.scrollIntoView({ block: 'start' }), deliverables: () => document.getElementById('bk-deliverables')?.scrollIntoView({ block: 'start' }),
     }),
-    h('div', { class: 'actions bk-tools' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
-      h('button', { class: 'btn ghost small sb-open', onclick: () => go({ view: 'strips', id: b.id }) }, `🎬 Stripboard${sceneCount(b) ? ` · ${sceneCount(b)} scene${sceneCount(b) === 1 ? '' : 's'}` : ''}`),
-      h('button', { class: 'btn ghost small', onclick: () => import('../crew-link.js').then(m => m.openCrewShare(b)).catch(e => toast('Could not open sharing: ' + (e.message || e))) }, '👥 Share with crew'),
-      h('button', { class: 'btn ghost small', onclick: () => saveBookingAsTemplate(b, t => t && toast(`Saved as the “${t.name}” template`)) }, '📐 Save as template'),
-      templateById(b.type) && h('button', { class: 'btn ghost small', onclick: () => { const n = applyTemplateExtras(b.id, templateById(b.type)); toast(n ? `${n} item${n === 1 ? '' : 's'} added from the template` : 'Nothing missing from the template'); } }, '↻ Apply template items')),
     venueBlock(b, gear),
     sunLine(b.date, b),
     section('Stakeholders', (b.stakeholders || []).length
