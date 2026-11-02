@@ -26,14 +26,17 @@ export async function initLicence() {
   const l = L(); if (!l) return;
   set(await l.state().catch(() => null));
   l.onChange(set);
-  setGate(() => {
+  setGate(({ form = false } = {}) => {
     if (!S.cur || S.cur.canEdit !== false) return true;
     muteToasts(600);
     // Background work (a calendar sync, say) is refused quietly; a change someone just asked for is explained.
     const asked = Date.now() - S.input < 3000;
     if (asked) {
+      // A control on the page (a ticked box, a typed field) is redrawn to show what is stored, and keeps the focus
+      // when the explanation closes. A form stays open as it is, so there is nothing to redraw.
+      const twin = form ? null : rememberFocus();
       if (!document.querySelector('.sheet.licence-readonly')) readOnlySheet(); else announce('Vdex is read-only. Nothing was changed.');
-      clearTimeout(S.redraw); S.redraw = setTimeout(redraw, 0); // a box ticked on screen goes back to what is stored
+      if (!form) { clearTimeout(S.redraw); S.redraw = setTimeout(() => { redraw(); if (twin) setTimeout(twin, 0); }, 0); } // the page redraws in a microtask; look for its new copy after that
     }
     return false;
   });
@@ -130,6 +133,16 @@ function paintBar() {
 }
 
 /* --------------------------------- sheets --------------------------------- */
+// Marks the focused control so the sheet can hand focus back to its redrawn copy (util.sheet follows data-fk).
+function rememberFocus() {
+  document.querySelectorAll('[data-fk="licence-ro"]').forEach(e => delete e.dataset.fk);
+  const el = document.activeElement, page = document.getElementById('page');
+  if (!el || !page || !page.contains(el) || el.closest('[data-fk]')) return null;
+  const sig = e => [e.tagName, e.type || '', e.getAttribute('aria-label') || '', e.name || '', e.id || '', (e.closest('label') || e).textContent.trim().slice(0, 80)].join('|');
+  const want = sig(el), all = [...page.querySelectorAll(el.tagName)], nth = all.filter(e => sig(e) === want).indexOf(el);
+  el.dataset.fk = 'licence-ro';
+  return () => { const twin = [...page.querySelectorAll(el.tagName)].filter(e => sig(e) === want)[nth]; if (twin && twin !== el) twin.dataset.fk = 'licence-ro'; };
+}
 function readOnlySheet() {
   const s = S.cur, d = describe(s) || {};
   const sh = sheet('Vdex is read-only', h('div', { class: 'stack' },
@@ -138,7 +151,9 @@ function readOnlySheet() {
     h('div', { class: 'actions' }, ...actions(s, d, () => sh.close()))));
   sh.el.classList.add('licence-readonly');
   announce('Vdex is read-only. That change was not saved.');
-  setTimeout(() => { const b = sh.el.querySelector('.actions .btn'); if (b) b.focus(); }, 50);
+  // Focus goes to the sheet itself, not a button: someone still typing must not press Buy by accident.
+  sh.el.tabIndex = -1;
+  setTimeout(() => sh.el.focus(), 50);
 }
 function detailsSheet() {
   const s = S.cur, d = describe(s); if (!d) return;

@@ -83,7 +83,7 @@ let gate = null;
 export const setGate = fn => { gate = typeof fn === 'function' ? fn : null; };
 
 // Whether a change would be accepted now (and, when not, the gate explains why). Forms check it before closing.
-export const canChange = () => !gate || gate();
+export const canChange = () => !gate || gate({ form: true });
 
 // Redraws the page from what is stored (after a refused change, so a ticked box shows the stored value again).
 export const redraw = () => emit();

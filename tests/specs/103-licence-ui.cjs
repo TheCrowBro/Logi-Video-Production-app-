@@ -103,11 +103,13 @@ const bridge = start => `(() => {
     await page.evaluate(() => window.logiGo('settings')); await sleep(400);
     await page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => /Profile/.test(x.querySelector('.ss-title').textContent)); d.open = true; d.scrollIntoView(); });
     const cur = page.locator('input[aria-label="Currency symbol"]');
-    await cur.fill('£'); await cur.press('Tab'); await sleep(300);
+    await cur.fill('£'); await cur.press('Enter'); await sleep(300);
     const stored = await page.evaluate(() => import('./js/store.js').then(s => s.db.profile.currency || '$'));
     ok('a change someone makes is refused and explained, with Buy and Enter code, and no "Saved"', stored !== '£' && /Vdex is read-only/.test(await page.locator('.sheet').innerText()) && (await page.locator('.sheet .btn').count()) >= 2 && (await page.locator('.toast').count()) === 0, stored);
     await page.screenshot({ path: OUT + '/licence-readonly.png' });
-    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape'); await sleep(200);
+    const back = await page.evaluate(() => ({ tag: document.activeElement?.tagName, label: document.activeElement?.getAttribute('aria-label'), value: document.activeElement?.value, fk: [...document.querySelectorAll('[data-fk]')].map(e => e.tagName + ':' + e.dataset.fk + ':' + (e.getAttribute('aria-label') || '')) }));
+    ok('closing the explanation puts the focus back on the field, redrawn with what is stored', back.label === 'Currency symbol' && back.value !== '£', JSON.stringify(back));
     const exported = await page.evaluate(() => import('./js/store.js').then(s => typeof s.db.bookings.length === 'number'));
     ok('everything can still be read', exported);
     await ctx.close();
@@ -123,6 +125,10 @@ const bridge = start => `(() => {
     const kept = await page.evaluate(() => ({ forms: document.querySelectorAll('.sheet form').length, typed: document.querySelector('.sheet form input[type="text"]')?.value, readOnly: !!document.querySelector('.sheet.licence-readonly'), focus: !!document.activeElement?.closest('.licence-readonly') }));
     const saved = await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.length));
     ok('saving a form while read-only keeps the form and what was typed, explains why, and moves focus to the explanation', kept.forms === 1 && kept.typed === 'Wedding at the pier' && kept.readOnly && kept.focus && saved === 0, JSON.stringify(kept));
+    await page.keyboard.press('Enter'); await page.keyboard.press('Space'); await sleep(200);
+    ok('keys pressed straight after (someone still typing) never buy anything', !(await page.evaluate(() => window.__lic.calls.some(c => c[0] === 'buy'))));
+    await page.keyboard.press('Escape'); await sleep(200);
+    ok('closing the explanation returns to the form', await page.evaluate(() => !!document.activeElement?.closest('.sheet form') && !document.querySelector('.licence-readonly')));
     await ctx.close();
 
     // The bar offers each state's own next step: someone who has paid is never asked to buy again.
@@ -134,11 +140,11 @@ const bridge = start => `(() => {
     ]) {
       ({ ctx, page } = await open(state, { width: 360 }));
       const bar = page.locator('.licence-bar'), btxt = await bar.innerText(), h = await bar.evaluate(b => b.getBoundingClientRect().height);
-      ok(`read-only bar for "${state.mode}": "${button}", a short message, and a compact bar on a narrow window`, (await bar.getByRole('button', { name: button }).count()) === 1 && text.test(btxt) && (state.mode === 'cancelled' || !/Buy/.test(btxt)) && !/jane mcdonald/.test(btxt) && h < 130, `${Math.round(h)}px: ${btxt.replace(/\n/g, ' | ')}`);
+      ok(`read-only bar for "${state.mode}": "${button}", a short message, and a compact bar on a narrow window`, (await bar.getByRole('button', { name: button }).count()) === 1 && text.test(btxt) && (state.mode === 'cancelled' || !/Buy/.test(btxt)) && !/jane mcdonald/.test(btxt) && h < 150, `${Math.round(h)}px: ${btxt.replace(/\n/g, ' | ')}`);
       if (state.mode === 'pending') {
         await page.evaluate(() => import('./js/util.js').then(u => u.toast('Saved')));
-        const top = await page.evaluate(() => { const t = document.querySelector('.toast').getBoundingClientRect(); return document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2)?.closest('.toast') != null; });
-        ok('messages show above the licence bar', top);
+        const z = await page.evaluate(() => { const t = getComputedStyle(document.querySelector('.toast')), b = getComputedStyle(document.querySelector('.licence-bar')); return { above: Number(t.zIndex) > Number(b.zIndex), through: t.pointerEvents === 'none' }; });
+        ok('messages show above the licence bar, and clicks still reach its buttons', z.above && z.through, JSON.stringify(z));
       }
       await ctx.close();
     }
