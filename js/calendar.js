@@ -252,6 +252,7 @@ export function calendarPanel() {
       h('div', { class: 'card' }, h('strong', null, 'Live feed (any calendar app)'),
         h('p', { class: 'small muted' }, 'Vdex keeps a vdex-bookings.ics file in your linked cloud storage up to date. Subscribe to its link once and your calendar follows every change by itself. One-way, from Vdex to the calendar.'),
         !a ? h('p', { class: 'note' }, 'Link a cloud storage first (☁ at the top).')
+          : !a.writeAux ? h('p', { class: 'note' }, `${a.label} keeps Vdex’s copy private, so it can’t give your calendar a link to follow. Use Two-way sync below, or Export once.`)
           : [h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cs.feed, onchange: async e => { await store.setFeed(e.target.checked); draw(); } }), h('span', null, `Publish the feed to ${a.label}`)),
             cs.feed && a.id === 'file' && h('div', { class: 'stack' },
               cloud.auxName ? h('p', { class: 'small' }, `Feed file: ${cloud.auxName}. Share that file from your Dropbox / Drive / OneDrive app and use the link’s direct-download form (Dropbox: dl=1, OneDrive: ?download=1, Google Drive: drive.google.com/uc?export=download&id=…).`) : h('button', { class: 'btn ghost', onclick: async () => { try { await store.createFeedFile(); draw(); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } } }, 'Choose where to save logi-bookings.ics…')),

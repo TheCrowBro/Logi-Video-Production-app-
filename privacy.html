@@ -39,7 +39,7 @@
     <img src="icons/icon.svg" alt="">
     <h1>Vdex privacy policy</h1>
   </header>
-  <p class="meta">Last updated 31 October 2026. Applies to the Vdex web app, the Vdex desktop app for Windows, Mac and Linux, and the Vdex app on Google Play.</p>
+  <p class="meta">Last updated 2 November 2026. Applies to the Vdex web app, the Vdex desktop app for Windows, Mac and Linux, and the Vdex app on Google Play.</p>
 
   <section class="summary">
     <h2>The short version</h2>
@@ -74,10 +74,10 @@
   <p>Each of the following is optional. You switch it on, or trigger it, yourself.</p>
 
   <h3>Cloud storage you link</h3>
-  <p>You can link Dropbox, Google Drive, Microsoft OneDrive, a WebDAV server of your choosing, or a folder on your computer. Vdex then saves its backup files into your own account, so your other devices can read them and a copy survives a lost phone. That content is held by the provider under its own privacy policy. We have no access to it. Sign-in tokens stay on your device and are encrypted while Vdex is locked. You can unlink the storage in Vdex at any time and withdraw Vdex's access in your provider's account settings.</p>
+  <p>You can link Google Drive, Apple iCloud, Dropbox, Microsoft OneDrive, a WebDAV server of your choosing, or a folder on your computer. Vdex then saves its database and backup files into your own account, so your other devices can read them and a copy survives a lost phone. That content is held by the provider under its own privacy policy. We have no access to it. With iCloud, the copy is kept in Vdex's container in your private iCloud database through Apple's CloudKit service: it counts toward your iCloud storage, only you can read it, and Apple says it does not access it except as the law requires. In Vdex, &ldquo;Delete Vdex&rsquo;s copy from iCloud&rdquo; removes it; you can also manage iCloud storage in your Apple account settings. Sign-in tokens stay on your device and are encrypted while Vdex is locked. You can unlink the storage in Vdex at any time and withdraw Vdex's access in your provider's account settings.</p>
 
   <h3>Calendar sync and calendar feeds</h3>
-  <p>If you switch on calendar sync, Vdex creates and updates events for your bookings in your own Google Calendar or Microsoft Outlook calendar: the title, dates, location and description. The "Add to calendar" buttons open your calendar app with the same details. If you create a calendar feed, Vdex saves a calendar file to your linked storage and asks that provider for a share link. Anyone who has that link can read the feed, so share it only with the people you want.</p>
+  <p>If you switch on calendar sync, Vdex creates and updates events for your bookings in your own Google Calendar or Microsoft Outlook calendar: the title, dates, location and description. The "Add to calendar" buttons open your calendar app with the same details. If you create a calendar feed, Vdex saves a calendar file to your linked storage and asks that provider for a share link (iCloud gives no such link, so there is no feed with iCloud). Anyone who has that link can read the feed, so share it only with the people you want.</p>
 
   <h3>Weather</h3>
   <p>For a booking with a location, Vdex asks Open-Meteo (open-meteo.com) for the forecast. It sends the map coordinates of the shoot location and nothing else: no names, no account and no identifier.</p>
@@ -88,8 +88,8 @@
   <h3>Scanning a printed script</h3>
   <p>Text recognition runs on your device. The first time you use it, the app downloads the recognition library and its English language data from public content delivery networks (cdnjs by Cloudflare, jsDelivr and the Tesseract.js project). The photo of the page never leaves your device.</p>
 
-  <h3>Signing in to Dropbox, Google or Microsoft</h3>
-  <p>When you connect Dropbox, Google Drive, Google Calendar, OneDrive or Outlook, you sign in on that service's own page, so Vdex never sees your password. For Google, Google's sign-in library loads from Google. In the desktop app the sign-in page opens in your web browser and the answer comes back to Vdex through the app's own address on your computer. Vdex receives only a token that lets it reach the files and calendars you allowed.</p>
+  <h3>Signing in to Google, Apple, Dropbox or Microsoft</h3>
+  <p>When you connect Google Drive, Google Calendar, iCloud, Dropbox, OneDrive or Outlook, you sign in on that service's own page, so Vdex never sees your password. For Google, Google's sign-in library loads from Google. For iCloud, Apple's page sends you back to Vdex with a session that Vdex keeps on your device, encrypted while Vdex is locked; it lasts about two weeks if you tick &ldquo;Keep me signed in&rdquo;. In the desktop app the sign-in page opens in your web browser and the answer comes back to Vdex through the app's own address on your computer. Vdex receives only a token that lets it reach the files and calendars you allowed.</p>
 
   <h3>Sharing</h3>
   <p>When you email a call sheet, a quote or an invoice, Vdex opens your mail app with the text ready to send. Printing and the share sheet hand the document to the app you choose. Vdex sends nothing itself.</p>

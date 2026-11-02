@@ -46,6 +46,20 @@ const post = await fetch(gUrl, { method: 'POST', headers: { 'Content-Type': 'app
 const got = await win.evaluate(() => window.__g);
 signin.googleAnswer = post.status === 204 && got.access_token === 'gt';
 signin.googleOnce = (await fetch(gUrl)).status === 404 && (await fetch(base + '/__vdex/google?n=guess')).status === 404;
+// Apple (iCloud): the same one-time page, with its own token checks, and a newer Connect replacing a waiting one
+signin.icloudRefusesOdd = (await win.evaluate(() => window.vdexDesktop.icloudSignIn({ container: 'not a container', apiToken: 'x' }))).error === 'refused';
+await win.evaluate(() => { window.__a1 = window.vdexDesktop.icloudSignIn({ container: 'iCloud.test.vdex', apiToken: 'abc123' }); });
+await new Promise(r => setTimeout(r, 300));
+await win.evaluate(() => { window.__a = window.vdexDesktop.icloudSignIn({ container: 'iCloud.test.vdex', apiToken: 'abc123' }); });
+await new Promise(r => setTimeout(r, 300));
+const aUrl = await app.evaluate(() => global.__vdexLastExternal);
+signin.icloudReplaces = (await win.evaluate(() => window.__a1)).error === 'replaced';
+signin.icloudNotGoogle = (await fetch(aUrl.replace('/__vdex/icloud', '/__vdex/google'))).status === 404;
+const aPage = await fetch(aUrl), aHtml = await aPage.text(), aCsp = aPage.headers.get('content-security-policy') || '';
+signin.icloudPage = /\/__vdex\/icloud\?n=/.test(aUrl) && aPage.ok && /Continue with Apple/.test(aHtml) && /iCloud\.test\.vdex/.test(aHtml) && /connect-src 'self' https:\/\/api\.apple-cloudkit\.com/.test(aCsp) && /script-src 'nonce-/.test(aCsp);
+const aKey = (aHtml.match(/"key":"([^"]+)"/) || [])[1];
+const aPost = await fetch(aUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, 'X-Vdex-Key': aKey }, body: JSON.stringify({ ckSession: 'ck-session-1' }) });
+signin.icloudAnswer = aPost.status === 204 && (await win.evaluate(() => window.__a)).ckSession === 'ck-session-1' && (await fetch(aUrl)).status === 404;
 const signinOk = Object.values(signin).every(Boolean);
 console.log((signinOk ? 'PASS' : 'FAIL') + ' desktop sign-ins open in the web browser and come back only for sign-ins the app started —', JSON.stringify(signin));
 await app.close();

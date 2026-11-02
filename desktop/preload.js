@@ -10,4 +10,5 @@ contextBridge.exposeInMainWorld('vdexDesktop', {
   // Sign-ins open in the web browser; the answer comes back through the local server.
   openSignIn: url => ipcRenderer.invoke('signin:open', url),
   googleSignIn: opts => ipcRenderer.invoke('signin:google', opts),
+  icloudSignIn: opts => ipcRenderer.invoke('signin:icloud', opts),
 });

@@ -1,6 +1,6 @@
 // Cloud storage adapters. Each exposes: name, ready() -> bool, read() -> object|null, write(text).
 // Dropbox, Google and Microsoft sign in through Vdex's own registered apps (js/cloud-config.js), so people only see
-// the service's normal sign-in page. A developer can still use an app of their own instead (Advanced); that key is
+// the service's normal sign-in page. A developer can still use an app of their own instead (More ways → For developers); that key is
 // kept on this device only and wins over the built-in one.
 import { CLOUD_APPS } from './cloud-config.js';
 import { toast } from './util.js';
@@ -21,8 +21,9 @@ const OWN = { dropbox: 'logi-own-dropbox', google: 'logi-own-google', microsoft:
 const own = svc => (LS.get(OWN[svc]) || '').trim();
 const builtIn = svc => String(CLOUD_APPS[svc] || '').trim();
 // Can this service be connected here, and through whose app?
+const icloudCfg = () => CLOUD_APPS.icloud || {};
 export const signIn = {
-  available: svc => (svc === 'google-calendar' ? !!(own('google') || (builtIn('google') && CLOUD_APPS.googleCalendar !== false)) : !!(own(svc) || builtIn(svc))),
+  available: svc => (svc === 'icloud' ? !!(icloudCfg().container && (window.vdexDesktop ? icloudCfg().desktopToken : icloudCfg().apiToken)) : svc === 'google-calendar' ? !!(own('google') || (builtIn('google') && CLOUD_APPS.googleCalendar !== false)) : !!(own(svc) || builtIn(svc))),
   builtIn: svc => !!builtIn(svc),
   usingOwn: svc => !!own(svc),
   // Which app the current Dropbox sign-in was made with: devices only share a copy when they use the same one.
@@ -43,7 +44,7 @@ export const settings = {
 // or http://localhost:47831/ in the desktop app), however the app was opened, so only those two addresses have to be
 // registered. A developer's own app keeps the address the page was opened at, as it always did.
 export const redirectUri = svc => (svc && !own(svc) ? new URL('./', location.href).href : location.origin + location.pathname);
-const notOn = name => new Error(`${name} sign-in isn't ready in Vdex yet. Until it is, use Other ways to keep a copy, or save a backup file.`);
+const notOn = name => new Error(`${name} sign-in isn't ready in Vdex yet. Until it is, use More ways to keep a copy, or save a backup file.`);
 const FILE = 'vdex-production-db.json';
 
 const parse = text => {
@@ -72,7 +73,7 @@ const pkce = async () => { const verifier = b64url(crypto.getRandomValues(new Ui
 // answer back. Returns 'browser' when the sign-in carries on in the web browser.
 // The desktop app's sign-ins are registered at its usual address; on a stand-in port they would be refused.
 const desktopAway = () => window.vdexDesktop && location.port && location.port !== '47831';
-const AWAY = 'Vdex can’t open the sign-in page because another program on this computer is using the connection Vdex needs. Restart the computer, open Vdex first, and try again. Until then, Other ways to keep a copy still work.';
+const AWAY = 'Vdex can’t open the sign-in page because another program on this computer is using the connection Vdex needs. Restart the computer, open Vdex first, and try again. Until then, More ways to keep a copy still work.';
 async function openSignIn(url) {
   if (desktopAway()) throw new Error(AWAY);
   if (window.vdexDesktop?.openSignIn) { if (!(await window.vdexDesktop.openSignIn(url))) throw new Error(AWAY); return 'browser'; }
@@ -229,7 +230,7 @@ export async function googleToken(scope, interactive) {
     client.requestAccessToken(hint ? { prompt: '', login_hint: hint } : { prompt: '' });
   });
 }
-const GOOGLE_ERR = { address_taken: 'Vdex can’t open the sign-in page because another program on this computer is using the connection Vdex needs. Restart the computer, open Vdex first, and try again. Until then, Other ways to keep a copy still work.', access_denied: 'Google sign-in was cancelled', popup_closed: 'The Google window was closed before signing in', popup_failed_to_open: 'The Google window was blocked. Allow pop-ups for Vdex and tap again', timed_out: 'The Google sign-in in your web browser wasn’t finished. Tap Connect to try again.', failed: 'Google sign-in did not work. Tap again to retry.' };
+const GOOGLE_ERR = { address_taken: 'Vdex can’t open the sign-in page because another program on this computer is using the connection Vdex needs. Restart the computer, open Vdex first, and try again. Until then, More ways to keep a copy still work.', access_denied: 'Google sign-in was cancelled', popup_closed: 'The Google window was closed before signing in', popup_failed_to_open: 'The Google window was blocked. Allow pop-ups for Vdex and tap again', timed_out: 'The Google sign-in in your web browser wasn’t finished. Tap Connect to try again.', failed: 'Google sign-in did not work. Tap again to retry.' };
 export const forgetGoogleToken = scope => { for (const p of scope.split(' ')) delete gTokens[p]; saveGTokens(); };
 const DRIVE_APP = 'https://www.googleapis.com/auth/drive.appdata', DRIVE_FILE = 'https://www.googleapis.com/auth/drive.file';
 // Storage needs only Vdex's private area (drive.appdata); the calendar feed's visible file asks for drive.file on its own.
@@ -329,6 +330,141 @@ export const gdriveAdapter = () => {
     signOut: () => { forgetGoogleToken(DRIVE_APP + ' ' + DRIVE_FILE); LS.del('logi-gdrive-file'); LS.del('logi-gdrive-feed'); LS.del('logi-feed-drive'); LS.del('logi-gdrive-on'); LS.del('logi-google-email'); setWho(''); const left = [...grantedScopes()].filter(g => !g.includes('/auth/drive')); left.length ? LS.set('logi-google-scopes', left.join(' ')) : LS.del('logi-google-scopes'); },
   };
 };
+
+/* --------------------------------- iCloud --------------------------------- */
+// iCloud through Apple's CloudKit web service, called directly: the same requests Apple's CloudKit JS makes, without
+// loading Apple's script into Vdex. The copy is a record in Vdex's own container in the person's private iCloud
+// database: only they can read it, it counts toward their iCloud storage, and it is not a file in iCloud Drive.
+// Signing in happens on Apple's own page. The website goes there and back, as with Dropbox (Apple's pop-up window is
+// unreliable on iPhone and iPad); the desktop app opens it in the web browser. Apple hands back a web session, which
+// changes with every request; it lasts two weeks when "Keep me signed in" is ticked, otherwise 30 minutes.
+const CK_SESSION = 'logi-icloud-session'; // sealed by the lock like the other sign-ins
+const CK_PENDING = 'logi-icloud-pending'; // set just before going to Apple: only a sign-in Vdex started is accepted back
+const CK_TYPE = 'VdexFile';               // the record type the publisher sets up once (docs/turn-on-sign-in.md)
+const CK_PART = 700000;                   // bytes of text per record: CloudKit allows 1 MB a record
+const ck = () => CLOUD_APPS.icloud || {};
+// The website and the desktop app each have their own API token: Apple sends the website's sign-ins back to the website.
+const ckToken = () => String((window.vdexDesktop ? ck().desktopToken : ck().apiToken) || '').trim();
+const ckBase = db => `https://api.apple-cloudkit.com/database/1/${encodeURIComponent(ck().container)}/${ck().environment === 'development' ? 'development' : 'production'}/${db}/`;
+const CK_WORDS = {
+  QUOTA_EXCEEDED: 'Your iCloud storage is full. Free up some space in iCloud, or choose another way to keep a copy',
+  THROTTLED: 'iCloud is busy. Vdex will try again shortly', TRY_AGAIN_LATER: 'iCloud is busy. Vdex will try again shortly', SERVICE_UNAVAILABLE: 'iCloud is not answering right now. Vdex will try again shortly',
+  ZONE_NOT_FOUND: 'iCloud isn’t set up for this Apple ID yet. Turn on iCloud on one of your Apple devices, then try again',
+  AUTHENTICATION_FAILED: 'iCloud didn’t accept Vdex’s app details. The Vdex publisher needs to check the iCloud set-up',
+  ACCESS_DENIED: 'iCloud didn’t let Vdex in. If you use Advanced Data Protection, turn on Access iCloud Data on the Web (iPhone Settings → your name → iCloud), then sign in again',
+};
+const ckError = (j, status) => new Error(CK_WORDS[j?.serverErrorCode] || ('iCloud said: ' + (j?.reason || j?.serverErrorCode || 'error ' + status)));
+const ckSignedOut = redirect => { const e = new Error('iCloud wants you to sign in again'); e.name = 'NotAllowedError'; e.redirectURL = redirect; return e; };
+// One request at a time: each answer carries the session for the next request.
+let ckChain = Promise.resolve();
+function ckRequest(db, path, body) {
+  const run = async () => {
+    const q = new URLSearchParams({ ckAPIToken: ckToken() }), session = LS.get(CK_SESSION);
+    if (session) q.set('ckWebAuthToken', session);
+    let r;
+    try { r = await fetch(ckBase(db) + path + '?' + q, body === undefined ? { credentials: 'omit' } : { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), credentials: 'omit' }); }
+    catch { throw new Error('Could not reach iCloud. Check the connection and try again'); }
+    const next = r.headers.get('x-apple-cloudkit-web-auth-token') || r.headers.get('x-apple-cloudkit-session');
+    if (next && session && LS.get(CK_SESSION) === session) LS.set(CK_SESSION, next);
+    let j = null; try { j = await r.json(); } catch { /* not JSON */ }
+    if (r.status === 421 || j?.serverErrorCode === 'AUTHENTICATION_REQUIRED') { if (session && LS.get(CK_SESSION) === (next || session)) LS.del(CK_SESSION); throw ckSignedOut(j?.redirectURL); }
+    if (!r.ok) throw ckError(j, r.status);
+    return j || {};
+  };
+  const p = ckChain.then(run, run); ckChain = p.catch(() => {}); return p;
+}
+// Apple's sign-in address comes from asking iCloud who is signed in (users/caller, as CloudKit JS 2.6 does), with no session.
+async function appleSignInAddress() {
+  try { await ckRequest('public', 'users/caller'); } catch (e) { if (e.name === 'NotAllowedError' && e.redirectURL) return e.redirectURL; throw e; }
+  throw new Error('Apple sign-in didn’t start. Tap Connect to try again');
+}
+async function icloudSignIn() {
+  if (!signIn.available('icloud')) throw notOn('iCloud');
+  if (window.vdexDesktop) { // the desktop app: Apple's page opens in the web browser and the answer comes back to the app
+    if (desktopAway() || !window.vdexDesktop.icloudSignIn) throw new Error(AWAY);
+    toast('Carry on in your web browser: sign in with your Apple ID there, then come back to Vdex.');
+    const r = (await window.vdexDesktop.icloudSignIn({ container: ck().container, apiToken: ckToken(), environment: ck().environment || '' })) || { error: 'failed' };
+    if (r.error === 'replaced') { const e = new Error('A newer sign-in took over'); e.name = 'AbortError'; throw e; }
+    if (r.error || !r.ckSession) throw new Error(APPLE_ERR[r.error] || 'Apple sign-in didn’t finish. Tap Connect to try again');
+    LS.set(CK_SESSION, String(r.ckSession)); return;
+  }
+  const url = await appleSignInAddress();
+  LS.set(CK_PENDING, String(Date.now()));
+  location.href = url; // Apple's page, then back to Vdex with the session: icloudFinish takes it from there
+  const e = new Error('Going to Apple to sign in'); e.name = 'AbortError'; throw e;
+}
+const APPLE_ERR = { address_taken: AWAY, timed_out: 'The Apple sign-in in your web browser wasn’t finished. Tap Connect to try again' };
+// Call on page load: takes the session Apple sends back (…/?ckWebAuthToken=…). Returns true when it did.
+export function icloudFinish() {
+  const raw = (location.search.match(/[?&](?:ckWebAuthToken|ckSession)=([^&]*)/) || [])[1]; // read as sent: a + in it is a +
+  if (!raw) return false;
+  history.replaceState(null, '', location.pathname + location.hash);
+  let token; try { token = decodeURIComponent(raw); } catch { token = raw; }
+  const started = Number(LS.get(CK_PENDING)) || 0; LS.del(CK_PENDING);
+  // Only a sign-in started here in the last half hour: a link carrying someone else's session must not be taken.
+  if (!started || Date.now() - started > 30 * 60e3) throw new Error('That iCloud sign-in wasn’t started here, or it is too old. Tap Connect next to iCloud to sign in.');
+  LS.set(CK_SESSION, token);
+  return true;
+}
+
+// A copy bigger than one record is split: the parts are saved first and the record that names them last, so a reader
+// only ever sees a whole copy; the parts of the copy before are then removed.
+const ckName = name => name.replace(/[^A-Za-z0-9._-]/g, '_');
+const splitBytes = (text, max) => { // pieces of at most max UTF-8 bytes, never splitting a character
+  const out = []; let start = 0, bytes = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text.charCodeAt(i), b = c < 0x80 ? 1 : c < 0x800 ? 2 : c >= 0xdc00 && c < 0xe000 ? 0 : c >= 0xd800 && c < 0xdc00 ? 4 : 3;
+    if (b && bytes + b > max) { out.push(text.slice(start, i)); start = i; bytes = 0; }
+    bytes += b;
+  }
+  out.push(text.slice(start)); return out;
+};
+async function ckLookup(recordName, desiredKeys) {
+  const rec = ((await ckRequest('private', 'records/lookup', { records: [{ recordName }], ...(desiredKeys ? { desiredKeys } : {}) })).records || [])[0];
+  if (!rec || rec.serverErrorCode === 'NOT_FOUND' || rec.serverErrorCode === 'UNKNOWN_ITEM') return null;
+  if (rec.serverErrorCode) throw ckError(rec);
+  return rec.fields || {};
+}
+async function ckModify(operations) {
+  const recs = (await ckRequest('private', 'records/modify', { operations })).records || [];
+  const bad = recs.find(r => r.serverErrorCode && !(/delete/i.test(operations[0].operationType) && r.serverErrorCode === 'NOT_FOUND'));
+  if (bad) throw ckError(bad);
+}
+async function ckGet(name) {
+  const base = ckName(name), f = await ckLookup(base); if (!f) return null;
+  const parts = Number(f.parts?.value) || 1, gen = f.gen?.value || '';
+  let text = f.text?.value || '';
+  for (let i = 1; i < parts; i++) { const p = await ckLookup(`${base}~${gen}~${i}`, ['text']); if (!p) throw new Error('Part of the iCloud copy is missing. Tap Sync now to try again'); text += p.text?.value || ''; }
+  return text;
+}
+async function ckPut(name, text) {
+  const base = ckName(name), pieces = splitBytes(text, CK_PART);
+  const gen = pieces.length > 1 ? Date.now().toString(36) + Math.random().toString(36).slice(2, 7) : '';
+  const was = await ckLookup(base, ['parts', 'gen']);
+  for (let i = 1; i < pieces.length; i++) await ckModify([{ operationType: 'forceReplace', record: { recordName: `${base}~${gen}~${i}`, recordType: CK_TYPE, fields: { text: { value: pieces[i] } } } }]);
+  await ckModify([{ operationType: 'forceReplace', record: { recordName: base, recordType: CK_TYPE, fields: { text: { value: pieces[0] }, parts: { value: pieces.length }, gen: { value: gen } } } }]);
+  const oldParts = Number(was?.parts?.value) || 1, oldGen = was?.gen?.value || '';
+  if (oldParts > 1 && oldGen !== gen) await ckModify(Array.from({ length: oldParts - 1 }, (_, i) => ({ operationType: 'forceDelete', record: { recordName: `${base}~${oldGen}~${i + 1}` } }))).catch(() => {}); // tidying only
+}
+export const icloudAdapter = () => ({
+  id: 'icloud', label: 'iCloud', where: 'a private Vdex space in your iCloud (not a file in iCloud Drive)',
+  ready: async ask => { if (LS.get(CK_SESSION)) return true; if (!ask) return false; await icloudSignIn(); return true; },
+  read: async () => parse(await ckGet(FILE)),
+  write: text => ckPut(FILE, text),
+  // dated backups sit beside the copy as records of their own; iCloud gives no public link, so no calendar feed
+  writeExtra: (name, text) => ckPut(name, text),
+  readExtra: name => ckGet(name),
+  // Removes everything Vdex keeps in iCloud: the copy, its parts and the dated backups (Apple asks apps to offer this).
+  erase: async () => {
+    const months = Array.from({ length: 72 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); return `vdex-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}.json`; });
+    const names = [FILE, ...['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map(d => `vdex-backup-${d}.json`), ...months].map(ckName);
+    const found = ((await ckRequest('private', 'records/lookup', { records: names.map(recordName => ({ recordName })), desiredKeys: ['parts', 'gen'] })).records || []).filter(r => !r.serverErrorCode);
+    const doomed = found.flatMap(r => [r.recordName, ...Array.from({ length: (Number(r.fields?.parts?.value) || 1) - 1 }, (_, i) => `${r.recordName}~${r.fields?.gen?.value || ''}~${i + 1}`)]);
+    for (let i = 0; i < doomed.length; i += 150) await ckModify(doomed.slice(i, i + 150).map(recordName => ({ operationType: 'forceDelete', record: { recordName } })));
+    return found.length;
+  },
+  signOut: () => { LS.del(CK_SESSION); setWho(''); },
+});
 
 /* ------------------------------ Microsoft 365 ------------------------------ */
 // Sign-in with the authorization code flow and PKCE, by going to Microsoft's page and back, as with Dropbox: no library

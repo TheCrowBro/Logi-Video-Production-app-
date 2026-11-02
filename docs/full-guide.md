@@ -4,7 +4,7 @@ This is the long version. The short one is the [README](../README.md).
 
 **Vdex is a production deck for freelance videographers and small video businesses.** Bookings, crew, kit, venues, insurance, a shoot-day clock, timecode notes, pre- and post-production checklists and a few field tools, all in one app that lives on your phone and works on your computer too.
 
-- **No account, no subscription, no server.** Your data stays on your device and only goes where *you* send it (your own Dropbox, Google Drive, OneDrive or server).
+- **No account, no subscription, no server.** Your data stays on your device and only goes where *you* send it (your own Google Drive, iCloud, Dropbox, OneDrive or server).
 - **Works offline** once installed, which matters on location.
 - **Locks with a PIN, or your fingerprint or face,** and keeps everything it stores encrypted whenever it is locked, in the background or closed. Never loses your data: automatic daily backups in your cloud storage, encrypted backup files, and a reminder when there's no recent copy.
 - **Phone and computer share one database** once you link a cloud storage.
@@ -17,7 +17,7 @@ This is the long version. The short one is the [README](../README.md).
 | 📱 **iPhone or iPad** | [iPhone guide](#iphone-guide) |
 | 🤖 **Android phone or tablet** | [Android guide](#android-guide) |
 | 💻 **Windows, Mac or Linux computer** | [Using Vdex on a computer](#using-vdex-on-a-computer): one-click installers, or the browser |
-| 🔌 Linking Dropbox, Google Drive, OneDrive or your own server | Tap **☁** at the top and sign in. More in [Connecting your storage](connections.md) |
+| 🔌 Linking Google Drive, iCloud, Dropbox, OneDrive or your own server | Tap **☁** at the top and sign in. More in [Connecting your storage](connections.md) |
 | 🧑‍💻 Running the app yourself | [For developers](developers.md) |
 
 The two phone guides cover the same ground in the same order, so a crew with both kinds of phone can follow along together. Where the phones behave differently, the guide for that phone says so.
@@ -152,21 +152,22 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Backups.** Settings → *Backups & data* → **Export backup** opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
 
-**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Dropbox, Google Drive or OneDrive, sign in to your own account and tap **Allow**. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a folder of its own and cannot see your other files.
+**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
 | On an iPhone you can link | Notes |
 |---|---|
-| **Dropbox** | Sign in once. Stays connected. |
+| **iCloud** | Sign in with your Apple ID and tick *Keep me signed in*. About every two weeks Apple wants one tap: **Sign in again**. Uses a little of your iCloud storage; it is not a file in iCloud Drive. |
 | **Google Drive** | Sign in once. About once an hour Google wants one tap: **Sign in again**. |
-| **OneDrive** | Personal or work account. Sign in once. About once a day Microsoft wants one tap: **Sign in again**. |
-| **Nextcloud and other WebDAV servers** | Under *Other ways*: your Nextcloud address, username and an app password. |
+| **Dropbox** | Under *More ways to keep a copy*. Sign in once. Stays connected. |
+| **OneDrive** | Under *More ways to keep a copy*. Personal or work account. About once a day Microsoft wants one tap: **Sign in again**. |
+| **Nextcloud and other WebDAV servers** | Under *More ways to keep a copy*: your Nextcloud address, username and an app password. |
 
-There is no iCloud Drive option: iPhones don't let web apps keep a file in a synced folder. The four above work on your iPhone and on your computer, so pick one and link it everywhere.
+All of these work on your iPhone and on your computer, so pick one and link it everywhere. iCloud works on Android and Windows too, with your Apple ID.
 
 ### Calendar on an iPhone
 
 1. **Add once.** On any booking, **📆 Add to calendar** → **Apple Calendar** saves a calendar file; open it and tap **Add All**. The Google Calendar and Outlook options open those apps or sites ready-filled. **📤 Share** and **✉ Email** send the details to anyone.
-2. **Live feed.** With a cloud storage linked, Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. Then on the iPhone: **Settings → Calendar** (on iOS 18, **Settings → Apps → Calendar**) → **Accounts → Add Account → Other → Add Subscribed Calendar**, paste the link. On a Mac, Calendar → *File → New Calendar Subscription* does the same and reaches the iPhone through iCloud.
+2. **Live feed.** With a cloud storage linked (any but iCloud, which keeps Vdex's copy private and gives no link), Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. Then on the iPhone: **Settings → Calendar** (on iOS 18, **Settings → Apps → Calendar**) → **Accounts → Add Account → Other → Add Subscribed Calendar**, paste the link. On a Mac, Calendar → *File → New Calendar Subscription* does the same and reaches the iPhone through iCloud.
 3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [the connection guides](connections.md).
 
 Deliverable due dates ride along as all-day events.
@@ -205,7 +206,7 @@ What the lock does: the screen can't be used until the PIN or Face ID opens it, 
 
 A stolen, lost or broken phone should cost you a phone, not your business records. Keep at least one copy somewhere else:
 
-- **Link a cloud storage** (Dropbox, Google Drive, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
+- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
 - **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
 - **Equipment → Asset register (CSV)** exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
@@ -389,21 +390,22 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Backups.** Settings → *Backups & data* → **Export backup** opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
 
-**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Dropbox, Google Drive or OneDrive, sign in to your own account and tap **Allow**. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a folder of its own and cannot see your other files.
+**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
 | On Android you can link | Notes |
 |---|---|
 | **Google Drive** | Sign in once. About once an hour Google wants one tap: **Sign in again**. |
-| **Dropbox** | Sign in once. Stays connected. |
-| **OneDrive** | Personal or work account. Sign in once. About once a day Microsoft wants one tap: **Sign in again**. |
-| **Nextcloud and other WebDAV servers** | Under *Other ways*: your Nextcloud address, username and an app password. |
+| **iCloud** | With an Apple ID, if you also use an iPhone, iPad or Mac. About every two weeks Apple wants one tap: **Sign in again**. |
+| **Dropbox** | Under *More ways to keep a copy*. Sign in once. Stays connected. |
+| **OneDrive** | Under *More ways to keep a copy*. Personal or work account. About once a day Microsoft wants one tap: **Sign in again**. |
+| **Nextcloud and other WebDAV servers** | Under *More ways to keep a copy*: your Nextcloud address, username and an app password. |
 
-The *file in a synced folder* option you may see on a computer doesn't appear on Android: phones don't let web apps keep a file in a synced folder. The four above work on your phone and on your computer, so pick one and link it everywhere.
+The *file in a synced folder* option you may see on a computer doesn't appear on Android: phones don't let web apps keep a file in a synced folder. All of these work on your phone and on your computer, so pick one and link it everywhere.
 
 ### Calendar on Android
 
 1. **Add once.** On any booking, **📆 Add to calendar** → **Google Calendar** opens the Google Calendar app ready-filled; **Outlook** does the same for Outlook. The Apple option saves a calendar file for any app that imports one. **📤 Share** and **✉ Email** send the details to anyone.
-2. **Live feed.** With a cloud storage linked, Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. The Google Calendar app can't add subscriptions itself, so open **calendar.google.com** in a browser → *Other calendars → + → From URL* and paste the link; it then shows up in the app and in Samsung Calendar. Outlook: **outlook.com → Add calendar → Subscribe from web**.
+2. **Live feed.** With a cloud storage linked (any but iCloud, which keeps Vdex's copy private and gives no link), Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. The Google Calendar app can't add subscriptions itself, so open **calendar.google.com** in a browser → *Other calendars → + → From URL* and paste the link; it then shows up in the app and in Samsung Calendar. Outlook: **outlook.com → Add calendar → Subscribe from web**.
 3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [the connection guides](connections.md).
 
 Deliverable due dates ride along as all-day events.
@@ -442,7 +444,7 @@ What the lock does: the screen can't be used until the PIN or your fingerprint o
 
 A stolen, lost or broken phone should cost you a phone, not your business records. Keep at least one copy somewhere else:
 
-- **Link a cloud storage** (Dropbox, Google Drive, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
+- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
 - **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
 - **Equipment → Asset register (CSV)** exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
@@ -506,7 +508,7 @@ Open the repository's **Releases** page, download the file for your computer, an
 | **Mac** | `Vdex-<version>.pkg` | Double-click it and follow the installer; Vdex lands in Applications. If macOS says it can't be opened because it's from an unidentified developer, right-click (Control-click) the file and choose **Open**, or go to **System Settings → Privacy & Security** and click **Open Anyway**. |
 | **Linux** | `Vdex-<version>.AppImage` | Make it executable (right-click → Properties → *Allow executing as program*, or `chmod +x`), then double-click it. |
 
-The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **☁ → A file in a synced folder**, which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Dropbox, Google Drive, OneDrive or WebDAV, and link the same one everywhere.
+The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **☁ → A file in a synced folder**, which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Google Drive or iCloud (or Dropbox, OneDrive or WebDAV), and link the same one everywhere.
 
 **Good to know about the desktop app**
 

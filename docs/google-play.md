@@ -138,7 +138,7 @@ ON SET
 Sunrise and sunset, a white balance reader, a sound level meter and a range finder. Timecode notes stamped with the camera's clock, synced from the audio feed, exported for the editor.
 
 YOURS, PRIVATELY
-Vdex keeps everything on your device. Set a PIN and it locks with your fingerprint or face. Link your own Dropbox, Google Drive or OneDrive to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
+Vdex keeps everything on your device. Set a PIN and it locks with your fingerprint or face. Link your own Google Drive or iCloud (or Dropbox or OneDrive) to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
 
 Works offline. Tap ? on any page for a walkthrough.
 ```
@@ -155,7 +155,7 @@ Google asks what the app does with people's information. Vdex sends nothing to u
 | Data types: **Location → Approximate location** and **Precise location** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **Yes**. Required or optional: **Optional** (users can choose whether to use it). Purpose: **App functionality**. |
 | Every other data type (personal info, financial info, messages, photos, files, contacts, app activity, device IDs…) | **Not collected.** |
 
-Why "not collected" for the rest: everything a user types stays on the device. When a user links their own Dropbox, Google Drive or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer. The privacy policy explains all of it.
+Why "not collected" for the rest: everything a user types stays on the device. When a user links their own Google Drive, iCloud, Dropbox or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer. The privacy policy explains all of it.
 
 If a Google reviewer asks for changes to this section, send me what they wrote and I will adjust the wording.
 

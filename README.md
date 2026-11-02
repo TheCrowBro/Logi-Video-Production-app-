@@ -52,7 +52,7 @@ Everything can be changed later. Nothing is ever lost by tapping the wrong thing
 ## Keep your things safe
 
 - **Set a PIN** in Settings → Security. Then Vdex locks when you put the phone down, and you can open it with your fingerprint or face. While it's locked, your information is scrambled so no one else can read it.
-- **Connect your cloud storage:** tap ☁ at the top, tap **Connect** next to Dropbox, Google Drive or OneDrive, and sign in to your own account. Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
+- **Connect your cloud storage:** tap ☁ at the top, tap **Connect** next to Google Drive or iCloud, and sign in to your own account (Dropbox, OneDrive and more are under *More ways to keep a copy*). Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
 - **Nothing is sent anywhere by itself.** The [privacy policy](https://thecrowbro.github.io/Logi-Video-Production-app-/privacy.html) says in plain words what stays on your device and what leaves it, and when.
 - **Save a backup now and then:** Settings → Backups & data → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.
 
@@ -73,7 +73,7 @@ Everything can be changed later. Nothing is ever lost by tapping the wrong thing
 
 ## For the person who looks after the tech
 
-- [Turning on sign-in](docs/turn-on-sign-in.md): the one-time job that lets everyone connect Dropbox, Google Drive and OneDrive by signing in. About 45 minutes, once.
+- [Turning on sign-in](docs/turn-on-sign-in.md): the one-time job that lets everyone connect Google Drive and iCloud (and optionally Dropbox and OneDrive) by signing in. Google is free; iCloud needs Apple's paid developer membership.
 - [Connecting your storage](docs/connections.md): how connecting works for everyone, plus Nextcloud, synced folders and the calendar feed.
 - [For developers](docs/developers.md): running Vdex yourself, the tests, making the installers, signing, releasing updates, and how it is built.
 - [Security](SECURITY.md): what protects your data and what doesn't.

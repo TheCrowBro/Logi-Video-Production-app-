@@ -78,7 +78,7 @@ export async function importFile(e) {
 
 export async function restoreFromCloud() {
   const a = store.cloud.adapter;
-  if (!a || !a.readExtra) return toast('Link Dropbox, Google Drive, OneDrive or WebDAV first');
+  if (!a || !a.readExtra) return toast('Link a cloud storage first, such as Google Drive or iCloud');
   const list = h('div', { class: 'stack' }, h('p', { class: 'small muted' }, 'Looking for backups…'));
   const { close } = sheet('Restore a cloud backup', list);
   const found = [];

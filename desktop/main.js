@@ -10,8 +10,8 @@ const path = require('path');
 
 const ROOT = path.join(__dirname, '..');            // the web app (inside app.asar once packaged)
 const DEFAULT_PORT = 47831;                           // part of the address the browser stores data under, so it stays fixed
-// Sign-in pages open in the person's own web browser (Dropbox, Google and Microsoft ask apps not to show them in an
-// app window); the answer comes back to this local server and is handed to the Vdex window.
+// Sign-in pages open in the person's own web browser (Dropbox, Google, Microsoft and Apple ask apps not to show them in
+// an app window); the answer comes back to this local server and is handed to the Vdex window.
 const SIGNIN_HOSTS = new Set(['www.dropbox.com', 'login.microsoftonline.com']);
 const GUIDE = 'https://github.com/TheCrowBro/Logi-Video-Production-app-#readme';
 const MIME = {
@@ -32,7 +32,7 @@ let loopbackShared = false; // set when another program holds the IPv6 side of o
 
 /* --------------------------------- sign-ins --------------------------------- */
 const signinStates = new Set();   // Dropbox/Microsoft sign-ins this app started and is waiting for
-const googlePending = new Map();  // one-time code -> a Google sign-in page waiting in the web browser
+const pagePending = new Map();    // one-time code -> a Google or Apple sign-in page waiting in the web browser
 const openOut = url => { global.__vdexLastExternal = url; if (!process.env.VDEX_TEST_NO_BROWSER) shell.openExternal(url).catch(() => {}); };
 const fromApp = e => { try { return isOurs(new URL(e.senderFrame.url).origin); } catch { return false; } };
 const signinSafe = () => !busy && !loopbackShared; // only at the usual address, held entirely by Vdex
@@ -42,8 +42,8 @@ function note(res, title, text) {
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'", 'X-Content-Type-Options': 'nosniff' });
   res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title><body style="font:17px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px;text-align:center"><h1 style="font-size:1.4rem">${esc(title)}</h1><p>${esc(text)}</p></body>`);
 }
-// The Google page runs in the web browser at this app's address (which Google knows), signs in with Google's own
-// window, and posts the answer back here with the one-time code.
+// The Google and Apple pages run in the web browser at this app's address (which Google and Apple know), sign in with
+// the service's own window, and post the answer back here with the one-time code.
 function googlePage(res, nonce, { client, scope, hint, key }) {
   const sn = crypto.randomBytes(16).toString('base64');
   res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
@@ -63,6 +63,37 @@ const ready = () => { go.disabled = false; go.onclick = () => google.accounts.oa
 window.google && google.accounts ? ready() : addEventListener('load', ready);
 </script></body>`);
 }
+function applePage(res, nonce, { container, apiToken, environment, key }) {
+  const sn = crypto.randomBytes(16).toString('base64');
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+    'Content-Security-Policy': `default-src 'none'; script-src 'nonce-${sn}'; style-src 'unsafe-inline'; connect-src 'self' https://api.apple-cloudkit.com` });
+  const cfg = JSON.stringify({ container, apiToken, environment, nonce, key }).replace(/</g, '\\u003c');
+  res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Sign in to iCloud for Vdex</title>
+<body style="font:17px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 16px;text-align:center"><h1 style="font-size:1.4rem">Sign in to iCloud for Vdex</h1>
+<p id="t">Click the button and sign in with your Apple ID. Tick “Keep me signed in” so Apple asks less often. Vdex only uses its own private space in your iCloud.</p>
+<button id="go" style="font:inherit;font-weight:700;padding:12px 22px;border-radius:10px;border:0;background:#000;color:#fff;cursor:pointer">Continue with Apple</button>
+<script nonce="${sn}">
+const C = ${cfg}, t = document.getElementById('t'), go = document.getElementById('go');
+const send = r => fetch('/__vdex/icloud?n=' + encodeURIComponent(C.nonce), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Vdex-Key': C.key }, body: JSON.stringify(r) })
+  .then(() => { go.hidden = true; t.textContent = r.error ? 'Sign-in not finished. Go back to Vdex and tap Connect to try again. You can close this tab.' : 'Done. Go back to Vdex; you can close this tab.'; })
+  .catch(() => { t.textContent = 'Vdex has closed, or this sign-in has expired. Open Vdex and try again.'; });
+const current = 'https://api.apple-cloudkit.com/database/1/' + encodeURIComponent(C.container) + '/' + (C.environment === 'development' ? 'development' : 'production') + '/public/users/caller?ckAPIToken=' + encodeURIComponent(C.apiToken);
+go.onclick = async () => {
+  const w = window.open('', 'vdex-icloud', 'width=640,height=700'); // straight from the click, or the browser blocks it
+  if (!w) { t.textContent = 'The Apple window was blocked. Allow pop-ups for this page and click again.'; return; }
+  let url = ''; try { url = (await (await fetch(current, { credentials: 'omit' })).json()).redirectURL || ''; } catch (e) { /* below */ }
+  if (!url) { w.close(); t.textContent = 'iCloud could not be reached. Check the connection and click again.'; return; }
+  w.location.href = url;
+  let settled = false;
+  const apple = o => { try { const h = new URL(o); return h.protocol === 'https:' && (h.hostname === 'apple.com' || h.hostname.endsWith('.apple.com')); } catch (x) { return false; } };
+  const got = e => { if (settled || e.source !== w || !apple(e.origin) || !e.data || typeof e.data !== 'object') return;
+    settled = true; removeEventListener('message', got); try { w.close(); } catch (x) { /* closed */ }
+    const tok = e.data.ckWebAuthToken || e.data.ckSession; send(tok ? { ckSession: String(tok) } : { error: 'failed' }); };
+  addEventListener('message', got);
+  const watch = setInterval(() => { if (!w.closed) return; clearInterval(watch); setTimeout(() => { if (!settled) { removeEventListener('message', got); t.textContent = 'The Apple window was closed before signing in. Click the button to try again.'; } }, 1500); }, 500);
+};
+</script></body>`);
+}
 ipcMain.handle('signin:open', (e, url) => {
   if (!fromApp(e) || !signinSafe()) return false;
   let u; try { u = new URL(url); } catch { return false; }
@@ -73,24 +104,36 @@ ipcMain.handle('signin:open', (e, url) => {
 ipcMain.handle('signin:google', (e, opts = {}) => new Promise(resolve => {
   if (!fromApp(e)) return resolve({ error: 'refused' });
   if (!signinSafe()) return resolve({ error: 'address_taken' });
-  for (const p of [...googlePending.values()]) p.resolve({ error: 'replaced' }); // Connect tapped again: start afresh
-  const nonce = crypto.randomBytes(24).toString('base64url');
-  const timer = setTimeout(() => { googlePending.delete(nonce); resolve({ error: 'timed_out' }); }, 5 * 60e3);
-  googlePending.set(nonce, { opts: { client: String(opts.client || ''), scope: String(opts.scope || ''), hint: String(opts.hint || '') }, resolve: r => { clearTimeout(timer); googlePending.delete(nonce); resolve(r); } });
-  openOut(`${origin}/__vdex/google?n=${encodeURIComponent(nonce)}`);
+  waitForPage('google', { client: String(opts.client || ''), scope: String(opts.scope || ''), hint: String(opts.hint || '') }, resolve);
 }));
+ipcMain.handle('signin:icloud', (e, opts = {}) => new Promise(resolve => {
+  if (!fromApp(e)) return resolve({ error: 'refused' });
+  if (!signinSafe()) return resolve({ error: 'address_taken' });
+  const container = String(opts.container || ''), apiToken = String(opts.apiToken || ''), environment = opts.environment === 'development' ? 'development' : '';
+  if (!/^iCloud\.[A-Za-z0-9.-]+$/.test(container) || !/^[A-Za-z0-9]+$/.test(apiToken)) return resolve({ error: 'refused' });
+  waitForPage('icloud', { container, apiToken, environment }, resolve);
+}));
+// One sign-in page at a time: Connect tapped again replaces the one still waiting. It expires after five minutes.
+function waitForPage(kind, opts, resolve) {
+  for (const p of [...pagePending.values()]) p.resolve({ error: 'replaced' });
+  const nonce = crypto.randomBytes(24).toString('base64url');
+  const timer = setTimeout(() => { pagePending.delete(nonce); resolve({ error: 'timed_out' }); }, 5 * 60e3);
+  pagePending.set(nonce, { kind, opts, resolve: r => { clearTimeout(timer); pagePending.delete(nonce); resolve(r); } });
+  openOut(`${origin}/__vdex/${kind}?n=${encodeURIComponent(nonce)}`);
+}
 
 /* ------------------------------- local server ------------------------------- */
 function handler(req, res) {
   let u; try { u = new URL(req.url, 'http://localhost'); } catch { res.writeHead(400); return res.end(); }
-  // Google: the sign-in page, and its answer.
-  if (u.pathname === '/__vdex/google') {
-    const p = googlePending.get(u.searchParams.get('n') || '');
-    if (!p) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('This sign-in has expired. Open Vdex and try again.'); }
+  // Google and Apple: the sign-in page, and its answer.
+  const kind = u.pathname === '/__vdex/google' ? 'google' : u.pathname === '/__vdex/icloud' ? 'icloud' : '';
+  if (kind) {
+    const p = pagePending.get(u.searchParams.get('n') || '');
+    if (!p || p.kind !== kind) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('This sign-in has expired. Open Vdex and try again.'); }
     if (req.method === 'GET') { // served once; the answer must carry the key that only this page was given
       if (p.key) { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('This sign-in page was already opened. Go back to Vdex and try again.'); }
       p.key = crypto.randomBytes(24).toString('base64url');
-      return googlePage(res, u.searchParams.get('n'), { ...p.opts, key: p.key });
+      return (kind === 'google' ? googlePage : applePage)(res, u.searchParams.get('n'), { ...p.opts, key: p.key });
     }
     if (req.method === 'POST') {
       if (req.headers.origin !== origin || !/^application\/json/.test(req.headers['content-type'] || '') || !p.key || req.headers['x-vdex-key'] !== p.key) { res.writeHead(403); return res.end(); }

@@ -2,7 +2,7 @@
 // file you pick inside any cloud-synced folder (Google Drive, Dropbox, OneDrive, iCloud Drive...)
 // using the File System Access API where available. Export/Import covers everything else.
 import { uid, ymd, toast } from './util.js';
-import { fileAdapter, dropboxAdapter, gdriveAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish, microsoftFinish } from './providers.js';
+import { fileAdapter, dropboxAdapter, gdriveAdapter, icloudAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish, icloudFinish, microsoftFinish } from './providers.js';
 
 const KEY = 'logi-db-v1';
 const blank = () => ({
@@ -246,6 +246,9 @@ export async function initCloud() {
     if (await dropboxFinish()) { lsSet('logi-provider', 'dropbox'); cloud.notice = ''; say('Connected to Dropbox'); }
   } catch (e) { cloud.notice = e.message; say(e.message); }
   try {
+    if (icloudFinish()) { lsSet('logi-provider', 'icloud'); cloud.notice = ''; say('Connected to iCloud'); }
+  } catch (e) { cloud.notice = e.message; say(e.message); }
+  try {
     const intent = await microsoftFinish();
     if (intent === 'onedrive') { lsSet('logi-provider', 'onedrive'); cloud.notice = ''; say('Connected to OneDrive'); }
     else if (intent === 'calendar') { update(d => { d.calSync = { ...d.calSync, provider: 'microsoft', updatedAt: Date.now() }; }); say('Connected to Outlook'); import('./calendar.js').then(m => m.syncCalendar({ interactive: false })).catch(() => {}); }
@@ -258,6 +261,7 @@ export async function initCloud() {
     const provider = lsGet('logi-provider');
     if (provider === 'dropbox') cloud.adapter = dropboxAdapter();
     else if (provider === 'gdrive') cloud.adapter = gdriveAdapter();
+    else if (provider === 'icloud') cloud.adapter = icloudAdapter();
     else if (provider === 'onedrive') cloud.adapter = onedriveAdapter();
     else if (provider === 'webdav') cloud.adapter = webdavAdapter();
     else if (cloud.supported) {
@@ -429,9 +433,16 @@ async function linkOrUndo(a, provider) {
   if (cloud.status === 'error' || cloud.status === 'needs-permission') { const msg = cloud.error || 'Sign-in did not finish'; cloud.adapter = null; lsSet('logi-provider', null); setStatus('off'); throw new Error(msg); }
 }
 export const connectGdrive = () => linkOrUndo(gdriveAdapter(), 'gdrive');
+export const connectIcloud = () => linkOrUndo(icloudAdapter(), 'icloud');
 export const connectOneDrive = () => linkOrUndo(onedriveAdapter(), 'onedrive');
 export async function connectWebdav() { const a = webdavAdapter(); if (!(await a.ready())) throw new Error('Enter the server address, your username and the app password first'); await a.ensureFolder(); await linkOrUndo(a, 'webdav'); }
 
+// iCloud only: delete Vdex's copy and backups there, then unlink. This device keeps everything.
+export async function eraseCloudCopy() {
+  const a = cloud.adapter; if (!a?.erase) return 0;
+  if (!(await a.ready(true))) throw new Error('Sign in to iCloud first');
+  const n = await a.erase(); await unlinkCloud(); return n;
+}
 export async function unlinkCloud() {
   cloud.adapter?.signOut?.({ keepToken: db.calSync?.provider === 'microsoft' }); // the Outlook link shares the Microsoft sign-in
   cloud.adapter = null; cloud.auxName = ''; cloud.feedUrl = ''; lsSet('logi-feed-url', null);

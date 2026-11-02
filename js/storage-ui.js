@@ -12,6 +12,7 @@ export function preloadSignIn() {
   if (providers.signIn.available('google')) providers.loadGIS().catch(() => {});
 }
 const STATUS = { synced: 'Up to date', saving: 'Saving…', 'needs-permission': 'Needs you to sign in again', error: 'Could not reach it', off: 'Not copied yet' };
+const ICLOUD_SUB = 'Sign in with your Apple ID and tick “Keep me signed in”: Apple then asks again about every two weeks. Uses a little of your iCloud storage.';
 export const BROWSER = 'Carry on in your web browser: sign in there, then come back to Vdex.';
 
 export function storagePanel() {
@@ -37,30 +38,31 @@ export function storagePanel() {
       h('div', { class: 'card stack' },
         h('div', { class: 'cloud-head' }, h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, ICON[a.id] || '☁'), h('div', null, h('strong', null, `Connected to ${a.label}`), who && h('div', { class: 'small muted' }, 'Signed in as ' + who))),
         h('p', { class: 'status-line', 'data-state': c.status }, [STATUS[c.status] || c.status, c.error && c.status !== 'synced' ? c.error : ''].filter(Boolean).join(' · ')),
-        ownApp(a) ? h('p', { class: 'small muted' }, 'This sign-in uses your own developer app (from Advanced), so the copy is in that app’s folder. Every device has to use the same app to share it.')
+        ownApp(a) ? h('p', { class: 'small muted' }, 'This sign-in uses your own developer app (set under For developers), so the copy is in that app’s folder. Every device has to use the same app to share it.')
           : a.where && h('p', { class: 'small muted' }, `Vdex keeps its copy in ${a.where}, and nothing else of yours is touched. Your phone and computer share it when both are connected the same way.`),
         h('div', { class: 'actions' },
           c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: run(() => (a.id === 'dropbox' ? store.connectDropbox() : store.reconnect()), 'Signed in again. Up to date.') }, 'Sign in again'),
           h('button', { class: 'btn ' + (c.status === 'needs-permission' ? 'ghost' : 'primary'), onclick: run(() => store.reconnect(), 'Up to date. Your copy is saved.') }, 'Sync now'),
           h('button', { class: 'btn ghost', onclick: run(store.unlinkCloud, false) }, 'Disconnect'))),
-      h('p', { class: 'small muted' }, 'Disconnecting stops the copying. Everything stays on this device, and the copy in your storage stays where it is.'));
+      h('p', { class: 'small muted' }, 'Disconnecting stops the copying. Everything stays on this device, and the copy in your storage stays where it is.'),
+      a.erase && h('button', { class: 'btn ghost small', onclick: () => { if (confirm(`Delete Vdex’s copy and its backups from ${a.label}? Everything stays on this device, and Vdex disconnects.`)) run(async () => { await store.eraseCloudCopy(); toast(`Vdex’s copy was deleted from ${a.label}. Everything is still on this device.`); }, false)(); } }, `Delete Vdex’s copy from ${a.label}…`));
   }
 
   const ownApp = a => (a.id === 'dropbox' ? providers.signIn.dropboxOwn() : a.id === 'gdrive' ? providers.signIn.usingOwn('google') : a.id === 'onedrive' ? providers.signIn.usingOwn('microsoft') : false);
-  // Not connected: three sign-in buttons first, the rest tucked away.
-  const ICON = { dropbox: '📦', gdrive: '🟢', onedrive: '🔷', webdav: '🌐', file: '🗂️' };
-  const service = (id, svc, name, sub, connect) => {
+  // Not connected: Google Drive and iCloud first; everything else folded away under More ways.
+  const ICON = { dropbox: '📦', gdrive: '🟢', icloud: '☁️', onedrive: '🔷', webdav: '🌐', file: '🗂️' };
+  const service = (id, svc, name, sub, connect, folded = false) => {
     const on = providers.signIn.available(svc);
     return h('div', { class: 'card cloud-choice' + (on ? '' : ' off'), 'data-svc': id },
       h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, ICON[id]),
-      h('div', { class: 'grow' }, h('strong', null, name), h('div', { class: 'small muted' }, on ? sub : `Not ready yet: sign-in for ${name} is still being set up for Vdex. Until then, use Other ways below.`, !on && [' ', h('a', { href: SWITCH_ON, target: '_blank', rel: 'noopener', class: 'publisher-link' }, 'For the Vdex publisher: how to switch it on')])),
+      h('div', { class: 'grow' }, h('strong', null, name), h('div', { class: 'small muted' }, on ? sub : `Not ready yet: sign-in for ${name} is still being set up for Vdex.${folded ? '' : ' Until then, see More ways below.'}`, !on && [' ', h('a', { href: SWITCH_ON, target: '_blank', rel: 'noopener', class: 'publisher-link' }, 'For the Vdex publisher: how to switch it on')])),
       h('button', { class: 'btn primary', disabled: !on, onclick: run(connect), 'aria-label': `Connect ${name}` }, 'Connect'));
   };
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const field = (label, get, set, ph, type = 'text') => h('label', { class: 'field' }, h('span', null, label), h('input', { type, placeholder: ph, 'aria-label': label, value: get(), autocomplete: type === 'password' ? 'current-password' : 'off', spellcheck: false, autocapitalize: 'off', oninput: e => set(e.target.value) }));
-  // Sections stay open when the panel redraws (a tab tapped, a key saved). While no sign-in is ready, Other ways starts open.
-  const opened = new Set(['dropbox', 'google', 'microsoft'].some(providers.signIn.available) ? [] : ['Other ways to keep a copy']);
-  const more = (title, sub, body) => { const d = h('details', { class: 'twirl', open: opened.has(title) }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, title), sub && h('span', { class: 'twirl-sub' }, sub))), h('div', { class: 'twirl-body stack' }, body));
+  // A fold-down that stays open or closed across redraws (a tab tapped, a key saved). Everything starts folded.
+  const opened = new Set();
+  const more = (title, sub, body, cls = '') => { const d = h('details', { class: 'twirl ' + cls, open: opened.has(title) }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, title), sub && h('span', { class: 'twirl-sub' }, sub))), h('div', { class: 'twirl-body stack' }, body));
     d.addEventListener('toggle', () => { if (d.open) opened.add(title); else opened.delete(title); }); return d; };
 
   function choices() {
@@ -70,14 +72,16 @@ export function storagePanel() {
     return h('div', { class: 'stack' },
       c.notice && h('div', { class: 'warn small' }, c.notice),
       h('p', null, 'Sign in to your own cloud storage and Vdex keeps a copy of everything there. Your phone and computer then share the same information, and a backup is made every day.'),
-      h('p', { class: 'small muted' }, 'Vdex only uses a folder of its own. It cannot see, change or share any of your other files.'),
+      h('p', { class: 'small muted' }, 'Vdex only uses a space of its own. It cannot see, change or share any of your other files.'),
       h('div', { class: 'stack cloud-choices' },
-        service('dropbox', 'dropbox', 'Dropbox', 'Sign in and tap Allow. Stays connected.', () => store.connectDropbox()),
         service('gdrive', 'google', 'Google Drive', 'Sign in and tap Allow. About once an hour Google asks again: one tap.', store.connectGdrive),
-        service('onedrive', 'microsoft', 'OneDrive', 'Sign in and tap Accept. About once a day Microsoft asks again: one tap.', store.connectOneDrive)),
+        service('icloud', 'icloud', 'iCloud', ICLOUD_SUB, store.connectIcloud)),
       h('p', { class: 'small muted' }, 'Use the same one on every device. Nothing is shared with anyone else.'),
-      more('Other ways to keep a copy', 'Nextcloud, your own server, a synced folder, or backup files', [
-        h('div', { class: 'card stack' }, h('strong', null, '☁ Nextcloud, ownCloud or another WebDAV server'),
+      more('More ways to keep a copy', 'Dropbox, OneDrive, Nextcloud, a synced folder or backup files', [
+        h('div', { class: 'stack cloud-choices' },
+          service('dropbox', 'dropbox', 'Dropbox', 'Sign in and tap Allow. Stays connected.', () => store.connectDropbox(), true),
+          service('onedrive', 'microsoft', 'OneDrive', 'Sign in and tap Accept. About once a day Microsoft asks again: one tap.', store.connectOneDrive, true)),
+        h('div', { class: 'card stack' }, h('strong', null, '🌐 Nextcloud, ownCloud or another WebDAV server'),
           h('div', { class: 'seg', role: 'tablist' },
             h('button', { role: 'tab', class: nc ? 'on' : '', 'aria-selected': nc, onclick: () => { setWd({ kind: 'nextcloud' }); draw(); } }, 'Nextcloud / ownCloud'),
             h('button', { role: 'tab', class: nc ? '' : 'on', 'aria-selected': !nc, onclick: () => { setWd({ kind: 'webdav' }); draw(); } }, 'Other WebDAV')),
@@ -92,16 +96,16 @@ export function storagePanel() {
           c.supported
             ? [h('p', { class: 'small muted' }, 'Save the database file inside a folder that iCloud Drive, OneDrive, Google Drive, Dropbox, Box or another sync app already copies, and that app carries it between your computers.'),
               h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: run(store.createCloudFile) }, 'Create database file…'), h('button', { class: 'btn ghost', onclick: run(store.openCloudFile) }, 'Open existing file…'))]
-            : h('p', { class: 'small muted' }, ios ? 'Not on iPhone or iPad: they cannot give an app a file to keep writing to. Use Dropbox, Google Drive or OneDrive above.' : 'Needs Chrome, Edge or the Vdex desktop app on a computer.')),
+            : h('p', { class: 'small muted' }, ios ? 'Not on iPhone or iPad: they cannot give an app a file to keep writing to. Use Google Drive or iCloud above.' : 'Needs Chrome, Edge or the Vdex desktop app on a computer.')),
         h('div', { class: 'card stack' }, h('strong', null, '💾 No cloud at all'),
-          h('p', { class: 'small muted' }, 'Keep everything on this device and save a backup file now and then under Backups & data.'))]),
-      more('Advanced: use your own developer app', 'For developers who run their own copy of Vdex', [
-        h('p', { class: 'small muted' }, 'Only needed if you host Vdex yourself or want sign-ins to go through an app you registered. A key here replaces the built-in one on this device; leave it empty to use the built-in one.'),
-        field('Dropbox app key', providers.settings.ownDropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),
-        field('Google OAuth client ID', providers.settings.ownGdriveId, providers.settings.setGdriveId, 'Google OAuth client ID'),
-        field('Microsoft application (client) ID', providers.settings.ownMsId, providers.settings.setMsId, 'Microsoft application (client) ID'),
-        h('p', { class: 'small muted' }, `Register these sign-in addresses with your app: ${location.origin + location.pathname} (Dropbox and Microsoft redirect URI, as a single-page application at Microsoft) and ${location.origin} (Google JavaScript origin). `, h('a', { href: OWN_APPS, target: '_blank', rel: 'noopener' }, 'Step-by-step')),
-        h('button', { class: 'btn ghost small', onclick: () => { draw(); toast('Saved'); } }, 'Use these keys')]));
+          h('p', { class: 'small muted' }, 'Keep everything on this device and save a backup file now and then under Backups & data.')),
+        more('For developers: use your own app', 'Only if you run your own copy of Vdex', [
+          h('p', { class: 'small muted' }, 'Only needed if you host Vdex yourself or want sign-ins to go through an app you registered. A key here replaces the built-in one on this device; leave it empty to use the built-in one.'),
+          field('Dropbox app key', providers.settings.ownDropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),
+          field('Google OAuth client ID', providers.settings.ownGdriveId, providers.settings.setGdriveId, 'Google OAuth client ID'),
+          field('Microsoft application (client) ID', providers.settings.ownMsId, providers.settings.setMsId, 'Microsoft application (client) ID'),
+          h('p', { class: 'small muted' }, `Register these sign-in addresses with your app: ${location.origin + location.pathname} (Dropbox and Microsoft redirect URI, as a single-page application at Microsoft) and ${location.origin} (Google JavaScript origin). `, h('a', { href: OWN_APPS, target: '_blank', rel: 'noopener' }, 'Step-by-step')),
+          h('button', { class: 'btn ghost small', onclick: () => { draw(); toast('Saved'); } }, 'Use these keys')], 'twirl-inner')], 'twirl-more'));
   }
   draw();
   let last = store.cloud.status, lastA = store.cloud.adapter;
@@ -124,7 +128,7 @@ export function backupPanel() {
       h('button', { class: 'btn ghost', onclick: () => backup.exportFile({ encrypted: true }) }, '🔐 Encrypted backup…'),
       h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: backup.importFile }))),
     a && a.readExtra && h('button', { class: 'btn ghost', onclick: () => backup.restoreFromCloud() }, '☁ Restore an automatic cloud backup…'),
-    h('p', { class: 'small muted' }, 'With Dropbox, Google Drive, OneDrive or WebDAV linked, Vdex also writes a dated backup next to its database once a day after a change: one per weekday and one per month. Backup files are plain unless you choose the encrypted one, so keep them somewhere private.'),
+    h('p', { class: 'small muted' }, 'With a cloud storage linked (Google Drive, iCloud, Dropbox, OneDrive or WebDAV), Vdex also writes a dated backup next to its database once a day after a change: one per weekday and one per month. Backup files are plain unless you choose the encrypted one, so keep them somewhere private.'),
     h('button', { class: 'btn ghost', onclick: () => { if (confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),
     erase);
 }
