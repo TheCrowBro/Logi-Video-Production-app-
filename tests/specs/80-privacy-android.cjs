@@ -21,6 +21,17 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   for (const s of ['Open-Meteo', 'OpenStreetMap', 'Dropbox', 'Google', 'Microsoft', 'GitHub', 'Camera', 'Microphone', 'Location']) ok(`it covers ${s}`, text.includes(s));
   ok('it fits a phone without sideways scrolling', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   ok('its back link returns to the app', (await page.locator('a.back').getAttribute('href')) === './');
+  ok('it points to the terms of service', (await page.locator('a[href="terms.html"]').count()) >= 1);
+
+  // The terms of service page
+  const rt = await page.goto(BASE + 'terms.html');
+  ok('terms.html is served', !!rt && rt.status() === 200);
+  ok('it is titled as the terms of service', /terms of service/i.test(await page.title()));
+  const terms = await page.evaluate(() => document.body.innerText);
+  ok('it carries a last-updated date', /Last updated \d{1,2} \w+ \d{4}/.test(terms));
+  for (const [what, re] of [['no warranty', /as is/i], ['limits on liability', /liability/i], ['backups being the user\u2019s job', /backups/i], ['invoices and payments', /Pay buttons/], ['safety-critical use of the tools', /safety/i], ['other services\u2019 own terms', /their own terms/i], ['rights the law keeps', /cannot be changed by agreement|cannot be taken away/i]]) ok(`it covers ${what}`, re.test(terms));
+  ok('it fits a phone without sideways scrolling', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  ok('it links the privacy policy and back to the app', (await page.locator('a[href="privacy.html"]').count()) >= 1 && (await page.locator('a.back').getAttribute('href')) === './');
 
   // Reachable from the app, and kept offline with it
   await page.goto(BASE); await page.waitForSelector('#rolodex .drum-btn');
@@ -32,9 +43,21 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await popup.waitForLoadState();
   ok('the link opens the policy page', /privacy\.html$/.test(popup.url()), popup.url());
   await popup.close();
+  const tlink = page.locator('details.settings-section:has(> summary:has-text("About")) a[href="terms.html"]');
+  ok('Settings → About links the terms of service', (await tlink.count()) === 1 && /Terms of service/.test(await tlink.innerText()));
+  const [tpop] = await Promise.all([ctx.waitForEvent('page'), tlink.click()]);
+  await tpop.waitForLoadState();
+  ok('the link opens the terms page', /terms\.html$/.test(tpop.url()), tpop.url());
+  await tpop.close();
+  // The first-run welcome says that using Vdex means accepting the terms, next to the button that starts
+  await page.evaluate(() => import('./js/tour.js').then(t => t.startTour()));
+  await page.waitForSelector('.tour-card');
+  const note = page.locator('.tour-card .tour-note');
+  ok('the welcome card names the terms of service and privacy policy, with links', /accept its terms of service and privacy policy/.test(await note.innerText()) && (await note.locator('a[href="terms.html"]').count()) === 1 && (await note.locator('a[href="privacy.html"]').count()) === 1);
+  await page.locator('.tour-card button:has-text("Skip")').click();
   await page.waitForFunction(() => navigator.serviceWorker.controller != null, null, { timeout: 20000 });
-  const cachedPolicy = await page.evaluate(async () => { const c = await caches.open('logi-dev'); return !!(await c.match(new URL('privacy.html', location.href).href)); });
-  ok('the policy is part of the offline set', cachedPolicy);
+  const cachedPolicy = await page.evaluate(async () => { const c = await caches.open('logi-dev'); return !!(await c.match(new URL('privacy.html', location.href).href)) && !!(await c.match(new URL('terms.html', location.href).href)); });
+  ok('the policy and the terms are part of the offline set', cachedPolicy);
 
   // The Android package and the site agree
   const links = JSON.parse(fs.readFileSync(ROOT + '/.well-known/assetlinks.json', 'utf8'));

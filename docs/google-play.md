@@ -9,6 +9,7 @@ This is the step-by-step for putting Vdex in the Google Play store, written for 
 | What | Where it is |
 |---|---|
 | Privacy policy address | https://thecrowbro.github.io/Logi-Video-Production-app-/privacy.html |
+| Terms of service address | https://thecrowbro.github.io/Logi-Video-Production-app-/terms.html |
 | The app file for Google Play (`vdex-android.aab`) | https://github.com/TheCrowBro/Logi-Video-Production-app-/releases/tag/android-latest |
 | The app file to try on a phone first (`vdex-android.apk`) | same page |
 | Icon, 512 × 512 | https://thecrowbro.github.io/Logi-Video-Production-app-/store/android/icon-512.png |

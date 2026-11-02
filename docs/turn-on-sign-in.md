@@ -23,6 +23,7 @@ Copy these exactly, including the slash at the end where there is one.
 |---|---|
 | Website, home page | `https://thecrowbro.github.io/Logi-Video-Production-app-/` |
 | Privacy policy | `https://thecrowbro.github.io/Logi-Video-Production-app-/privacy.html` |
+| Terms of service | `https://thecrowbro.github.io/Logi-Video-Production-app-/terms.html` |
 | Redirect URI, first one (Dropbox and Microsoft) | `https://thecrowbro.github.io/Logi-Video-Production-app-/` |
 | Redirect URI, second one (Dropbox and Microsoft: the desktop app) | `http://localhost:47831/` |
 | JavaScript origin, first one (Google only) | `https://thecrowbro.github.io` |
@@ -41,7 +42,7 @@ Copy these exactly, including the slash at the end where there is one.
    - Audience: **External**. **Next**.
    - Contact information: your email. **Next**.
    - Tick the box to agree, **Continue**, **Create**.
-5. Still on **Branding**, fill in: application home page and privacy policy (both from the table), and under **Authorized domains** click **Add domain** and type `thecrowbro.github.io`. Leave the logo empty for now. Click **Save**.
+5. Still on **Branding**, fill in: application home page, privacy policy and terms of service (all from the table), and under **Authorized domains** click **Add domain** and type `thecrowbro.github.io`. Leave the logo empty for now. Click **Save**.
 6. Go to **Data access** → **Add or remove scopes**. In the box for adding scopes by hand, paste these three lines, then click **Add to table**, **Update** and **Save**:
 
    ```
