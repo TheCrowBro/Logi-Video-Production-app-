@@ -57,6 +57,9 @@ signin.icloudReplaces = (await win.evaluate(() => window.__a1)).error === 'repla
 signin.icloudNotGoogle = (await fetch(aUrl.replace('/__vdex/icloud', '/__vdex/google'))).status === 404;
 const aPage = await fetch(aUrl), aHtml = await aPage.text(), aCsp = aPage.headers.get('content-security-policy') || '';
 signin.icloudPage = /\/__vdex\/icloud\?n=/.test(aUrl) && aPage.ok && /Continue with Apple/.test(aHtml) && /iCloud\.test\.vdex/.test(aHtml) && /connect-src 'self' https:\/\/api\.apple-cloudkit\.com/.test(aCsp) && /script-src 'nonce-/.test(aCsp);
+// the pages' own scripts must be valid JavaScript once served (escaping inside the template is easy to get wrong)
+const parses = html => [...html.matchAll(/<script nonce="[^"]+">([\s\S]*?)<\/script>/g)].every(m => { try { new Function(m[1]); return true; } catch { return false; } }) && /<script nonce="[^"]+">/.test(html);
+signin.pagesParse = parses(gHtml) && parses(aHtml);
 const aKey = (aHtml.match(/"key":"([^"]+)"/) || [])[1];
 const aPost = await fetch(aUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, 'X-Vdex-Key': aKey }, body: JSON.stringify({ ckSession: 'ck-session-1' }) });
 signin.icloudAnswer = aPost.status === 204 && (await win.evaluate(() => window.__a)).ckSession === 'ck-session-1' && (await fetch(aUrl)).status === 404;

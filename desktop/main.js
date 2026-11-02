@@ -57,7 +57,7 @@ function googlePage(res, nonce, { client, scope, hint, key }) {
 <script nonce="${sn}">
 const C = ${cfg}, t = document.getElementById('t'), go = document.getElementById('go');
 const send = r => fetch('/__vdex/google?n=' + encodeURIComponent(C.nonce), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Vdex-Key': C.key }, body: JSON.stringify(r) })
-  .then(x => { go.hidden = true; t.textContent = r.error ? 'Sign-in not finished. Go back to Vdex and tap Connect to try again. You can close this tab.' : 'Done. Go back to Vdex; you can close this tab.'; })
+  .then(x => { go.hidden = true; if (!x.ok) { t.textContent = 'This sign-in has expired, or a newer one took over. Go back to Vdex and tap Connect again. You can close this tab.'; return; } t.textContent = r.error ? 'Sign-in not finished. Go back to Vdex and tap Connect to try again. You can close this tab.' : 'Done. Go back to Vdex; you can close this tab.'; })
   .catch(() => { t.textContent = 'Vdex has closed, or this sign-in has expired. Open Vdex and try again.'; });
 const ready = () => { go.disabled = false; go.onclick = () => google.accounts.oauth2.initTokenClient({ client_id: C.client, scope: C.scope, callback: r => send(r), error_callback: e => send({ error: e.type || 'failed' }) }).requestAccessToken(C.hint ? { prompt: '', login_hint: C.hint } : { prompt: '' }); };
 window.google && google.accounts ? ready() : addEventListener('load', ready);
@@ -75,7 +75,7 @@ function applePage(res, nonce, { container, apiToken, environment, key }) {
 <script nonce="${sn}">
 const C = ${cfg}, t = document.getElementById('t'), go = document.getElementById('go');
 const send = r => fetch('/__vdex/icloud?n=' + encodeURIComponent(C.nonce), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Vdex-Key': C.key }, body: JSON.stringify(r) })
-  .then(() => { go.hidden = true; t.textContent = r.error ? 'Sign-in not finished. Go back to Vdex and tap Connect to try again. You can close this tab.' : 'Done. Go back to Vdex; you can close this tab.'; })
+  .then(x => { go.hidden = true; if (!x.ok) { t.textContent = 'This sign-in has expired, or a newer one took over. Go back to Vdex and tap Connect again. You can close this tab.'; return; } t.textContent = r.error ? 'Sign-in not finished. Go back to Vdex and tap Connect to try again. You can close this tab.' : 'Done. Go back to Vdex; you can close this tab.'; })
   .catch(() => { t.textContent = 'Vdex has closed, or this sign-in has expired. Open Vdex and try again.'; });
 const current = 'https://api.apple-cloudkit.com/database/1/' + encodeURIComponent(C.container) + '/' + (C.environment === 'development' ? 'development' : 'production') + '/public/users/caller?ckAPIToken=' + encodeURIComponent(C.apiToken);
 go.onclick = async () => {
@@ -85,8 +85,10 @@ go.onclick = async () => {
   if (!url) { w.close(); t.textContent = 'iCloud could not be reached. Check the connection and click again.'; return; }
   w.location.href = url;
   let settled = false;
-  const apple = o => { try { const h = new URL(o); return h.protocol === 'https:' && (h.hostname === 'apple.com' || h.hostname.endsWith('.apple.com')); } catch (x) { return false; } };
-  const got = e => { if (settled || e.source !== w || !apple(e.origin) || !e.data || typeof e.data !== 'object') return;
+  // Only Apple's own sites, and only from that window (or a frame inside it), with an answer in it.
+  const apple = o => { try { const h = new URL(o); return h.protocol === 'https:' && ['apple.com', 'icloud.com', 'apple-cloudkit.com'].some(d => h.hostname === d || h.hostname.endsWith('.' + d)); } catch (x) { return false; } };
+  const fromPopup = s => { try { return !!s && (s === w || s.top === w); } catch (x) { return false; } };
+  const got = e => { if (settled || !fromPopup(e.source) || !apple(e.origin) || !e.data || typeof e.data !== 'object' || !(e.data.ckWebAuthToken || e.data.ckSession || e.data.errorMessage)) return;
     settled = true; removeEventListener('message', got); try { w.close(); } catch (x) { /* closed */ }
     const tok = e.data.ckWebAuthToken || e.data.ckSession; send(tok ? { ckSession: String(tok) } : { error: 'failed' }); };
   addEventListener('message', got);
