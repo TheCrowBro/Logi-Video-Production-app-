@@ -292,8 +292,9 @@ function mergeList(a, b, dead, mergeOne) {
 const newer = (x, y) => (ts(y) > ts(x) ? y : x);
 // A booking follows its newer copy, except its budget, which follows the newer budget: one device can plan costs while
 // another ticks the checklist, and neither loses the other's work.
-const budgetAt = b => Number(b && b.budget && b.budget.updatedAt) || 0;
-const mergeBooking = (x, y) => { const base = newer(x, y), other = base === x ? y : x; return budgetAt(other) > budgetAt(base) ? { ...base, budget: other.budget } : base; };
+const budgetAt = b => Number(b && b.budget && b.budget.updatedAt) || 0, boardAt = b => Number(b && b.board && b.board.updatedAt) || 0;
+// The budget and the stripboard each keep their own time, so a newer one survives a newer edit elsewhere on the booking.
+const mergeBooking = (x, y) => { const base = newer(x, y), other = base === x ? y : x; let out = base; if (budgetAt(other) > budgetAt(base)) out = { ...out, budget: other.budget }; if (boardAt(other) > boardAt(base)) out = { ...out, board: other.board }; return out; };
 const mergeNote = (x, y) => (nts(y) > nts(x) ? y : x);
 // A log's settings (sync point, mode, script…) follow the newer copy; its notes are the union of both.
 export function mergeLog(a, b, globalDead = db.deleted) {

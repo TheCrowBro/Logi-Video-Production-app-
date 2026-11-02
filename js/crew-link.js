@@ -7,11 +7,12 @@ import { callSheetData } from './callsheet.js';
 import { TYPES, baseType } from './workflow.js';
 import { pack } from './link-pack.js';
 import { SITE } from './version.js';
+import { boardPlan, hasScheduled, ieOf, dnOf, stripClass, fmtEighths } from './board.js';
 
 // What the producer can leave out. Client contacts are off unless chosen: they are the client's details, not the crew's.
 export const PARTS = [
   ['client', 'Client name', true], ['crew', 'Crew: names, roles, call times, phone numbers and email addresses', true], ['contacts', 'Client contacts and who is on set', false],
-  ['shots', 'Shot list', true], ['kit', 'Equipment list (no values)', true], ['deliverables', 'Deliverables and due dates', true],
+  ['scenes', 'Scenes from the stripboard, by day (no notes)', true], ['shots', 'Shot list', true], ['kit', 'Equipment list (no values)', true], ['deliverables', 'Deliverables and due dates', true],
   ['rules', 'Venue rules', true], ['notes', 'Call sheet instructions', true],
 ];
 const KEY = 'logi-crew-share';
@@ -37,6 +38,7 @@ export function crewSnapshot(b, inc = choices()) {
   if (inc.client) snap.client = str(b.client);
   if (inc.crew) snap.crew = d.crew.map(c => ({ ...person(c), call: str(c.call) }));
   if (inc.contacts) { snap.contacts = (b.stakeholders || []).map(person); snap.onSet = str(cs.attendees); }
+  if (inc.scenes) { const plan = boardPlan(b); snap.scenes = plan.days.filter(d => d.items.some(x => x.type === 'scene')).map(d => ({ n: d.n, date: str(d.date), pages: fmtEighths(d.eighths), items: d.items.map(x => (x.type === 'scene' ? { scene: str(x.scene), ie: ieOf(x), set: str(x.set), tod: str(x.tod) || dnOf(x).toUpperCase(), desc: str(x.desc), cast: x.cast.map(str), pages: fmtEighths(x.eighths), kind: stripClass(x) } : { banner: str(x.text) })) })); }
   if (inc.shots) snap.shots = (b.shots || []).map(s => ({ text: str(s.text), done: !!s.done }));
   if (inc.kit) snap.kit = (b.gear || []).map(id => byId('gear', id)).filter(Boolean).map(g => ({ name: str(g.name), cat: str(g.category), qty: usedQty(b, g.id) }));
   if (inc.deliverables) snap.deliverables = (b.deliverables || []).map(x => ({ name: str(x.name), duration: str(x.duration), due: str(x.due), status: str(x.status) }));
@@ -66,19 +68,22 @@ export function openCrewShare(b) {
     // Very long links do not fit in an email link (some mail apps stop at about 2,000 characters): the link is copied
     // instead, to be pasted into the email.
     const long = url.length > 1700;
-    const what = ['times', 'the location', inc.crew && 'who is on', inc.shots && 'what we are shooting'].filter(Boolean), list = what.slice(0, -1).join(', ') + ' and ' + what[what.length - 1];
+    const what = ['times', 'the location', inc.crew && 'who is on', inc.scenes && hasScheduled(byId('bookings', b.id) || b) && 'the scenes for each day', inc.shots && 'what we are shooting'].filter(Boolean), list = what.slice(0, -1).join(', ') + ' and ' + what[what.length - 1];
     const sign = [d.p.name, d.p.business].filter(Boolean).join(' · ');
     const body = `Hi all,\n\nHere is everything for ${b.title} on ${fmtShort(b.date)}${endOf(b) > b.date ? ' to ' + fmtShort(endOf(b)) : ''}: ${list}.\n\n${long ? '[Paste the link here]' : url}\n\nIf plans change I'll send a new link.\n\nThanks${sign ? ',\n' + sign : ''}`;
     mail.href = `mailto:${emails.join(',')}?` + new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20');
     mail.dataset.long = long ? '1' : '';
-    if (url.length > 2800) return; // too long for a QR code: the link still works by copy, share or email
+    if (url.length > 2800) { // too long for a QR code: the link still works by copy, share or email
+      const cur = byId('bookings', b.id) || b, big = [inc.scenes && hasScheduled(cur) && 'the scenes', inc.shots && (cur.shots || []).length && 'the shot list', inc.kit && (cur.gear || []).length && 'the equipment list'].filter(Boolean);
+      qrBox.replaceChildren(h('p', { class: 'small muted', style: 'text-align:center' }, `This link is too long for a QR code.${big.length ? ` Untick ${big.join(' or ')} to get one, or send the link.` : ' Send the link instead.'}`)); return;
+    }
     import('./qr.js').then(m => m.qrSvg(url, { cellSize: 2 })).then(svg => { if (n === seq) { qrBox.innerHTML = svg; qrNote.hidden = false; } }).catch(() => { if (n === seq) { qrBox.replaceChildren(); qrNote.hidden = true; } });
   };
   const copy = async () => { if (!url) return; try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { area.select(); toast('Select the link and copy it'); } };
   mail.addEventListener('click', e => { if (!url || !mail.getAttribute('href')) { e.preventDefault(); return; } if (mail.dataset.long) { navigator.clipboard?.writeText(url).then(() => toast('The link is long, so it was copied: paste it into the email'), () => toast('Copy the link above and paste it into the email')); } });
   const share = async () => { if (!url) return; if (navigator.share) { try { await navigator.share({ title: `Shoot info: ${b.title}`, url }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const acts = [h('button', { class: 'btn primary', onclick: copy }, '📋 Copy link'), h('button', { class: 'btn ghost', onclick: share }, '📤 Share…')];
-  const toggles = h('div', { class: 'crew-parts' }, PARTS.map(([k, label]) => h('label', { class: 'check' },
+  const toggles = h('div', { class: 'crew-parts' }, PARTS.filter(([k]) => k !== 'scenes' || hasScheduled(byId('bookings', b.id) || b)).map(([k, label]) => h('label', { class: 'check' },
     h('input', { type: 'checkbox', checked: inc[k], onchange: e => { inc[k] = e.target.checked; remember(inc); make(); } }), h('span', null, label))));
   sheet(`Share with crew · ${b.title}`, h('div', { class: 'stack' },
     h('p', { class: 'small' }, 'A read-only page for your cast and crew: the dates, call times, schedule and location, and whatever you tick below.'),

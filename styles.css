@@ -630,3 +630,40 @@ html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .s
 .sheet-body:has(.price-picker) { scroll-padding-bottom: 84px; } /* a ticked row reached with Tab is never under the Add bar */
 /* Rows in a form (quote lines, contacts, deliverables): the first text box on a line of its own, the rest below it */
 .field .rows .row-edit { flex-wrap: wrap; } .field .rows .row-edit > input { flex: 1 1 0; min-width: 0; } .field .rows .row-edit > input[type=text]:first-child { flex: 1 1 100%; }
+/* Stripboard: one strip per scene in the paper-board colours (white interior day, yellow exterior day, blue interior
+   night, green exterior night), black "end of day" strips, brown banners. The colours are the same in every theme.
+   Sizes are in rem, so the strips grow with Settings → Display → Text size. */
+.sb-page .status-line { margin: 6px 0 10px; }
+.sb-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.sb-chip { font-size: .8rem; font-weight: 700; letter-spacing: .03em; padding: 3px 9px; border-radius: 999px; border: 1px solid #0003; }
+.sb-board { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sb-board > li, .sb-ghost { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr); align-items: stretch; border-radius: 8px; border: 1px solid #0002; min-height: 48px; list-style: none; box-sizing: border-box; }
+.sb-int-day { background: #fbfaf6; color: #1d1a16; } .sb-ext-day { background: #f6dc5c; color: #1d1a16; }
+.sb-int-night { background: #35609f; color: #fff; } .sb-ext-night { background: #226b43; color: #fff; }
+.sb-break { background: #16130f; color: #f4efe6; border-color: #000 !important; box-shadow: inset 0 0 0 1px #ffffff2e; } .sb-banner { background: #6b5640; color: #fff; }
+.sb-handle { display: grid; place-items: center; background: transparent; border: 0; color: inherit; opacity: .75; font-size: 1.15rem; cursor: grab; touch-action: none; min-height: 44px; border-radius: 8px 0 0 8px; -webkit-user-select: none; user-select: none; }
+.sb-handle:active { cursor: grabbing; }
+.sb-handle:focus-visible, .sb-body:focus-visible, .sb-break-x:focus-visible { outline: 3px solid currentColor; outline-offset: -5px; box-shadow: inset 0 0 0 6px color-mix(in srgb, currentColor 18%, transparent); opacity: 1; border-radius: 8px; }
+.sb-body { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 10px 7px 2px; display: grid; grid-template-columns: minmax(2.4rem, auto) minmax(0, auto) minmax(0, 1fr) auto; grid-template-areas: "num set set pages" "num desc desc desc" "num ie cast cast"; column-gap: 8px; row-gap: 1px; min-width: 0; color: inherit; }
+.sb-num { grid-area: num; font-weight: 800; font-size: 1.05rem; align-self: center; text-align: center; min-width: 0; overflow-wrap: anywhere; }
+.sb-set { grid-area: set; font-weight: 700; font-size: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.sb-desc { grid-area: desc; font-size: .85rem; opacity: .85; min-width: 0; overflow-wrap: break-word; }
+.sb-int-night .sb-desc, .sb-ext-night .sb-desc, .sb-banner .sb-desc { opacity: 1; }
+.sb-ie { grid-area: ie; font-size: .78rem; font-weight: 700; letter-spacing: .03em; min-width: 0; overflow-wrap: anywhere; }
+.sb-cast { grid-area: cast; font-size: .8rem; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.sb-pages { grid-area: pages; font-weight: 800; font-size: 1rem; white-space: nowrap; text-align: right; }
+@media (min-width: 700px) {
+  .sb-body { grid-template-columns: minmax(3rem, auto) minmax(0, 9.5rem) minmax(0, 1fr) minmax(4rem, 9rem) 3.6rem; grid-template-areas: "num ie set cast pages" "num ie desc cast pages"; }
+  .sb-ie, .sb-cast, .sb-pages { align-self: center; }
+}
+.sb-break { grid-template-columns: 2.6rem minmax(0, 1fr) auto !important; }
+.sb-break-text { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; padding: 8px 4px; font-size: .9rem; min-width: 0; }
+.sb-break-text b { text-transform: uppercase; letter-spacing: .06em; }
+.sb-break-x { color: inherit; opacity: .75; align-self: center; }
+.sb-pool-head { grid-column: 1 / -1; background: var(--bg); color: var(--text); padding: 14px 4px 4px; font-weight: 700; border-top: 1px solid #000; }
+.sb-banner .sb-body { display: block; text-align: center; font-weight: 700; padding: 10px; }
+.sb-placeholder { opacity: .35; outline: 2px dashed var(--accent); outline-offset: -2px; }
+.sb-board > li.sb-drop { display: block; min-height: 0; height: 5px; border: 0; border-radius: 4px; background: var(--accent); margin: 1px 0; box-shadow: 0 0 0 2px var(--bg), 0 0 10px var(--accent); }
+.sb-ghost { box-shadow: 0 10px 28px #0007; opacity: .72; }
+body.sb-dragging { -webkit-user-select: none; user-select: none; cursor: grabbing; }
+.sb-cast-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }

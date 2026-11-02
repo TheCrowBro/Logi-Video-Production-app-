@@ -71,6 +71,8 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([typ
 // Modal bottom sheet: traps focus, restores it on close, hides the page from assistive tech while open.
 export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   const opener = document.activeElement;
+  // If a redraw replaces the opener while the sheet is open, its stand-in (same data-fk) gets the focus back.
+  const fk = opener && opener.closest && opener.closest('[data-fk]') ? opener.closest('[data-fk]').dataset.fk : null;
   const app = document.getElementById('app');
   const back = h('div', { class: 'sheet-back' });
   let closed = false;
@@ -79,7 +81,8 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
     back.remove(); document.removeEventListener('keydown', keys);
     const at = sheetStack.indexOf(back); if (at >= 0) sheetStack.splice(at, 1);
     if (--openSheets === 0 && app) app.inert = false;
-    opener && opener.isConnected && opener.focus();
+    if (opener && opener.isConnected) opener.focus();
+    else if (fk) { const twin = document.querySelector(`[data-fk="${CSS.escape(fk)}"]`); if (twin) twin.focus({ preventScroll: true }); }
     onClose && onClose();
   };
   const keys = e => {

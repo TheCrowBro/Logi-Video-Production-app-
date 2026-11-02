@@ -18,6 +18,7 @@ const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const fold = line => { const out = []; let cur = '', bytes = 0; for (const ch of line) { const n = new TextEncoder().encode(ch).length; if (bytes + n > 74) { out.push(cur); cur = ' '; bytes = 1; } cur += ch; bytes += n; } out.push(cur); return out.join('\r\n'); };
 const TIME = /^(\d{1,2}):(\d{2})$/;
+const KINDS = ['sb-int-day', 'sb-ext-day', 'sb-int-night', 'sb-ext-night']; // strip colours: only these class names are ever used
 const at = (d, t) => { const [y, m, dd] = d.split('-').map(Number), x = TIME.exec(t || ''); return x ? new Date(y, m - 1, dd, Number(x[1]), Number(x[2])) : null; };
 const stamp = x => `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}T${String(x.getHours()).padStart(2, '0')}${String(x.getMinutes()).padStart(2, '0')}00`;
 const dayStamp = (d, add = 0) => { const [y, m, dd] = d.split('-').map(Number), x = new Date(y, m - 1, dd + add); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
@@ -52,6 +53,7 @@ function clean(raw) {
     location: { venue: s(l.venue), address: s(l.address), access: s(l.access), parking: s(l.parking), power: s(l.power), hospital: s(l.hospital), rules: s(l.rules) },
     schedule: list(raw.schedule, r => ({ date: isDate(s(r.date)) ? s(r.date) : '', time: s(r.time), item: s(r.item) })),
     crew: list(raw.crew, person), contacts: list(raw.contacts, person), onSet: s(raw.onSet),
+    scenes: list(raw.scenes, d => ({ n: Math.max(1, Math.floor(Number(d.n)) || 1), date: isDate(s(d.date)) ? s(d.date) : '', pages: s(d.pages), items: list(d.items, x => (x.banner != null ? { banner: s(x.banner) } : { scene: s(x.scene), ie: s(x.ie), set: s(x.set), tod: s(x.tod), desc: s(x.desc), cast: Array.isArray(x.cast) ? x.cast.map(s).filter(Boolean) : [], pages: s(x.pages), kind: KINDS.includes(x.kind) ? x.kind : 'sb-int-day' })) })),
     shots: list(raw.shots, x => ({ text: s(x.text), done: x.done === true })), kit: list(raw.kit, k => ({ name: s(k.name), cat: s(k.cat), qty: Math.max(1, Math.floor(Number(k.qty)) || 1) })),
     deliverables: list(raw.deliverables, x => ({ name: s(x.name), duration: s(x.duration), due: isDate(s(x.due)) ? s(x.due) : '', status: s(x.status) })), notes: s(raw.notes),
   };
@@ -90,6 +92,8 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
     ...section('Schedule', schedule),
     ...section('Crew', people(snap.crew || [], true)),
     ...section('Client and on set', people(snap.contacts || [], false), snap.onSet && h('p', { class: 'pre' }, snap.onSet)),
+    ...section('Scenes', (snap.scenes || []).length ? snap.scenes.map(d => [h('div', { class: 'day' }, `Day ${d.n}${d.date ? ' · ' + fmtLong(d.date) : ''}${d.pages ? ' · ' + d.pages + ' pages' : ''}`),
+      h('table', { class: 'scenes' }, h('tbody', null, d.items.map(x => (x.banner != null ? h('tr', { class: 'banner' }, h('td', { colspan: 4 }, x.banner)) : h('tr', { class: x.kind }, h('td', { class: 'nw' }, x.scene || '—'), h('td', null, h('b', null, [x.ie, x.set].filter(Boolean).join(' ')), x.tod && ` — ${x.tod}`, x.desc && h('div', null, x.desc), x.cast.length > 0 && h('div', { class: 'cast' }, x.cast.join(', '))), h('td', { class: 'nw' }, x.pages ? x.pages + ' pg' : ''))))))]) : null),
     ...section('Shot list', (snap.shots || []).length ? h('ul', { class: 'plain' }, snap.shots.map(s => h('li', { class: s.done ? 'done' : '' }, (s.done ? '✓ ' : '○ ') + s.text))) : null),
     ...section('Equipment', Object.keys(kitGroups).length ? Object.entries(kitGroups).map(([cat, items]) => [h('div', { class: 'day' }, cat), h('ul', { class: 'plain' }, items.map(k => h('li', null, k.name + (k.qty > 1 ? ` × ${k.qty}` : ''))))]) : null),
     ...section('Deliverables', (snap.deliverables || []).length ? h('table', null, h('tbody', null, snap.deliverables.map(x => h('tr', null, h('td', null, x.name), h('td', { class: 'nw' }, x.duration || ''), h('td', { class: 'nw' }, isDate(x.due) ? 'due ' + fmtShort(x.due) : ''), h('td', null, x.status || ''))))) : null),

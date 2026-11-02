@@ -8,15 +8,28 @@ import { getTimes } from './suncalc.js';
 import { setCheck, itemId } from './workflow.js';
 import { saveOrShare } from './backup.js';
 import { forecastLine } from './weather.js';
+import { boardPlan, ieOf, dnOf, fmtEighths, castNumbers } from './board.js';
 
-const INCLUDE = { kit: true, rules: true, sun: true, contacts: true, notes: true };
+const INCLUDE = { kit: true, rules: true, sun: true, contacts: true, notes: true, scenes: true };
 const BLANK = { generalCall: '', lunch: '', wrap: '', schedule: [], attendees: '', weather: '', dress: '', emergency: '', notes: '', version: 0, editedAt: 0, sentAt: 0 };
 export const sheetOf = b => { const cs = { ...BLANK, ...(b.callSheet || {}) }; cs.include = { ...INCLUDE, ...(cs.include || {}) }; cs.schedule = Array.isArray(cs.schedule) ? cs.schedule.map(r => ({ ...r })) : []; return cs; };
 const hasContent = cs => !!(cs.generalCall || cs.lunch || cs.wrap || cs.schedule.length || cs.attendees || cs.weather || cs.dress || cs.emergency || cs.notes);
-export const sheetState = b => { const cs = sheetOf(b); return cs.sentAt ? (cs.editedAt > cs.sentAt ? 'changed' : 'sent') : hasContent(cs) ? 'draft' : 'none'; };
+// A sent sheet has changed when it was edited since, or when the stripboard it shows the scenes from was.
+export const sheetState = b => { const cs = sheetOf(b), boardAt = Number(b.board && b.board.updatedAt) || 0; return cs.sentAt ? (cs.editedAt > cs.sentAt || (cs.include.scenes !== false && boardAt > cs.sentAt) ? 'changed' : 'sent') : hasContent(cs) ? 'draft' : 'none'; };
 const STATE_LABEL = { none: 'Not started', draft: 'Draft', sent: 'Sent', changed: 'Changed since it was sent' };
 const dateLabel = (b, f = fmtLong) => (endOf(b) > b.date ? `${f(b.date)} → ${f(endOf(b))}` : f(b.date));
 const multiDay = b => endOf(b) > b.date;
+// The stripboard's shooting days that have scenes, for the call sheet's Scenes section (banners are left out).
+export function sceneDays(b) {
+  const plan = boardPlan(b);
+  const days = plan.days.map(d => ({ ...d, scenes: d.items.filter(x => x.type === 'scene') })).filter(d => d.scenes.length);
+  const used = [...new Set(days.flatMap(d => d.scenes.flatMap(x => x.cast)))];
+  return { days, cast: plan.cast, castLine: plan.cast.map((n, i) => used.includes(n) ? `${i + 1} ${n}` : '').filter(Boolean).join(' · ') };
+}
+// A day label goes on unless it is plainly the shoot's one day (day 1, with its date).
+const needsDayLabel = (sd, multi) => sd.days.length > 1 || multi || sd.days[0].n !== 1 || !sd.days[0].date;
+const sceneDayLabel = d => `Day ${d.n}${d.date ? ' · ' + fmtLong(d.date) : ''} · ${fmtEighths(d.eighths)} page${d.eighths === 8 ? '' : 's'}`;
+const sceneRow = (x, cast) => [x.scene, ieOf(x), [x.set, x.desc].filter(Boolean).join(' — '), x.tod || dnOf(x).toUpperCase(), castNumbers(x.cast, cast).join(', '), fmtEighths(x.eighths)];
 const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
 /* ----------------------------------- data ----------------------------------- */
@@ -38,7 +51,7 @@ export function callSheetData(b, cs = sheetOf(b), crewCall = b.crewCall || {}) {
 /* ----------------------------------- text ----------------------------------- */
 const line = (k, v) => (v ? `${k}: ${v}` : null);
 export function callSheetText(b) {
-  const d = callSheetData(b), { cs, v } = d, inc = cs.include;
+  const d = callSheetData(b), { cs, v } = d, inc = cs.include, sd = sceneDays(b);
   const sched = d.schedule.map(r => `${multiDay(b) && r.date ? fmtShort(r.date) + ' ' : ''}${r.time || '—'}  ${r.item || ''}`.trim());
   const out = [
     `CALL SHEET — ${b.title}${b.client ? ' (' + b.client + ')' : ''}`,
@@ -64,6 +77,8 @@ export function callSheetText(b) {
     inc.kit && Object.keys(d.kit).length && '',
     cs.dress && line('Dress code / bring', cs.dress), cs.emergency && line('Emergency contact', cs.emergency), (cs.dress || cs.emergency) && '',
     (cs.notes || (inc.notes && b.notes)) && 'NOTES', cs.notes, inc.notes && b.notes && b.notes !== cs.notes ? b.notes : null, (cs.notes || (inc.notes && b.notes)) && '',
+    // The scenes come last, so the crew, contacts and emergency details come first in a long email.
+    ...(inc.scenes && sd.days.length ? ['SCENES', ...sd.days.flatMap(dd => [sceneDayLabel(dd), ...dd.scenes.map(x => { const r = sceneRow(x, sd.cast); return `Sc ${r[0] || '—'}  ${r[1]}  ${r[2]} — ${r[3]}  ${r[5]} pg${r[4] ? '  Cast ' + r[4] : ''}`; })]), sd.castLine && 'Cast: ' + sd.castLine, ''] : []),
     'Produced by ' + d.producerLine,
   ].filter(x => x !== null && x !== false && x !== undefined && x !== 0);
   return out.join('\n');
@@ -97,12 +112,14 @@ export function renderDoc(b, { cs = sheetOf(b), crewCall = b.crewCall || {}, edi
       h('div', null, h('div', { class: 'cs-brand' }, d.producer), h('div', { class: 'cs-kicker' }, 'CALL SHEET')),
       h('div', { class: 'cs-when' }, h('b', null, dateLabel(b, fmtShort)), h('div', null, cs.version ? `Version ${cs.version}` : 'Draft'))),
     h('h2', null, b.title), b.client && h('div', { class: 'cs-sub' }, b.client),
-    edit && h('div', { class: 'cs-include' }, h('span', { class: 'cs-hint' }, 'Include:'), toggle('sun', 'Sun'), toggle('rules', 'Venue rules'), toggle('contacts', 'Contacts'), toggle('kit', 'Kit'), toggle('notes', 'Booking notes')),
+    edit && h('div', { class: 'cs-include' }, h('span', { class: 'cs-hint' }, 'Include:'), toggle('scenes', 'Scenes'), toggle('sun', 'Sun'), toggle('rules', 'Venue rules'), toggle('contacts', 'Contacts'), toggle('kit', 'Kit'), toggle('notes', 'Booking notes')),
     h('div', { class: 'cs-times' }, timeBox('General call', d.generalCall, 'generalCall'), timeBox('Lunch', cs.lunch, 'lunch'), timeBox('Wrap', d.wrap, 'wrap'), include('sun') && d.sun && timeBox('Sunrise', fmtTime(d.sun.sunrise)), include('sun') && d.sun && timeBox('Sunset', fmtTime(d.sun.sunset))),
     sec('Location', v && kv('Venue', v.name), kv('Address', d.address), v && kv('Access', v.access), v && kv('Parking', v.parking), v && kv('Power', v.power), v && kv('Nearest hospital', v.hospital),
       include('rules') && v && (v.rules || '').trim() && kv('Venue rules', v.rules.replace(/\n/g, '; ')),
       d.address && h('div', { class: 'cs-kv' }, h('span', null, 'Map'), h('a', { href: mapsUrl(d.address), target: '_blank', rel: 'noopener noreferrer' }, mapsUrl(d.address)))),
     edit ? sec('Schedule', scheduleEditor()) : d.schedule.length ? sec('Schedule', ...d.days.map(day => { const rows = scheduleRows(day); return rows.length && [multi && h('div', { class: 'cs-day' }, fmtLong(day)), table(['Time', 'What'], rows)]; })) : null,
+    include('scenes') && (sd => sd.days.length ? sec('Scenes', ...sd.days.map(dd => [needsDayLabel(sd, multi) && h('div', { class: 'cs-day' }, sceneDayLabel(dd)), table(['Sc', 'I/E', 'Set', 'Time', 'Cast', 'Pages'], dd.scenes.map(x => sceneRow(x, sd.cast)))]),
+      sd.castLine && kv('Cast', sd.castLine), edit && h('p', { class: 'cs-hint' }, 'From the stripboard: arrange the scenes there.')) : null)(sceneDays(b)),
     sec('Crew', d.crew.length ? table(['Name', 'Role', 'Call', 'Phone', 'Email'], d.crew.map(c => [c.name, c.role || 'crew', crewCell(c), c.phone, c.email])) : h('p', null, 'No crew assigned yet. Add people on the booking and they appear here with their call times.'),
       edit && d.crew.length && h('p', { class: 'cs-hint' }, 'A blank call time means the general call.')),
     include('contacts') && sec('On set / contacts', (b.stakeholders || []).length && table(['Name', 'Role', 'Phone'], b.stakeholders.map(s => [s.name, s.role, s.phone])),
@@ -139,6 +156,12 @@ export async function callSheetPdf(b) {
   if (d.schedule.length) {
     blocks.push({ type: 'heading', text: 'Schedule' });
     for (const day of d.days) { const rows = d.schedule.filter(r => (r.date || b.date) === day).map(r => [r.time || '—', r.item || '']); if (!rows.length) continue; if (multiDay(b)) blocks.push({ type: 'text', text: fmtLong(day), bold: true }); blocks.push({ type: 'table', head: ['Time', 'What'], rows, widths: [0.16, 0.84] }); }
+  }
+  const sd = sceneDays(b);
+  if (inc.scenes && sd.days.length) {
+    blocks.push({ type: 'heading', text: 'Scenes' });
+    for (const dd of sd.days) { if (needsDayLabel(sd, multiDay(b))) blocks.push({ type: 'text', text: sceneDayLabel(dd), bold: true }); blocks.push({ type: 'table', head: ['Sc', 'I/E', 'Set', 'Time', 'Cast', 'Pages'], rows: dd.scenes.map(x => sceneRow(x, sd.cast)), widths: [0.07, 0.08, 0.5, 0.13, 0.12, 0.1] }); }
+    if (sd.castLine) kv('Cast', sd.castLine);
   }
   blocks.push({ type: 'heading', text: 'Crew' });
   if (d.crew.length) blocks.push({ type: 'table', head: ['Name', 'Role', 'Call', 'Phone', 'Email'], rows: d.crew.map(c => [c.name, c.role || 'crew', c.call, c.phone, c.email]), widths: [0.24, 0.2, 0.1, 0.2, 0.26] });
@@ -220,7 +243,12 @@ export function callSheetPage(b, go) {
   const copy = async () => { try { await navigator.clipboard.writeText(text()); toast('Copied'); markSent(b.id); } catch { toast('Select the text and copy it'); } };
   const pdf = async () => { try { const bytes = await callSheetPdf(byId('bookings', b.id)); if (await saveOrShare(bytes, `call-sheet-${slug(b.title)}-${b.date}.pdf`, 'application/pdf')) { toast('PDF saved'); markSent(b.id); } } catch (e) { toast('Could not make the PDF: ' + (e.message || e)); } };
   const web = async () => { if (await saveOrShare(callSheetHtml(byId('bookings', b.id)), `call-sheet-${slug(b.title)}-${b.date}.html`, 'text/html')) markSent(b.id); };
-  const emailHref = `mailto:${withEmail.map(c => c.email.trim()).join(',')}?` + new URLSearchParams({ subject: `Call sheet — ${b.title} — ${fmtShort(b.date)}`, body: text() }).toString().replace(/\+/g, '%20');
+  // A long sheet (many scenes) does not fit in an email link (some mail apps stop at about 2,000 characters): the text
+  // is copied instead, to be pasted into the email.
+  const mailto = body => `mailto:${withEmail.map(c => c.email.trim()).join(',')}?` + new URLSearchParams({ subject: `Call sheet — ${b.title} — ${fmtShort(b.date)}`, body }).toString().replace(/\+/g, '%20');
+  const fullHref = mailto(text()), longMail = fullHref.length > 1700;
+  const emailHref = longMail ? mailto('The call sheet is copied: paste it here.\n\n') : fullHref;
+  const emailClick = () => { if (longMail) { const w = navigator.clipboard && navigator.clipboard.writeText(text()); if (w) w.then(() => toast('The call sheet is long, so it was copied: paste it into the email'), () => toast('Use Copy text, then paste it into the email')); else toast('Use Copy text, then paste it into the email'); } markSent(b.id); };
   return h('div', { class: 'cs-page' },
     h('div', { class: 'page-head' },
       h('button', { class: 'btn ghost small', onclick: () => { commitDraft(); go({ view: 'booking', id: b.id }); } }, '‹ Booking'),
@@ -238,7 +266,7 @@ export function callSheetPage(b, go) {
       : h('div', { class: 'actions' },
         h('button', { class: 'btn primary', onclick: () => { printCallSheet(byId('bookings', b.id)); markSent(b.id); } }, '🖨 Print'),
         h('button', { class: 'btn ghost', onclick: pdf }, '📄 Save PDF'),
-        h('a', { class: 'btn ghost', href: emailHref, onclick: () => markSent(b.id), title: withEmail.length ? `To: ${withEmail.length} crew member${withEmail.length === 1 ? '' : 's'}` : 'No crew email addresses yet' }, withEmail.length ? `✉ Email crew (${withEmail.length})` : '✉ Email'),
+        h('a', { class: 'btn ghost', href: emailHref, onclick: emailClick, title: withEmail.length ? `To: ${withEmail.length} crew member${withEmail.length === 1 ? '' : 's'}` : 'No crew email addresses yet' }, withEmail.length ? `✉ Email crew (${withEmail.length})` : '✉ Email'),
         h('button', { class: 'btn ghost small', onclick: share }, '📤 Share'),
         h('button', { class: 'btn ghost small', onclick: web }, '💾 Web page'),
         h('button', { class: 'btn ghost small', onclick: copy }, 'Copy text')),

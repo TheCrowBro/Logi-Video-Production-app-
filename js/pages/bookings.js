@@ -13,6 +13,15 @@ import { forecastLine, locationFor } from '../weather.js';
 import { getTimes } from '../suncalc.js';
 
 const STATUSES = WF_STATUSES;
+// The stripboard loads on first use; once loaded it draws straight away, so a redraw after each change does not flicker.
+let stripMod = null;
+const stripsView = (b, go) => {
+  if (stripMod) return stripMod.stripboardPage(b, go);
+  const host = h('div', { class: 'sb-page' }, h('p', { class: 'muted' }, 'Opening the stripboard…'));
+  import('../stripboard.js').then(m => { stripMod = m; if (host.isConnected) host.replaceWith(m.stripboardPage(byId('bookings', b.id) || b, go)); }).catch(e => host.replaceChildren(h('p', { class: 'warn' }, 'The stripboard could not be loaded. Check the connection and try again. ' + (e.message || ''))));
+  return host;
+};
+const sceneCount = b => (b.board && Array.isArray(b.board.list) ? b.board.list.filter(x => x && x.type === 'scene').length : 0);
 const S = { view: 'month', cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1), day: todayISO(), id: null };
 
 const dateRange = (b, f) => endOf(b) > b.date ? `${f(b.date)} → ${f(endOf(b))}` : f(b.date);
@@ -23,8 +32,8 @@ export const bookings = {
   render(root) {
     const go = patch => { if (patch.view && patch.view !== 'callsheet') commitDraft(); Object.assign(S, patch); draw(); window.scrollTo({ top: 0 }); };
     const draw = () => {
-      if ((S.view === 'booking' || S.view === 'callsheet' || S.view === 'money') && !byId('bookings', S.id)) S.view = 'day';
-      root.replaceChildren(S.view === 'month' ? month(go) : S.view === 'day' ? day(go) : S.view === 'callsheet' ? callSheetPage(byId('bookings', S.id), go) : S.view === 'money' ? moneyPage(byId('bookings', S.id), S.kind || 'quote', go) : detail(go));
+      if ((S.view === 'booking' || S.view === 'callsheet' || S.view === 'money' || S.view === 'strips') && !byId('bookings', S.id)) S.view = 'day';
+      root.replaceChildren(S.view === 'month' ? month(go) : S.view === 'day' ? day(go) : S.view === 'callsheet' ? callSheetPage(byId('bookings', S.id), go) : S.view === 'money' ? moneyPage(byId('bookings', S.id), S.kind || 'quote', go) : S.view === 'strips' ? stripsView(byId('bookings', S.id), go) : detail(go));
     };
     draw();
     // Leaving the tab while a call sheet is being edited saves the draft (a re-render of this same tab does not).
@@ -185,6 +194,7 @@ function detail(go) {
       hours: () => openHoursSheet(b.id), licences: () => document.getElementById('bk-licences')?.scrollIntoView({ block: 'start' }), deliverables: () => document.getElementById('bk-deliverables')?.scrollIntoView({ block: 'start' }),
     }),
     h('div', { class: 'actions bk-tools' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
+      h('button', { class: 'btn ghost small sb-open', onclick: () => go({ view: 'strips', id: b.id }) }, `🎬 Stripboard${sceneCount(b) ? ` · ${sceneCount(b)} scene${sceneCount(b) === 1 ? '' : 's'}` : ''}`),
       h('button', { class: 'btn ghost small', onclick: () => import('../crew-link.js').then(m => m.openCrewShare(b)).catch(e => toast('Could not open sharing: ' + (e.message || e))) }, '👥 Share with crew'),
       h('button', { class: 'btn ghost small', onclick: () => saveBookingAsTemplate(b, t => t && toast(`Saved as the “${t.name}” template`)) }, '📐 Save as template'),
       templateById(b.type) && h('button', { class: 'btn ghost small', onclick: () => { const n = applyTemplateExtras(b.id, templateById(b.type)); toast(n ? `${n} item${n === 1 ? '' : 's'} added from the template` : 'Nothing missing from the template'); } }, '↻ Apply template items')),

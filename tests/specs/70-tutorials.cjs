@@ -79,7 +79,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card');
   await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet');
   const names = await page.locator('.sheet .card.tap').allInnerTexts();
-  ok('chooser lists every page tutorial (sheet walkthroughs live behind the sheets’ own ?)', names.length === 16 && names.some(n => /a log/.test(n)) && names.some(n => /start to finish/.test(n)), names.join(', '));
+  ok('chooser lists every page tutorial (sheet walkthroughs live behind the sheets’ own ?)', names.length === 17 && names.some(n => /Stripboard/.test(n)) && names.some(n => /a log/.test(n)) && names.some(n => /start to finish/.test(n)), names.join(', '));
   await page.locator('.sheet .card.tap', { hasText: 'A booking' }).click();
   await page.waitForSelector('.tour-card', { timeout: 10000 });
   ok('choosing “A booking” opens a booking and starts its tutorial', (await page.locator('.bk-detail').count()) === 1 && /booking/i.test(await page.locator('.tour-card h2').innerText()));

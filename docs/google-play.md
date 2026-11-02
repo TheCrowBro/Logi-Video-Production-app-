@@ -152,6 +152,9 @@ A calendar of your shoots. Each one holds the client, the contacts, the address,
 CALL SHEETS
 Built in the app from the booking, with the schedule, the weather and the sunset time, the crew list and the venue notes. Edit it on the spot, then email it to the crew or print it.
 
+STRIPBOARD
+Turn the script into colour-coded scene strips (white interior day, yellow exterior day, blue interior night, green exterior night) with the cast and page counts, and drag them into shooting days. Each day adds up its pages, and the call sheet lists the day's scenes.
+
 QUOTES AND INVOICES
 Vdex suggests the lines from the shoot: days, crew rates, kit, deliverables. Or tick them from your own price list, which starts from typical freelance rates where you work. Send the client a link that opens the invoice with Pay buttons for PayPal, Venmo, Cash App, your card payment page or a bank transfer, record payments as they arrive, and see what is still unpaid.
 

@@ -43,7 +43,7 @@ export const TUTORIALS = {
     T('The booking', 'Project, client, dates, times and address, with Add to calendar, Share and Email. Edit changes the details.', '.bk-detail .card.hero'),
     T('Stages', 'Every project moves Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. Tap a stage to move it; the checklist underneath belongs to the current stage.', '.bk-detail .stage-strip'),
     T('The checklist', 'Tick things off, add your own lines, and tap an arrow to open the tool a line is about. When a stage is complete, Next moves the project on.', '.bk-detail .checklist'),
-    T('Call sheet, crew link and templates', 'Call sheet opens this shoot’s sheet. Share with crew makes a read-only page for your cast and crew, with the times, location, who is on and the shot list, and never any prices or budgets. Save as template turns a job that went well into a template; Apply template items adds anything a template still has to offer.', '.bk-detail .bk-tools'),
+    T('Call sheet, stripboard, crew link and templates', 'Call sheet opens this shoot’s sheet. Stripboard breaks the shoot down scene by scene into shooting days. Share with crew makes a read-only page for your cast and crew, with the times, location, who is on and the shot list, and never any prices or budgets. Save as template turns a job that went well into a template; Apply template items adds anything a template still has to offer.', '.bk-detail .bk-tools'),
     T('Venue', 'The venue’s rules, access, parking and map, with a warning if your kit breaks a rule.', '#bk-venue'),
     T('Sun and weather', 'Sunrise, sunset and golden hour at the venue, plus the forecast within two weeks.', '.bk-detail .sunline'),
     T('Crew', 'Who is on the shoot: ask them by text or email, set each person’s call time, and mark them confirmed.', '#bk-crew'),
@@ -56,6 +56,14 @@ export const TUTORIALS = {
     T('Money', 'The quote and the invoice for this booking.', '#bk-money'),
     T('Budget', 'What the job will cost you, line by line, in categories you pick from a list. Fill from booking adds your crew, hires and licences. It compares with the quote, and only you see it.', '#bk-budget'),
     T('Hours', 'What the clock bar logged on this job, with overtime, and a button to start an edit session.', '#bk-hours'),
+  ] },
+  strips: { name: 'Stripboard', page: 'bookings', steps: [
+    T('The stripboard', 'One strip per scene, in shooting order: the scene number, interior or exterior and the time of day, the set, what happens, the cast numbers and the pages in eighths.', '.sb-page .sb-board'),
+    T('Scenes from the script', 'Pick a Word, Fountain or text script and each scene heading becomes a strip, with its speaking cast and an estimated page count. ＋ Scene adds one by hand, ＋ Banner a line such as a company move, ＋ Day a shooting day.', '.sb-page .sb-tools'),
+    T('Colours', 'As on a paper board: white interior day, yellow exterior day, blue interior night, green exterior night.', '.sb-page .sb-legend'),
+    T('Move strips', 'Drag a strip by its ⠿ handle, or focus the handle and use the up and down arrow keys. Tap a strip to edit it or send it to a day.', '.sb-page .sb-handle'),
+    T('Shooting days', 'Each black strip ends a day and adds up its pages and scenes; anything below the last one is not scheduled yet. ⚖ Spread over the days shares the pages out evenly; ↕ groups the unscheduled scenes by location.', '.sb-page .sb-break'),
+    T('Print and share', 'Print makes a one-line-per-scene schedule with the cast list. The call sheet and the crew link show each day’s scenes.', '.sb-page .sb-tools2'),
   ] },
   callsheet: { name: 'Call sheet', page: 'bookings', steps: [
     T('Edit the sheet', '‹ Booking goes back. Edit sheet turns the document’s fields into boxes you can type in; Done saves a new version.', '.cs-page .page-head'),
@@ -200,7 +208,7 @@ export function currentContext() {
   const sheets = document.querySelectorAll('.sheet[aria-label]'), title = sheets.length ? sheets[sheets.length - 1].getAttribute('aria-label') : '';
   const bySheet = { 'Sync timecode': 'tcsync', 'Link another device': 'tclink', 'Add script': 'tcimport', 'Replace script': 'tcimport', 'Export notes': 'tcexport' }[title];
   if (bySheet) return bySheet;
-  if (page === 'bookings') return q('.money-page') ? 'money' : q('.cs-page') ? 'callsheet' : q('.bk-detail') ? 'booking' : q('.bk-month') ? 'bookings' : 'day';
+  if (page === 'bookings') return q('.money-page') ? 'money' : q('.cs-page') ? 'callsheet' : q('.sb-page') ? 'strips' : q('.bk-detail') ? 'booking' : q('.bk-month') ? 'bookings' : 'day';
   if (page === 'tcnotes') return q('.tc-log-head') ? 'tclog' : 'tcnotes';
   return TUTORIALS[page] ? page : 'around';
 }
@@ -220,13 +228,14 @@ async function reach(key) {
   if (key === 'tcnotes' && document.querySelector('.tc-log-head')) { click('.tc-log-head .btn.ghost.small'); await wait(300); }
   if (key === 'tclog' && !document.querySelector('.tc-log-head')) { if (!click('#page .list .card.tap')) { toast('Create a log first with + New log, then tap ? inside it.'); return false; } await wait(350); }
   const click = sel => { const el = document.querySelector(sel); if (el) { el.click(); return true; } return false; };
-  if (['booking', 'callsheet', 'money', 'day'].includes(key)) {
+  if (['booking', 'callsheet', 'money', 'day', 'strips'].includes(key)) {
     // from wherever the Bookings page is, go to the month view first
-    for (let i = 0; i < 3 && !document.querySelector('.bk-month'); i++) { if (!(click('.cs-page .page-head button') || click('.money-page .page-head button') || click('.bk-detail .page-head button') || click('button.btn.ghost.small'))) break; await wait(300); }
+    for (let i = 0; i < 3 && !document.querySelector('.bk-month'); i++) { if (!(click('.cs-page .page-head button') || click('.money-page .page-head button') || click('.sb-page .page-head button') || click('.bk-detail .page-head button') || click('button.btn.ghost.small'))) break; await wait(300); }
     if (key === 'day') { click('.bk-month .cal .day.today') || click('.bk-month .cal .day.has') || click('.bk-month .cal .day'); await wait(300); return true; }
     if (!(click('.bk-month h3 + .list .card.tap') || click('.bk-month .list .card.tap'))) { toast('Add a booking first, then open this tutorial from the booking.'); return false; }
     await wait(350);
     if (key === 'callsheet') { click('.bk-tools button'); await wait(350); }
+    if (key === 'strips') { click('.bk-tools .sb-open'); await wait(600); }
     if (key === 'money') { click('#bk-money button'); await wait(350); }
   }
   return true;

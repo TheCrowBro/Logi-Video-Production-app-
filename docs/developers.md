@@ -74,6 +74,7 @@ js/suncalc.js    sun and Polaris     js/range.js   range finder (WebXR + tilt)  
 js/a11y.js       themes, text size, motion, accessibility     js/tour.js   spotlight walkthrough engine, first-run tour     js/tutorials.js   per-page tutorials behind the ? button     js/install.js   install prompt
 js/lock.js       PIN / biometric lock and the encrypted vault     js/crypto.js   WebCrypto helpers     js/backup.js   backup health, encrypted backups, cloud restore, asset register
 js/update.js     service worker registration, update checks, the "new version" bar     tools/stamp-build.mjs   stamps a deploy
+js/board.js      the stripboard's data: days, page totals in eighths, strip colours     js/stripboard.js   the stripboard page, script → scenes, dragging
 js/price-list.js the price list for quotes and invoices     js/price-rates.js   typical rates by region (sources in docs/price-list-sources.md)
 tools/stage-site.mjs   copies only the website's files for publishing (GitHub Pages and Cloudflare)     cloudflare/   the vdex.crowmade.app Worker config and pinned Wrangler
 js/money.js      quotes, invoices and the budget: suggested lines, documents, PDF, overview, billing settings     js/weather.js   Open-Meteo day forecast
