@@ -591,7 +591,7 @@ html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .s
 .storage .twirl-more > summary { padding: 14px 16px; }
 .storage .twirl-more > summary::after { content: '⌄'; font-size: 1.3rem; line-height: 1; transform: none; transition: transform .2s ease; }
 .storage .twirl-more[open] > summary::after { transform: rotate(180deg); }
-.storage .twirl-more > .twirl-body, .storage .twirl-more::details-content > .twirl-body { padding: 0 12px 14px; }
+.storage .twirl-more > .twirl-body { padding: 0 12px 14px; }
 .storage .twirl-more .card { background: var(--bg2); }
 .storage .twirl-inner { background: transparent; border-style: dashed; margin: 4px 0 0; }
 .storage .twirl-inner > summary { min-height: 40px; padding: 8px 12px; }

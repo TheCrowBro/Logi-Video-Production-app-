@@ -217,6 +217,9 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   await page.evaluate(() => import('./js/calendar.js').then(m => m.openCalendarSheet())); await page.waitForSelector('.sheet .cloud-choice');
   const cal = await page.evaluate(() => [...document.querySelectorAll('.sheet .cloud-choice')].map(c => [c.dataset.svc, !c.querySelector('button').disabled]));
   ok('the calendar panel offers Google and Outlook as one-tap connections', JSON.stringify(cal) === '[["google",true],["microsoft",true]]' && (await page.locator('.sheet input[aria-label*="client"]').count()) === 0, JSON.stringify(cal));
+  await page.locator('.sheet label.check input[type=checkbox]').check(); await sleep(500);
+  ok('with Nextcloud the feed says to share the file from the server, and offers no link button that can’t work', /Share that file from your server/.test(await page.locator('.sheet').innerText()) && (await page.locator('.sheet button:has-text("Get the subscription link")').count()) === 0);
+  await page.locator('.sheet label.check input[type=checkbox]').uncheck(); await sleep(300);
 
   // A copy that waited behind the lock is merged with the cloud's copy on unlock, never written over it
   const merged = await page.evaluate(async () => {

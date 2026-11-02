@@ -4,7 +4,7 @@
 
 **What it does:** the storage panel offers **Google Drive** and **iCloud** up front, and keeps Dropbox, OneDrive and the rest folded away under *More ways to keep a copy*. Each **Connect** button stays grey until that service knows about Vdex: Google, Apple, Dropbox and Microsoft only let an app ask people to sign in once the app has been registered with them. You do that registration once, for everybody. After that, everyone who uses Vdex just taps **Connect**, signs in to their own account and taps **Allow**. Nobody types a code or visits a developer page again.
 
-**Where to start:** Google first (free, about 15 minutes), then Apple for iCloud (paid, see below). Dropbox and Microsoft are optional: they only switch on the two cards inside *More ways*, so leave them for later or skip them.
+**Where to start:** Google first (free, about 15 minutes), then Apple for iCloud (paid, see below). Dropbox and Microsoft are optional: they switch on the two cards inside *More ways* (and, for Microsoft, Outlook calendar sync too), so leave them for later or skip them.
 
 **What you need:**
 
@@ -50,7 +50,7 @@ Copy these exactly, including the slash at the end where there is one.
    https://www.googleapis.com/auth/calendar.app.created
    ```
 
-   Then look at where they landed. The two Drive ones should be under **non-sensitive scopes**. If the calendar one is under **sensitive scopes**, remove it again (click its bin icon and **Save**): Drive will work for everyone, and Google Calendar sync is left for later, because Google wants a review for sensitive permissions. In that case the Google Calendar button has to be switched off too: say so when you send the codes, or set `googleCalendar: false` in the file in step 4.
+   Then look at where they landed. The two Drive ones should be under **non-sensitive scopes**. If the calendar one is under **sensitive scopes**, remove it again (click its bin icon and **Save**): Drive will work for everyone, and Google Calendar sync is left for later, because Google wants a review for sensitive permissions. In that case the Google Calendar button has to be switched off too: say so when you send the codes, or set `googleCalendar: false` in `js/cloud-config.js` (see [Putting the codes in](#5-putting-the-codes-in)).
 7. Go to **Clients** → **Create client**. Application type: **Web application**. Name: **Vdex**. Under **Authorized JavaScript origins**, click **Add URI** and paste `https://thecrowbro.github.io`, then **Add URI** again and paste `http://localhost:47831`. Leave **Authorized redirect URIs** empty. Click **Create**.
 8. Copy the **Client ID**, which ends in `.apps.googleusercontent.com`. That is your Google code. (Google also shows a client secret; Vdex doesn't use it.)
 9. Go to **Audience** and click **Publish app**, then **Confirm**. Until you do this, only accounts you list as test users can sign in, and only for seven days at a time.

@@ -245,8 +245,9 @@ export async function initCloud() {
   try {
     if (await dropboxFinish()) { lsSet('logi-provider', 'dropbox'); cloud.notice = ''; say('Connected to Dropbox'); }
   } catch (e) { cloud.notice = e.message; say(e.message); }
+  let icloudFirst = false;
   try {
-    if (icloudFinish()) { lsSet('logi-provider', 'icloud'); cloud.notice = ''; say('Connected to iCloud'); }
+    if (icloudFinish()) { lsSet('logi-provider', 'icloud'); cloud.notice = ''; icloudFirst = true; }
   } catch (e) { cloud.notice = e.message; say(e.message); }
   try {
     const intent = await microsoftFinish();
@@ -269,6 +270,10 @@ export async function initCloud() {
       if (handle) { const aux = await kv('readonly', s => s.get('auxHandle')); cloud.adapter = fileAdapter(handle, aux || null); cloud.auxName = aux ? aux.name : ''; }
     }
     if (cloud.adapter) await sync();
+    if (icloudFirst) {
+      if (cloud.status === 'synced' || sealed) say('Connected to iCloud'); // behind the PIN lock the first copy waits for the unlock
+      else { const msg = cloud.error || 'iCloud didn’t finish connecting. Tap Connect to try again.'; cloud.adapter?.signOut?.(); cloud.adapter = null; lsSet('logi-provider', null); cloud.notice = msg; setStatus('off'); say(msg); }
+    }
   } catch (e) { setStatus('error', e.message); }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && cloud.adapter && cloud.status === 'synced') sync(); });
 }
@@ -344,18 +349,23 @@ async function runSync({ ask = false, quiet = false } = {}) {
 
 let auxWriter = null;
 export const setAuxWriter = fn => { auxWriter = fn; }; // calendar.js supplies the feed contents
-async function push() {
-  if (!cloud.adapter) return;
+// One copy is written at a time (a timed push and a sync's push never overlap), never while locked, and always to
+// the storage that was linked when it started.
+let pushing = Promise.resolve();
+function push() { const p = pushing.then(pushNow, pushNow); pushing = p.catch(() => {}); return p; }
+async function pushNow() {
+  const a = cloud.adapter; if (!a) return;
+  if (sealed) { pendingSync = true; return; }
   try {
     setStatus('saving');
-    await cloud.adapter.write(exportJSON());
+    await a.write(exportJSON());
     lsSet('logi-sync-at', String(Date.now()));
-    await autoBackup();
-    if (db.calSync?.feed && auxWriter && cloud.adapter.writeAux) {
-      try { await cloud.adapter.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
+    await autoBackup(a);
+    if (db.calSync?.feed && auxWriter && a.writeAux) {
+      try { await a.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
     }
-    setStatus('synced');
-  } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
+    if (cloud.adapter === a) setStatus('synced');
+  } catch (e) { if (cloud.adapter === a) setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
 }
 export async function setFeed(on) {
   if (on && cloud.adapter?.enableFeed) await cloud.adapter.enableFeed();
@@ -378,8 +388,8 @@ export async function feedLink() {
 }
 
 // Once a day, after a change, a dated copy goes next to the database: one file per weekday and one per month.
-async function autoBackup() {
-  const a = cloud.adapter; if (!a || !a.writeExtra) return;
+async function autoBackup(a = cloud.adapter) {
+  if (!a || !a.writeExtra || cloud.adapter !== a) return;
   const now = new Date(), day = ymd(now), month = day.slice(0, 7);
   let last = {}; try { last = JSON.parse(lsGet('logi-backup-cloud')) || {}; } catch { /* none yet */ }
   if (last.day === day) return;
@@ -401,6 +411,7 @@ function schedulePush() {
   timer = setTimeout(push, 800);
 }
 
+export function reconnectNeeded(msg) { if (cloud.adapter) setStatus('needs-permission', msg || ''); }
 export async function reconnect() { const a = cloud.adapter; if (!a) return; if (!(await a.ready(true))) return setStatus('needs-permission'); cloud.notice = ''; return sync(); }
 
 // Sign in first, outside the sync lock, and link only once that has worked: a cancelled, abandoned or still-open
@@ -437,11 +448,16 @@ export const connectIcloud = () => linkOrUndo(icloudAdapter(), 'icloud');
 export const connectOneDrive = () => linkOrUndo(onedriveAdapter(), 'onedrive');
 export async function connectWebdav() { const a = webdavAdapter(); if (!(await a.ready())) throw new Error('Enter the server address, your username and the app password first'); await a.ensureFolder(); await linkOrUndo(a, 'webdav'); }
 
-// iCloud only: delete Vdex's copy and backups there, then unlink. This device keeps everything.
+// iCloud only: delete Vdex's copy and backups there, then unlink. This device keeps everything. Nothing new is copied
+// or backed up while deleting, and a copy already on its way finishes first, so nothing lands after the delete.
 export async function eraseCloudCopy() {
   const a = cloud.adapter; if (!a?.erase) return 0;
-  if (!(await a.ready(true))) throw new Error('Sign in to iCloud first');
-  const n = await a.erase(); await unlinkCloud(); return n;
+  if (!(await a.ready(false))) throw new Error(`Sign in to ${a.label} again first (Sign in again, above), then delete.`); // never off to a sign-in page from here
+  clearTimeout(timer); cloud.adapter = null;
+  let n;
+  try { while (syncing) await syncing.catch(() => {}); await pushing; n = await a.erase(); }
+  catch (e) { cloud.adapter = a; if (e.name === 'NotAllowedError') setStatus('needs-permission', e.message); throw e; }
+  cloud.adapter = a; await unlinkCloud(); return n;
 }
 export async function unlinkCloud() {
   cloud.adapter?.signOut?.({ keepToken: db.calSync?.provider === 'microsoft' }); // the Outlook link shares the Microsoft sign-in

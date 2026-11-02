@@ -83,7 +83,11 @@ export async function restoreFromCloud() {
   const { close } = sheet('Restore a cloud backup', list);
   const found = [];
   for (const name of backupNames()) {
-    try { const text = await a.readExtra(name); if (text) { const d = JSON.parse(text); found.push({ name, text, at: Number(d.updatedAt) || 0, n: (d.bookings || []).length }); } } catch { /* skip that one */ }
+    try { const text = await a.readExtra(name); if (text) { const d = JSON.parse(text); found.push({ name, text, at: Number(d.updatedAt) || 0, n: (d.bookings || []).length }); } }
+    catch (e) { // a sign-in that ran out is not "no backups": say so, and stop asking
+      if (e.name === 'NotAllowedError') { close(); store.reconnectNeeded(e.message); return toast(`${a.label} wants you to sign in again before backups can be listed: tap ☁, then Sign in again.`); }
+      /* an unreadable one is skipped */
+    }
   }
   found.sort((x, y) => y.at - x.at);
   list.replaceChildren(...nodes(

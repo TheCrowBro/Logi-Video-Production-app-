@@ -353,21 +353,27 @@ const CK_WORDS = {
   AUTHENTICATION_FAILED: 'iCloud didn’t accept Vdex’s app details. The Vdex publisher needs to check the iCloud set-up',
   ACCESS_DENIED: 'iCloud didn’t let Vdex in. If you use Advanced Data Protection, turn on Access iCloud Data on the Web (iPhone Settings → your name → iCloud), then sign in again',
 };
-const ckError = (j, status) => new Error(CK_WORDS[j?.serverErrorCode] || ('iCloud said: ' + (j?.reason || j?.serverErrorCode || 'error ' + status)));
+const ckError = (j, status) => Object.assign(new Error(CK_WORDS[j?.serverErrorCode] || ('iCloud said: ' + (j?.reason || j?.serverErrorCode || 'error ' + status))), { code: j?.serverErrorCode || '' });
 const ckSignedOut = redirect => { const e = new Error('iCloud wants you to sign in again'); e.name = 'NotAllowedError'; e.redirectURL = redirect; return e; };
-// One request at a time: each answer carries the session for the next request.
-let ckChain = Promise.resolve();
+// One request at a time: each answer carries the session for the next request. The newest session is saved at once
+// (and the lock told, so its sealed copy keeps up). If the lock cleared it while a request was out, the new one is
+// kept here and put back in place of the used one when the lock opens again; a sign-out in between drops it.
+let ckChain = Promise.resolve(), ckHeld = null, ckEpoch = 0;
+const ckSave = v => { LS.set(CK_SESSION, v); dispatchEvent(new Event('vdex-secrets')); };
 function ckRequest(db, path, body) {
   const run = async () => {
-    const q = new URLSearchParams({ ckAPIToken: ckToken() }), session = LS.get(CK_SESSION);
+    let session = LS.get(CK_SESSION);
+    if (ckHeld && session === ckHeld.used) { session = ckHeld.next; ckSave(session); }
+    ckHeld = null;
+    const epoch = ckEpoch, q = new URLSearchParams({ ckAPIToken: ckToken() });
     if (session) q.set('ckWebAuthToken', session);
     let r;
     try { r = await fetch(ckBase(db) + path + '?' + q, body === undefined ? { credentials: 'omit' } : { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), credentials: 'omit' }); }
     catch { throw new Error('Could not reach iCloud. Check the connection and try again'); }
     const next = r.headers.get('x-apple-cloudkit-web-auth-token') || r.headers.get('x-apple-cloudkit-session');
-    if (next && session && LS.get(CK_SESSION) === session) LS.set(CK_SESSION, next);
+    if (next && session && epoch === ckEpoch) { const now = LS.get(CK_SESSION); if (now === session) ckSave(next); else if (now == null) ckHeld = { used: session, next }; }
     let j = null; try { j = await r.json(); } catch { /* not JSON */ }
-    if (r.status === 421 || j?.serverErrorCode === 'AUTHENTICATION_REQUIRED') { if (session && LS.get(CK_SESSION) === (next || session)) LS.del(CK_SESSION); throw ckSignedOut(j?.redirectURL); }
+    if (r.status === 421 || j?.serverErrorCode === 'AUTHENTICATION_REQUIRED') { if (session && LS.get(CK_SESSION) === (next || session)) LS.del(CK_SESSION); ckHeld = null; throw ckSignedOut(j?.redirectURL); }
     if (!r.ok) throw ckError(j, r.status);
     return j || {};
   };
@@ -386,7 +392,7 @@ async function icloudSignIn() {
     const r = (await window.vdexDesktop.icloudSignIn({ container: ck().container, apiToken: ckToken(), environment: ck().environment || '' })) || { error: 'failed' };
     if (r.error === 'replaced') { const e = new Error('A newer sign-in took over'); e.name = 'AbortError'; throw e; }
     if (r.error || !r.ckSession) throw new Error(APPLE_ERR[r.error] || 'Apple sign-in didn’t finish. Tap Connect to try again');
-    LS.set(CK_SESSION, String(r.ckSession)); return;
+    ckEpoch++; ckHeld = null; ckSave(String(r.ckSession)); return;
   }
   const url = await appleSignInAddress();
   LS.set(CK_PENDING, String(Date.now()));
@@ -397,19 +403,30 @@ const APPLE_ERR = { address_taken: AWAY, timed_out: 'The Apple sign-in in your w
 // Call on page load: takes the session Apple sends back (…/?ckWebAuthToken=…). Returns true when it did.
 export function icloudFinish() {
   const raw = (location.search.match(/[?&](?:ckWebAuthToken|ckSession)=([^&]*)/) || [])[1]; // read as sent: a + in it is a +
-  if (!raw) return false;
+  if (!raw) { LS.del(CK_PENDING); return false; } // any other visit ends the wait, so an abandoned sign-in leaves no window open
   history.replaceState(null, '', location.pathname + location.hash);
   let token; try { token = decodeURIComponent(raw); } catch { token = raw; }
   const started = Number(LS.get(CK_PENDING)) || 0; LS.del(CK_PENDING);
-  // Only a sign-in started here in the last half hour: a link carrying someone else's session must not be taken.
-  if (!started || Date.now() - started > 30 * 60e3) throw new Error('That iCloud sign-in wasn’t started here, or it is too old. Tap Connect next to iCloud to sign in.');
-  LS.set(CK_SESSION, token);
+  // Only a sign-in started here in the last ten minutes: a link carrying someone else's session must not be taken.
+  if (!started || Date.now() - started > 10 * 60e3) throw new Error('That iCloud sign-in wasn’t started here, or it took too long. Tap Connect next to iCloud to sign in.');
+  ckEpoch++; ckHeld = null; ckSave(token);
   return true;
 }
 
-// A copy bigger than one record is split: the parts are saved first and the record that names them last, so a reader
-// only ever sees a whole copy; the parts of the copy before are then removed.
+// Everything lives in a zone of its own in the private database, made on the first save, so deleting Vdex's copy is
+// one request that leaves nothing behind. A copy bigger than one record is split: the parts are saved first and the
+// record that names them last, so a reader only ever sees a whole copy; the parts of the copy before are then removed.
+// Saves run one at a time.
+const CK_ZONE = { zoneName: 'Vdex' };
 const ckName = name => name.replace(/[^A-Za-z0-9._-]/g, '_');
+const noZone = e => e?.code === 'ZONE_NOT_FOUND';
+const ckZone = async operationType => { // make or delete Vdex's zone; a zone already there, or already gone, is fine
+  const z = ((await ckRequest('private', 'zones/modify', { operations: [{ operationType, zone: { zoneID: CK_ZONE } }] })).zones || [])[0];
+  if (z?.serverErrorCode && !['ZONE_NOT_FOUND', 'EXISTS'].includes(z.serverErrorCode)) throw ckError(z);
+};
+const ckMakeZone = () => ckZone('create');
+let ckWrites = Promise.resolve();
+const ckSerial = fn => { const p = ckWrites.then(fn, fn); ckWrites = p.catch(() => {}); return p; };
 const splitBytes = (text, max) => { // pieces of at most max UTF-8 bytes, never splitting a character
   const out = []; let start = 0, bytes = 0;
   for (let i = 0; i < text.length; i++) {
@@ -420,13 +437,18 @@ const splitBytes = (text, max) => { // pieces of at most max UTF-8 bytes, never 
   out.push(text.slice(start)); return out;
 };
 async function ckLookup(recordName, desiredKeys) {
-  const rec = ((await ckRequest('private', 'records/lookup', { records: [{ recordName }], ...(desiredKeys ? { desiredKeys } : {}) })).records || [])[0];
-  if (!rec || rec.serverErrorCode === 'NOT_FOUND' || rec.serverErrorCode === 'UNKNOWN_ITEM') return null;
+  let rec;
+  try { rec = ((await ckRequest('private', 'records/lookup', { zoneID: CK_ZONE, records: [{ recordName }], ...(desiredKeys ? { desiredKeys } : {}) })).records || [])[0]; }
+  catch (e) { if (noZone(e)) return null; throw e; } // nothing saved yet
+  if (!rec || ['NOT_FOUND', 'UNKNOWN_ITEM', 'ZONE_NOT_FOUND'].includes(rec.serverErrorCode)) return null;
   if (rec.serverErrorCode) throw ckError(rec);
   return rec.fields || {};
 }
-async function ckModify(operations) {
-  const recs = (await ckRequest('private', 'records/modify', { operations })).records || [];
+async function ckModify(operations, again = true) {
+  let recs;
+  try { recs = (await ckRequest('private', 'records/modify', { zoneID: CK_ZONE, operations })).records || []; }
+  catch (e) { if (again && noZone(e)) { await ckMakeZone(); return ckModify(operations, false); } throw e; }
+  if (again && recs.some(r => r.serverErrorCode === 'ZONE_NOT_FOUND')) { await ckMakeZone(); return ckModify(operations, false); }
   const bad = recs.find(r => r.serverErrorCode && !(/delete/i.test(operations[0].operationType) && r.serverErrorCode === 'NOT_FOUND'));
   if (bad) throw ckError(bad);
 }
@@ -449,21 +471,15 @@ async function ckPut(name, text) {
 export const icloudAdapter = () => ({
   id: 'icloud', label: 'iCloud', where: 'a private Vdex space in your iCloud (not a file in iCloud Drive)',
   ready: async ask => { if (LS.get(CK_SESSION)) return true; if (!ask) return false; await icloudSignIn(); return true; },
-  read: async () => parse(await ckGet(FILE)),
-  write: text => ckPut(FILE, text),
+  read: async () => parse(await ckSerial(() => ckGet(FILE))), // never mid-way through a save of this device's
+  write: text => ckSerial(() => ckPut(FILE, text)),
   // dated backups sit beside the copy as records of their own; iCloud gives no public link, so no calendar feed
-  writeExtra: (name, text) => ckPut(name, text),
-  readExtra: name => ckGet(name),
-  // Removes everything Vdex keeps in iCloud: the copy, its parts and the dated backups (Apple asks apps to offer this).
-  erase: async () => {
-    const months = Array.from({ length: 72 }, (_, i) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - i); return `vdex-backup-${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}.json`; });
-    const names = [FILE, ...['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'].map(d => `vdex-backup-${d}.json`), ...months].map(ckName);
-    const found = ((await ckRequest('private', 'records/lookup', { records: names.map(recordName => ({ recordName })), desiredKeys: ['parts', 'gen'] })).records || []).filter(r => !r.serverErrorCode);
-    const doomed = found.flatMap(r => [r.recordName, ...Array.from({ length: (Number(r.fields?.parts?.value) || 1) - 1 }, (_, i) => `${r.recordName}~${r.fields?.gen?.value || ''}~${i + 1}`)]);
-    for (let i = 0; i < doomed.length; i += 150) await ckModify(doomed.slice(i, i + 150).map(recordName => ({ operationType: 'forceDelete', record: { recordName } })));
-    return found.length;
-  },
-  signOut: () => { LS.del(CK_SESSION); setWho(''); },
+  writeExtra: (name, text) => ckSerial(() => ckPut(name, text)),
+  readExtra: name => ckSerial(() => ckGet(name)),
+  // Removes everything Vdex keeps in iCloud by deleting its zone: the copy, its parts, the dated backups and any part
+  // a broken save left behind (Apple asks apps to offer this). Waits for a save under way.
+  erase: () => ckSerial(async () => { try { await ckZone('delete'); } catch (e) { if (!noZone(e)) throw e; } }), // nothing there is fine
+  signOut: () => { ckEpoch++; ckHeld = null; LS.del(CK_SESSION); setWho(''); },
 });
 
 /* ------------------------------ Microsoft 365 ------------------------------ */
