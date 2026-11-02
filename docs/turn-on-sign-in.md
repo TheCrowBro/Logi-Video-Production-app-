@@ -21,15 +21,17 @@ Copy these exactly, including the slash at the end where there is one.
 
 | What the form calls it | Paste this |
 |---|---|
-| Website, home page | `https://thecrowbro.github.io/Logi-Video-Production-app-/` |
-| Privacy policy | `https://thecrowbro.github.io/Logi-Video-Production-app-/privacy.html` |
-| Terms of service | `https://thecrowbro.github.io/Logi-Video-Production-app-/terms.html` |
-| Redirect URI, first one (Dropbox and Microsoft) | `https://thecrowbro.github.io/Logi-Video-Production-app-/` |
+| Website, home page | `https://vdex.crowmade.app/` |
+| Privacy policy | `https://vdex.crowmade.app/privacy.html` |
+| Terms of service | `https://vdex.crowmade.app/terms.html` |
+| Redirect URI, first one (Dropbox and Microsoft) | `https://vdex.crowmade.app/` |
 | Redirect URI, second one (Dropbox and Microsoft: the desktop app) | `http://localhost:47831/` |
-| JavaScript origin, first one (Google only) | `https://thecrowbro.github.io` |
+| Redirect URI, third one (Dropbox and Microsoft: the old address, while people move) | `https://thecrowbro.github.io/Logi-Video-Production-app-/` |
+| JavaScript origin, first one (Google only) | `https://vdex.crowmade.app` |
 | JavaScript origin, second one (Google only) | `http://localhost:47831` |
-| Sign-in callback, website token (Apple only) | `https://thecrowbro.github.io/Logi-Video-Production-app-/` |
-| Allowed origin, website token (Apple only) | `https://thecrowbro.github.io` |
+| JavaScript origin, third one (Google only: the old address, while people move) | `https://thecrowbro.github.io` |
+| Sign-in callback, website token (Apple only) | `https://vdex.crowmade.app/` |
+| Allowed origin, website token (Apple only) | `https://vdex.crowmade.app` |
 | Allowed origin, desktop token (Apple only) | `http://localhost:47831` |
 
 ## 1. Google (about 15 minutes)
@@ -42,7 +44,7 @@ Copy these exactly, including the slash at the end where there is one.
    - Audience: **External**. **Next**.
    - Contact information: your email. **Next**.
    - Tick the box to agree, **Continue**, **Create**.
-5. Still on **Branding**, fill in: application home page, privacy policy and terms of service (all from the table), and under **Authorized domains** click **Add domain** and type `thecrowbro.github.io`. Leave the logo empty for now. Click **Save**.
+5. Still on **Branding**, fill in: application home page, privacy policy and terms of service (all from the table), and under **Authorized domains** click **Add domain** and type `crowmade.app` (and, while people are still moving from the old address, add `thecrowbro.github.io` as a second one). Leave the logo empty for now. Click **Save**.
 6. Go to **Data access** → **Add or remove scopes**. In the box for adding scopes by hand, paste these three lines, then click **Add to table**, **Update** and **Save**:
 
    ```
@@ -52,11 +54,11 @@ Copy these exactly, including the slash at the end where there is one.
    ```
 
    Then look at where they landed. The two Drive ones should be under **non-sensitive scopes**. If the calendar one is under **sensitive scopes**, remove it again (click its bin icon and **Save**): Drive will work for everyone, and Google Calendar sync is left for later, because Google wants a review for sensitive permissions. In that case the Google Calendar button has to be switched off too: say so when you send the codes, or set `googleCalendar: false` in `js/cloud-config.js` (see [Putting the codes in](#5-putting-the-codes-in)).
-7. Go to **Clients** → **Create client**. Application type: **Web application**. Name: **Vdex**. Under **Authorized JavaScript origins**, click **Add URI** and paste `https://thecrowbro.github.io`, then **Add URI** again and paste `http://localhost:47831`. Leave **Authorized redirect URIs** empty. Click **Create**.
+7. Go to **Clients** → **Create client**. Application type: **Web application**. Name: **Vdex**. Under **Authorized JavaScript origins**, click **Add URI** and paste `https://vdex.crowmade.app`, then **Add URI** again and paste `http://localhost:47831`, and while people are still moving, once more for `https://thecrowbro.github.io`. Leave **Authorized redirect URIs** empty. Click **Create**.
 8. Copy the **Client ID**, which ends in `.apps.googleusercontent.com`. That is your Google code. (Google also shows a client secret; Vdex doesn't use it.)
 9. Go to **Audience** and click **Publish app**, then **Confirm**. Until you do this, only accounts you list as test users can sign in, and only for seven days at a time.
 
-**What people will see:** Google's window will name `thecrowbro.github.io` rather than "Vdex". Showing the app's name and logo needs a check that Google only does for a domain you own. If Vdex moves to its own domain later, you can ask for it then. Google may take a few minutes, sometimes a few hours, before a new client ID works.
+**What people will see:** until Google has checked the brand, its window names the website's domain rather than "Vdex". Showing the app's name and logo needs a check that Google only does for a domain you own; crowmade.app is yours, so you can ask for it under **Branding** → **Verify branding** (Google asks you to prove the domain in Search Console). Google may take a few minutes, sometimes a few hours, before a new client ID works.
 
 ## 2. Apple, for iCloud (about 30 minutes, plus Apple's sign-up)
 
@@ -65,11 +67,11 @@ Copy these exactly, including the slash at the end where there is one.
 - **It costs money.** Letting an app keep data in people's iCloud needs Apple's paid **Apple Developer Program**: US$99 a year, shown in your local currency when you join. Apple's free developer account can't do it. Joining as a person is usually approved within a day or two. Joining as a company first needs a free D-U-N-S number, which takes about a week.
 - **Apple's terms expect a matching app.** Apple's developer licence (Attachment 4, section 1.1, and its definition of "Web Software") lets a *website* use iCloud when it matches an app of the same name that Apple distributes, such as an App Store app. Vdex is a website and desktop app with no App Store app yet. Read that part of the licence before paying, and decide whether you are comfortable going ahead, would rather ask Apple Developer Support first, or would rather wait. If you leave iCloud off, its button simply stays grey and Google Drive works without it.
 
-What people will see once it is on: Apple's own sign-in page. Until Vdex has an App Store app, Apple may show the container's identifier (`iCloud.io.github.thecrowbro.vdex`) on it rather than the name Vdex. They sign in with their Apple ID, perhaps type a six-digit code from their iPhone, and tick **Keep me signed in**, which keeps them signed in for about two weeks (otherwise only half an hour). Vdex's copy counts toward their iCloud storage (5 GB free). It is kept in Vdex's private space in their iCloud, not as a file in iCloud Drive, and Vdex has a button to delete it.
+What people will see once it is on: Apple's own sign-in page. Until Vdex has an App Store app, Apple may show the container's identifier (`iCloud.app.crowmade.vdex`) on it rather than the name Vdex. They sign in with their Apple ID, perhaps type a six-digit code from their iPhone, and tick **Keep me signed in**, which keeps them signed in for about two weeks (otherwise only half an hour). Vdex's copy counts toward their iCloud storage (5 GB free). It is kept in Vdex's private space in their iCloud, not as a file in iCloud Drive, and Vdex has a button to delete it.
 
 1. **Join.** Go to **developer.apple.com/programs/enroll** and sign in with the Apple Account that will own Vdex's iCloud set-up. It needs two-factor sign-in and your legal name. Follow the steps and pay. Wait for Apple's confirmation email; if none comes within a day of paying, contact Apple with your Enrollment ID.
-2. **Make Vdex's container**, the private space Vdex gets in everyone's iCloud. Go to **developer.apple.com/account** → **Certificates, Identifiers & Profiles** → **Identifiers** → the **+** button → **iCloud Containers** → **Continue**. Description: **Vdex**. Identifier: **`iCloud.io.github.thecrowbro.vdex`**. Click **Continue**, then **Register**. A container can never be renamed or deleted, so check the spelling first. This identifier is your first Apple code.
-3. **Recommended: an App ID for it.** This keeps the door open for an App Store app later. Still under **Identifiers**: **+** → **App IDs** → **App** → **Continue**. Description: **Vdex**. Bundle ID: **Explicit**, `io.github.thecrowbro.vdex`. Tick **iCloud**, then **Continue** → **Register**. Open the new App ID, click **Edit** next to iCloud (it may say *Include CloudKit support*), tick the Vdex container, then **Continue** → **Save**.
+2. **Make Vdex's container**, the private space Vdex gets in everyone's iCloud. Go to **developer.apple.com/account** → **Certificates, Identifiers & Profiles** → **Identifiers** → the **+** button → **iCloud Containers** → **Continue**. Description: **Vdex**. Identifier: **`iCloud.app.crowmade.vdex`**. Click **Continue**, then **Register**. A container can never be renamed or deleted, so check the spelling first. This identifier is your first Apple code.
+3. **Recommended: an App ID for it.** This keeps the door open for an App Store app later. Still under **Identifiers**: **+** → **App IDs** → **App** → **Continue**. Description: **Vdex**. Bundle ID: **Explicit**, `app.crowmade.vdex`. Tick **iCloud**, then **Continue** → **Register**. Open the new App ID, click **Edit** next to iCloud (it may say *Include CloudKit support*), tick the Vdex container, then **Continue** → **Save**.
 4. **Open the CloudKit Console** at **icloud.developer.apple.com** with the same account and choose **CloudKit Database**. Pick the Vdex container in the list at the top and make sure the environment says **Development**. If the container isn't listed, open the account menu at the top right and switch from your own name to your team's name.
 5. **Describe what Vdex saves.** Go to **Schema** → **Record Types** → **+**. Name: **`VdexFile`**, exactly like that. Click **Create Record Type**, then add three fields with exactly these names and types:
 
@@ -83,8 +85,8 @@ What people will see once it is on: Apple's own sign-in page. Until Vdex has an 
 6. **Make it live.** Click **Deploy Schema Changes…**, check that `VdexFile` and its three fields are listed, and click **Deploy**. Things deployed can be added to later but never removed, so check the names first. If you skip this step, every save fails with *Cannot create new type VdexFile in production schema*.
 7. **The website's token.** Switch the environment at the top to **Production**. Go to **Settings** (or **API Access**) → **Tokens & Keys** → **New API Token**:
    - Name: **Vdex website**.
-   - Sign In Callback: **URL Redirect**. In the address box, pick **https://** if it asks, and enter the website address from the table: `thecrowbro.github.io/Logi-Video-Production-app-/`. Apple sends people straight back to Vdex after signing in, which works better on iPhone and iPad than a pop-up window.
-   - Allowed Origins: **Only the following domain(s)**, and add `https://thecrowbro.github.io`. That's the scheme and host only: no path, no slash at the end.
+   - Sign In Callback: **URL Redirect**. In the address box, pick **https://** if it asks, and enter the website address from the table: `vdex.crowmade.app/`. Apple sends people straight back to Vdex after signing in, which works better on iPhone and iPad than a pop-up window.
+   - Allowed Origins: **Only the following domain(s)**, and add `https://vdex.crowmade.app`. That's the scheme and host only: no path, no slash at the end.
    - Leave *user discoverability* off. Click **Save Changes**.
 
    Copy the long token it shows. This is your **Apple website token**.
@@ -108,7 +110,7 @@ Only needed to switch on the **Dropbox** card under *More ways to keep a copy*.
 4. *Choose the type of access you need*: pick **App folder**. This can't be changed later, and it is what keeps Vdex out of everyone's other files.
 5. *Name your app*: type **Vdex**. If Dropbox says the name is taken, try **Vdex Production Manager**. (Dropbox doesn't allow names containing "Dropbox", starting with "drop", or using "DB".) Tick the box and click **Create app**.
 6. You are now on the **Settings** tab. Find **App key** and copy it somewhere safe. That is your Dropbox code. Leave **App secret** alone; Vdex doesn't use it.
-7. Still on Settings, under **OAuth 2** → **Redirect URIs**: paste the first redirect address from the table and click **Add**. Then paste the second one (`http://localhost:47831/`) and click **Add**.
+7. Still on Settings, under **OAuth 2** → **Redirect URIs**: paste the first redirect address from the table and click **Add**. Then paste the second one (`http://localhost:47831/`) and click **Add**, and while people are still moving from the old address, the third one too.
 8. Just below, check that **Allow public clients (Implicit Grant & PKCE)** says **Allow**. Leave it like that.
 9. Under **Development users**, click **Enable additional users**. Without this, only your own Dropbox can connect.
 10. Still on Settings, find **App folder name**, click **Change**, type **Vdex** and save. That way the folder people see in their Dropbox is always *Apps › Vdex*, whatever name the app got in step 5.
@@ -132,7 +134,7 @@ Microsoft no longer lets a personal account register an app on its own; it needs
    - Redirect URI, if the page offers one: pick **Single-page application (SPA)** in the list, and paste the first redirect address from the table. If it doesn't offer one, you add it in step 6.
    - Click **Register**.
 5. On the page that opens, copy the **Application (client) ID** (it looks like `0a1b2c3d-…`). That is your Microsoft code. Don't create anything under *Certificates & secrets*.
-6. Go to **Authentication** → **Add redirect URI** (or **Add a platform**) → **Single-page application**, paste `http://localhost:47831/` and save, and the first address too if it isn't there yet. Check both addresses now sit under **Single-page application**, not under *Web*. Leave the *Access tokens* and *ID tokens* boxes unticked.
+6. Go to **Authentication** → **Add redirect URI** (or **Add a platform**) → **Single-page application**, paste `http://localhost:47831/` and save, and the first address too if it isn't there yet (and the third, old address while people are still moving). Check both addresses now sit under **Single-page application**, not under *Web*. Leave the *Access tokens* and *ID tokens* boxes unticked.
 7. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**. Search for and tick **Files.ReadWrite.AppFolder** and **Calendars.ReadWrite**, then **Add permissions**. Leave **User.Read** in place.
 8. Optional: under **Owners**, add a second Microsoft account you trust, so the registration isn't lost with a single account.
 
@@ -146,7 +148,7 @@ Microsoft no longer lets a personal account register an app on its own; it needs
 
 ```
 Google: 1234-abcd.apps.googleusercontent.com
-Apple container: iCloud.io.github.thecrowbro.vdex
+Apple container: iCloud.app.crowmade.vdex
 Apple website token: 0123abcd…
 Apple desktop token: 4567efgh…
 Dropbox: abc123xyz

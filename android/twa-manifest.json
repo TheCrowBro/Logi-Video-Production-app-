@@ -1,6 +1,6 @@
 {
-  "packageId": "io.github.thecrowbro.vdex",
-  "host": "thecrowbro.github.io",
+  "packageId": "app.crowmade.vdex",
+  "host": "vdex.crowmade.app",
   "name": "Vdex",
   "launcherName": "Vdex",
   "display": "standalone",
@@ -12,9 +12,9 @@
   "navigationDividerColorDark": "#3A332B",
   "backgroundColor": "#14110F",
   "enableNotifications": true,
-  "startUrl": "/Logi-Video-Production-app-/index.html",
-  "iconUrl": "https://thecrowbro.github.io/Logi-Video-Production-app-/icons/icon-512.png",
-  "maskableIconUrl": "https://thecrowbro.github.io/Logi-Video-Production-app-/icons/icon-512.png",
+  "startUrl": "/index.html?src=play",
+  "iconUrl": "https://vdex.crowmade.app/icons/icon-512.png",
+  "maskableIconUrl": "https://vdex.crowmade.app/icons/icon-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "./upload-key.keystore",
@@ -24,7 +24,7 @@
   "appVersionCode": 1,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://thecrowbro.github.io/Logi-Video-Production-app-/manifest.webmanifest",
+  "webManifestUrl": "https://vdex.crowmade.app/manifest.webmanifest",
   "fallbackType": "customtabs",
   "features": {},
   "alphaDependencies": {
@@ -35,7 +35,7 @@
   "isMetaQuest": false,
   "minSdkVersion": 26,
   "shareTarget": {
-    "action": "/Logi-Video-Production-app-/share",
+    "action": "https://vdex.crowmade.app/share",
     "method": "POST",
     "enctype": "multipart/form-data",
     "params": {
@@ -45,11 +45,9 @@
         {
           "name": "file",
           "accept": [
-            ".docx",
-            ".txt",
-            ".md",
-            ".fountain",
             "text/plain",
+            "text/markdown",
+            "text/x-markdown",
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
           ]
         }

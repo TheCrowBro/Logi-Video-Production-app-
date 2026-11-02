@@ -5,7 +5,7 @@
 export const CLOUD_APPS = {
   // iCloud (Apple CloudKit): the container identifier and two API tokens from the CloudKit Console, one for the website
   // (sign-in callback: URL Redirect to the website) and one for the desktop app (sign-in callback: Post Message)
-  icloud: { container: '', apiToken: '', desktopToken: '' }, // container looks like iCloud.io.github.thecrowbro.vdex
+  icloud: { container: '', apiToken: '', desktopToken: '' }, // container looks like iCloud.app.crowmade.vdex
   dropbox: '',   // Dropbox App key (App Console → your app → Settings)
   google: '',    // Google OAuth client ID, ends in .apps.googleusercontent.com
   microsoft: '', // Microsoft Application (client) ID, looks like 00000000-0000-0000-0000-000000000000

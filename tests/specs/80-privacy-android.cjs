@@ -64,7 +64,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const gradle = fs.readFileSync(ROOT + '/android/app/build.gradle', 'utf8');
   ok('asset links name the Android package', links[0].target.package_name === twa.packageId, twa.packageId);
   ok('asset links carry certificate fingerprints', links[0].target.sha256_cert_fingerprints.length > 0 && links[0].target.sha256_cert_fingerprints.every(f => /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/.test(f)));
-  ok('the Android app opens the live site', twa.host === 'thecrowbro.github.io' && twa.startUrl.startsWith('/Logi-Video-Production-app-/'));
+  ok('the Android app opens the site at its own address', twa.host === 'vdex.crowmade.app' && twa.startUrl.startsWith('/index.html'));
   ok('the Android version matches the app version', twa.appVersionName === version, `${twa.appVersionName} vs ${version}`);
   ok('the Android project carries the same version', gradle.includes(`versionName "${version}"`));
   ok('the Android app targets Android 16 (API 36), as Google Play requires', /targetSdkVersion 36/.test(gradle));

@@ -1,4 +1,4 @@
-package io.github.thecrowbro.vdex;
+package app.crowmade.vdex;
 
 
 

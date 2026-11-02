@@ -2,3 +2,6 @@
 node_modules/
 dist/
 tests/output/
+site/
+cloudflare/site/
+.wrangler/

@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PAGES, ROOT_FILES, DIRS } from './site-files.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let sha = process.env.BUILD_SHA || process.env.GITHUB_SHA || '';
@@ -14,7 +15,7 @@ const build = sha.slice(0, 7), built = new Date().toISOString().slice(0, 10);
 
 const walk = dir => readdirSync(dir).sort().flatMap(n => { const p = path.join(dir, n); return statSync(p).isDirectory() ? walk(p) : [p]; });
 const rel = p => path.relative(root, p).split(path.sep).join('/');
-const files = ['index.html', 'styles.css', 'manifest.webmanifest', 'privacy.html', 'terms.html', 'invoice.html', 'crew.html', ...['js', 'vendor', 'icons'].flatMap(d => walk(path.join(root, d)).map(rel))].filter(p => !/(^|\/)\./.test(p));
+const files = [...PAGES, ...ROOT_FILES, ...DIRS.flatMap(d => walk(path.join(root, d)).map(rel))].filter(p => !/(^|\/)\./.test(p)); // tools/site-files.mjs
 const shell = ['./', ...files];
 
 const vPath = path.join(root, 'js', 'version.js');
