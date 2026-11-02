@@ -610,3 +610,9 @@ html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .s
 .terms-check input { flex: none; width: 24px; height: 24px; margin-top: 1px; }
 .terms-card .btn.primary { width: 100%; }
 .terms-card .btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Budget on a booking */
+.budget-amts { display: grid; justify-items: end; gap: 2px; text-align: right; white-space: nowrap; }
+.budget-cat > summary { grid-template-columns: minmax(0, 1fr) auto; } /* name and chevron: the chevron turns in place */
+.budget-cat .twirl-body { gap: 8px; }
+.crew-parts { display: grid; gap: 2px; }

@@ -84,7 +84,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 ### Add a booking
 
 1. Bookings → **+ New** (or tap a date, then **+ New**).
-2. Fill in the project, client, **job type** (this picks the right checklist), dates (multi-day shoots have an end date), times and address.
+2. Fill in the project, client, **job type** (this picks the right checklist: brand, corporate, event, wedding, music video, real estate, documentary, social media, short film, vertical video, series or feature film), dates (multi-day shoots have an end date), times and address.
 3. Pick a **venue** if you've saved one: its address fills in and Vdex warns if your kit breaks the venue's rules.
 4. Tick **crew** and **equipment**. Tick a **kit** to load a whole set of gear at once, then adjust. Items you own more than one of get a quantity.
 5. Set the **approved break per day** if the production has one. The shoot-day clock uses it.
@@ -138,6 +138,8 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 - Each stage has a **checklist** that depends on the job type. Tick things off, add your own items, and when a stage is complete a **Next** button moves the project on. Items with an arrow open the tool they're about (call sheet, kit, media log, hours…).
 - **🗂 Pipeline** on the Bookings page shows every project by stage, with its progress and next deadline.
 - Change the checklists for each job type under Settings → *Workflow templates*.
+- **Budget** on the booking page: what the job will cost you, one line at a time, each in a category you pick from a list (crew, cast and talent, equipment hire, locations and permits, travel, accommodation, catering, art and wardrobe, hair and make-up, post-production, music and licences, insurance and more). Put in the estimate, then the actual cost once you know it. **Fill from booking** adds your crew at their day rates, your hires and your licences. If the job has a quote, the budget shows what is left for you after costs. Only you see the budget: it never goes into a quote, an invoice or a crew link. **Export CSV** saves it for a spreadsheet.
+- **👥 Share with crew** on the booking page makes a link to a read-only page for your cast and crew: the dates, call times, schedule, location, who is on, the shot list, the kit and the deliverables, whichever you tick. Prices, rates, budgets, quotes, invoices and your booking notes are never included. The whole page is inside the link, so there is no server and nothing is stored online. Crew can add the shoot to their calendar or print it. If plans change, send a new link: an old one keeps showing what it had.
 
 ### After the shoot
 
@@ -322,7 +324,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 ### Add a booking
 
 1. Bookings → **+ New** (or tap a date, then **+ New**).
-2. Fill in the project, client, **job type** (this picks the right checklist), dates (multi-day shoots have an end date), times and address.
+2. Fill in the project, client, **job type** (this picks the right checklist: brand, corporate, event, wedding, music video, real estate, documentary, social media, short film, vertical video, series or feature film), dates (multi-day shoots have an end date), times and address.
 3. Pick a **venue** if you've saved one: its address fills in and Vdex warns if your kit breaks the venue's rules.
 4. Tick **crew** and **equipment**. Tick a **kit** to load a whole set of gear at once, then adjust. Items you own more than one of get a quantity.
 5. Set the **approved break per day** if the production has one. The shoot-day clock uses it.
@@ -376,6 +378,8 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 - Each stage has a **checklist** that depends on the job type. Tick things off, add your own items, and when a stage is complete a **Next** button moves the project on. Items with an arrow open the tool they're about (call sheet, kit, media log, hours…).
 - **🗂 Pipeline** on the Bookings page shows every project by stage, with its progress and next deadline.
 - Change the checklists for each job type under Settings → *Workflow templates*.
+- **Budget** on the booking page: what the job will cost you, one line at a time, each in a category you pick from a list (crew, cast and talent, equipment hire, locations and permits, travel, accommodation, catering, art and wardrobe, hair and make-up, post-production, music and licences, insurance and more). Put in the estimate, then the actual cost once you know it. **Fill from booking** adds your crew at their day rates, your hires and your licences. If the job has a quote, the budget shows what is left for you after costs. Only you see the budget: it never goes into a quote, an invoice or a crew link. **Export CSV** saves it for a spreadsheet.
+- **👥 Share with crew** on the booking page makes a link to a read-only page for your cast and crew: the dates, call times, schedule, location, who is on, the shot list, the kit and the deliverables, whichever you tick. Prices, rates, budgets, quotes, invoices and your booking notes are never included. The whole page is inside the link, so there is no server and nothing is stored online. Crew can add the shoot to their calendar or print it. If plans change, send a new link: an old one keeps showing what it had.
 
 ### After the shoot
 

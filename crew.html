@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light">
+<title>Shoot info</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+  body { margin: 0; background: #e9e4da; color: #111; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 16px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin: 4px 0 12px; }
+  .bar .who { font-weight: 600; }
+  .bar .who small { display: block; font-weight: 400; color: #555; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn { padding: 9px 14px; border-radius: 10px; border: 1px solid #333; background: #fff; color: #111; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; }
+  .paper { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.08); padding: 20px 22px 24px; overflow-wrap: anywhere; }
+  .msg { background: #fff; border-radius: 12px; padding: 24px; }
+  h1 { font-size: 1.6rem; line-height: 1.2; margin: 0 0 4px; }
+  h2 { font-size: .8rem; letter-spacing: .08em; text-transform: uppercase; color: #555; margin: 22px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #ddd; }
+  .sub { color: #444; margin: 0 0 4px; }
+  .kv { display: grid; grid-template-columns: 9.5em 1fr; gap: 4px 12px; }
+  .kv dt { color: #666; } .kv dd { margin: 0; white-space: pre-line; }
+  table { width: 100%; border-collapse: collapse; } td, th { text-align: left; vertical-align: top; padding: 6px 8px 6px 0; border-bottom: 1px solid #eee; }
+  th { font-weight: 600; color: #555; font-size: .9rem; }
+  .day { font-weight: 700; margin: 12px 0 2px; }
+  ul.plain { list-style: none; padding: 0; margin: 0; } ul.plain li { padding: 4px 0; border-bottom: 1px solid #f0f0f0; }
+  .done { color: #777; text-decoration: line-through; }
+  .pre { white-space: pre-line; margin: 0; }
+  .note { color: #555; font-size: .9rem; margin-top: 20px; }
+  a { color: #0b57d0; }
+  .foot { text-align: center; color: #666; font-size: 12px; margin: 18px 0 32px; }
+  .foot a { color: #444; }
+  @media (max-width: 520px) { .kv { grid-template-columns: 1fr; } .kv dt { margin-top: 6px; } td, th { padding-right: 6px; } .paper { padding: 16px; } }
+  @media print { body { background: #fff; } .bar, .foot { display: none; } .paper { box-shadow: none; border-radius: 0; padding: 0; } a { color: inherit; text-decoration: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="bar" id="bar"></div>
+  <div id="doc"><div class="msg">Opening the shoot info…</div></div>
+  <p class="foot">This page was made by the producer named on it, with <a href="./">Vdex</a>, a free tool. Vdex cannot confirm who made this link, and it is a copy from when it was sent: if something looks wrong or plans may have changed, check with the producer. Everything is inside the link itself; nothing was stored online. <a href="terms.html">Terms of service</a></p>
+</div>
+<script type="module" src="js/crew-page.js"></script>
+</body>
+</html>

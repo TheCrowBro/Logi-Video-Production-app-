@@ -43,7 +43,7 @@ export const TUTORIALS = {
     T('The booking', 'Project, client, dates, times and address, with Add to calendar, Share and Email. Edit changes the details.', '.bk-detail .card.hero'),
     T('Stages', 'Every project moves Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. Tap a stage to move it; the checklist underneath belongs to the current stage.', '.bk-detail .stage-strip'),
     T('The checklist', 'Tick things off, add your own lines, and tap an arrow to open the tool a line is about. When a stage is complete, Next moves the project on.', '.bk-detail .checklist'),
-    T('Call sheet and templates', 'Call sheet opens this shoot’s sheet. Save as template turns a job that went well into a template; Apply template items adds anything a template still has to offer.', '.bk-detail .bk-tools'),
+    T('Call sheet, crew link and templates', 'Call sheet opens this shoot’s sheet. Share with crew makes a read-only page for your cast and crew, with the times, location, who is on and the shot list, and never any prices or budgets. Save as template turns a job that went well into a template; Apply template items adds anything a template still has to offer.', '.bk-detail .bk-tools'),
     T('Venue', 'The venue’s rules, access, parking and map, with a warning if your kit breaks a rule.', '#bk-venue'),
     T('Sun and weather', 'Sunrise, sunset and golden hour at the venue, plus the forecast within two weeks.', '.bk-detail .sunline'),
     T('Crew', 'Who is on the shoot: ask them by text or email, set each person’s call time, and mark them confirmed.', '#bk-crew'),
@@ -54,6 +54,7 @@ export const TUTORIALS = {
     T('Deliverables', 'What the client gets, with due dates that appear in your calendar, status and links.', '#bk-deliverables'),
     T('Licences', 'Music and stock licences kept with the project.', '#bk-licences'),
     T('Money', 'The quote and the invoice for this booking.', '#bk-money'),
+    T('Budget', 'What the job will cost you, line by line, in categories you pick from a list. Fill from booking adds your crew, hires and licences. It compares with the quote, and only you see it.', '#bk-budget'),
     T('Hours', 'What the clock bar logged on this job, with overtime, and a button to start an edit session.', '#bk-hours'),
   ] },
   callsheet: { name: 'Call sheet', page: 'bookings', steps: [

@@ -44,8 +44,9 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 
 1. **Bookings → + New.** Type the job, the client, the date and the address. Tick the crew and the kit you're taking.
 2. **On the day,** a bar appears under the Rolodex. Tap **Start work** when you begin and **Stop work** when you finish. Tap **Break** for lunch.
-3. **Call sheet.** Open the booking and tap **Call sheet**. It's already filled in from the booking. Tap **Edit sheet** to add the schedule, then **Email crew** or **Print**.
-4. **Afterwards,** open the booking's **Money** block to make the quote or the invoice. Vdex suggests the lines from the shoot. Tap **Link for the client** to send a link that opens the invoice with Pay buttons, then **Record a payment** when the money arrives.
+3. **Call sheet.** Open the booking and tap **Call sheet**. It's already filled in from the booking. Tap **Edit sheet** to add the schedule, then **Email crew** or **Print**. Or tap **👥 Share with crew** to send your cast and crew a link to the schedule, location and shot list, with no prices or budgets in it.
+4. **Plan the costs** in the booking's **Budget**: pick a category for each line (crew, hires, travel, locations…) and see what's left for you after the quote. Only you see it.
+5. **Afterwards,** open the booking's **Money** block to make the quote or the invoice. Vdex suggests the lines from the shoot. Tap **Link for the client** to send a link that opens the invoice with Pay buttons, then **Record a payment** when the money arrives.
 
 Everything can be changed later, and every screen has a back button.
 

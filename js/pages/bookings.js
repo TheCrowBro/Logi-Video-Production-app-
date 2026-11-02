@@ -8,7 +8,7 @@ import { openCalendarSheet, openAddToCalendar, shareBooking, mailtoLink } from '
 import { openHoursSheet, editShift, stats, fmtHm, defaultBreak, startShift, running } from '../hours.js';
 import { STATUSES as WF_STATUSES, typeOptions, templateById, applyTemplateDefaults, applyTemplateExtras, saveBookingAsTemplate, pickTemplate, typeLabel, slugStatus, workflowBlock, openPipeline, hiresBlock, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, stageIndex } from '../workflow.js';
 import { callSheetPage, openCallSheets, sheetState, commitDraft } from '../callsheet.js';
-import { moneyPage, openMoney, moneyBlock } from '../money.js';
+import { moneyPage, openMoney, moneyBlock, budgetBlock } from '../money.js';
 import { forecastLine, locationFor } from '../weather.js';
 import { getTimes } from '../suncalc.js';
 
@@ -185,6 +185,7 @@ function detail(go) {
       hours: () => openHoursSheet(b.id), licences: () => document.getElementById('bk-licences')?.scrollIntoView({ block: 'start' }), deliverables: () => document.getElementById('bk-deliverables')?.scrollIntoView({ block: 'start' }),
     }),
     h('div', { class: 'actions bk-tools' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
+      h('button', { class: 'btn ghost small', onclick: () => import('../crew-link.js').then(m => m.openCrewShare(b)).catch(e => toast('Could not open sharing: ' + (e.message || e))) }, '👥 Share with crew'),
       h('button', { class: 'btn ghost small', onclick: () => saveBookingAsTemplate(b, t => t && toast(`Saved as the “${t.name}” template`)) }, '📐 Save as template'),
       templateById(b.type) && h('button', { class: 'btn ghost small', onclick: () => { const n = applyTemplateExtras(b.id, templateById(b.type)); toast(n ? `${n} item${n === 1 ? '' : 's'} added from the template` : 'Nothing missing from the template'); } }, '↻ Apply template items')),
     venueBlock(b, gear),
@@ -220,6 +221,7 @@ function detail(go) {
     h('div', { id: 'bk-deliverables' }, deliverablesBlock(b)),
     h('div', { id: 'bk-licences', class: 'block' }, licencesBlock(b)),
     moneyBlock(b, go),
+    budgetBlock(b),
     hoursBlock(b),
     b.notes && section('Notes', h('p', { class: 'prewrap' }, b.notes)));
 }

@@ -38,6 +38,9 @@ const shootDays = b => Math.max(1, Math.round((parseISO(endOf(b)) - parseISO(b.d
 const addDays = (iso, n) => { const d = parseISO(iso); return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
 export const isOverdue = b => { const inv = docOf(b, 'invoice'); return !!(inv && inv.status === 'Sent' && inv.due && inv.due < todayISO() && totals(inv).balance > 0); };
 const num = v => (v === '' || v == null ? '' : Number(v));
+// A crew rate is typed freely ("450", "$450/day", "£55 an hour", "1,200 per week"): its number, and whether it is per hour.
+export const rateOf = r => { const m = String(r ?? '').replace(/(\d),(?=\d{3}(\D|$))/g, '$1').match(/\d+(?:[.,]\d+)?/); return m ? Number(m[0].replace(',', '.')) : ''; };
+const perHour = r => /(\/|\bper\s*|\ban?\s+)(h|hr|hrs|hour)\b|\bhourly\b/i.test(String(r || ''));
 
 // Suggested lines: from the booking, from the quote, or from the hours logged.
 export function suggestLines(b, kind, source = 'booking') {
@@ -56,7 +59,7 @@ export function suggestLines(b, kind, source = 'booking') {
     return lines;
   }
   line(`Shoot day${days === 1 ? '' : 's'} — ${b.title}`, days, 'day', bl.dayRate);
-  for (const id of b.crew || []) { const c = byId('crew', id); if (c) line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, days, 'day', c.rate); }
+  for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const hourly = perHour(c.rate); line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, hourly ? days * 10 : days, hourly ? 'hour' : 'day', rateOf(c.rate)); } }
   if ((b.gear || []).length || (b.kits || []).length) line('Equipment package', days, 'day', bl.kitRate);
   for (const dl of b.deliverables || []) line(`${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
   if (kind === 'invoice') for (const hr of b.hires || []) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
@@ -250,6 +253,76 @@ export function moneyPage(b, kind, go) {
 export function moneyBlock(b, go) {
   const row = kind => { const doc = docOf(b, kind), K = KINDS[kind]; return h('div', { class: 'card-row' }, h('div', null, h('strong', null, K.label), h('div', { class: 'muted small' }, doc ? `${doc.number} · ${doc.status}${isOverdue(b) && kind === 'invoice' ? ' · overdue' : ''} · ${fmtMoney(totals(doc).total)}${kind === 'invoice' && doc.status !== 'Paid' && totals(doc).paid > 0 ? ` · ${fmtMoney(totals(doc).balance)} due` : ''}` : 'none yet')), h('button', { class: 'btn ghost small', onclick: () => go({ view: 'money', id: b.id, kind }) }, doc ? 'Open' : 'Create')); };
   return h('section', { class: 'block', id: 'bk-money' }, h('h3', null, 'Money'), h('div', { class: 'card stack' }, row('quote'), row('invoice')));
+}
+
+/* ---------------------------------- budget ---------------------------------- */
+// What a job will cost you, line by line, with each line in a category picked from a list. Private: it never goes
+// into a quote, an invoice, a call sheet or a crew link. Compared with the quote, it shows what is left for you.
+export const BUDGET_CATS = ['Crew', 'Cast & talent', 'Equipment hire', 'Locations & permits', 'Travel & transport', 'Accommodation', 'Catering', 'Art, props & wardrobe', 'Hair & make-up', 'Post-production', 'Music & licences', 'Insurance', 'Marketing & distribution', 'Contingency', 'Other'];
+const BUDGET_UNITS = ['item', 'day', 'half day', 'hour', 'week', 'person', 'night', 'km', 'mile'];
+const lineEst = l => (Number(l.qty) || 0) * (Number(l.rate) || 0);
+const hasActual = l => l.actual !== '' && l.actual != null && Number.isFinite(Number(l.actual));
+export function budgetTotals(b) {
+  const lines = (b.budget && b.budget.lines) || [];
+  const est = lines.reduce((s, l) => s + lineEst(l), 0), spent = lines.reduce((s, l) => s + (hasActual(l) ? Number(l.actual) : 0), 0);
+  const byCat = BUDGET_CATS.map(cat => { const ls = lines.filter(l => (BUDGET_CATS.includes(l.cat) ? l.cat : 'Other') === cat); return { cat, lines: ls, est: ls.reduce((s, l) => s + lineEst(l), 0), spent: ls.reduce((s, l) => s + (hasActual(l) ? Number(l.actual) : 0), 0) }; }).filter(c => c.lines.length);
+  const q = docOf(b, 'quote'), quoted = q ? totals(q, 'quote').subtotal : null; // before tax: the tax is not yours to spend
+  return { lines, est, spent, left: est - spent, byCat, quoted, margin: quoted == null ? null : quoted - est };
+}
+const patchBooking = (b, fn) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { x.budget = { lines: [], ...(x.budget || {}) }; x.budget.lines = [...(x.budget.lines || [])]; fn(x.budget); x.budget.updatedAt = Date.now(); x.updatedAt = Date.now(); } });
+function editBudgetLine(b, line) {
+  openForm({
+    title: line ? 'Edit budget line' : 'Add budget line',
+    values: line || { cat: 'Crew', desc: '', qty: 1, unit: 'day', rate: '', actual: '', supplier: '' },
+    fields: [
+      { key: 'cat', label: 'Category', type: 'select', options: BUDGET_CATS },
+      { key: 'desc', label: 'What it is', required: true, placeholder: 'e.g. Gaffer, van hire, location fee' },
+      { key: 'qty', label: 'Quantity', type: 'number', min: 0 },
+      { key: 'unit', label: 'Per', type: 'select', options: BUDGET_UNITS },
+      { key: 'rate', label: 'Cost each (estimate)', type: 'number', hint: 'What it will cost you, not what you charge the client.' },
+      { key: 'actual', label: 'Actual cost, once known', type: 'number', hint: 'The whole line, as it turned out. Leave blank until you know.' },
+      { key: 'supplier', label: 'Paid to', placeholder: 'Person or company' },
+    ],
+    onSave: v => patchBooking(b, bd => { const next = { ...v, qty: v.qty === '' ? 1 : v.qty, id: (line && line.id) || uid(), src: line && line.src }; const i = bd.lines.findIndex(l => l.id === next.id); if (i >= 0) bd.lines[i] = next; else bd.lines.push(next); }),
+    onDelete: line ? () => patchBooking(b, bd => { bd.lines = bd.lines.filter(l => l.id !== line.id); }) : null,
+  });
+}
+// Lines from what the booking already knows: crew at their day rates, hires and licences at their cost. Only adds
+// what is not there yet, so it can be tapped again after the booking changes.
+export function fillBudget(b) {
+  b = current(b);
+  const have = new Set(((b.budget && b.budget.lines) || []).map(l => l.src).filter(Boolean)), add = [], days = shootDays(b);
+  for (const id of b.crew || []) { const c = byId('crew', id); if (c && !have.has('crew:' + id)) { const hourly = perHour(c.rate); add.push({ cat: 'Crew', desc: c.name + (c.role ? ` (${c.role})` : '') + (hourly ? ' — check the hours' : ''), qty: hourly ? days * 10 : days, unit: hourly ? 'hour' : 'day', rate: rateOf(c.rate), src: 'crew:' + id }); } }
+  for (const hr of b.hires || []) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
+  for (const lc of b.licences || []) if (!have.has('lic:' + lc.id)) add.push({ cat: 'Music & licences', desc: [lc.kind, lc.title].filter(Boolean).join(': '), qty: 1, unit: 'item', rate: rateOf(lc.cost), src: 'lic:' + lc.id });
+  if (add.length) patchBooking(b, bd => { bd.lines.push(...add.map(l => ({ ...l, id: uid(), actual: '', supplier: '' }))); });
+  return add.length;
+}
+function budgetCsv(b) {
+  const t = budgetTotals(b), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const rows = [['Category', 'What it is', 'Quantity', 'Per', 'Cost each', 'Estimate', 'Actual', 'Paid to'].map(q).join(',')];
+  for (const c of t.byCat) for (const l of c.lines) rows.push([c.cat, l.desc, l.qty, l.unit, l.rate, lineEst(l).toFixed(2), hasActual(l) ? Number(l.actual).toFixed(2) : '', l.supplier].map(q).join(','));
+  rows.push(['Total', '', '', '', '', t.est.toFixed(2), t.spent.toFixed(2), ''].map(q).join(','));
+  return rows.join('\r\n');
+}
+export function budgetBlock(b) {
+  const t = budgetTotals(b), cur = sym();
+  const line = l => h('button', { class: 'card tap budget-line', type: 'button', onclick: () => editBudgetLine(b, l) },
+    h('div', { class: 'card-row' }, h('div', null, h('strong', null, l.desc), h('div', { class: 'muted small' }, [`${l.qty || 0} ${l.unit || 'item'}${Number(l.qty) === 1 ? '' : 's'} × ${fmtMoney(l.rate)}`, l.supplier].filter(Boolean).join(' · '))),
+      h('div', { class: 'budget-amts' }, h('span', null, fmtMoney(lineEst(l))), hasActual(l) && h('span', { class: 'small ' + (Number(l.actual) > lineEst(l) + 0.005 ? 'overdue' : 'muted') }, 'actual ' + fmtMoney(l.actual)))));
+  const stat = (v, l, cls = '') => h('div', { class: 'stat ' + cls }, h('b', null, v), h('span', null, l));
+  return h('section', { class: 'block', id: 'bk-budget' }, h('h3', null, 'Budget'),
+    h('div', { class: 'card stack' },
+      t.lines.length
+        ? [h('div', { class: 'stats' }, stat(fmtMoney(t.est), 'Estimate'), stat(fmtMoney(t.spent), 'Spent so far'), stat(fmtMoney(t.left), t.left < -0.005 ? 'Over the estimate' : 'Still to spend', t.left < -0.005 ? 'overdue' : '')),
+          t.quoted != null && h('p', { class: 'small' + (t.margin < 0 ? ' overdue' : '') }, `Quoted to the client: ${fmtMoney(t.quoted)} before tax. Left for you after this budget: ${fmtMoney(t.margin)}${t.quoted > 0 ? ` (${Math.round(t.margin / t.quoted * 100)}%)` : ''}.`),
+          ...t.byCat.map(c => h('details', { class: 'twirl budget-cat' }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, c.cat), h('span', { class: 'twirl-sub' }, `${c.lines.length} line${c.lines.length === 1 ? '' : 's'} · ${fmtMoney(c.est)}${c.spent ? ' · spent ' + fmtMoney(c.spent) : ''}`))),
+            h('div', { class: 'twirl-body stack' }, c.lines.map(line))))]
+        : h('p', { class: 'muted small' }, `Plan what this job will cost you: crew, hires, travel, locations and more, in ${cur}. Only you see it: it never goes into a quote, an invoice or a crew link.`),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn ghost small', onclick: () => editBudgetLine(b, null) }, '+ Add line'),
+        h('button', { class: 'btn ghost small', onclick: () => { const n = fillBudget(b); toast(n ? `${n} line${n === 1 ? '' : 's'} added from the booking` : 'Nothing new to add from the booking'); } }, '↻ Fill from booking'),
+        t.lines.length > 0 && h('button', { class: 'btn ghost small', onclick: () => saveOrShare(budgetCsv(b), `budget-${String(b.title || 'job').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}.csv`, 'text/csv') }, '⬇ Export CSV'))));
 }
 
 /* --------------------------------- overview --------------------------------- */
