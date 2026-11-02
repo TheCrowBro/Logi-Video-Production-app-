@@ -10,7 +10,7 @@ It works on an iPhone, an Android phone, and a computer. There is no account to 
 
 1. **Open Vdex.** It lives at this link, the same way a website does. Tap it, or type it into your phone's or computer's browser exactly as written:
 
-   **https://thecrowbro.github.io/Logi-Video-Production-app-/**
+   **https://vdex.crowmade.app/**
 
    Or point your phone's camera at this square and tap the link that pops up:
 
@@ -55,7 +55,7 @@ Everything can be changed later, and every screen has a back button.
 
 - **Set a PIN** in Settings → Security. Then Vdex locks when you put the phone down, and you can open it with your fingerprint or face. While it's locked, the information on this device is encrypted.
 - **Connect your cloud storage:** tap ☁ at the top, tap **Connect** next to Google Drive or iCloud, and sign in to your own account (Dropbox, OneDrive and more are under *More ways to keep a copy*). Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
-- **Nothing is sent anywhere by itself.** The [privacy policy](https://thecrowbro.github.io/Logi-Video-Production-app-/privacy.html) says in plain words what stays on your device and what leaves it, and when. The [terms of service](https://thecrowbro.github.io/Logi-Video-Production-app-/terms.html) cover using Vdex.
+- **Nothing is sent anywhere by itself.** The [privacy policy](https://vdex.crowmade.app/privacy.html) says in plain words what stays on your device and what leaves it, and when. The [terms of service](https://thecrowbro.github.io/Logi-Video-Production-app-/terms.html) cover using Vdex.
 - **Save a backup now and then:** Settings → Backups & data → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.
 
 ## Need help?

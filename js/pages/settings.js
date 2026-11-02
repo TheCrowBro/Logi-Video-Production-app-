@@ -8,7 +8,7 @@ import { displayPanel, prefsSummary } from '../a11y.js';
 import { calendarPanel, calState } from '../calendar.js';
 import { openInstallHelp, installState } from '../install.js';
 import { startTour } from '../tour.js';
-import { VERSION, BUILD, BUILT, REPO } from '../version.js';
+import { VERSION, BUILD, BUILT } from '../version.js';
 import { updatePanel } from '../update.js';
 import * as notify from '../notify.js';
 import { templatesPanel, projectTemplatesPanel, projectTemplates } from '../workflow.js';
@@ -63,8 +63,7 @@ export const settings = {
           h('button', { class: 'btn ghost', onclick: () => startTour() }, '🧭 Take the tour'),
           h('a', { class: 'btn ghost', href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms of service'),
           h('a', { class: 'btn ghost', href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy'),
-          h('a', { class: 'btn ghost', href: 'vendor/LICENSES.md', target: '_blank', rel: 'noopener' }, 'Open-source licences'),
-          h('a', { class: 'btn ghost', href: REPO, target: '_blank', rel: 'noopener noreferrer' }, 'Source on GitHub')))));
+          h('a', { class: 'btn ghost', href: 'vendor/LICENSES.md', target: '_blank', rel: 'noopener' }, 'Open-source licences')))));
     return () => panels.forEach(p => p.destroy && p.destroy());
   },
 };

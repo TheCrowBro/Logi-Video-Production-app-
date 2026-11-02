@@ -9,8 +9,6 @@ import { openForm } from './form.js';
 import { billing, fmtMoney } from './money.js';
 import { knownCode } from './pay.js';
 import { RATES, RATES_AS_OF } from './price-rates.js';
-import { REPO } from './version.js';
-const SOURCES = REPO + '/blob/main/docs/price-list-sources.md';
 
 export const CATS = ['Filming and crew', 'Equipment hire', 'Planning', 'Editing and post-production', 'Music and stock footage', 'Travel', 'Delivery and extras', 'Packages', 'Other'];
 // [key, the line as the client reads it, unit, category]. The keys match js/price-rates.js.
@@ -159,7 +157,7 @@ export function openPriceList() {
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', 'data-id': 'add', onclick: () => edit(null) }, '+ Add a line')),
       h('div', { class: 'field' }, h('label', { for: 'pl-region' }, 'Typical rates from'), pick),
       h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', 'data-id': 'restart', onclick: restart }, own ? '↺ Start again from these rates' : 'Use these rates')),
-      h('p', { class: 'small muted' }, disclaimer(region), ' ', h('a', { href: SOURCES, target: '_blank', rel: 'noopener' }, 'Where the rates come from'))].filter(Boolean));
+      h('p', { class: 'small muted' }, disclaimer(region))].filter(Boolean));
     // Keyboard and screen-reader focus stays on the line just changed (or the next sensible button), not lost.
     if (focus) setTimeout(() => { const el = body.querySelector(`[data-id="${CSS.escape(focus)}"]`) || body.querySelector('[data-id="add"]'); if (el && el.isConnected) el.focus(); }, 0);
   };

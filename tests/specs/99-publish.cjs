@@ -48,13 +48,14 @@ try {
 
   // ---- the Cloudflare Worker and the workflow ----
   const wr = JSON.parse(read('cloudflare/wrangler.jsonc').replace(/^\s*\/\/.*$/gm, ''));
-  ok('the Worker serves static files by their own names, with no routes and no workers.dev address', wr.name === 'vdex' && wr.assets.directory === './site' && wr.assets.html_handling === 'none' && !('routes' in wr) && !('route' in wr) && wr.workers_dev === false && wr.preview_urls === false);
+  ok('the Worker serves static files by their own names at vdex.crowmade.app, with no workers.dev address', wr.name === 'vdex' && wr.assets.directory === './site' && wr.assets.html_handling === 'none' && JSON.stringify(wr.routes) === JSON.stringify([{ pattern: 'vdex.crowmade.app', custom_domain: true }]) && wr.workers_dev === false && wr.preview_urls === false);
   const lock = JSON.parse(read('cloudflare/package-lock.json'));
   ok('Wrangler is pinned to an exact version with its checksum', /^\d+\.\d+\.\d+$/.test(JSON.parse(read('cloudflare/package.json')).devDependencies.wrangler) && /^sha512-/.test(lock.packages['node_modules/wrangler'].integrity));
   const yml = fs.readFileSync(path.join(REPO, '.github/workflows/pages.yml'), 'utf8');
-  ok('GitHub Pages publishes the staged site, not the whole repository', /stage-site\.mjs site/.test(yml) && /path: site\n/.test(yml) && !/path: \.\n/.test(yml));
+  ok('only Cloudflare publishes now (GitHub Pages stopped when the repository went private), from the staged site', !/upload-pages-artifact|deploy-pages|configure-pages|pages: write/.test(yml) && /stage-site\.mjs cloudflare\/site --cloudflare/.test(yml));
+  ok('each change is tested once: on the working branch, not again on main', /\n  test:\n(?:.*\n){0,3}\s+if: github\.ref != 'refs\/heads\/main'/.test(yml));
   const cfJob = (yml.split('\n  cloudflare:\n')[1] || '').split(/\n  [a-z-]+:\n/)[0];
-  ok('the Cloudflare job is skipped until its secrets exist, and its action is pinned by commit', /\n  cloudflare-ready:\n/.test(yml) && /needs: \[test, cloudflare-ready\]/.test(cfJob) && /if: github\.ref == 'refs\/heads\/main' && needs\.cloudflare-ready\.outputs\.go == '1'/.test(cfJob) && /cloudflare\/wrangler-action@[0-9a-f]{40} /.test(cfJob));
+  ok('the Cloudflare job is skipped until its secrets exist, and its action is pinned by commit', /\n  cloudflare-ready:\n/.test(yml) && /needs: cloudflare-ready\n/.test(cfJob) && /if: github\.ref == 'refs\/heads\/main' && needs\.cloudflare-ready\.outputs\.go == '1'/.test(cfJob) && /cloudflare\/wrangler-action@[0-9a-f]{40} /.test(cfJob));
   ok('the live check only calls a missing address "not attached yet", and fails on a broken deploy', /6\|7\|35\|60\)/.test(cfJob) && /answered HTTP \$code after the deploy/.test(cfJob));
   const andr = fs.readFileSync(path.join(REPO, '.github/workflows/android.yml'), 'utf8');
   ok('the Android app is no longer published as a free public download, and the old one is removed in a job of its own', !/gh release create/.test(andr) && /\n  unpublish:\n/.test(andr) && /gh release delete android-latest/.test(andr) && /actions\/artifacts\/\$id/.test(andr) && /^permissions:\n  contents: read$/m.test(andr));

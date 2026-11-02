@@ -26,10 +26,8 @@ Copy these exactly, including the slash at the end where there is one.
 | Terms of service | `https://vdex.crowmade.app/terms.html` |
 | Redirect URI, first one (Dropbox and Microsoft) | `https://vdex.crowmade.app/` |
 | Redirect URI, second one (Dropbox and Microsoft: the desktop app) | `http://localhost:47831/` |
-| Redirect URI, third one (Dropbox and Microsoft: the old address, while people move) | `https://thecrowbro.github.io/Logi-Video-Production-app-/` |
 | JavaScript origin, first one (Google only) | `https://vdex.crowmade.app` |
 | JavaScript origin, second one (Google only) | `http://localhost:47831` |
-| JavaScript origin, third one (Google only: the old address, while people move) | `https://thecrowbro.github.io` |
 | Sign-in callback, website token (Apple only) | `https://vdex.crowmade.app/` |
 | Allowed origin, website token (Apple only) | `https://vdex.crowmade.app` |
 | Allowed origin, desktop token (Apple only) | `http://localhost:47831` |
@@ -44,7 +42,7 @@ Copy these exactly, including the slash at the end where there is one.
    - Audience: **External**. **Next**.
    - Contact information: your email. **Next**.
    - Tick the box to agree, **Continue**, **Create**.
-5. Still on **Branding**, fill in: application home page, privacy policy and terms of service (all from the table), and under **Authorized domains** click **Add domain** and type `crowmade.app` (and, while people are still moving from the old address, add `thecrowbro.github.io` as a second one). Leave the logo empty for now. Click **Save**.
+5. Still on **Branding**, fill in: application home page, privacy policy and terms of service (all from the table), and under **Authorized domains** click **Add domain** and type `crowmade.app`. Leave the logo empty for now. Click **Save**.
 6. Go to **Data access** → **Add or remove scopes**. In the box for adding scopes by hand, paste these three lines, then click **Add to table**, **Update** and **Save**:
 
    ```
@@ -54,7 +52,7 @@ Copy these exactly, including the slash at the end where there is one.
    ```
 
    Then look at where they landed. The two Drive ones should be under **non-sensitive scopes**. If the calendar one is under **sensitive scopes**, remove it again (click its bin icon and **Save**): Drive will work for everyone, and Google Calendar sync is left for later, because Google wants a review for sensitive permissions. In that case the Google Calendar button has to be switched off too: say so when you send the codes, or set `googleCalendar: false` in `js/cloud-config.js` (see [Putting the codes in](#5-putting-the-codes-in)).
-7. Go to **Clients** → **Create client**. Application type: **Web application**. Name: **Vdex**. Under **Authorized JavaScript origins**, click **Add URI** and paste `https://vdex.crowmade.app`, then **Add URI** again and paste `http://localhost:47831`, and while people are still moving, once more for `https://thecrowbro.github.io`. Leave **Authorized redirect URIs** empty. Click **Create**.
+7. Go to **Clients** → **Create client**. Application type: **Web application**. Name: **Vdex**. Under **Authorized JavaScript origins**, click **Add URI** and paste `https://vdex.crowmade.app`, then **Add URI** again and paste `http://localhost:47831`. Leave **Authorized redirect URIs** empty. Click **Create**.
 8. Copy the **Client ID**, which ends in `.apps.googleusercontent.com`. That is your Google code. (Google also shows a client secret; Vdex doesn't use it.)
 9. Go to **Audience** and click **Publish app**, then **Confirm**. Until you do this, only accounts you list as test users can sign in, and only for seven days at a time.
 
@@ -110,7 +108,7 @@ Only needed to switch on the **Dropbox** card under *More ways to keep a copy*.
 4. *Choose the type of access you need*: pick **App folder**. This can't be changed later, and it is what keeps Vdex out of everyone's other files.
 5. *Name your app*: type **Vdex**. If Dropbox says the name is taken, try **Vdex Production Manager**. (Dropbox doesn't allow names containing "Dropbox", starting with "drop", or using "DB".) Tick the box and click **Create app**.
 6. You are now on the **Settings** tab. Find **App key** and copy it somewhere safe. That is your Dropbox code. Leave **App secret** alone; Vdex doesn't use it.
-7. Still on Settings, under **OAuth 2** → **Redirect URIs**: paste the first redirect address from the table and click **Add**. Then paste the second one (`http://localhost:47831/`) and click **Add**, and while people are still moving from the old address, the third one too.
+7. Still on Settings, under **OAuth 2** → **Redirect URIs**: paste the first redirect address from the table and click **Add**. Then paste the second one (`http://localhost:47831/`) and click **Add**.
 8. Just below, check that **Allow public clients (Implicit Grant & PKCE)** says **Allow**. Leave it like that.
 9. Under **Development users**, click **Enable additional users**. Without this, only your own Dropbox can connect.
 10. Still on Settings, find **App folder name**, click **Change**, type **Vdex** and save. That way the folder people see in their Dropbox is always *Apps › Vdex*, whatever name the app got in step 5.
@@ -134,7 +132,7 @@ Microsoft no longer lets a personal account register an app on its own; it needs
    - Redirect URI, if the page offers one: pick **Single-page application (SPA)** in the list, and paste the first redirect address from the table. If it doesn't offer one, you add it in step 6.
    - Click **Register**.
 5. On the page that opens, copy the **Application (client) ID** (it looks like `0a1b2c3d-…`). That is your Microsoft code. Don't create anything under *Certificates & secrets*.
-6. Go to **Authentication** → **Add redirect URI** (or **Add a platform**) → **Single-page application**, paste `http://localhost:47831/` and save, and the first address too if it isn't there yet (and the third, old address while people are still moving). Check both addresses now sit under **Single-page application**, not under *Web*. Leave the *Access tokens* and *ID tokens* boxes unticked.
+6. Go to **Authentication** → **Add redirect URI** (or **Add a platform**) → **Single-page application**, paste `http://localhost:47831/` and save, and the first address too if it isn't there yet. Check both addresses now sit under **Single-page application**, not under *Web*. Leave the *Access tokens* and *ID tokens* boxes unticked.
 7. Go to **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated permissions**. Search for and tick **Files.ReadWrite.AppFolder** and **Calendars.ReadWrite**, then **Add permissions**. Leave **User.Read** in place.
 8. Optional: under **Owners**, add a second Microsoft account you trust, so the registration isn't lost with a single account.
 

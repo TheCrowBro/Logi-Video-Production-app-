@@ -13,7 +13,7 @@ const DEFAULT_PORT = 47831;                           // part of the address the
 // Sign-in pages open in the person's own web browser (Dropbox, Google, Microsoft and Apple ask apps not to show them in
 // an app window); the answer comes back to this local server and is handed to the Vdex window.
 const SIGNIN_HOSTS = new Set(['www.dropbox.com', 'login.microsoftonline.com']);
-const GUIDE = 'https://github.com/TheCrowBro/Logi-Video-Production-app-#readme';
+const GUIDE = 'https://vdex.crowmade.app/';
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8', '.webmanifest': 'application/manifest+json',
@@ -262,7 +262,7 @@ function setMenu() {
     { role: 'editMenu' },
     { label: 'View', submenu: [{ role: 'reload' }, { role: 'forceReload' }, { type: 'separator' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { type: 'separator' }, { role: 'togglefullscreen' }] },
     { role: 'windowMenu' },
-    { role: 'help', submenu: [{ label: 'Vdex guide', click: () => shell.openExternal(GUIDE) }] },
+    { role: 'help', submenu: [{ label: 'Vdex website', click: () => shell.openExternal(GUIDE) }] },
   ]));
 }
 

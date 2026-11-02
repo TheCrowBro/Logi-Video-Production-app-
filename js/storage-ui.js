@@ -6,7 +6,6 @@ import * as backup from './backup.js';
 import { REPO } from './version.js';
 
 export const SWITCH_ON = REPO + '/blob/main/docs/turn-on-sign-in.md';
-export const OWN_APPS = REPO + '/blob/main/docs/connections.md#using-your-own-developer-apps';
 // Load Google's sign-in library ahead of the tap, so its window opens straight from the tap (browsers block late ones).
 export function preloadSignIn() {
   if (providers.signIn.available('google')) providers.loadGIS().catch(() => {});
@@ -104,7 +103,7 @@ export function storagePanel() {
           field('Dropbox app key', providers.settings.ownDropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),
           field('Google OAuth client ID', providers.settings.ownGdriveId, providers.settings.setGdriveId, 'Google OAuth client ID'),
           field('Microsoft application (client) ID', providers.settings.ownMsId, providers.settings.setMsId, 'Microsoft application (client) ID'),
-          h('p', { class: 'small muted' }, `Register these sign-in addresses with your app: ${location.origin + location.pathname} (Dropbox and Microsoft redirect URI, as a single-page application at Microsoft) and ${location.origin} (Google JavaScript origin). `, h('a', { href: OWN_APPS, target: '_blank', rel: 'noopener' }, 'Step-by-step')),
+          h('p', { class: 'small muted' }, `Register these sign-in addresses with your app: ${location.origin + location.pathname} (Dropbox and Microsoft redirect URI, as a single-page application at Microsoft) and ${location.origin} (Google JavaScript origin). `),
           h('button', { class: 'btn ghost small', onclick: () => { draw(); toast('Saved'); } }, 'Use these keys')], 'twirl-inner')], 'twirl-more'));
   }
   draw();
