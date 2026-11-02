@@ -18,7 +18,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const walk = async (btn = '#helpBtn') => {
     if (btn) await page.locator(btn).last().click();
     await page.waitForSelector('.tour-card');
-    let spots = 0, cards = 0, titles = [];
+    let spots = 0, cards = 0, titles = [], counter = '', label = '';
     for (let i = 0; i < 40; i++) {
       const h2 = page.locator('.tour-card h2');
       if (!(await h2.count())) { await sleep(600); if (!(await h2.count())) break; } // the tour closed by itself: nothing to point at
@@ -26,17 +26,17 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
       titles.push(await h2.innerText());
       if (!(await page.locator('.tour-spot').evaluate(el => el.classList.contains('center')))) spots++;
       const btn = page.locator('.tour-card .btn.primary');
-      const label = await btn.innerText();
-      const was = await page.locator('.tour-step').innerText();
+      label = await btn.innerText();
+      const was = counter = await page.locator('.tour-step').innerText();
       await btn.click();
       if (label === 'Done') break;
       await page.waitForFunction(prev => !document.querySelector('.tour-card') || (document.querySelector('.tour-step') || {}).textContent !== prev, was, { timeout: 8000 }).catch(() => {});
       await sleep(120);
     }
     const closed = (await page.locator('.tour').count()) === 0;
-    return { cards, spots, closed, titles };
+    return { cards, spots, closed, titles, counter, label };
   };
-  const expect = async (name, min, btn) => { const r = await walk(btn); ok(`${name}: ${r.cards} steps, ${r.spots} highlighted, closes on Done`, r.cards >= min && r.spots >= min && r.closed, r.titles.join(' · ')); };
+  const expect = async (name, min, btn) => { const r = await walk(btn); ok(`${name}: ${r.cards} steps, ${r.spots} highlighted, ends on Done at ${r.cards} / ${r.cards}`, r.cards >= min && r.spots >= min && r.closed && r.label === 'Done' && r.counter === `${r.cards} / ${r.cards}`, `${r.counter} · ${r.label} · ` + r.titles.join(' · ')); };
   await page.evaluate(() => window.logiGo('bookings')); await sleep(400); await expect('Bookings calendar', 4);
   await page.evaluate(() => document.querySelector('.bk-month .cal .day.has')?.click()); await sleep(400); await expect('A day', 2);
   // open the Harbour booking whatever today's date is: back to the month, then its card in Next up (or its day)

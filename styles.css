@@ -101,7 +101,8 @@ a { color: var(--accent); }
 .card.hero { border-left: 4px solid var(--accent); display: grid; gap: 4px; }
 .card.center { text-align: center; }
 .card-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.card-row > div:first-child { min-width: 0; overflow-wrap: anywhere; } .card.stack { grid-template-columns: minmax(0, 1fr); } /* text shrinks, buttons stay on screen */
+.card-row > div:first-child { min-width: 0; overflow-wrap: break-word; } .card.stack { grid-template-columns: minmax(0, 1fr); } /* text wraps by word, buttons stay on screen */
+.stack .card-row > .btn, .stack .card-row > button.btn { width: auto; flex: none; } /* a button beside text keeps its own size, never squeezing the text */
 .list { display: grid; gap: 0; } .list > .card { margin-bottom: 10px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; } .actions.center { justify-content: center; }
 .empty { text-align: center; color: var(--muted); padding: 28px 12px; border: 1px dashed var(--line); border-radius: var(--radius); display: grid; gap: 12px; justify-items: center; }

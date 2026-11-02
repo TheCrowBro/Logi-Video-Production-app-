@@ -79,6 +79,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.setViewportSize({ width: 360, height: 800 }); await sleep(300);
   const fits = await page.evaluate(() => { const st = document.querySelector('#bk-budget .stats').getBoundingClientRect(), card = document.querySelector('#bk-budget .card').getBoundingClientRect(); return { inCard: st.right <= card.right + 0.5, page: document.documentElement.scrollWidth <= innerWidth }; });
   ok('the budget, and the whole booking page, fit a 360-pixel phone with no sideways scrolling', fits.inCard && fits.page, JSON.stringify(fits));
+  const squeezed = await page.evaluate(() => [...document.querySelectorAll('.bk-detail .card-row > :first-child')].filter(e => { const r = e.getBoundingClientRect(); return e.getClientRects().length > 0 && e.textContent.trim().length > 4 && (r.width < 45 || r.height > 160); }) /* squeezed: no width left, or one letter a line */.map(e => e.textContent.trim().slice(0, 20)));
+  ok('…and no text is squeezed into a narrow column beside its button (the Money rows read "Quote", not one letter a line)', squeezed.length === 0, squeezed.join(' | '));
   await page.setViewportSize({ width: 420, height: 900 }); await sleep(200);
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.locator('#bk-budget button:has-text("Export CSV")').click()]);
   const csv = require('fs').readFileSync(await dl.path(), 'utf8');
