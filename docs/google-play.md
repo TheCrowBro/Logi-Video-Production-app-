@@ -41,7 +41,10 @@ If the passphrase is ever lost, say so: a new key can be made, and Google has a 
 ## Step 3. Create the app in the Play Console
 
 1. In the Play Console press **Create app**.
-2. App name: `Vdex`. Default language: English. App or game: **App**. Free or paid: **Free**.
+2. App name: `Vdex`. Default language: English. App or game: **App**. Free or paid: **Paid**.
+
+   > **Choose Paid, never Free.** Vdex is sold on Google Play, and Google never lets an app that has been offered for free become a paid one. Pick **Paid** here, before anything is uploaded to any testing track. Before a paid app can go out you also need a payments profile with your bank and tax details (Play Console → **Settings** → **Payments profile**).
+
 3. Tick the declarations (developer programme policies and US export laws) and press **Create app**.
 
 ## Step 4. The store listing
