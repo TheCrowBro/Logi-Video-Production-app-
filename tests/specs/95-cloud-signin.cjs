@@ -2,6 +2,7 @@
 // trip, Google's and Microsoft's sign-in windows (stood in for), undo on a cancelled sign-in, a developer's own key,
 // Nextcloud's shortcut and folder creation, the calendar panel, and the "not switched on yet" state.
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -20,6 +21,7 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
     if (ids) await ctx.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: `export const CLOUD_APPS = ${JSON.stringify(ids)};` }));
     await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); window.__toasts = []; addEventListener('DOMContentLoaded', () => new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true })); }); // every message, even one that has faded
+    await ctx.addInitScript(acceptTerms());
     if (stubs) await ctx.addInitScript(() => {
       // Google Identity Services, standing in for the sign-in window
       window.google = { accounts: { oauth2: { initTokenClient: cfg => { window.__gcfg = cfg; return { requestAccessToken: o => { window.__greq = o; setTimeout(() => window.__gfail ? cfg.callback({ error: 'access_denied' }) : cfg.callback({ access_token: 'gtok' + Math.random(), expires_in: 3600, scope: window.__gdeny ? 'https://www.googleapis.com/auth/drive.appdata' : cfg.scope }), 10); } }; } } } };

@@ -4,12 +4,14 @@
 import { _electron as electron } from 'playwright';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const app = await electron.launch({ args: ['desktop/main.js', '--no-sandbox'], cwd: repo, env: { ...process.env, NODE_OPTIONS: '', VDEX_TEST_NO_BROWSER: '1' }, timeout: 60000 });
 const win = await app.firstWindow({ timeout: 60000 });
 const bad = []; win.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) bad.push(m.text()); }); win.on('pageerror', e => bad.push('pageerror: ' + e.message));
 await win.waitForLoadState('domcontentloaded');
-await win.evaluate(() => localStorage.setItem('logi-tour', 'done'));
+const { TERMS_RECORD } = createRequire(import.meta.url)('./helpers.cjs');
+await win.evaluate(t => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); }, TERMS_RECORD);
 await win.reload();
 if (await win.locator('.lock').count()) await win.keyboard.type('2468');
 await win.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });

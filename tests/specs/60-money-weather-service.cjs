@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const fs = require('fs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -7,6 +8,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 }, acceptDownloads: true });
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-loc', JSON.stringify({ lat: 51.5, lon: -0.12 })); });
+  await ctx.addInitScript(acceptTerms());
   // Forecast API mocked: a fixed sunny-then-showery day
   await ctx.route('https://api.open-meteo.com/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ daily_units: { temperature_2m_max: '°C' }, daily: { time: ['2026-11-01'], weather_code: [80], temperature_2m_max: [14.2], temperature_2m_min: [8.6], precipitation_probability_max: [60], wind_speed_10m_max: [24.1], wind_gusts_10m_max: [45.3] } }) }));
   const page = await ctx.newPage();

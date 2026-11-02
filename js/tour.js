@@ -2,8 +2,7 @@
 import { h } from './util.js';
 
 const STEPS = [
-  { title: 'Welcome to Vdex', text: 'Your whole production in one deck: bookings, crew, kit, venues, insurance, field tools and timecode notes. This tour takes about a minute. Tap Skip any time.',
-    note: () => ['By using Vdex you accept its ', h('a', { href: 'terms.html', target: '_blank', rel: 'noopener' }, 'terms of service'), ' and ', h('a', { href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'privacy policy'), '. Vdex is free and comes as it is: keep your own backups.'] },
+  { title: 'Welcome to Vdex', text: 'Your whole production in one deck: bookings, crew, kit, venues, insurance, field tools and timecode notes. This tour takes about a minute. Tap Skip any time.' },
   { go: 'bookings', target: ['.binder'], title: 'The Rolodex', text: 'Spin it to move between sections: drag it, tap ▲ ▼, use the arrow keys, or scroll on it.' },
   { go: 'bookings', target: ['.bk-month .page-head', '.page-head'], title: 'Bookings', text: 'Tap a date to see the day, then a booking for its address, contacts, crew and kit. Multi-day shoots span their days.' },
   { go: 'gear', target: ['.seg[role=tablist]', '.page-head'], title: 'Equipment & kits', text: 'Log everything you own, with quantities. Save kits for the shoots you do most and tick one on a booking to load its gear.' },
@@ -55,7 +54,7 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
     if (target) { target.scrollIntoView({ block: 'center', inline: 'nearest' }); await new Promise(r => setTimeout(r, 250)); }
     card.replaceChildren(
       h('div', { class: 'tour-step muted small' }, `${n + 1} / ${STEPS.length}`),
-      h('h2', { id: 'tour-title' }, s.title), h('p', null, s.text), s.note && h('p', { class: 'tour-note small muted' }, s.note()),
+      h('h2', { id: 'tour-title' }, s.title), h('p', null, s.text),
       h('div', { class: 'tour-actions' },
         h('button', { class: 'btn ghost small', onclick: stop }, 'Skip'), footer && footer(n, stop), h('span', { class: 'spacer' }),
         n > 0 && h('button', { class: 'btn ghost', onclick: () => { dir = -1; show(n - 1); } }, 'Back'),

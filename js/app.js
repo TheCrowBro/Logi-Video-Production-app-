@@ -10,10 +10,12 @@ import { initClockBar } from './clock.js';
 import * as lock from './lock.js';
 import * as backup from './backup.js';
 import { initUpdates } from './update.js';
+import { termsGate } from './terms.js';
 
 applyPrefs();
 await lock.gate(); // with a PIN set, nothing below runs until the lock screen is passed
 lock.init();
+await termsGate(); // nor until the terms of service and privacy policy are accepted on this device
 const lockBtn = document.getElementById('lockBtn');
 const paintLock = () => { if (lockBtn) lockBtn.hidden = !lock.enabled(); };
 paintLock(); lock.onChange(paintLock);

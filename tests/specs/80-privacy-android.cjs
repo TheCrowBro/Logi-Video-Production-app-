@@ -1,5 +1,6 @@
 // The privacy policy page, its link from Settings → About, and the Android package's agreement with the site.
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const fs = require('fs');
 const ROOT = process.env.VDEX_ROOT;
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
@@ -9,6 +10,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const ctx = await browser.newContext({ viewport: { width: 420, height: 860 } });
   await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+  await ctx.addInitScript(acceptTerms());
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
 
@@ -49,12 +51,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await tpop.waitForLoadState();
   ok('the link opens the terms page', /terms\.html$/.test(tpop.url()), tpop.url());
   await tpop.close();
-  // The first-run welcome says that using Vdex means accepting the terms, next to the button that starts
-  await page.evaluate(() => import('./js/tour.js').then(t => t.startTour()));
-  await page.waitForSelector('.tour-card');
-  const note = page.locator('.tour-card .tour-note');
-  ok('the welcome card names the terms of service and privacy policy, with links', /accept its terms of service and privacy policy/.test(await note.innerText()) && (await note.locator('a[href="terms.html"]').count()) === 1 && (await note.locator('a[href="privacy.html"]').count()) === 1);
-  await page.locator('.tour-card button:has-text("Skip")').click();
+  ok('About says when the terms were accepted on this device', /You accepted the terms of service and privacy policy on this device on /.test(await page.locator('details.settings-section:has(> summary:has-text("About"))').innerText()));
   await page.waitForFunction(() => navigator.serviceWorker.controller != null, null, { timeout: 20000 });
   const cachedPolicy = await page.evaluate(async () => { const c = await caches.open('logi-dev'); return !!(await c.match(new URL('privacy.html', location.href).href)) && !!(await c.match(new URL('terms.html', location.href).href)); });
   ok('the policy and the terms are part of the offline set', cachedPolicy);

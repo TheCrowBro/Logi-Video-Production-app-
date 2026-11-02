@@ -1,5 +1,6 @@
 // Settings: everything that isn't a record — storage, calendar links, display, field-tool defaults, backups, about.
 import { h, toast, nodes } from '../util.js';
+import { acceptance } from '../terms.js';
 import { db, update } from '../store.js';
 import * as store from '../store.js';
 import { storagePanel, backupPanel } from '../storage-ui.js';
@@ -55,7 +56,8 @@ export const settings = {
         h('button', { class: 'btn primary', onclick: () => { const b = document.getElementById('installBtn'); if (b && !b.hidden) b.click(); else openInstallHelp(); } }, '⤓ Install Vdex'))),
       section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
       section('About', 'v' + VERSION + (BUILD !== 'dev' ? ' · ' + BUILD : ''), h('div', { class: 'stack' },
-        h('p', { class: 'small muted' }, `Vdex ${VERSION}${BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ' (' + BUILT + ')' : ''}` : ''}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link. Using Vdex means you accept its terms of service and privacy policy.`),
+        h('p', { class: 'small muted' }, `Vdex ${VERSION}${BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ' (' + BUILT + ')' : ''}` : ''}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link.`),
+        acceptance() && h('p', { class: 'small muted' }, `You accepted the terms of service and privacy policy on this device on ${new Date(acceptance().at || Date.now()).toLocaleDateString()}.`),
         panels[3].el,
         h('div', { class: 'actions' },
           h('button', { class: 'btn ghost', onclick: () => startTour() }, '🧭 Take the tour'),

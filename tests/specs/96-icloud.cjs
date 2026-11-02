@@ -2,6 +2,7 @@
 // that changes with every request, a big database split across records and read back whole, dated backups, a run-out
 // sign-in, a full iCloud, a link carrying someone else's session, the calendar feed note, and Disconnect.
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -59,6 +60,7 @@ const utf8 = s => Buffer.byteLength(s, 'utf8');
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
     await ctx.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: `export const CLOUD_APPS = ${JSON.stringify(IDS)};` }));
     await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); window.__toasts = []; addEventListener('DOMContentLoaded', () => new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true })); });
+    await ctx.addInitScript(acceptTerms());
     const ck = await fakeApple(ctx);
     const page = await ctx.newPage();
     page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if ((m.type() === 'error' && !/^Failed to load resource: the server responded with a status of (421|413|404|403)/.test(m.text())) || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); }); // 421: asking who is signed in, before signing in; 413: the full-iCloud check; 404: no Vdex zone yet; 403: the Advanced Data Protection check

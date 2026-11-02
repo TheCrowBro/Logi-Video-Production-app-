@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 (async () => {
@@ -6,6 +7,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const ctx = await browser.newContext({ viewport: { width: 420, height: 860 } });
   await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' })); // no live weather calls in tests
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+  await ctx.addInitScript(acceptTerms());
   const page = await ctx.newPage();
   const ORIGIN = new URL(process.env.VDEX_URL || 'http://localhost:8123/').origin + '/';
   const reqs = []; page.on('response', async r => { try { const u = r.url(); if (u.startsWith(ORIGIN)) reqs.push({ url: u.slice(ORIGIN.length), bytes: Number(r.headers()['content-length'] || 0), type: r.request().resourceType() }); } catch { /* ignore */ } });
@@ -57,7 +59,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const preloads = [...fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').matchAll(/rel="modulepreload" href="([^"]+)"/g)].map(m => m[1]);
   const wanted = graph.filter(f => f !== 'js/app.js').sort(), have = [...preloads].sort();
   ok('index.html preloads exactly the start-up modules', JSON.stringify(wanted) === JSON.stringify(have), `missing: ${wanted.filter(f => !have.includes(f)).join(', ') || 'none'}; extra: ${have.filter(f => !wanted.includes(f)).join(', ') || 'none'}`);
-  ok(`the start-up graph stays small (${graph.length} modules)`, graph.length <= 32); // 31 with the money documents; raise this only for a reason
+  ok(`the start-up graph stays small (${graph.length} modules)`, graph.length <= 33); // 31 with the money documents, 33 with the terms gate; raise this only for a reason
   const lazy = ['js/pages/tcnotes.js', 'js/pages/field.js', 'js/pages/settings.js', 'js/pages/crew.js', 'js/tutorials.js'];
   ok('other sections and the tutorials are not loaded at startup', !reqs.some(r => lazy.includes(r.url) && r.type === 'script'), reqs.filter(r => lazy.includes(r.url)).map(r => r.url + ':' + r.type).join(', '));
   await page.evaluate(() => window.logiGo('tcnotes'));
