@@ -15,7 +15,7 @@ const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
 // A calendar file for the shoot, made here from what the link carries. Every value is cleaned first (a link can be
 // made by anyone), each line is folded at 75 bytes, and the event keeps one id per shoot so a newer link updates it.
-const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const fold = line => { const out = []; let cur = '', bytes = 0; for (const ch of line) { const n = new TextEncoder().encode(ch).length; if (bytes + n > 74) { out.push(cur); cur = ' '; bytes = 1; } cur += ch; bytes += n; } out.push(cur); return out.join('\r\n'); };
 const TIME = /^(\d{1,2}):(\d{2})$/;
 const at = (d, t) => { const [y, m, dd] = d.split('-').map(Number), x = TIME.exec(t || ''); return x ? new Date(y, m - 1, dd, Number(x[1]), Number(x[2])) : null; };
@@ -28,7 +28,7 @@ function ics(snap) {
   if (start && !end) end = new Date(start.getTime() + 36e5);              // no wrap time: an hour, rather than no length
   const made = snap.made || Date.now();
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vdex//Crew//EN', 'BEGIN:VEVENT',
-    `UID:crew-${slug(snap.ref || snap.title)}-${snap.date}@vdex`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}`,
+    snap.ref ? `UID:crew-${slug(snap.ref)}@vdex` : `UID:crew-${slug(snap.title)}-${snap.date}@vdex`, // a moved shoot replaces its event `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}`,
     `SEQUENCE:${Math.floor(made / 1000) % 2147483647}`, `LAST-MODIFIED:${new Date(made).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}`,
     start ? `DTSTART:${stamp(start)}` : `DTSTART;VALUE=DATE:${dayStamp(snap.date)}`,
     start ? `DTEND:${stamp(end)}` : `DTEND;VALUE=DATE:${dayStamp(last, 1)}`,
@@ -60,7 +60,7 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
 
 (async () => {
   let snap;
-  try { snap = await unpack(location.hash); } catch (e) { return fail(/document/.test(e.message || '') ? e.message : 'It is incomplete or damaged: part of it may have been cut off when it was copied.'); }
+  try { snap = await unpack(location.hash); } catch (e) { return fail(/does not contain/.test(e.message || '') ? 'It has no shoot info in it: part of the link may be missing.' : 'It is incomplete or damaged: part of it may have been cut off when it was copied.'); }
   if (!snap || typeof snap !== 'object') return fail('It is incomplete or damaged.');
   snap = clean(snap);
   if (snap.kind !== 'crew' || !isDate(snap.date)) return fail('It is incomplete or damaged.');
@@ -76,8 +76,8 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
   const schedule = (snap.schedule || []).length ? days.map(d => [dayHeads && isDate(d) && h('div', { class: 'day' }, fmtLong(d)),
     h('table', null, h('tbody', null, snap.schedule.filter(r => (r.date || snap.date) === d).map(r => h('tr', null, h('td', { style: 'width:5.5em;white-space:nowrap' }, r.time || ''), h('td', null, r.item || '')))))]) : null;
   const people = (list, withCall) => list.length ? h('table', null,
-    h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Role'), withCall && h('th', null, 'Call'), h('th', null, 'Contact'))),
-    h('tbody', null, list.map(p => h('tr', null, h('td', null, p.name || '—'), h('td', null, p.role || ''), withCall && h('td', null, p.call || ''),
+    h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Role'), withCall && h('th', { class: 'nw' }, 'Call'), h('th', null, 'Contact'))),
+    h('tbody', null, list.map(p => h('tr', null, h('td', null, p.name || '—'), h('td', null, p.role || ''), withCall && h('td', { class: 'nw' }, p.call || ''),
       h('td', null, [p.phone && link(telUrl(p.phone), p.phone), p.phone && p.email && h('br'), p.email && link('mailto:' + p.email, p.email)]))))) : null;
   const kitGroups = {}; (snap.kit || []).forEach(k => { (kitGroups[k.cat || 'Other'] = kitGroups[k.cat || 'Other'] || []).push(k); });
 
@@ -92,7 +92,7 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
     ...section('Client and on set', people(snap.contacts || [], false), snap.onSet && h('p', { class: 'pre' }, snap.onSet)),
     ...section('Shot list', (snap.shots || []).length ? h('ul', { class: 'plain' }, snap.shots.map(s => h('li', { class: s.done ? 'done' : '' }, (s.done ? '✓ ' : '○ ') + s.text))) : null),
     ...section('Equipment', Object.keys(kitGroups).length ? Object.entries(kitGroups).map(([cat, items]) => [h('div', { class: 'day' }, cat), h('ul', { class: 'plain' }, items.map(k => h('li', null, k.name + (k.qty > 1 ? ` × ${k.qty}` : ''))))]) : null),
-    ...section('Deliverables', (snap.deliverables || []).length ? h('table', null, h('tbody', null, snap.deliverables.map(x => h('tr', null, h('td', null, x.name), h('td', null, x.duration || ''), h('td', null, isDate(x.due) ? 'due ' + fmtShort(x.due) : ''), h('td', null, x.status || ''))))) : null),
+    ...section('Deliverables', (snap.deliverables || []).length ? h('table', null, h('tbody', null, snap.deliverables.map(x => h('tr', null, h('td', null, x.name), h('td', { class: 'nw' }, x.duration || ''), h('td', { class: 'nw' }, isDate(x.due) ? 'due ' + fmtShort(x.due) : ''), h('td', null, x.status || ''))))) : null),
     ...section('Instructions', snap.notes && h('p', { class: 'pre' }, snap.notes)),
     h('p', { class: 'note' }, `Sent ${snap.made ? new Date(snap.made).toLocaleString() : ''}. This is a copy from that moment: if plans change, the producer sends a new link.`)));
 })();

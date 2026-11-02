@@ -37,7 +37,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
       const x = d.bookings.find(y => y.id === b.id), cr = d.crew.find(y => y.id === c.id), gr = d.gear.find(y => y.id === g.id);
       cr.rate = '$450/day'; cr.email = 'sam@example.com'; cr.phone = '+1 555 0101';
       gr.value = 9876;
-      Object.assign(x, { type: 'vertical', date: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10), crew: [c.id], gear: [g.id], venueId: v ? v.id : undefined, notes: 'SECRET BOOKING NOTE', status: 'Confirmed',
+      Object.assign(x, { address: '1 Quay Street, Portside', type: 'vertical', date: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10), crew: [c.id], gear: [g.id], venueId: v ? v.id : undefined, notes: 'SECRET BOOKING NOTE', status: 'Confirmed',
         stakeholders: [{ name: 'Client Person', role: 'Client', phone: '+1 555 0999', email: 'client@example.com' }],
         hires: [{ id: 'h1', item: 'Prism lens', from: 'Camera Co', cost: 150 }], licences: [{ id: 'l1', kind: 'Music', title: 'Track One', cost: 60 }],
         shots: [{ id: 's1', text: 'Wide of the harbour at dawn', done: false }, { id: 's2', text: 'Close-up of the hands', done: true }],
@@ -76,6 +76,10 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('…and the expected cost once actual costs are in', text.includes(`Expected total cost, with the actual costs so far: ${await money(830)} (${await money(10)} over the estimate)`), text.match(/Expected[^\n]*/)?.[0]);
   ok('…lines are grouped by category', (await page.locator('#bk-budget details.budget-cat').count()) === 4 && /Travel & transport/.test(text));
   ok('…and compared with the quote before tax: what is left for you after costs', text.includes(`Quoted to the client: ${await money(2500)} before tax`) && text.includes(`Left for you after costs: ${await money(2500 - 830)}`), text.match(/Quoted[^\n]*/)?.[0]);
+  await page.setViewportSize({ width: 360, height: 800 }); await sleep(300);
+  const fits = await page.evaluate(() => { const st = document.querySelector('#bk-budget .stats').getBoundingClientRect(), card = document.querySelector('#bk-budget .card').getBoundingClientRect(); return { inCard: st.right <= card.right + 0.5, page: document.documentElement.scrollWidth <= innerWidth }; });
+  ok('the budget, and the whole booking page, fit a 360-pixel phone with no sideways scrolling', fits.inCard && fits.page, JSON.stringify(fits));
+  await page.setViewportSize({ width: 420, height: 900 }); await sleep(200);
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.locator('#bk-budget button:has-text("Export CSV")').click()]);
   const csv = require('fs').readFileSync(await dl.path(), 'utf8');
   ok('the budget exports as a spreadsheet file Excel reads correctly', csv.charCodeAt(0) === 0xfeff && /^\ufeff"Category","What it is"/.test(csv) && /"Travel & transport","Van","2","day","80","160.00","170.00"/.test(csv) && /"Total"/.test(csv), csv.split('\r\n')[1]);
@@ -111,7 +115,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const url = await page.locator('.sheet textarea.share-link').inputValue();
   ok('Share with crew makes a link to the crew page with everything inside it', url.startsWith(BASE + 'crew.html#'), url.slice(0, 80));
   const snap = await page.evaluate(u => import('./js/link-pack.js').then(m => m.unpack(new URL(u).hash)), url);
-  const raw = JSON.stringify(snap);
+  const raw = JSON.stringify({ ...snap, made: 0, ref: '' }); // the timestamp and the random id could contain any digits
   const keys = new Set(); (function walk(o) { if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) { if (!Array.isArray(o)) keys.add(k); walk(v); } })(snap);
   const FORBIDDEN = ['rate', 'price', 'cost', 'value', 'actual', 'budget', 'quote', 'invoice', 'payments', 'pay', 'link', 'notesOnBooking'];
   ok('the link carries no money: no rates, prices, costs, values, budgets, quotes or invoices', !FORBIDDEN.some(k => keys.has(k)) && !/450|9876|2500|Q-0099|Van|SECRET BOOKING NOTE|private\.example/.test(raw), [...keys].join(','));
@@ -148,10 +152,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const crew = await ctx.newPage(); watch(crew);
   await crew.goto(url); await crew.waitForSelector('.paper h1');
   const page2 = await crew.locator('.paper').innerText();
-  ok('the crew page opens from the link with no sign-in and no terms gate', (await crew.locator('.terms-gate').count()) === 0 && page2.includes(seed.title));
+  { const freshCtx = await browser.newContext({ serviceWorkers: 'block' }), fresh = await freshCtx.newPage(); await fresh.goto(url); await fresh.waitForSelector('.paper h1');
+    ok('the crew page opens from the link with no sign-in and no terms gate, even in a browser that never used Vdex', (await fresh.locator('.terms-gate').count()) === 0 && (await fresh.locator('.paper h1').innerText()) === seed.title);
+    await freshCtx.close(); }
   ok('…showing the call, schedule, crew, shot list and kit', /General call\s*07:30/.test(page2) && /First set-up on the quay/.test(page2) && page2.includes(seed.crewName) && /Wide of the harbour at dawn/.test(page2) && /✓ Close-up of the hands/.test(page2) && /Bring a head torch/.test(page2));
   ok('…with no money anywhere on it', !/\$|£|€|450|9876|2500|budget|invoice|quote/i.test(page2));
-  ok('…and phone numbers and the address as links', (await crew.locator('.paper a[href^="tel:"]').count()) >= 1);
+  ok('…and phone numbers and the address as links', (await crew.locator('.paper a[href^="tel:"]').count()) >= 1 && (await crew.locator('.paper a[href^="https://www.google.com/maps/"]').count()) === 1);
   const [ics] = await Promise.all([crew.waitForEvent('download', { timeout: 8000 }), crew.locator('button:has-text("Add to calendar")').click()]);
   const icsText = require('fs').readFileSync(await ics.path(), 'utf8');
   ok('crew can add the shoot to their calendar', /BEGIN:VEVENT/.test(icsText) && icsText.includes('SUMMARY:' + seed.title.replace(/,/g, '\\,')) && /DTSTART:\d{8}T073000/.test(icsText), icsText.split('\r\n').filter(l => /^DT|^SUMMARY/.test(l)).join(' | '));
@@ -165,6 +171,21 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const later = await icsOf({ kind: 'crew', ref: 'r2', title: 'Night shoot', date: '2026-11-10', made: 2000, call: { general: '19:00', wrap: '02:00' }, location: {} });
   ok('a newer link for the same shoot updates the same calendar event', night.match(/^UID:.*$/m)[0] === later.match(/^UID:.*$/m)[0] && /^SEQUENCE:2$/m.test(later));
   ok('calendar lines are folded at 75 bytes', icsText.split('\r\n').every(l => new TextEncoder().encode(l).length <= 75));
+  const multi = await page.evaluate(id => import('./js/store.js').then(async s => {
+    const m = await import('./js/crew-link.js'), was = s.byId('bookings', id), keep = { endDate: was.endDate, start: was.start, end: was.end }, last = new Date(Date.now() + 4 * 864e5).toISOString().slice(0, 10);
+    s.update(d => { Object.assign(d.bookings.find(y => y.id === id), { endDate: last, start: '08:00', end: '19:00', updatedAt: Date.now() }); });
+    const snp = m.crewSnapshot(s.byId('bookings', id));
+    s.update(d => { const x = d.bookings.find(y => y.id === id); Object.assign(x, keep, { updatedAt: Date.now() }); if (!keep.endDate) delete x.endDate; });
+    return { snp, last, packed: await (await import('./js/link-pack.js')).pack(snp) }; }), seed.id);
+  ok('a multi-day shoot keeps its last day and its times in the link', multi.snp.endDate === multi.last && multi.snp.start === '08:00' && multi.snp.end === '19:00', JSON.stringify({ endDate: multi.snp.endDate, start: multi.snp.start, end: multi.snp.end }));
+  await crew.goto(BASE + 'crew.html#' + multi.packed); await crew.waitForSelector('.paper h1');
+  ok('…and the crew page shows both days', /→/.test(await crew.locator('.paper .sub').first().innerText()));
+  const anon = await page.evaluate(id => import('./js/store.js').then(async s => { const keep = { ...s.db.profile }; s.update(d => { d.profile = { ...d.profile, name: '', business: '', phone: '', email: '', updatedAt: Date.now() }; }); const snp = (await import('./js/crew-link.js')).crewSnapshot(s.byId('bookings', id)); s.update(d => { d.profile = { ...keep, updatedAt: Date.now() }; }); return snp.producer; }), seed.id);
+  ok('with no name in the profile, the crew page never claims the info is from Vdex', anon === '', JSON.stringify(anon));
+  const semi = await icsOf({ kind: 'crew', ref: 'r3', title: 'Day 2; pick-ups', date: '2026-11-12', made: 1, call: { general: '09:00' }, location: { address: '12 Dock Rd; Gate B' } });
+  ok('semicolons are escaped in the calendar file', /^SUMMARY:Day 2\\; pick-ups$/m.test(semi) && /^LOCATION:12 Dock Rd\\; Gate B$/m.test(semi));
+  await crew.goto(BASE + 'crew.html'); await sleep(600);
+  ok('a link with nothing after it says so in plain words', /no shoot info in it/.test(await crew.locator('body').innerText()));
   await crew.goto(BASE + 'crew.html#1.garbage'); await sleep(600);
   ok('a damaged link says so plainly', /does not open shoot info/.test(await crew.locator('body').innerText()));
   await crew.close();

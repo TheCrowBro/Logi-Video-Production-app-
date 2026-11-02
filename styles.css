@@ -101,6 +101,7 @@ a { color: var(--accent); }
 .card.hero { border-left: 4px solid var(--accent); display: grid; gap: 4px; }
 .card.center { text-align: center; }
 .card-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-row > div:first-child { min-width: 0; overflow-wrap: anywhere; } .card.stack { grid-template-columns: minmax(0, 1fr); } /* text shrinks, buttons stay on screen */
 .list { display: grid; gap: 0; } .list > .card { margin-bottom: 10px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; } .actions.center { justify-content: center; }
 .empty { text-align: center; color: var(--muted); padding: 28px 12px; border: 1px dashed var(--line); border-radius: var(--radius); display: grid; gap: 12px; justify-items: center; }
@@ -190,7 +191,8 @@ input[type=range] { min-height: var(--hit); padding: 0; accent-color: var(--acce
 /* accessibility */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .skip { position: absolute; left: 8px; top: -60px; z-index: 300; background: var(--accent); color: var(--accent-ink); padding: 10px 14px; border-radius: 10px; font-weight: 700; } .skip:focus { top: 8px; }
-.top-actions { display: flex; gap: 8px; }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; } /* narrow phones: wraps rather than pushing the page sideways */
+@media (max-width: 400px) { #installBtn > span:not(.cloud-ico) { display: none; } }
 button, .btn, a.btn, .chip, .check, .day, .tab, summary { touch-action: manipulation; }
 .btn, .chip, .icon-btn, .day, .card.tap, .seg button, .tab, .tc-badge, .sc-badge { transition: transform .12s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease, filter .15s ease; }
 .btn:active, .chip:active, .icon-btn:active, .day:active, .card.tap:active, .seg button:active, .tc-badge:active, .sc-badge:active { transform: scale(.96); }
@@ -613,6 +615,9 @@ html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .s
 
 /* Budget on a booking */
 .budget-amts { display: grid; justify-items: end; gap: 2px; text-align: right; white-space: nowrap; }
+#bk-budget .card.stack { grid-template-columns: minmax(0, 1fr); }
+#bk-budget .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#bk-budget .stat b { font-size: clamp(.9rem, 3.8vw, 1.15rem); overflow-wrap: anywhere; }
 .budget-cat > summary { grid-template-columns: minmax(0, 1fr) auto; } /* name and chevron: the chevron turns in place */
 .budget-cat .twirl-body { gap: 8px; }
 .crew-parts { display: grid; gap: 2px; }

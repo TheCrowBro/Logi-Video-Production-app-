@@ -10,7 +10,7 @@ import { SITE } from './version.js';
 
 // What the producer can leave out. Client contacts are off unless chosen: they are the client's details, not the crew's.
 export const PARTS = [
-  ['client', 'Client name', true], ['crew', 'Crew, their call times and phone numbers', true], ['contacts', 'Client contacts and who is on set', false],
+  ['client', 'Client name', true], ['crew', 'Crew: names, roles, call times, phone numbers and email addresses', true], ['contacts', 'Client contacts and who is on set', false],
   ['shots', 'Shot list', true], ['kit', 'Equipment list (no values)', true], ['deliverables', 'Deliverables and due dates', true],
   ['rules', 'Venue rules', true], ['notes', 'Call sheet instructions', true],
 ];
@@ -26,8 +26,10 @@ export function crewSnapshot(b, inc = choices()) {
   const snap = {
     v: 1, kind: 'crew', made: Date.now(),
     ref: str(b.id), // a random id with nothing in it: lets the crew's calendar update the event instead of adding another
-    title: str(b.title), type: (TYPES.find(t => t[0] === baseType(b.type)) || [, ''])[1], date: b.date, // the built-in type, never the name of the producer's own template endDate: endOf(b) > b.date ? endOf(b) : '', start: str(b.start), end: str(b.end),
-    producer: str(d.producerLine),
+    title: str(b.title),
+    type: (TYPES.find(t => t[0] === baseType(b.type)) || [, ''])[1], // the built-in type, never the name of the producer's own template
+    date: b.date, endDate: endOf(b) > b.date ? endOf(b) : '', start: str(b.start), end: str(b.end),
+    producer: [[d.p.name, d.p.business].filter(Boolean).join(' · '), d.p.phone, d.p.email].filter(Boolean).map(str).join(' · '),
     call: { general: str(d.generalCall), lunch: str(cs.lunch), wrap: str(d.wrap), breaks: str(d.breaks), dress: str(cs.dress), weather: str(cs.weather), emergency: str(cs.emergency) },
     location: { venue: str(v && v.name), address: str(d.address), access: str(v && v.access), parking: str(v && v.parking), power: str(v && v.power), hospital: str(v && v.hospital), rules: inc.rules ? str(v && v.rules) : '' },
     schedule: d.schedule.map(r => ({ date: str(r.date), time: str(r.time), item: str(r.item) })),
@@ -64,7 +66,9 @@ export function openCrewShare(b) {
     // Very long links do not fit in an email link (some mail apps stop at about 2,000 characters): the link is copied
     // instead, to be pasted into the email.
     const long = url.length > 1700;
-    const body = `Hi all,\n\nHere is everything for ${b.title} on ${fmtShort(b.date)}${endOf(b) > b.date ? ' to ' + fmtShort(endOf(b)) : ''}: times, the location, who is on and what we are shooting.\n\n${long ? '[Paste the link here]' : url}\n\nIf plans change I'll send a new link.\n\nThanks,\n${d.producer}`;
+    const what = ['times', 'the location', inc.crew && 'who is on', inc.shots && 'what we are shooting'].filter(Boolean), list = what.slice(0, -1).join(', ') + ' and ' + what[what.length - 1];
+    const sign = [d.p.name, d.p.business].filter(Boolean).join(' · ');
+    const body = `Hi all,\n\nHere is everything for ${b.title} on ${fmtShort(b.date)}${endOf(b) > b.date ? ' to ' + fmtShort(endOf(b)) : ''}: ${list}.\n\n${long ? '[Paste the link here]' : url}\n\nIf plans change I'll send a new link.\n\nThanks${sign ? ',\n' + sign : ''}`;
     mail.href = `mailto:${emails.join(',')}?` + new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20');
     mail.dataset.long = long ? '1' : '';
     if (url.length > 2800) return; // too long for a QR code: the link still works by copy, share or email

@@ -42,10 +42,17 @@ const num = v => (v === '' || v == null ? '' : Number(v));
 // that counts is the one per day (or with no unit); an hourly amount is used only when there is nothing else. A
 // weekly rate, or nothing readable, gives '' so the line is left for the person to fill in.
 const toNumber = t => { const m = t.match(/^(.*?)(?:[.,](\d{1,2}))?$/), whole = m[1].replace(/[.,\s]/g, ''); return Number(whole + (m[2] ? '.' + m[2] : '')); };
-const RATE_UNIT = /^\s*(?:\/|per\b|an?\b|each\b)?\s*(hourly|hours?|hrs?|h|daily|days?|d|weekly|weeks?|wk)\b/i;
+const RATE_UNIT = /^\s*(?:(?:\/|per\b|an?\b|each\b)\s*(hours?|hrs?|h|days?|d|weeks?|wk)|(hourly|daily|weekly))\b/i;
+const COUNT = /^\s*(hours?|hrs?|h|days?|d|weeks?|wk|people|persons?|crew)\b/i; // "2 days at 450", "10hr day": a count, not a price
 export function parseRate(r) {
   const s = String(r ?? ''), found = [], re = /\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?(?!\d)|\d+(?:[.,]\d{1,2})?(?!\d)/g;
-  for (let m; (m = re.exec(s));) { const u = ((s.slice(m.index + m[0].length).match(RATE_UNIT) || [])[1] || '').toLowerCase(); found.push({ n: toNumber(m[0]), unit: u[0] === 'h' ? 'hour' : u[0] === 'w' ? 'week' : u[0] === 'd' ? 'day' : '' }); }
+  for (let m; (m = re.exec(s));) {
+    let rest = s.slice(m.index + m[0].length), n = toNumber(m[0]);
+    if (/^k\b/i.test(rest)) { n *= 1000; rest = rest.slice(1); } // "$1k/day"
+    const um = rest.match(RATE_UNIT), u = ((um && (um[1] || um[2])) || '').toLowerCase();
+    if (!um && COUNT.test(rest)) continue;
+    found.push({ n, unit: u[0] === 'h' ? 'hour' : u[0] === 'w' ? 'week' : u[0] === 'd' ? 'day' : '' });
+  }
   const pick = found.find(f => f.unit === 'day') || found.find(f => f.unit === '') || found.find(f => f.unit === 'hour');
   return pick && Number.isFinite(pick.n) ? { amount: pick.n, hourly: pick.unit === 'hour' } : { amount: '', hourly: false };
 }
@@ -270,6 +277,7 @@ export function moneyBlock(b, go) {
 // into a quote, an invoice, a call sheet or a crew link. Compared with the quote, it shows what is left for you.
 export const BUDGET_CATS = ['Crew', 'Cast & talent', 'Equipment hire', 'Locations & permits', 'Travel & transport', 'Accommodation', 'Catering', 'Art, props & wardrobe', 'Hair & make-up', 'Post-production', 'Music & licences', 'Insurance', 'Marketing & distribution', 'Contingency', 'Other'];
 const BUDGET_UNITS = ['item', 'day', 'half day', 'hour', 'week', 'person', 'night', 'km', 'mile'];
+const unitText = (q, u = 'item') => (Number(q) === 1 ? u : ({ person: 'people', km: 'km' }[u] || u + 's'));
 const lineEst = l => (Number(l.qty) || 0) * (Number(l.rate) || 0);
 const hasActual = l => l.actual !== '' && l.actual != null && Number.isFinite(Number(l.actual));
 export function budgetTotals(b) {
@@ -311,16 +319,16 @@ export function fillBudget(b) {
   return add.length;
 }
 function budgetCsv(b) {
-  const t = budgetTotals(b), q = v => '"' + String(v == null ? '' : v).replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""') + '"';
+  const t = budgetTotals(b), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', tx = v => q(String(v == null ? '' : v).replace(/^[=+\-@\t\r]/, "'$&")); // tx: text a spreadsheet must not run as a formula
   const rows = [['Category', 'What it is', 'Quantity', 'Per', 'Cost each', 'Estimate', 'Actual', 'Paid to'].map(q).join(',')];
-  for (const c of t.byCat) for (const l of c.lines) rows.push([c.cat, l.desc, l.qty, l.unit, l.rate, lineEst(l).toFixed(2), hasActual(l) ? Number(l.actual).toFixed(2) : '', l.supplier].map(q).join(','));
+  for (const c of t.byCat) for (const l of c.lines) rows.push([tx(c.cat), tx(l.desc), q(l.qty), tx(l.unit), q(l.rate), q(lineEst(l).toFixed(2)), q(hasActual(l) ? Number(l.actual).toFixed(2) : ''), tx(l.supplier)].join(','));
   rows.push(['Total', '', '', '', '', t.est.toFixed(2), t.spent.toFixed(2), ''].map(q).join(','));
   return '\ufeff' + rows.join('\r\n');
 }
 export function budgetBlock(b) {
-  const t = budgetTotals(b), cur = sym();
+  const t = budgetTotals(b);
   const line = l => h('button', { class: 'card tap budget-line', type: 'button', onclick: () => editBudgetLine(b, l) },
-    h('div', { class: 'card-row' }, h('div', null, h('strong', null, l.desc), h('div', { class: 'muted small' }, [`${l.qty || 0} ${l.unit || 'item'}${Number(l.qty) === 1 ? '' : 's'} × ${fmtMoney(l.rate)}`, l.supplier].filter(Boolean).join(' · '))),
+    h('div', { class: 'card-row' }, h('div', null, h('strong', null, l.desc), h('div', { class: 'muted small' }, [`${l.qty || 0} ${unitText(l.qty, l.unit || 'item')} × ${fmtMoney(l.rate)}`, l.supplier].filter(Boolean).join(' · '))),
       h('div', { class: 'budget-amts' }, h('span', null, fmtMoney(lineEst(l))), hasActual(l) && h('span', { class: 'small ' + (Number(l.actual) > lineEst(l) + 0.005 ? 'overdue' : 'muted') }, 'actual ' + fmtMoney(l.actual)))));
   const stat = (v, l, cls = '') => h('div', { class: 'stat ' + cls }, h('b', null, v), h('span', null, l));
   return h('section', { class: 'block', id: 'bk-budget' }, h('h3', null, 'Budget'),
@@ -331,7 +339,7 @@ export function budgetBlock(b) {
           t.quoted != null && h('p', { class: 'small' + (t.margin < 0 ? ' overdue' : '') }, `Quoted to the client: ${fmtMoney(t.quoted)} before tax. Left for you after costs: ${fmtMoney(t.margin)}${t.quoted > 0 ? ` (${Math.round(t.margin / t.quoted * 100)}%)` : ''}.`),
           ...t.byCat.map(c => h('details', { class: 'twirl budget-cat' }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, c.cat), h('span', { class: 'twirl-sub' }, `${c.lines.length} line${c.lines.length === 1 ? '' : 's'} · ${fmtMoney(c.est)}${c.spent ? ' · spent ' + fmtMoney(c.spent) : ''}`))),
             h('div', { class: 'twirl-body stack' }, c.lines.map(line))))]
-        : h('p', { class: 'muted small' }, `Plan what this job will cost you: crew, hires, travel, locations and more, in ${cur}. Only you see it: it never goes into a quote, an invoice or a crew link.`),
+        : h('p', { class: 'muted small' }, 'Plan what this job will cost you: crew, hires, travel, locations and more. Only you see it: it never goes into a quote, an invoice or a crew link.'),
       h('div', { class: 'actions' },
         h('button', { class: 'btn ghost small', onclick: () => editBudgetLine(b, null) }, '+ Add line'),
         h('button', { class: 'btn ghost small', onclick: () => { const n = fillBudget(b); toast(n ? `${n} line${n === 1 ? '' : 's'} added from the booking` : 'Nothing new to add from the booking'); } }, '↻ Fill from booking'),

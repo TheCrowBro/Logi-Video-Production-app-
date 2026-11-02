@@ -50,12 +50,14 @@ Camera, microphone, location, notifications and installing need https or `localh
 ```
 index.html  styles.css  sw.js  manifest.webmanifest   app shell, styles, service worker (offline, share target, notifications), install manifest
 js/app.js        startup, Rolodex tabs, header; every section but Bookings loads the first time it is opened
-js/money.js      quotes and invoices: settings, suggested lines, payments and balances, the client's link, reminders, the overview
+js/money.js      quotes and invoices: settings, suggested lines, payments and balances, the client's link, reminders, the overview; the private budget and crew-rate reading (parseRate)
 js/money-doc.js  the document itself from a self-contained snapshot (page, print, PDF, email text, public page)
 js/pay.js        payment links (PayPal.Me, Venmo, Cash App, any payment page, UPI), bank lines, the EPC bank QR
 js/link-pack.js  packs a document into a link (deflate + base64url in the URL fragment) and unpacks it
 js/doc-css.js    print and standalone styles shared by the call sheet, the money documents and the public page
 invoice.html     the page a client opens: js/invoice-page.js renders the packed document with Pay buttons
+crew.html        the page cast and crew open: js/crew-page.js cleans and renders the packed shoot info (never money), with an .ics download and print
+js/crew-link.js  Share with crew: the allow-listed snapshot, the tick boxes, the link, email and QR (loaded on first use)
 js/rolodex.js    the 3D drum
 js/store.js      the database, record-by-record merging, cloud sync engine
 js/providers.js  Google Drive, iCloud, Dropbox, OneDrive, WebDAV and local-file adapters; their sign-ins
@@ -72,7 +74,7 @@ js/suncalc.js    sun and Polaris     js/range.js   range finder (WebXR + tilt)  
 js/a11y.js       themes, text size, motion, accessibility     js/tour.js   spotlight walkthrough engine, first-run tour     js/tutorials.js   per-page tutorials behind the ? button     js/install.js   install prompt
 js/lock.js       PIN / biometric lock and the encrypted vault     js/crypto.js   WebCrypto helpers     js/backup.js   backup health, encrypted backups, cloud restore, asset register
 js/update.js     service worker registration, update checks, the "new version" bar     tools/stamp-build.mjs   stamps a deploy
-js/money.js      quotes and invoices: suggested lines, documents, PDF, overview, billing settings     js/weather.js   Open-Meteo day forecast
+js/money.js      quotes, invoices and the budget: suggested lines, documents, PDF, overview, billing settings     js/weather.js   Open-Meteo day forecast
 desktop/         the desktop app (main.js), its preload bridge, the GitHub-release updater, its icon, and the version sync used by the installers
 vendor/          qrcode-generator (MIT), jsQR (Apache-2.0); see vendor/LICENSES.md
 ```
