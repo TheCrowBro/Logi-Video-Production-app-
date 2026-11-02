@@ -117,7 +117,7 @@ Even signed, a new Windows app shows a milder "not commonly downloaded" prompt n
 1. Tell me you are ready (or, in GitHub: **Actions → Build desktop installers → Run workflow**, tick **Publish**, **Run workflow**). When it is green, `https://download.crowmade.app/vdex/latest.yml` shows the new version and https://vdex.crowmade.app/download.html downloads work.
 2. Install Vdex on a computer that has never had it. Settings → About should show the free trial.
 3. Buy a licence yourself through **Buy a licence**. Check the thank-you page shows a code, the email arrives, and **Enter licence code** activates it.
-4. Refund yourself in Stripe. Within about a week (or straight away with **Try again** in Vdex), Vdex says the code was cancelled. Stripe keeps its fee on a refund.
+4. Refund yourself in Stripe. Within about a week, Vdex says the code was cancelled. To see it at once: **Release this computer**, then **Enter licence code** with the same code, and Vdex says it has been cancelled. Stripe keeps its fee on a refund.
 5. Make a free code in the generator page (part 8) and try it on a second computer.
 
 ## Part 8. Everyday

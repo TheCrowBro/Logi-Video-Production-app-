@@ -539,7 +539,9 @@ body.has-update-bar #page { padding-bottom: 110px; }
 @media (max-width: 480px) { .update-bar { flex-wrap: wrap; justify-content: center; border-radius: 16px; } }
 /* The desktop app's licence (js/licence.js): its bar sits above the update bar when both show. */
 .licence-bar.urgent { border-color: var(--danger); }
-body:has(.sheet-back) .licence-bar { display: none; } /* never over a sheet's buttons */
+body:has(.sheet-back) .licence-bar, body:has(.sc-bar) .licence-bar { display: none; } /* never over a sheet's buttons, or the script's Mark */
+.licence-bar { left: 16px; right: 16px; transform: none; width: fit-content; margin-inline: auto; flex-wrap: wrap; justify-content: center; }
+body.has-licence-bar .toast { z-index: 260; } /* messages show above the bar */
 body.has-update-bar .licence-bar { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 64px); }
 body.has-licence-bar #page { padding-bottom: 110px; }
 body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }

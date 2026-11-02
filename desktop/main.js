@@ -283,12 +283,14 @@ app.whenReady().then(async () => {
   setPermissions();
   setMenu();
   // The licence (desktop/licence.js). An earlier version of Vdex ran here if it left desktop-state.json (written only
-  // by Vdex, when its window closes); that is read before this run opens a window, and those installs keep Vdex free.
-  // (Chromium's own storage folders are no sign: they can exist before any page has run.)
+  // by Vdex, when its window closes) without the licence's copy of the trial start in it, which versions with a
+  // licence always add; that is read before this run opens a window, and those installs keep Vdex free. (Chromium's
+  // own storage folders are no sign: they can exist before any page has run.)
   const dir = app.getPath('userData');
   wireLicence({
     ipcMain, fromApp, shell, dir, getWindow: () => win,
-    hasPriorData: () => fs.existsSync(path.join(dir, 'desktop-state.json')),
+    hasPriorData: () => fs.existsSync(stateFile()) && !readState().licence,
+    mirror: { get: () => readState().licence || null, set: v => writeState({ licence: v }) },
     site: !app.isPackaged && /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(process.env.VDEX_LICENCE_SITE || '') ? process.env.VDEX_LICENCE_SITE : '', // tests only
   });
   createWindow();

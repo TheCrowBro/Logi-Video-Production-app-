@@ -73,7 +73,7 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
         return { status: 200, body: { ok: true, receipt: await codes.signNote('active', shopKey, 2, { ref, install: this.forge || body.install, at: Date.now() }) } };
       } };
     const T0 = Date.parse('2026-11-02T10:00:00Z');
-    const make = (opts = {}) => { const c = { t: opts.t || T0 }; const lic = createLicence({ dir: opts.dir || dirOf(), keys: 'keys' in opts ? opts.keys : KEYS, now: () => c.t, post: (u, b) => server.post(u, b), priorData: () => !!opts.prior, site: 'http://licence.test' }); return { lic, c }; };
+    const make = (opts = {}) => { const c = { t: opts.t || T0 }; const lic = createLicence({ dir: opts.dir || dirOf(), keys: 'keys' in opts ? opts.keys : KEYS, now: () => c.t, post: (u, b) => server.post(u, b), priorData: () => !!opts.prior, mirror: opts.mirror, site: 'http://licence.test' }); return { lic, c }; };
 
     const off = make({ keys: {} });
     const s0 = await off.lic.state();
@@ -117,8 +117,10 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
 
     server.mode = 'down'; tr.c.t += 8 * DAY; s = await tr.lic.recheck();
     ok('a weekly check with no internet changes nothing', s.mode === 'licensed' && s.canEdit);
-    tr.c.t += 85 * DAY; s = await tr.lic.recheck();
-    ok('after 90 days without reaching the server it is read-only until it can check', s.mode === 'offline' && s.canEdit === false);
+    tr.c.t += 85 * DAY; s = await tr.lic.state();
+    ok('opened after a long break, it is not read-only while it is still checking', s.mode === 'licensed' && s.canEdit);
+    s = await tr.lic.recheck();
+    ok('after 90 days without reaching the server (and a check that fails) it is read-only until it can check', s.mode === 'offline' && s.canEdit === false);
     server.mode = 'ok'; s = await tr.lic.recheck(true);
     ok('"Try again" with the internet back puts it right', s.mode === 'licensed' && s.canEdit);
     server.cancelled.add('2:4242'); tr.c.t += 8 * DAY; s = await tr.lic.recheck();
@@ -138,11 +140,37 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     s = await pc6.lic.enter(free.replace(/.*/, await codes.signCode(ownerKey, 1, { name: 'Offline Olly', comp: true, issued: '2026-11-02' })));
     ok('entering a code with no internet keeps it and lets Vdex be used for 14 days', s.mode === 'pending' && s.canEdit && s.daysLeft === 14 && s.offline);
     pc6.c.t += 15 * DAY; s = await pc6.lic.state();
-    ok('after 14 days unactivated (and the trial over) it is read-only', s.mode === 'pending' && s.canEdit === false);
+    ok('after 14 days it stays usable until a check made after then fails', s.mode === 'pending' && s.canEdit);
+    s = await pc6.lic.recheck();
+    ok('after 14 days unactivated and a failed check (and the trial over) it is read-only', s.mode === 'pending' && s.canEdit === false);
     server.mode = '503'; s = await pc6.lic.recheck(true);
     ok('a licence server that is not set up yet counts as no answer', s.mode === 'pending');
-    server.mode = 'ok'; pc6.c.t += 2 * 3600e3; s = await pc6.lic.recheck();
+    server.mode = 'ok'; pc6.c.t += 2 * 3600e3; let calls = server.calls.length; s = await pc6.lic.recheck();
+    ok('after an error answer, it waits a day before asking again (not every hour)', s.mode === 'pending' && server.calls.length === calls);
+    pc6.c.t += 23 * 3600e3; s = await pc6.lic.recheck();
     ok('it activates by itself once the server answers', s.mode === 'licensed' && s.licence.comp);
+
+    // A free code with an end date is not checked online once it has ended.
+    const pc7 = make(); await pc7.lic.state();
+    const short = await codes.signCode(ownerKey, 1, { name: 'Short Term', comp: true, issued: '2026-11-02', expires: '2026-11-10' });
+    ok('a free code with an end date activates', (await pc7.lic.enter(short)).mode === 'licensed');
+    pc7.c.t = Date.parse('2026-11-20T10:00:00Z'); calls = server.calls.length;
+    for (let h = 0; h < 48; h++) { pc7.c.t += 3600e3; await pc7.lic.recheck(); }
+    s = await pc7.lic.state();
+    ok('once it has ended, Vdex stops contacting the server for it', s.mode === 'expired' && server.calls.length === calls, `${server.calls.length - calls} calls`);
+
+    // Deleting licence.json: the desktop app keeps a copy of the trial start in its own window-state file.
+    const box = { v: null }, mirror = { get: () => box.v, set: v => { box.v = v; } };
+    const pc8 = make({ mirror, prior: true }); await pc8.lic.state(); // prior: an earlier version's window-state file
+    ok('an early user is recorded in the copy too', box.v && box.v.founder === true);
+    const box2 = { v: null }, mirror2 = { get: () => box2.v, set: v => { box2.v = v; } };
+    const dir9 = dirOf(), pc9 = make({ mirror: mirror2, dir: dir9 }); await pc9.lic.state();
+    pc9.c.t = T0 + 40 * DAY; s = await pc9.lic.state();
+    ok('a new install\'s trial ends as usual', s.mode === 'ended');
+    fs.rmSync(path.join(dir9, 'licence.json'));
+    const again = createLicence({ dir: dir9, keys: KEYS, now: () => T0 + 41 * DAY, post: (u, b) => server.post(u, b), priorData: () => true, mirror: mirror2, site: 'http://licence.test' });
+    s = await again.state();
+    ok('deleting licence.json neither starts a new trial nor makes it an early user', s.mode === 'ended' && s.canEdit === false, s.mode);
 
     // Releasing.
     server.mode = 'down'; s = await pc2.lic.release();

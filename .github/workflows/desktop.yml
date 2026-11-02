@@ -16,6 +16,10 @@ on:
         description: Publish to download.crowmade.app (installed copies update to it)
         type: boolean
         default: false
+      replace:
+        description: Replace a version that is already published (only to fix a broken upload)
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 permissions:
@@ -122,12 +126,19 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           DEST: vdex-downloads/vdex
           WRANGLER_SEND_METRICS: "false"
+          REPLACE: ${{ inputs.replace }}
         run: |
           set -euo pipefail
           [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::The Cloudflare secrets are missing (docs/cloudflare.md)"; exit 1; }
           W="$PWD/cloudflare/node_modules/.bin/wrangler"
           V=$(node -p "/VERSION\\s*=\\s*'([^']+)'/.exec(require('fs').readFileSync('js/version.js', 'utf8'))[1]")
           if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME#v}" != "$V" ]; then echo "::error::Tag $GITHUB_REF_NAME does not match version $V in js/version.js"; exit 1; fi
+          # A version's installers are cached for a year once published: publishing the same version again (a second
+          # run, or adding signing secrets) would leave old copies in caches that no longer match latest.yml, and
+          # updates would fail their checksum. Bump VERSION in js/version.js instead.
+          if curl -fsS "https://download.crowmade.app/vdex/latest.yml" 2>/dev/null | grep -q "^version: $V\$" && [ "$REPLACE" != true ]; then
+            echo "::error::Vdex $V is already published. Bump VERSION in js/version.js for a new release (or tick Replace to fix a broken upload)."; exit 1
+          fi
           cd installers
           for y in latest.yml latest-mac.yml latest-linux.yml; do
             grep -q "^version: $V\$" "$y" || { echo "::error::$y is not version $V"; exit 1; }

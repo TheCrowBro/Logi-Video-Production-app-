@@ -4,7 +4,7 @@
 // When the trial is over and there is no working code, Vdex is read-only: the store refuses changes (store.setGate)
 // and says why, while opening, searching, printing and exporting keep working.
 import { h, sheet, toast, announce, muteToasts } from './util.js';
-import { setGate } from './store.js';
+import { setGate, redraw } from './store.js';
 
 const L = () => (window.vdexDesktop && window.vdexDesktop.licence) || null;
 const S = { cur: null, bar: null, listeners: new Set(), blockedAt: 0, input: 0, hide: '' };
@@ -31,7 +31,10 @@ export async function initLicence() {
     muteToasts(600);
     // Background work (a calendar sync, say) is refused quietly; a change someone just asked for is explained.
     const asked = Date.now() - S.input < 3000;
-    if (asked && Date.now() - S.blockedAt > 1500) { S.blockedAt = Date.now(); readOnlySheet(); }
+    if (asked) {
+      if (!document.querySelector('.sheet.licence-readonly')) readOnlySheet(); else announce('Vdex is read-only. Nothing was changed.');
+      clearTimeout(S.redraw); S.redraw = setTimeout(redraw, 0); // a box ticked on screen goes back to what is stored
+    }
     return false;
   });
   const touched = e => { if (e.isTrusted) S.input = Date.now(); };
@@ -63,11 +66,21 @@ function actions(s, d, after = () => {}) {
   if (d.buy) b.push(h('button', { class: 'btn primary', onclick: () => l.buy() }, 'Buy a licence · 20 USD'));
   if (d.enter) b.push(h('button', { class: 'btn ghost', onclick: () => enterCode() }, 'Enter licence code'));
   if (d.again) b.push(h('button', { class: 'btn primary', onclick: async () => enterCode(await l.code()) }, 'Activate here again'));
-  if (d.retry) b.push(h('button', { class: 'btn primary', onclick: async e => { e.target.disabled = true; e.target.textContent = 'Checking…'; const r = await l.recheck().catch(() => null); set(r); after(); toast(r && r.mode === 'licensed' ? 'Licence activated' : 'Still not able to reach the licence server'); } }, 'Try again'));
+  if (d.retry) b.push(h('button', { class: 'btn primary', onclick: e => retry(e.target, after) }, 'Try again'));
   if (d.copy) b.push(h('button', { class: 'btn ghost', onclick: async () => { try { await navigator.clipboard.writeText(await l.code()); toast('Licence code copied'); } catch { toast('Could not copy'); } } }, 'Copy the code'));
   if (d.release) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet() }, 'Release this computer'));
   if (d.remove) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet(true) }, 'Remove the code'));
   return b;
+}
+
+// Checks the licence online now. The message says what the server answered, not just whether it is licensed.
+async function retry(btn, after = () => {}) {
+  const was = S.cur && S.cur.mode;
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking…'; }
+  const r = await L().recheck().catch(() => null);
+  set(r); after();
+  const m = r && r.mode;
+  toast(m === 'licensed' ? 'Licence activated' : m === 'released' ? 'This code is in use on its other computers' : m === 'cancelled' ? 'This licence code has been cancelled' : m === was ? 'Still not able to reach the licence server' : 'Licence checked');
 }
 
 /* ------------------------------ Settings → About ------------------------------ */
@@ -94,14 +107,23 @@ function paintBar() {
   const show = d && (urgent || (s.mode === 'trial' && s.trialLeft <= 7) || (s.mode === 'pending' && s.daysLeft <= 7));
   const key = s ? s.mode + (urgent ? '!' : '') : '';
   if (!show || S.hide === key) { if (S.bar) { S.bar.remove(); S.bar = null; document.body.classList.remove('has-licence-bar'); } return; }
-  const text = urgent ? (s.mode === 'ended' ? 'Your free trial has ended: Vdex is read-only.' : s.mode === 'offline' ? 'Read-only until Vdex can check your licence online.' : 'Vdex is read-only: ' + d.line.split(':')[0].replace(/\.$/, '').toLowerCase() + '.')
-    : s.mode === 'trial' ? `Free trial: ${plural(s.trialLeft, 'day')} left.` : 'Your licence is not activated on this computer yet.';
+  const URGENT = {
+    ended: 'Your free trial has ended: Vdex is read-only.', offline: 'Read-only until Vdex can check your licence online.',
+    pending: 'Read-only until your licence is activated on this computer.', released: 'Read-only: this computer is no longer on your licence.',
+    cancelled: 'Read-only: this licence code has been cancelled.', expired: 'Read-only: your licence has ended.',
+  };
+  const text = urgent ? URGENT[s.mode] || 'Vdex is read-only.' : s.mode === 'trial' ? `Free trial: ${plural(s.trialLeft, 'day')} left.` : 'Your licence is not activated on this computer yet.';
+  const small = (label, onclick, primary) => h('button', { class: `btn ${primary ? 'primary' : 'ghost'} small`, onclick }, label);
+  // Each state's own next step: someone who has paid is never asked to buy again.
+  const buttons = d.retry ? [small('Try again', e => retry(e.target), true), small('Details', () => detailsSheet())]
+    : d.again ? [small('Activate here again', async () => enterCode(await L().code()), true), small('Details', () => detailsSheet())]
+    : d.buy ? [small('Buy · 20 USD', () => L().buy(), true), small('Enter code', () => enterCode())]
+    : [small('Details', () => detailsSheet(), true)];
   const bar = h('div', { class: 'update-bar licence-bar' + (urgent ? ' urgent' : ''), role: 'status' },
-    h('span', null, text),
-    ...(urgent || s.mode === 'trial' ? [h('button', { class: 'btn primary small', onclick: () => L().buy() }, 'Buy · 20 USD'), h('button', { class: 'btn ghost small', onclick: () => enterCode() }, 'Enter code')]
-      : [h('button', { class: 'btn primary small', onclick: () => detailsSheet() }, 'Details')]),
+    h('span', null, text), ...buttons,
     h('button', { class: 'icon-btn', 'aria-label': 'Hide until Vdex is next opened', onclick: () => { S.hide = key; paintBar(); } }, '✕'));
-  if (S.bar) S.bar.replaceWith(bar); else announce(text);
+  if (!S.bar || S.bar.firstChild.textContent !== text) announce(text);
+  if (S.bar) S.bar.replaceWith(bar);
   S.bar = bar;
   if (!bar.isConnected) document.body.append(bar);
   document.body.classList.add('has-licence-bar');
@@ -112,8 +134,11 @@ function readOnlySheet() {
   const s = S.cur, d = describe(s) || {};
   const sh = sheet('Vdex is read-only', h('div', { class: 'stack' },
     h('p', null, d.line || 'Vdex is read-only on this computer.'),
-    h('p', { class: 'small muted' }, 'Nothing has been lost, and the website (vdex.crowmade.app) still works as before. With a licence you can change everything again here.'),
+    h('p', { class: 'small muted' }, 'That change was not saved. Everything already in Vdex is safe, and the website (vdex.crowmade.app) still works as before. With a licence you can change everything again here.'),
     h('div', { class: 'actions' }, ...actions(s, d, () => sh.close()))));
+  sh.el.classList.add('licence-readonly');
+  announce('Vdex is read-only. That change was not saved.');
+  setTimeout(() => { const b = sh.el.querySelector('.actions .btn'); if (b) b.focus(); }, 50);
 }
 function detailsSheet() {
   const s = S.cur, d = describe(s); if (!d) return;
@@ -140,7 +165,7 @@ export function enterCode(prefill = '') {
     if (r && r.error === 'full') return chooseComputer(r);
     if (!r || r.error) { msg.textContent = (r && r.error) || 'Something went wrong. Try again.'; msg.className = 'small licence-warn'; return; }
     set(r); sh.close();
-    toast(r.offline ? 'Code saved. Vdex activates it the next time it is online.' : 'Thank you! Vdex is activated on this computer.');
+    toast(r.mode === 'licensed' ? 'Thank you! Vdex is activated on this computer.' : r.mode === 'pending' ? 'Code saved. Vdex activates it the next time it is online.' : 'Vdex could not reach the licence server. Try again when you are online.');
   }
   function chooseComputer(r) {
     const list = h('ul', { class: 'lic-computers' }, ...(r.computers || []).map(c => h('li', null,

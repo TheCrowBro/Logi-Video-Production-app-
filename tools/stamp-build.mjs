@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PAGES, ROOT_FILES, DIRS } from './site-files.mjs';
+import { PAGES, ROOT_FILES, DIRS, WORKER_ROUTES } from './site-files.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let sha = process.env.BUILD_SHA || process.env.GITHUB_SHA || '';
@@ -24,6 +24,7 @@ v = v.replace(/export const BUILD = '[^']*';/, `export const BUILD = '${build}';
 writeFileSync(vPath, v);
 const swPath = path.join(root, 'sw.js');
 let sw = readFileSync(swPath, 'utf8');
-sw = sw.replace(/const BUILD = '[^']*';/, `const BUILD = '${build}';`).replace(/const SHELL = \[[\s\S]*?\n\];/, `const SHELL = [\n  ${shell.map(s => `'${s}'`).join(', ')},\n];`);
+sw = sw.replace(/const BUILD = '[^']*';/, `const BUILD = '${build}';`).replace(/const SHELL = \[[\s\S]*?\n\];/, `const SHELL = [\n  ${shell.map(s => `'${s}'`).join(', ')},\n];`)
+  .replace(/const WORKER_ROUTES = \[[^\]]*\];/, `const WORKER_ROUTES = [${WORKER_ROUTES.map(r => `'${r}'`).join(', ')}];`);
 writeFileSync(swPath, sw);
 console.log(`Stamped build ${build} (${built}); ${shell.length} files in the offline set.`);

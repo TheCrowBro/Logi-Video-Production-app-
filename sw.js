@@ -8,6 +8,9 @@ const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest', 'privacy.html', 'terms.html', 'invoice.html', 'crew.html', 'js/crew-link.js', 'js/crew-page.js', 'js/a11y.js', 'js/app.js', 'js/backup.js', 'js/board.js', 'js/calendar.js', 'js/callsheet.js', 'js/clock.js', 'js/crypto.js', 'js/docx.js', 'js/form.js', 'js/hours.js', 'js/install.js', 'js/link.js', 'js/lock.js', 'js/map.js', 'js/money.js', 'js/notify.js', 'js/pages/bookings.js', 'js/pages/crew.js', 'js/pages/field.js', 'js/pages/gear.js', 'js/pages/insurance.js', 'js/pages/me.js', 'js/pages/settings.js', 'js/pages/tcnotes.js', 'js/pages/venues.js', 'js/pdf.js', 'js/prepaint.js', 'js/price-list.js', 'js/price-rates.js', 'js/providers.js', 'js/qr.js', 'js/range.js', 'js/rolodex.js', 'js/storage-ui.js', 'js/stripboard.js', 'js/store.js', 'js/suncalc.js', 'js/terms.js', 'js/timecode.js', 'js/tour.js', 'js/tutorials.js', 'js/update.js', 'js/util.js', 'js/version.js', 'js/weather.js', 'js/workflow.js', 'vendor/LICENSES.md', 'vendor/jsQR.js', 'vendor/qrcode.js', 'icons/icon-180.png', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon.svg',
 ];
 const shellKeys = new Set(SHELL.map(p => new URL(p, self.registration.scope).href));
+// Addresses the site's Worker answers (cloudflare/worker.mjs): never the app, never cached. From tools/site-files.mjs.
+const WORKER_ROUTES = ['/buy', '/licence/*'];
+const workerRoute = u => { const base = new URL(self.registration.scope).pathname.replace(/\/$/, ''); return u.origin === location.origin && WORKER_ROUTES.some(r => (r.endsWith('/*') ? u.pathname.startsWith(base + r.slice(0, -1)) : u.pathname === base + r)); };
 const keyOf = req => { const u = new URL(req.url); u.search = ''; u.hash = ''; return u.href; };
 
 // Precache with cache: 'no-cache': every file is revalidated with the server (a cheap 304 when the page just fetched it),
@@ -39,6 +42,7 @@ self.addEventListener('notificationclick', e => {
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (new URL(req.url).pathname.includes('/__vdex/')) return; // the desktop app's sign-in pages are never the app
+  if (workerRoute(new URL(req.url))) return; // the shop's pages (Buy, the code after paying) always come from the server
   // Web Share Target: a file shared to the app arrives as a POST; park it and send the app to pick it up.
   if (req.method === 'POST' && new URL(req.url).pathname.endsWith('/share')) {
     e.respondWith((async () => {

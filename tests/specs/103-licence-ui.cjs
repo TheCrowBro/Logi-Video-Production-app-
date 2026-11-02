@@ -112,6 +112,51 @@ const bridge = start => `(() => {
     ok('everything can still be read', exported);
     await ctx.close();
 
+    // A form saved while read-only stays open with what was typed.
+    ({ ctx, page } = await open({ enabled: true, mode: 'ended', canEdit: false, trialLeft: 0, trialEnds: '2026-10-01', seats: 3 }));
+    await page.evaluate(() => window.logiGo('bookings')); await sleep(300);
+    await page.locator('.page button:has-text("+ New")').first().click();
+    await page.waitForSelector('.sheet form');
+    const title = page.locator('.sheet form input[type="text"]').first();
+    await title.fill('Wedding at the pier');
+    await page.locator('.sheet form button[type="submit"]').click(); await sleep(300);
+    const kept = await page.evaluate(() => ({ forms: document.querySelectorAll('.sheet form').length, typed: document.querySelector('.sheet form input[type="text"]')?.value, readOnly: !!document.querySelector('.sheet.licence-readonly'), focus: !!document.activeElement?.closest('.licence-readonly') }));
+    const saved = await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.length));
+    ok('saving a form while read-only keeps the form and what was typed, explains why, and moves focus to the explanation', kept.forms === 1 && kept.typed === 'Wedding at the pier' && kept.readOnly && kept.focus && saved === 0, JSON.stringify(kept));
+    await ctx.close();
+
+    // The bar offers each state's own next step: someone who has paid is never asked to buy again.
+    for (const [state, button, text] of [
+      [{ enabled: true, mode: 'pending', canEdit: false, daysLeft: 0, trialLeft: 0, seats: 3, licence: { name: 'Jane McDonald', email: 'jane@example.com', seats: 3 } }, 'Try again', /Read-only until your licence is activated on this computer/],
+      [{ enabled: true, mode: 'offline', canEdit: false, seats: 3, licence: { name: 'Jane', seats: 3 } }, 'Try again', /Read-only until Vdex can check your licence online/],
+      [{ enabled: true, mode: 'released', canEdit: false, trialLeft: 0, seats: 3, licence: { name: 'Jane', seats: 3 } }, 'Activate here again', /no longer on your licence/],
+      [{ enabled: true, mode: 'cancelled', canEdit: false, trialLeft: 0, seats: 3, licence: { name: 'Jane', seats: 3 } }, 'Buy · 20 USD', /code has been cancelled/],
+    ]) {
+      ({ ctx, page } = await open(state, { width: 360 }));
+      const bar = page.locator('.licence-bar'), btxt = await bar.innerText(), h = await bar.evaluate(b => b.getBoundingClientRect().height);
+      ok(`read-only bar for "${state.mode}": "${button}", a short message, and a compact bar on a narrow window`, (await bar.getByRole('button', { name: button }).count()) === 1 && text.test(btxt) && (state.mode === 'cancelled' || !/Buy/.test(btxt)) && !/jane mcdonald/.test(btxt) && h < 130, `${Math.round(h)}px: ${btxt.replace(/\n/g, ' | ')}`);
+      if (state.mode === 'pending') {
+        await page.evaluate(() => import('./js/util.js').then(u => u.toast('Saved')));
+        const top = await page.evaluate(() => { const t = document.querySelector('.toast').getBoundingClientRect(); return document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2)?.closest('.toast') != null; });
+        ok('messages show above the licence bar', top);
+      }
+      await ctx.close();
+    }
+
+    // The website's offline copy never stands in for the shop's pages.
+    {
+      const c = await browser.newContext({ viewport: { width: 420, height: 860 } });
+      await c.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+      await c.addInitScript(acceptTerms());
+      const p = await c.newPage();
+      await p.goto(URL); await p.waitForSelector('#rolodex .drum-btn');
+      await p.waitForFunction(() => navigator.serviceWorker.controller != null, null, { timeout: 20000 });
+      const buy = await p.goto(URL + 'buy'), thanks = await p.goto(URL + 'licence/thanks?session_id=cs_test_abc');
+      const app = await p.goto(URL + 'index.html');
+      ok('with the offline copy installed, /buy and /licence/… still go to the server, not the app', buy.status() === 404 && thanks.status() === 404 && app.status() === 200, `${buy.status()} ${thanks.status()}`);
+      await c.close();
+    }
+
     // The download page.
     ({ ctx, page } = await open(null, { desktop: false, width: 360 }));
     const dl = await page.goto(URL + 'download.html');

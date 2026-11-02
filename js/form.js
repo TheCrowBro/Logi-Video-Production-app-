@@ -1,6 +1,7 @@
 // Schema-driven edit form shown in a sheet.
 import { h, sheet, groupBy, toast } from './util.js';
 import { parseMapLink, geocode } from './map.js';
+import { canChange } from './store.js';
 
 /*
  fields: [{ key, label, type, options, required, placeholder, list, rows, columns, empty, hint }]
@@ -137,6 +138,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     e.preventDefault();
     const out = { ...values };
     readers.forEach(r => { const [k, v] = r(); out[k] = v; });
+    if (!canChange()) return; // read-only (the desktop app after its trial): keep the form and what was typed
     close();
     onSave(out);
   });

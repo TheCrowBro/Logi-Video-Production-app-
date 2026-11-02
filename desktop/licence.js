@@ -30,7 +30,10 @@ const MESSAGES = {
   invalid: 'The licence server does not recognise this code. Check you copied all of it, or reply to the email your code came in.',
 };
 
-function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = SITE, os = OS[process.platform] || 'Computer', priorData = () => false, onChange = () => {} }) {
+// `mirror` keeps a copy of when the trial started (and whether this is an early user) outside licence.json, in the
+// desktop app's own window-state file, so deleting licence.json does not start a new trial or make an early user.
+const NO_MIRROR = { get: () => null, set: () => {} };
+function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = SITE, os = OS[process.platform] || 'Computer', priorData = () => false, mirror = NO_MIRROR, onChange = () => {} }) {
   const file = path.join(dir, 'licence.json');
   const enabled = Object.keys(keys || {}).length > 0;
   const read = () => { try { const s = JSON.parse(fs.readFileSync(file, 'utf8')); return s && typeof s === 'object' ? s : {}; } catch { return {}; } };
@@ -43,18 +46,23 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     const s = read(), t = now();
     let dirty = false;
     if (!s.install) { s.install = codes.b64u.enc(globalThis.crypto.getRandomValues(new Uint8Array(16))); dirty = true; }
-    if (!s.first) { s.first = t; s.founder = !enabled || !!priorData(); dirty = true; }
-    else if (!enabled && !s.founder) { s.founder = true; dirty = true; }
+    if (!s.first) {
+      const m = mirror.get();
+      if (m && Number.isFinite(m.first) && m.first > 0) { s.first = m.first; s.founder = !!m.founder; s.seen = Math.max(Number(m.seen) || 0, s.seen || 0); } // licence.json was lost: same trial as before
+      else { s.first = t; s.founder = !enabled || !!priorData(); }
+      dirty = true;
+    }
+    if (!enabled && !s.founder) { s.founder = true; dirty = true; }
     if (t > (s.seen || 0) + 60e3 || !s.seen) { s.seen = Math.max(s.seen || 0, t); dirty = true; } // the latest time ever seen, so winding the clock back gains no trial days
-    if (dirty) write(s);
+    if (dirty) { write(s); mirror.set({ first: s.first, founder: !!s.founder, seen: s.seen }); }
     const r = await check(s), good = !!r && !!s.act && s.act.status === 'active' && (await goodReceipt(s, r.licence));
     const out = describe(s, r, t, good);
     const sig = JSON.stringify(out); if (sig !== last) { last = sig; onChange(out); }
     return out;
   }
-  async function check(s) {
+  async function check(s, at = s.seen) {
     if (!s.code) return null;
-    try { const r = await codes.verifyCode(s.code, { keys, now: s.seen }); return r; } catch { return null; } // a code no longer accepted (its key retired): back to the trial
+    try { const r = await codes.verifyCode(s.code, { keys, now: at }); return r; } catch { return null; } // a code no longer accepted (its key retired): back to the trial
   }
   async function goodReceipt(s, lic) {
     const r = s.act && s.act.receipt; if (!r || !r.sig) return false;
@@ -75,16 +83,19 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     const a = s.act || {};
     if (a.status === 'cancelled') return { ...base, ...trial, licence, mode: 'cancelled', canEdit: left > 0 };
     if (a.status === 'released') return { ...base, ...trial, licence, mode: 'released', canEdit: left > 0 };
+    // Past a limit, Vdex turns read-only only once a check made after the limit has failed, so someone opening Vdex
+    // after a long break is not shown read-only while it is still checking.
     if (a.status === 'active' && good) {
-      if (t - (a.checked || 0) > OFFLINE_LIMIT) return { ...base, licence, mode: 'offline', canEdit: false };
+      if (t - (a.checked || 0) > OFFLINE_LIMIT && (a.tried || 0) > (a.checked || 0) + OFFLINE_LIMIT) return { ...base, licence, mode: 'offline', canEdit: false };
       return { ...base, licence, mode: 'licensed', canEdit: true };
     }
     const waited = Math.max(0, t - (s.enteredAt || t)), daysLeft = Math.max(0, Math.ceil((PENDING_LIMIT - waited) / DAY));
-    return { ...base, ...trial, licence, mode: 'pending', daysLeft, canEdit: daysLeft > 0 || left > 0 };
+    const failedSince = (a.tried || 0) > (s.enteredAt || 0) + PENDING_LIMIT;
+    return { ...base, ...trial, licence, mode: 'pending', daysLeft, canEdit: daysLeft > 0 || left > 0 || !failedSince };
   }
 
   // Asks the licence server to put this computer on the code's list. { ok, receipt } | { full, computers } |
-  // { cancelled } | { swaps } | { invalid } | { offline }.
+  // { cancelled } | { swaps } | { invalid } | { offline } (with answered: true when the server did answer, unusably).
   async function activate(code, install, release) {
     let res;
     try { res = await post(site + '/licence/activate', { code, install, os, ...(release ? { release } : {}) }); } catch { return { offline: true }; }
@@ -92,11 +103,11 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     if (res.status === 200 && b.receipt) {
       const v = await codes.readNote('active', b.receipt, { keys });
       const r = await check({ code, seen: now() });
-      return v && r && v.ref === r.licence.ref && v.install === install ? { ok: true, receipt: b.receipt } : { offline: true }; // an answer we cannot trust counts as no answer
+      return v && r && v.ref === r.licence.ref && v.install === install ? { ok: true, receipt: b.receipt } : { offline: true, answered: true }; // an answer we cannot trust counts as no answer
     }
     if (b.error === 'full') return { full: true, computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft };
     if (b.error === 'cancelled' || b.error === 'swaps' || b.error === 'invalid') return { [b.error]: true };
-    return { offline: true }; // the server is down or not set up yet
+    return { offline: true, answered: true }; // the server is down, not set up yet, or says the code has ended
   }
   const active = (receipt, t) => ({ status: 'active', receipt, checked: t, tried: t });
 
@@ -113,17 +124,22 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     for (const k of ['cancelled', 'swaps', 'invalid']) if (a[k]) return { error: MESSAGES[k] };
     const s2 = read(), t = now();
     if (s2.code !== code) { s2.code = code; s2.enteredAt = t; s2.act = {}; }
-    s2.act = a.ok ? active(a.receipt, t) : { ...(s2.act || {}), tried: t };
+    s2.act = a.ok ? active(a.receipt, t) : { ...(s2.act || {}), tried: t, answered: !!a.answered };
     write(s2);
     return { ...(await state()), offline: !a.ok };
   }
 
-  // Background check: a licensed computer about once a week, one waiting for activation (or moved off the list)
-  // about once an hour while it can't get through. `force` checks now (the page's "Try again").
+  // Background check: a licensed computer about once a week; one that cannot get through, about once an hour until it
+  // does; one moved off the list, cancelled, or answered with an error, once a day. A code past its end date is not
+  // checked at all. `force` checks now (the page's "Try again").
   async function recheck(force = false) {
     const s = read(); if (!enabled || s.founder || !s.code) return state();
-    const a = s.act || {}, t = now();
-    const due = force || (a.status === 'active' ? t - (a.checked || 0) > RECHECK || t < (a.checked || 0) : t - (a.tried || 0) > (a.status ? DAY : HOUR) || t < (a.tried || 0));
+    const a = s.act || {}, t = now(), r = await check(s, Math.max(s.seen || 0, t));
+    if (!r || r.status === 'expired') return state();
+    let due;
+    if (force || t < (a.tried || 0) || t < (a.checked || 0)) due = true; // asked to, or the clock went back
+    else if (a.status === 'active') due = t - (a.checked || 0) > RECHECK && t - (a.tried || 0) > (a.answered ? DAY : HOUR);
+    else due = t - (a.tried || 0) > (a.status || a.answered ? DAY : HOUR);
     if (!due) return state();
     const res = await activate(s.code, s.install, '');
     const s2 = read(); if (s2.code !== s.code) return state(); // changed while we waited
@@ -131,7 +147,7 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     if (res.ok) s2.act = active(res.receipt, t2);
     else if (res.full) s2.act = { status: 'released', tried: t2 };
     else if (res.cancelled) s2.act = { status: 'cancelled', tried: t2 };
-    else s2.act = { ...a, tried: t2 }; // offline, or an answer to look at again later
+    else s2.act = { ...a, tried: t2, answered: !!res.answered }; // offline, or an answer to look at again later
     write(s2);
     return state();
   }
@@ -161,10 +177,10 @@ function netPost(url, body) {
 }
 
 // Called from main.js before the window opens: hasPriorData must be read before this run creates any data.
-function wireLicence({ ipcMain, fromApp, getWindow, shell, dir, hasPriorData, site }) {
+function wireLicence({ ipcMain, fromApp, getWindow, shell, dir, hasPriorData, mirror, site }) {
   const send = s => { const w = getWindow(); if (w && !w.isDestroyed()) w.webContents.send('licence:changed', s); };
   const prior = hasPriorData();
-  const lic = createLicence({ dir, post: netPost, priorData: () => prior, onChange: send, ...(site ? { site } : {}) });
+  const lic = createLicence({ dir, post: netPost, priorData: () => prior, mirror: mirror || NO_MIRROR, onChange: send, ...(site ? { site } : {}) });
   const guard = fn => (e, ...args) => (fromApp(e) ? fn(...args) : { error: 'refused' });
   ipcMain.handle('licence:state', guard(() => lic.state()));
   ipcMain.handle('licence:enter', guard((text, opts) => lic.enter(text, opts && typeof opts === 'object' ? { release: opts.release } : {})));
@@ -174,7 +190,7 @@ function wireLicence({ ipcMain, fromApp, getWindow, shell, dir, hasPriorData, si
   ipcMain.handle('licence:buy', guard(() => { shell.openExternal((site || SITE) + '/buy'); return true; }));
   lic.state().catch(() => {});
   const tick = () => lic.recheck(false).catch(() => {});
-  setTimeout(tick, 20e3);
+  setTimeout(tick, 1500); // straight away, so a computer back after a long break is confirmed before anyone notices
   setInterval(tick, HOUR);
   return lic;
 }

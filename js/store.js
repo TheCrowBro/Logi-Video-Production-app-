@@ -82,6 +82,12 @@ function persistLocal() {
 let gate = null;
 export const setGate = fn => { gate = typeof fn === 'function' ? fn : null; };
 
+// Whether a change would be accepted now (and, when not, the gate explains why). Forms check it before closing.
+export const canChange = () => !gate || gate();
+
+// Redraws the page from what is stored (after a refused change, so a ticked box shows the stored value again).
+export const redraw = () => emit();
+
 // Mutate the db inside fn, then save + sync. Returns false when the change was refused.
 export function update(fn) {
   if (gate && !gate()) return false;
@@ -94,7 +100,7 @@ export function update(fn) {
 }
 
 export function upsert(list, item) {
-  update(d => {
+  return update(d => {
     const arr = d[list];
     const i = arr.findIndex(x => x.id === item.id);
     const stamped = { ...item, id: item.id || uid(), updatedAt: Date.now() };
@@ -103,7 +109,7 @@ export function upsert(list, item) {
 }
 
 export function remove(list, id) {
-  update(d => {
+  return update(d => {
     d[list] = d[list].filter(x => x.id !== id);
     d.deleted[id] = Date.now();
     if (list === 'gear') { d.bookings.forEach(b => { b.gear = (b.gear || []).filter(g => g !== id); if (b.gearQty) delete b.gearQty[id]; }); d.kits.forEach(k => { if (k.gearQty) delete k.gearQty[id]; }); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }

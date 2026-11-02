@@ -522,7 +522,7 @@ Open https://vdex.crowmade.app/download.html, download the file for your compute
 |---|---|---|
 | **Windows** | `Vdex-Setup.exe` | Double-click it. Vdex installs in a few seconds, opens, and gets a Start menu and desktop shortcut. While Vdex is new, Windows may show *Windows protected your PC*: click **More info**, check the publisher, then **Run anyway**. |
 | **Mac** | `Vdex.dmg` | Open it and drag Vdex into Applications. If macOS says it cannot check the app, go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. |
-| **Linux** | `Vdex-<version>.AppImage` | Make it executable (right-click → Properties → *Allow executing as program*, or `chmod +x`), then double-click it. |
+| **Linux** | `Vdex.AppImage` | Make it executable (right-click → Properties → *Allow executing as program*, or `chmod +x`), then double-click it. |
 
 **The licence.** The desktop app is free to try for 30 days on each computer. After that it needs a licence code: **Buy a licence** in Settings → *About* (20 US dollars once, for up to 3 of your computers), then paste the code from your email under **Enter licence code**. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens, prints and exports, but nothing can be changed. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
 

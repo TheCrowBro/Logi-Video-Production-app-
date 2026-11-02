@@ -20,7 +20,10 @@ try {
   ok('no Android, desktop, docs, store, test or tool files, no signing key, and never the licence generator or keys', !files.some(f => /^(android|desktop|docs|store|tests|tools|cloudflare|\.github)\/|keystore|licence-(generator|key|codes)|package(-lock)?\.json$|\.md$/.test(f) && f !== 'vendor/LICENSES.md'), files.filter(f => /keystore|^android|^docs|licence-/.test(f)).join(', '));
   const shell = [...read('sw.js').match(/const SHELL = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(m => m[1]).filter(f => f !== './');
   ok('every file the offline copy asks for is published', shell.every(f => files.includes(f)), shell.filter(f => !files.includes(f)).join(', '));
-  ok('no _headers or _redirects in the GitHub Pages copy', !files.includes('_headers') && !files.includes('_redirects'));
+  ok('no _headers or _redirects in the plain copy', !files.includes('_headers') && !files.includes('_redirects'));
+  const WORKER_ROUTES = JSON.parse(read('tools/site-files.mjs').match(/export const WORKER_ROUTES = (\[[^\]]*\]);/)[1].replace(/'/g, '"'));
+  const swRoutes = JSON.parse(read('sw.js').match(/const WORKER_ROUTES = (\[[^\]]*\]);/)[1].replace(/'/g, '"'));
+  ok('the offline copy leaves the Worker\'s addresses (Buy, the code after paying) to the server', JSON.stringify(swRoutes) === JSON.stringify(WORKER_ROUTES) && /workerRoute\(new URL\(req\.url\)\)\) return;/.test(read('sw.js')) && /WORKER_ROUTES/.test(read('tools/stamp-build.mjs')));
   fs.rmSync(path.join(ROOT, out), { recursive: true, force: true });
   // a page nobody added to the list, or a link to a file that is not published, stops the deploy
   const stray = path.join(ROOT, 'stray-' + process.pid + '.html'); fs.writeFileSync(stray, '<!doctype html>');
