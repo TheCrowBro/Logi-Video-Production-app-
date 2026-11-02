@@ -14,6 +14,7 @@ const blank = () => ({
   templates: {}, // per job type: edited checklist lines per stage
   projectTemplates: [], // the user's own job types: defaults for a new booking (times, kit, crew, deliverables, schedule…)
   billing: { updatedAt: 0 }, // rates, numbering, tax and payment terms for quotes and invoices
+  priceList: { list: null, region: '', updatedAt: 0 }, // the lines picked into quotes and invoices (null: not set up yet)
 });
 
 function load() {
@@ -42,6 +43,7 @@ function normalise(raw) {
     templates: raw.templates && typeof raw.templates === 'object' ? raw.templates : {},
     projectTemplates: Array.isArray(raw.projectTemplates) ? raw.projectTemplates : [],
     billing: raw.billing && typeof raw.billing === 'object' ? raw.billing : { updatedAt: 0 },
+    priceList: raw.priceList && typeof raw.priceList === 'object' ? raw.priceList : b.priceList,
   };
 }
 
@@ -320,6 +322,7 @@ export function mergeDb(local, remote) {
   }
   out.templates = ts(remote.templates) > ts(local.templates) ? remote.templates : local.templates;
   out.billing = ts(remote.billing) > ts(local.billing) ? remote.billing : local.billing;
+  out.priceList = ts(remote.priceList) > ts(local.priceList) ? remote.priceList : local.priceList; // its own record: a change to the other billing settings never undoes it
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }

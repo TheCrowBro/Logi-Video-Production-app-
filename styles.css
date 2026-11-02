@@ -622,3 +622,11 @@ html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .s
 .budget-cat > summary { grid-template-columns: minmax(0, 1fr) auto; } /* name and chevron: the chevron turns in place */
 .budget-cat .twirl-body { gap: 8px; }
 .crew-parts { display: grid; gap: 2px; }
+/* Price list: the editor's lines and the picker's tick rows (the price under the name, never squeezed) */
+.price-item { display: grid; gap: 2px; text-align: left; min-width: 0; overflow-wrap: break-word; } .price-item strong { font-size: 1rem; }
+.price-group { gap: 0; } .price-group h4 { margin: 10px 0 2px; }
+.price-pick { align-items: flex-start; } .price-pick input { margin-top: 2px; }
+.price-pick-text { flex: 1; display: grid; gap: 1px; min-width: 0; overflow-wrap: break-word; } .price-pick-text > span { font-size: 1rem; }
+.sheet-body:has(.price-picker) { scroll-padding-bottom: 84px; } /* a ticked row reached with Tab is never under the Add bar */
+/* Rows in a form (quote lines, contacts, deliverables): the first text box on a line of its own, the rest below it */
+.field .rows .row-edit { flex-wrap: wrap; } .field .rows .row-edit > input { flex: 1 1 0; min-width: 0; } .field .rows .row-edit > input[type=text]:first-child { flex: 1 1 100%; }

@@ -65,6 +65,7 @@ export function announce(msg) {
 }
 
 let openSheets = 0;
+const sheetStack = []; // open sheets, newest last: only the top one answers Escape and keeps Tab inside it
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"])';
 
 // Modal bottom sheet: traps focus, restores it on close, hides the page from assistive tech while open.
@@ -76,11 +77,13 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   const close = () => {
     if (closed) return; closed = true;
     back.remove(); document.removeEventListener('keydown', keys);
+    const at = sheetStack.indexOf(back); if (at >= 0) sheetStack.splice(at, 1);
     if (--openSheets === 0 && app) app.inert = false;
     opener && opener.isConnected && opener.focus();
     onClose && onClose();
   };
   const keys = e => {
+    if (sheetStack[sheetStack.length - 1] !== back) return; // a sheet opened over this one handles it
     if (e.key === 'Escape') return close();
     if (e.key !== 'Tab') return;
     const items = [...box.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
@@ -96,6 +99,7 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   if (dismissOnBackdrop) back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
   document.addEventListener('keydown', keys);
   document.body.append(back);
+  sheetStack.push(back);
   openSheets++;
   if (app) app.inert = true;
   return { el: box, close };

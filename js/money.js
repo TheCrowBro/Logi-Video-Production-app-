@@ -1,7 +1,8 @@
 // Quotes and invoices, one of each per booking. Lines are suggested from the booking (shoot days, crew with their
 // day rates, kit, the deliverables a template put there) or, for the invoice, copied from the quote or built from the
 // hours logged; the user edits them. Printed from the app, saved as PDF, emailed to the client's contacts, and
-// summed up on the Money overview. Rates, numbering, tax and payment terms live in Settings → Quotes & invoices.
+// summed up on the Money overview. Rates, the price list, numbering, tax and payment terms live in Settings → Quotes &
+// invoices.
 import { h, sheet, toast, nodes, fmtShort, fmtLong, todayISO, parseISO, ymd, uid } from './util.js';
 import { db, byId, upsert, update, endOf } from './store.js';
 import { openForm } from './form.js';
@@ -109,8 +110,8 @@ export function editMoney(b, kind, onDone, preset) {
       { key: 'date', label: 'Date', type: 'date', required: true },
       { key: K.dateKey, label: K.dateLabel, type: 'date' },
       { key: 'lines', label: 'Lines', type: 'rows', columns: [{ key: 'desc', label: 'Description' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'unit', label: 'Unit' }, { key: 'price', label: `Price (${sym()})`, type: 'number' }], hint: 'Quantity × price per line. Units are free text: day, hour, each…' },
-      { key: 'taxRate', label: `${bl.taxLabel || 'Tax'} rate (%)`, type: 'number', min: 0, hint: '0 if you don’t charge it.' },
-      ...(kind === 'invoice' ? [{ key: 'deposit', label: 'Already paid / deposit', type: 'number', min: 0 }] : []),
+      { key: 'taxRate', label: `${bl.taxLabel || 'Tax'} rate (%)`, type: 'number', min: 0, step: 'any', hint: '0 if you don’t charge it.' },
+      ...(kind === 'invoice' ? [{ key: 'deposit', label: 'Already paid / deposit', type: 'number', min: 0, step: 'any' }] : []),
       { key: 'status', label: 'Status', type: 'select', options: K.statuses },
       { key: 'notes', label: kind === 'quote' ? 'What is included / notes' : 'Payment terms / notes', type: 'textarea', rows: 3 },
     ],
@@ -222,6 +223,8 @@ export function moneyPage(b, kind, go) {
   const pdf = async () => { try { if (await saveOrShare(await moneyPdf(byId('bookings', b.id), kind), `${kind}-${slug(doc.number)}-${slug(b.title)}.pdf`, 'application/pdf')) toast('PDF saved'); } catch (e) { toast('Could not make the PDF: ' + (e.message || e)); } };
   const web = () => saveOrShare(htmlDocument(`${K.label} ${doc.number} — ${b.title}`, renderMoneyDoc(byId('bookings', b.id), kind)), `${kind}-${slug(doc.number)}.html`, 'text/html');
   const addLines = (source, label) => { const have = new Set((doc.lines || []).map(l => (l.desc || '').toLowerCase())); const add = suggestLines(b, kind, source).filter(l => !have.has((l.desc || '').toLowerCase())); if (!add.length) return toast('Nothing new to add'); saveDoc(b.id, kind, { ...doc, lines: [...(doc.lines || []), ...add] }); toast(`${add.length} line${add.length === 1 ? '' : 's'} added from ${label}`); };
+  // Lines picked from the price list go onto the document; with no document yet they start a new one in the editor.
+  const fromList = () => import('./price-list.js').then(m => m.pickFromPriceList(b, lines => { const now = byId('bookings', b.id); if (!now) return toast('That booking has been removed'); const d = docOf(now, kind); if (!d) return editMoney(now, kind, refresh, { lines }); saveDoc(b.id, kind, { ...d, lines: [...(d.lines || []), ...lines] }); toast(`${lines.length} line${lines.length === 1 ? '' : 's'} added from the price list`); })).catch(e => toast('Could not open the price list: ' + (e.message || e)));
   const t = doc && totals(doc);
   const stateCls = doc && (doc.status === 'Paid' || doc.status === 'Accepted' ? 'synced' : isOverdue(b) || doc.status === 'Declined' ? 'error' : '');
   // The email carries the client's link once it is made (it is packed asynchronously); the plain text goes first.
@@ -242,6 +245,7 @@ export function moneyPage(b, kind, go) {
         kind === 'quote' && doc.status === 'Sent' && h('button', { class: 'btn ghost', onclick: () => setDocStatus(b.id, kind, 'Accepted') }, '✅ Accepted'),
         kind === 'invoice' && doc.status === 'Sent' && h('button', { class: 'btn ghost', onclick: () => setDocStatus(b.id, kind, 'Paid') }, '✅ Paid in full'),
         h('button', { class: 'btn ghost small', onclick: () => addLines('booking', 'the booking') }, '＋ Lines from the booking'),
+        h('button', { class: 'btn ghost small', onclick: fromList }, '＋ From the price list'),
         kind === 'invoice' && b.quote && h('button', { class: 'btn ghost small', onclick: () => addLines('quote', 'the quote') }, '＋ Lines from the quote'),
         kind === 'invoice' && h('button', { class: 'btn ghost small', onclick: () => addLines('hours', 'the hours logged') }, '＋ Lines from hours logged')),
       h('div', { class: 'actions' },
@@ -264,6 +268,7 @@ export function moneyPage(b, kind, go) {
         h('button', { class: 'btn primary', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'booking') }) }, '＋ From the booking'),
         kind === 'invoice' && b.quote && h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'quote'), taxRate: b.quote.taxRate }) }, '＋ From the quote'),
         kind === 'invoice' && h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'hours') }) }, '＋ From hours logged'),
+        h('button', { class: 'btn ghost', onclick: fromList }, '＋ From the price list'),
         h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh) }, 'Start blank')),
       !billing().dayRate && h('p', { class: 'small muted' }, 'Tip: set your day, hour and kit rates under Settings → Quotes & invoices, and each person’s day rate on the Crew page, and the suggested lines come priced.')));
 }
@@ -415,6 +420,9 @@ export function billingPanel() {
     h('div', { class: 'grid2' }, field(`Day rate (${sym()})`, 'dayRate', 'number', { min: 0 }), field(`Hour rate for editing (${sym()})`, 'hourRate', 'number', { min: 0 }), field(`Overtime hour rate (${sym()})`, 'overtimeRate', 'number', { min: 0 }), field(`Equipment package per day (${sym()})`, 'kitRate', 'number', { min: 0 })),
     h('div', { class: 'grid2' }, field('Tax name', 'taxLabel'), field('Tax rate (%)', 'taxRate', 'number', { min: 0 }), field('Quote number prefix', 'quotePrefix'), field('Next quote number', 'nextQuote', 'number', { min: 1 }), field('Invoice number prefix', 'invoicePrefix'), field('Next invoice number', 'nextInvoice', 'number', { min: 1 }), field('Quotes valid for (days)', 'validDays', 'number', { min: 1 }), field('Invoices due in (days)', 'dueDays', 'number', { min: 0 })),
     field('Payment terms (on every invoice)', 'terms', 'textarea'),
+    h('h4', { class: 'pay-head' }, 'Price list'),
+    h('p', { class: 'small muted' }, 'The lines you charge for again and again, with your prices, to pick into a quote or an invoice with ＋ From the price list. It starts from typical freelance rates where you work: change any price to yours.'),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => import('./price-list.js').then(m => m.openPriceList()).catch(e => toast('Could not open the price list: ' + (e.message || e))) }, '🏷 Edit the price list')),
     h('h4', { class: 'pay-head' }, 'Getting paid'),
     h('p', { class: 'small muted' }, 'Add the ways you like to be paid, as many as you want. Every invoice then carries a Pay button for each one that has a link, with the balance filled in, plain instructions for the ones that do not, bank details with a QR code banking apps can scan, and the invoice number as the reference. The link you send a client opens the invoice with the same buttons.'),
     h('div', { class: 'field' }, h('label', null, 'Currency for payment links'), h('select', { 'aria-label': 'Currency for payment links', onchange: e => setBilling({ currencyCode: e.target.value }) }, ...CURRENCIES.map(([c, sy]) => h('option', { value: c, selected: c === code() ? 'selected' : null }, `${c} ${sy.trim()}`)))),

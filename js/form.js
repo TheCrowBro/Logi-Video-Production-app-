@@ -102,6 +102,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
         list.replaceChildren(...rows.map((r, ri) => h('div', { class: 'row-edit' },
           f.columns.map(c => h('input', {
             type: c.type || 'text', placeholder: c.label, 'aria-label': c.label, value: r[c.key] ?? '',
+            step: c.type === 'number' ? (c.step ?? 'any') : null, inputMode: c.type === 'number' ? 'decimal' : null, // prices like 0.76 or 12.50
             oninput: e => { r[c.key] = e.target.value; },
           })),
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Remove row', onclick: () => { rows.splice(ri, 1); draw(); } }, '✕'))));
