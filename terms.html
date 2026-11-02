@@ -31,6 +31,11 @@
   th { color: var(--muted); font-weight: 600; }
   @media (max-width: 560px) { table, thead, tbody, tr, th, td { display: block; } thead { display: none; } tr { padding: 10px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; } td[data-h]::before { content: attr(data-h) ": "; color: var(--muted); } }
   .back { display: inline-block; margin-top: 32px; }
+  .important { border: 2px solid var(--accent); border-radius: 14px; padding: 4px 18px 14px; margin: 32px 0 8px; }
+  .important > h2:first-child { border: 0; margin-top: 14px; padding-top: 0; color: var(--accent); }
+  .important h3 { font-size: 1.15rem; margin: 22px 0 8px; }
+  .important strong { font-weight: 700; }
+  .clause { margin: 10px 0; }
 </style>
 </head>
 <body>
@@ -43,95 +48,135 @@
 
   <section class="summary">
     <h2>The short version</h2>
+    <p>This summary helps you find the important parts. The full terms below are what apply.</p>
     <ul>
       <li>Vdex is free to use for your own work, including paid work.</li>
-      <li>It is provided as it is. It can have mistakes, stop working or lose information, so keep your own backups.</li>
-      <li>Vdex helps you organise. You stay responsible for your shoots, your quotes and invoices, your taxes, people's safety, and the information you keep about other people.</li>
-      <li>As far as the law allows, the developer is not responsible for losses that come from using Vdex. Rights that the law says cannot be taken away stay with you.</li>
+      <li>It comes as it is. It can have mistakes, stop working or lose information, so keep your own backups.</li>
+      <li>Vdex helps you organise. You stay responsible for your shoots, your call sheets, quotes and invoices, your taxes, people's safety, and the information you keep about other people.</li>
+      <li>The developer's responsibility is very limited: many kinds of loss are excluded and the rest is capped at 50 US dollars (<a href="#liability">sections 13 and 14</a>). This does not affect rights the law gives you that cannot be taken away.</li>
     </ul>
   </section>
 
   <h2>1. Agreeing to these terms</h2>
-  <p>These terms are an agreement between you and the developer of Vdex. Before Vdex can be used on a device, it asks you to accept them and the <a href="privacy.html">privacy policy</a>: ticking the box and tapping "Agree and continue" means you accept both. If you do not agree, do not use Vdex.</p>
+  <p>These terms are an agreement between you and the developer of Vdex. Before Vdex can be used on a device, it asks you to agree to them: ticking the box and tapping "Agree and continue" means you agree. If you do not agree, do not use Vdex.</p>
+  <p>The <a href="privacy.html">privacy policy</a> explains how Vdex handles information. It is there to inform you and is not part of this agreement.</p>
   <p>You must be an adult who can make a binding agreement where you live. If you use Vdex for a business, you agree to these terms for that business too, and you confirm that you are allowed to.</p>
 
   <h2>2. Who provides Vdex</h2>
-  <p>Vdex is made and published by its developer, TheCrowBro ("we" and "us" below). Its source code is public at <a href="https://github.com/TheCrowBro/Logi-Video-Production-app-">github.com/TheCrowBro/Logi-Video-Production-app-</a>. If you got Vdex from an app store, that store's own terms apply as well.</p>
+  <p>Vdex is made and published by its developer, known online as TheCrowBro ("we" and "us" below). Its source code is public at <a href="https://github.com/TheCrowBro/Logi-Video-Production-app-">github.com/TheCrowBro/Logi-Video-Production-app-</a>.</p>
+  <p>Get Vdex only from <a href="https://thecrowbro.github.io/Logi-Video-Production-app-/">thecrowbro.github.io/Logi-Video-Production-app-</a>, the project's <a href="https://github.com/TheCrowBro/Logi-Video-Production-app-/releases">GitHub Releases page</a> or Google Play. These terms, and anything we say about Vdex, cover only Vdex as we publish it there. We are not responsible for copies that anyone else builds, hosts, changes or distributes.</p>
+  <p>If you got Vdex from an app store, the store's terms cover your relationship with the store; these terms cover your relationship with us.</p>
 
   <h2>3. What Vdex is, and what it is not</h2>
-  <p>Vdex is an organiser for people who film for a living: bookings, crew, equipment, venues, insurance dates, call sheets, quotes, invoices, shoot-day tools and timecode notes.</p>
-  <p>Vdex is not a bank or payment service, an accountant, a lawyer, a tax adviser, an insurance adviser, a safety device, a calibrated measuring instrument or a backup service. Nothing in Vdex is professional advice.</p>
+  <p>Vdex is an organiser for people who film for a living: bookings, crew, equipment, venues, insurance dates, call sheets, quotes, invoices, shoot-day tools and timecode notes. It is made for people who use it in their business or profession.</p>
+  <p>Vdex is not a bank or payment service, an accountant, a lawyer, a tax adviser, an insurance adviser, a safety device or a calibrated measuring instrument. Its backup features are not a substitute for keeping your own separate copies. The built-in checklists, templates, suggested lines, tutorials and guides are general examples: they are not complete for any job and do not replace your own checks, the law or professional advice. Nothing in Vdex is professional advice.</p>
 
-  <h2>4. Your information and your backups</h2>
-  <p>Vdex keeps what you enter on your own device, and in cloud storage only if you link it. We do not hold a copy. The <a href="privacy.html">privacy policy</a> explains this in full.</p>
+  <h2>4. Your licence to use Vdex</h2>
+  <p>We give you a free, personal, non-exclusive, non-transferable licence to install and use Vdex for your own personal or business purposes, including paid work, as long as you follow these terms. This gives you no other rights in Vdex's code, name or design. We may end your licence if you seriously or repeatedly break these terms. You can end it at any time by stopping using Vdex.</p>
+
+  <h2>5. Your information, your backups and security</h2>
+  <p>Vdex keeps what you enter on your own device, and in cloud storage only if you link it. We do not hold a copy.</p>
   <p>Keeping backups is your responsibility. Information can be lost in many ways, for example:</p>
   <ul>
     <li>clearing your browser's data, uninstalling Vdex, or losing or breaking the device;</li>
     <li>a browser removing a website's stored data on its own, as Safari may for a site that has not been opened for a while unless Vdex is added to the home screen;</li>
     <li>a mistake while syncing two devices, or a change made on another device;</li>
-    <li>forgetting your PIN, since the information is encrypted with it and cannot be recovered, or the "erase after too many wrong PINs" option you can switch on;</li>
+    <li>forgetting your PIN when fingerprint or face unlock is not set up, since the information on the device cannot then be unlocked or recovered, or the "Erase this device after 10 wrong PINs" option under Settings → Security, if you switch it on;</li>
     <li>a cloud service being unavailable, closing your account, or running out of space.</li>
   </ul>
-  <p>Vdex's backup, export and sync features are there to help, but they come with no guarantee. Export a backup now and then (Settings → Backups &amp; data) and keep it somewhere safe.</p>
+  <p>With Google Drive and iCloud, Vdex keeps its copy and its daily backups in a private area that only Vdex can open, not as files you can see. If Vdex stops working with that service, or stops being offered, you may not be able to get them back. So also keep an exported backup file you can open yourself (Settings → Backups &amp; data → Export backup), and keep it somewhere safe.</p>
+  <p>A PIN protects the information on this device while Vdex is locked. It does not protect the copy in your cloud storage, which is kept as plain text and protected only by your account there, or anything you export without a passphrase, print or send. Someone who copies the device's storage can guess a short PIN, so use six or more digits. Link only your own devices: the phone-to-laptop link shares your timecode notes and scripts with whoever scans its code. You are responsible for keeping your devices, accounts, passwords and backup files secure.</p>
 
-  <h2>5. Information about other people</h2>
+  <h2>6. Information about other people</h2>
   <p>You can keep details about clients, crew, venues and other people in Vdex. When you do, you decide what is kept and why, and you are responsible for being allowed to keep and use it, including under any data-protection law that applies to you. We never receive that information.</p>
-  <p>You also decide who receives what you send from Vdex, such as call sheets, quotes, invoices and links. Anyone who has a quote or invoice link can read it.</p>
+  <p>Deleting someone in Vdex removes them from your devices that sync. It does not remove them from backups (Vdex keeps one cloud backup for each month until you delete it), from files you exported, or from documents, links and calendar events already sent or synced. A device that has not synced for about six months, or an old backup you restore, can bring deleted records back. If you need someone's details gone, delete them in those places too.</p>
+  <p>You decide who receives what you send from Vdex. Anyone who has a quote or invoice link, or your calendar feed link, can read what is in it, including names and contact details. A calendar feed lists every booking that is not cancelled, with client and crew names, contacts' phone numbers and booking notes, so share its link only with people who may see all of that. A sent link cannot be withdrawn or changed: if you correct a document, send a new link and tell the client the old one is out of date. Links open through Vdex's website and may stop working if Vdex changes or stops, so keep the PDF as your record. Switching the feed off in Vdex does not stop a feed link you already shared from working; delete the feed file (vdex-bookings.ics) in your storage to do that.</p>
 
-  <h2>6. Quotes, invoices and payments</h2>
+  <h2>7. Quotes, invoices and payments</h2>
   <ul>
-    <li>Vdex suggests lines and does the arithmetic, but you must check every quote and invoice before you send it: the prices, taxes, totals, dates and any details the law where you work requires.</li>
-    <li>Vdex never handles money. The Pay buttons on an invoice open the payment service you chose. Any payment, fee, refund, chargeback or dispute is between you, your client and that service, under its terms. Vdex is not told whether a payment was made.</li>
+    <li>Vdex suggests lines and does the arithmetic, but you must check every quote and invoice each time you send, print, save or link it, including reminders: the prices, taxes, totals, currency, dates, your payment details and anything the law where you work requires. Each copy is made from your settings at that moment, so changing your currency, payment or business details also changes copies you make later of older documents.</li>
+    <li>Pay buttons and payment QR codes open another service with an amount and a currency filled in. Some services work in one currency only (for example UPI in Indian rupees, Monzo in pounds and Venmo in US dollars), and a button does not show which currency it uses. Before you send an invoice, open each Pay button yourself and check the amount, the currency and the account. We are not responsible for a payment made in the wrong amount or currency, or to the wrong account.</li>
+    <li>Vdex never handles money. Any payment, fee, refund, chargeback or dispute is between you, your client and the payment service, under its terms. Vdex is not told whether a payment was made.</li>
+    <li>Vdex does not check who made a quote or invoice, what it says, or the payment details on it. A Vdex link shows only what the person who made it put in. Anyone can make or change one, so a link is not proof of who sent it, of an agreement or of a payment. You are responsible for everything in the links you create, including the payment details, and for telling your clients how they can confirm your payment details.</li>
     <li>Your tax, accounting and record-keeping duties stay yours.</li>
   </ul>
 
-  <h2>7. Shoot-day tools, forecasts and reminders</h2>
+  <h2>8. Call sheets, shoot-day tools and reminders</h2>
   <ul>
-    <li>The weather forecast, sunrise, sunset and golden hour, Polaris, the white balance reader, the noise meter, the range finder, the level, timecode sync and the hours clock give estimates for planning. They can be wrong, late or unavailable.</li>
+    <li>Call sheets are made from what you enter and from the booking, including the address, map link, nearest hospital, emergency contact, weather and sun times. Vdex does not check any of it. Check each call sheet before you send it and whenever plans change, and make sure everyone on set gets current safety and emergency information from you or the production, not from Vdex alone.</li>
+    <li>The weather forecast, sunrise, sunset and golden hour, Polaris, the white balance reader, the noise meter, the range finder, timecode sync, the shoot-day clock, address lookups, map pins and directions give estimates for planning. They can be wrong, late or unavailable. Check a location yourself, especially before a first visit.</li>
     <li>Do not rely on them where safety, health, money or the law is at stake: for example work at height, rigging, drones, roads and traffic, water, bad weather, protecting your hearing (the noise meter is not a calibrated sound level meter), or settling a pay dispute. Follow site safety rules, the law and your own professional judgement.</li>
-    <li>Reminders and notifications, for shoots, breaks, equipment service or insurance renewals, may not arrive, for example if the device is off, notifications are blocked or Vdex is closed. Do not rely on Vdex alone for deadlines.</li>
+    <li>Vdex never reads, copies or checks your footage, sound or memory cards. The media log and checklists record only what you tick. Timecode notes are stamped from your device's clock and can drift or be out between devices, and text that Vdex reads from a camera screen or a script can be misread. Check your copies yourself before you clear a card, and check notes and exports against the camera and the original before anyone relies on them.</li>
+    <li>Reminders and notifications may not appear, for example if the device is off, notifications are blocked, or Vdex is closed or in the background. This includes break notifications and the notes Vdex shows when you open it about equipment due for a service, overdue invoices or an old backup. Vdex does not remind you about shoots or insurance renewals. Do not rely on Vdex alone for deadlines.</li>
     <li>The insurance section only records the policies you enter. It is not insurance advice and does not tell you whether you are covered.</li>
   </ul>
 
-  <h2>8. Other services you connect</h2>
-  <p>Google Drive, Google Calendar, iCloud, Dropbox, OneDrive, Outlook, Nextcloud and other WebDAV servers, payment services, maps, weather and app stores are run by other companies under their own terms and privacy policies. When you connect one, you are responsible for following its terms, for your account with it, and for any storage or costs it involves. We are not responsible for those services: whether they are available, how they change, or what they do with your information. Vdex may stop working with a service if that service changes or withdraws access.</p>
-  <p>Calendar sync makes and changes events in a calendar called "Vdex bookings" in your account, and some edits made there come back into Vdex. Check the dates that matter to you.</p>
+  <h2>9. Other services you connect</h2>
+  <p>Google Drive, Google Calendar, iCloud, Dropbox, OneDrive, Outlook, Nextcloud and other WebDAV servers, payment services, maps, weather, GitHub (which hosts Vdex and its updates), the services the text reader and device linking use, and app stores are run by other companies under their own terms and privacy policies. When you connect one, you are responsible for following its terms, for your account with it, and for any storage or costs it involves. We are not responsible for those services: whether they are available, how they change, or what they do with your information. Vdex may stop working with a service if that service changes or withdraws access.</p>
+  <p>Calendar sync creates, changes and deletes events, including deliverable due dates, in a calendar called "Vdex bookings" in your account. It does not touch your other calendars. Changes to an event's date, time, title or location made there replace what is in Vdex. Deleting an event there does not delete the booking, and Vdex puts the event back. The events include the client, contacts' phone numbers, crew names and booking notes, so anyone who can see that calendar can see them. Check the dates that matter to you.</p>
 
-  <h2>9. Using Vdex fairly</h2>
-  <p>Use Vdex lawfully. Do not use it to store or send unlawful material, to harass or spam anyone, or to infringe other people's rights, including in scripts or files you import. Do not use it to interfere with the services it connects to, or misuse the sign-in registrations Vdex has with Google, Apple, Dropbox and Microsoft.</p>
+  <h2>10. Using Vdex fairly</h2>
+  <p>Use Vdex lawfully. Do not use it to store or send unlawful material, to harass or spam anyone, or to infringe other people's rights, including in scripts or files you import. Do not use Vdex to make a quote, invoice, call sheet or link that pretends to come from someone else, asks for money that is not owed, or is otherwise false or misleading. Do not use it to interfere with the services it connects to, or misuse any sign-in registration Vdex has with Google, Apple, Dropbox or Microsoft.</p>
 
-  <h2>10. Free of charge, and changes to Vdex</h2>
-  <p>Vdex is free, and we are not obliged to provide support, fixes or updates. We may change, add or remove features, or stop offering Vdex, at any time. Updates reach the web app automatically, and the desktop app offers them when they come out.</p>
+  <h2>11. Free of charge, updates and changes to Vdex</h2>
+  <p>Vdex is free, and we are not obliged to provide support, fixes or updates. We may change, add or remove features, or stop offering Vdex, at any time. If we decide to stop offering Vdex, we will try to say so in the app first, so you can export your information.</p>
+  <p>Updates reach the web app and the Google Play app automatically. On Windows and Linux, the desktop app downloads updates by itself and installs them when you restart or close it. On a Mac, it tells you when a new version is out and gives you a link to download it.</p>
 
-  <h2>11. Who owns what</h2>
+  <h2>12. Who owns what</h2>
   <p>What you put into Vdex is yours, and we claim no rights in it.</p>
-  <p>The Vdex name, icon and design belong to the developer. Being able to read Vdex's source code does not by itself give permission to copy, change or publish it, except as a licence published with the code allows. Parts of Vdex made by others keep their own licences, listed in <a href="vendor/LICENSES.md">the open-source licences</a>.</p>
+  <p>The Vdex name, icon and design belong to the developer. Being able to read Vdex's source code does not by itself give permission to copy, change or publish it, except as a licence published with the code allows. Parts of Vdex made by others keep their own licences. Those in the app are listed in <a href="vendor/LICENSES.md">the open-source licences</a>, and the desktop app also includes the licences of Electron, Chromium and the libraries it uses.</p>
 
-  <h2>12. No warranty</h2>
-  <p>As far as the law allows, Vdex is provided "as is" and "as available", without any warranty or promise of any kind, express or implied. That includes any promise that Vdex is fit for a particular purpose, of satisfactory quality, accurate, secure, free of errors, available without interruption, or that information will not be lost.</p>
+  <section class="important" id="liability">
+    <h2>Important: no warranty, and limits on our liability</h2>
 
-  <h2>13. Limits on our liability</h2>
-  <p>As far as the law allows:</p>
+    <h3>13. No warranty (subject to section 16)</h3>
+    <p class="clause"><strong>Vdex is provided "as is" and "as available". We make no promises or warranties of any kind, express or implied,</strong> including any implied warranty of merchantability, satisfactory quality, fitness for a particular purpose, accuracy or non-infringement, or any warranty arising from course of dealing or usage of trade. We do not promise that Vdex will be secure, free of errors or available without interruption, that it will work with any other service, or that information will not be lost.</p>
+    <p class="clause">Descriptions of Vdex in the app, its guides, its README, its store listings and the privacy policy explain how Vdex is meant to work. They are given in good faith, but they are not a promise that it will always work that way, and where they seem to say more than these terms, these terms apply.</p>
+
+    <h3>14. Limits on our liability (subject to section 16)</h3>
+    <p class="clause"><strong>14.1</strong> This section applies to every kind of claim, including a claim for breach of contract, for negligence, for breach of a legal duty or for misrepresentation.</p>
+    <p class="clause"><strong>14.2 We are not liable for any indirect, incidental, special, consequential or punitive loss.</strong></p>
+    <p class="clause"><strong>14.3 We are not liable for loss or corruption of information, footage or recordings; for lost income, profit, business, contracts, clients, bookings, goodwill or savings; or for a missed shoot, deadline or payment.</strong></p>
+    <p class="clause"><strong>14.4 Our total liability for all claims relating to Vdex is limited to the greater of: what you paid us for Vdex in the twelve months before the event that caused the claim (normally nothing, as Vdex is free); and 50 US dollars or the same amount in your currency.</strong></p>
+    <p class="clause"><strong>14.5</strong> Sections 14.2 to 14.4 apply even if we were told that such a loss could happen.</p>
+    <p class="clause"><strong>14.6</strong> Nothing in these terms excludes or limits our liability for death or personal injury caused by our negligence, for fraud, for loss we caused deliberately or by gross negligence, or for anything else that the law that applies to you does not allow us to exclude or limit.</p>
+  </section>
+
+  <h2>15. Claims caused by your use</h2>
+  <p>If you use Vdex for a business, you will cover our reasonable losses and costs, including reasonable legal fees, from any claim someone else brings against us that results from information you kept or shared using Vdex, documents or links you sent using Vdex, or your breaking these terms or the law. This does not apply to the extent that the claim was caused by our own fault.</p>
+
+  <h2>16. Your rights under the law</h2>
+  <p>Some laws give you rights that an agreement cannot take away. Nothing in these terms takes those rights away, and sections 13 to 15 apply to you only as far as the law that applies to you allows.</p>
+  <p>If you use Vdex as a consumer (not for your business or profession):</p>
   <ul>
-    <li>We are not liable for any indirect, incidental, special, consequential or punitive loss. We are also not liable for lost information, income, profit, business, clients, bookings or goodwill, or for a missed shoot, deadline or payment. This applies whatever the cause, even if we were told such a loss could happen.</li>
-    <li>Our total liability for all claims relating to Vdex is limited to the greater of what you paid us for Vdex in the twelve months before the claim (normally nothing, as Vdex is free) and 50 US dollars or the same amount in your currency.</li>
+    <li>In the UK, if Vdex damages your device or other digital content because we did not use reasonable care and skill, you may be entitled to a repair or to compensation under section 46 of the Consumer Rights Act 2015.</li>
+    <li>In Australia, if the Australian Consumer Law applies to you, nothing in these terms excludes, restricts or modifies any consumer guarantee, right or remedy it gives you that cannot lawfully be excluded. Where that law allows us to limit our liability for failing to meet a consumer guarantee, our liability is limited to supplying Vdex again or paying the cost of having it supplied again.</li>
+    <li>Elsewhere, you keep any rights that consumer law where you live gives you and that cannot be excluded.</li>
   </ul>
-  <p>Nothing in these terms limits liability that the law does not allow to be limited, such as for death or personal injury caused by negligence, or for fraud.</p>
 
-  <h2>14. Claims caused by your use</h2>
-  <p>If you use Vdex for a business, you agree to cover our reasonable losses and costs from any claim someone else brings against us because of how you used Vdex: for example information about others you kept without permission, a document you sent, or breaking these terms or the law. This applies only as far as the law allows.</p>
+  <h2>17. Stopping, and removing your information</h2>
+  <p>You can stop using Vdex at any time. To remove your information:</p>
+  <ol>
+    <li>On every device except the last one, use Settings → Backups &amp; data → Erase all data on this device. Erasing also disconnects cloud storage, so that device stops copying to it.</li>
+    <li>On the last device, if you linked iCloud, first use ☁ → Delete Vdex's copy from iCloud…, then erase that device in the same way.</li>
+    <li>Then delete Vdex's copy from any other storage you linked: in Dropbox or OneDrive, the folder Apps › Vdex; in Google Drive, Settings → Manage apps → Vdex → Options → Delete hidden app data; on Nextcloud or another WebDAV server, the Vdex folder; and any file in a synced folder.</li>
+    <li>If you used calendar sync, delete the "Vdex bookings" calendar. If you made a calendar feed, delete vdex-bookings.ics or stop sharing its link.</li>
+    <li>Uninstall Vdex. Uninstalling alone may leave Vdex's information on the device (the desktop app keeps it), which is why erasing comes first.</li>
+  </ol>
+  <p>Sections 5 to 9, 12 to 16 and 19, and any other part that by its nature should continue, still apply after you stop.</p>
 
-  <h2>15. Your rights under the law</h2>
-  <p>Nothing in these terms takes away rights you have under laws that cannot be changed by agreement, such as consumer protection laws where you live. If a court finds part of these terms cannot be enforced, the rest still applies. If we do not enforce part of these terms straight away, we can still enforce it later.</p>
+  <h2>18. Changes to these terms</h2>
+  <p>We may update these terms, for example to cover new features, changes in the law or changes to the services Vdex connects to. When they change, Vdex shows you the new terms the next time you open it and asks you to agree before you carry on. A change does not apply to anything that happened before it took effect. If you do not agree, you can export your information and stop using Vdex. Each version is dated at the top, and the full history is in the project's public repository.</p>
 
-  <h2>16. Stopping</h2>
-  <p>You can stop using Vdex at any time. To remove your information, use Settings → Backups &amp; data → Erase all data on this device, delete the copy in any cloud storage you linked (with iCloud, ☁ → Delete Vdex's copy from iCloud), and uninstall Vdex. Sections 11 to 15 continue to apply after you stop.</p>
+  <h2>19. General</h2>
+  <p><strong>Whole agreement.</strong> These terms are the whole agreement between you and us about Vdex and replace anything said before. This does not limit liability for anything said fraudulently, or anything consumer law treats as part of the agreement.</p>
+  <p><strong>Transfer.</strong> We may transfer this agreement to someone who takes over Vdex, and will say so in the app or on the project's page. If you do not want to continue, you can stop using Vdex. You may not transfer your rights under these terms.</p>
+  <p><strong>Notices.</strong> We give notices in the app or on the project's page. You can send us a formal notice by email, using the support address at <a href="https://crowmade.app/">crowmade.app</a>. Please do not put personal information or legal claims in public GitHub issues.</p>
+  <p><strong>Nobody else.</strong> Only you and we can enforce these terms. They give no rights to anyone else.</p>
+  <p><strong>Separate parts.</strong> Each section, and each sentence within a section, is separate. If a court decides that one cannot be enforced, the rest still apply. If we do not enforce part of these terms straight away, we can still enforce it later.</p>
 
-  <h2>17. Changes to these terms</h2>
-  <p>We may update these terms. The date at the top changes when we do, and the full history is visible in the project's public repository. When they change, Vdex asks you to accept the new terms before you can carry on using it. If you do not agree with them, stop using Vdex.</p>
-
-  <h2>18. Contact</h2>
-  <p>Open an issue at <a href="https://github.com/TheCrowBro/Logi-Video-Production-app-/issues">github.com/TheCrowBro/Logi-Video-Production-app-/issues</a>.</p>
+  <h2>20. Contact</h2>
+  <p>For anything private or legal, email the support address at <a href="https://crowmade.app/">crowmade.app</a>. For bugs and suggestions, open an issue at <a href="https://github.com/TheCrowBro/Logi-Video-Production-app-/issues">github.com/TheCrowBro/Logi-Video-Production-app-/issues</a>.</p>
 
   <p><a href="privacy.html">Privacy policy</a></p>
   <a class="back" href="./">← Back to Vdex</a>

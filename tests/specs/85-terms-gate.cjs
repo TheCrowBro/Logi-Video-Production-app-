@@ -22,6 +22,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     await page.goto(BASE); await page.waitForSelector('.terms-gate'); await sleep(600);
     ok('a first visit opens on the terms, and nothing else has started', (await page.locator('#rolodex .drum-btn').count()) === 0 && (await page.locator('.tour-card').count()) === 0 && /Before you start/.test(await page.locator('.terms-gate h1').innerText()));
     ok('…with the short version, and links to the terms and the privacy policy', /keep your own backups/.test(await page.locator('.terms-gate').innerText()) && (await page.locator('.terms-gate a[href="terms.html"]').count()) >= 1 && (await page.locator('.terms-gate a[href="privacy.html"]').count()) >= 1);
+    ok('…saying plainly how limited the developer’s responsibility is, linked to those sections', /capped at 50 US dollars/.test(await page.locator('.terms-gate').innerText()) && (await page.locator('.terms-gate a[href="terms.html#liability"]').count()) === 1);
+    ok('…and asking to agree to the terms, with the privacy policy there to inform, not to be agreed to', /I have read and agree to the terms of service\./.test(await page.locator('.terms-gate label.terms-check').innerText()) && !/privacy/i.test(await page.locator('.terms-gate label.terms-check').innerText()));
     const agree = page.locator('.terms-gate button:has-text("Agree and continue")');
     ok('Agree stays off until the box is ticked, and the box has the focus', (await agree.isDisabled()) && (await page.evaluate(() => document.activeElement && document.activeElement.id)) === 'terms-ok');
     ok('the app behind cannot be reached meanwhile', await page.evaluate(() => [...document.body.children].filter(e => !e.classList.contains('terms-gate')).every(e => e.inert)));
@@ -57,6 +59,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   { const { ctx, page } = await newPage();
     await page.goto(BASE + 'invoice.html'); await sleep(800);
     ok('the client invoice page never shows the terms gate', (await page.locator('.terms-gate').count()) === 0);
+    const foot = await page.locator('.foot').innerText();
+    ok('…and tells the client Vdex cannot confirm who made the link, to check payment details with the sender', /cannot confirm who made this link/.test(foot) && /confirm the amount and payment details with the sender/.test(foot) && (await page.locator('.foot a[href="terms.html"]').count()) === 1);
     await ctx.close(); }
 
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));

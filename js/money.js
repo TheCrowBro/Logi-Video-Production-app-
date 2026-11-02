@@ -147,7 +147,7 @@ export async function openShareSheet(b, kind) {
   const share = async () => { if (navigator.share) { try { await navigator.share({ title: docTitle(snap), text: `${K.label} ${doc.number} — ${b.title}`, url }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const qrBox = h('div', { class: 'share-qr' }); qrSvg(url, { cellSize: 2 }).then(svg => { qrBox.innerHTML = svg; }).catch(() => qrBox.remove());
   sheet(`Link for the client · ${K.label} ${doc.number}`, h('div', { class: 'stack' },
-    h('p', { class: 'small muted' }, `The whole ${K.label.toLowerCase()} is inside the link itself, so nothing is stored online and nothing can go missing. Anyone who has the link can read it, so send it to the client only.${kind === 'invoice' && payButtons(snap).length ? ' It opens with Pay buttons for the balance.' : ''}`),
+    h('p', { class: 'small muted' }, `The whole ${K.label.toLowerCase()} is inside the link itself, so nothing is stored online. Anyone who has the link can read it, so send it to the client only.${kind === 'invoice' && payButtons(snap).length ? ' It opens with Pay buttons for the balance.' : ''}`),
     area,
     h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: copy }, '📋 Copy link'), h('button', { class: 'btn ghost', onclick: share }, '📤 Share…'), h('a', { class: 'btn ghost', href: mailtoFor(b, kind, url, 'send') }, '✉ Email it'), h('a', { class: 'btn ghost small', href: url, target: '_blank', rel: 'noopener' }, 'Open preview')),
     qrBox, h('p', { class: 'small muted', style: 'text-align:center' }, 'Scan to open it on a phone')));

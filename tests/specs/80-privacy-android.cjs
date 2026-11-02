@@ -33,6 +33,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('it carries a last-updated date', /Last updated \d{1,2} \w+ \d{4}/.test(terms));
   for (const [what, re] of [['no warranty', /as is/i], ['limits on liability', /liability/i], ['backups being the user\u2019s job', /backups/i], ['invoices and payments', /Pay buttons/], ['safety-critical use of the tools', /safety/i], ['other services\u2019 own terms', /their own terms/i], ['rights the law keeps', /cannot be changed by agreement|cannot be taken away/i]]) ok(`it covers ${what}`, re.test(terms));
   ok('it fits a phone without sideways scrolling', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+  ok('the no-warranty and liability sections stand out in their own box, reachable by a link', await page.evaluate(() => { const b = document.getElementById('liability'); return !!b && /merchantability/.test(b.innerText) && /negligence/.test(b.innerText) && getComputedStyle(b).borderTopStyle === 'solid'; }));
   ok('it links the privacy policy and back to the app', (await page.locator('a[href="privacy.html"]').count()) >= 1 && (await page.locator('a.back').getAttribute('href')) === './');
 
   // Reachable from the app, and kept offline with it
@@ -51,7 +52,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await tpop.waitForLoadState();
   ok('the link opens the terms page', /terms\.html$/.test(tpop.url()), tpop.url());
   await tpop.close();
-  ok('About says when the terms were accepted on this device', /You accepted the terms of service and privacy policy on this device on /.test(await page.locator('details.settings-section:has(> summary:has-text("About"))').innerText()));
+  ok('About says when the terms were accepted on this device', /You agreed to the terms of service on this device on /.test(await page.locator('details.settings-section:has(> summary:has-text("About"))').innerText()));
   await page.waitForFunction(() => navigator.serviceWorker.controller != null, null, { timeout: 20000 });
   const cachedPolicy = await page.evaluate(async () => { const c = await caches.open('logi-dev'); return !!(await c.match(new URL('privacy.html', location.href).href)) && !!(await c.match(new URL('terms.html', location.href).href)); });
   ok('the policy and the terms are part of the offline set', cachedPolicy);

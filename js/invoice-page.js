@@ -25,7 +25,7 @@ const slug = s => String(s || 'doc').toLowerCase().replace(/[^a-z0-9]+/g, '-').r
     : h('span', { class: 'tag' }, snap.status === 'Accepted' ? 'Accepted' : snap.until ? `Valid until ${fmtShort(snap.until)}` : 'Quote');
   const pdf = async () => { try { const { makePdf } = await import('./pdf.js'); save(makePdf({ title: docTitle(snap), blocks: pdfBlocks(snap), footer: `${(snap.from || []).join(' · ')} · Made with Vdex` }), `${snap.kind}-${slug(snap.number)}.pdf`, 'application/pdf'); } catch (e) { alert('Could not make the PDF: ' + (e.message || e)); } };
   bar.replaceChildren(
-    h('div', { class: 'who' }, `${K.label} ${snap.number}`, h('small', null, `from ${(snap.from || [])[0] || 'Vdex'}${snap.title ? ' · ' + snap.title : ''}`)),
+    h('div', { class: 'who' }, `${K.label} ${snap.number}`, h('small', null, [(snap.from || [])[0] ? `from ${snap.from[0]}` : '', snap.title || ''].filter(Boolean).join(' · '))),
     h('div', { class: 'acts' }, tag, h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, 'Print'), h('button', { class: 'btn', type: 'button', onclick: pdf }, 'Save PDF'), snap.email && h('a', { class: 'btn', href: `mailto:${snap.email}?subject=${encodeURIComponent(`${K.label} ${snap.number}`)}` }, 'Reply')));
   box.replaceChildren(h('div', { class: 'paper' }, renderDoc(snap, { qr: qrSvg })));
 })();

@@ -57,7 +57,7 @@ export const settings = {
       section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
       section('About', 'v' + VERSION + (BUILD !== 'dev' ? ' · ' + BUILD : ''), h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, `Vdex ${VERSION}${BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ' (' + BUILT + ')' : ''}` : ''}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link.`),
-        acceptance() && h('p', { class: 'small muted' }, `You accepted the terms of service and privacy policy on this device on ${new Date(acceptance().at || Date.now()).toLocaleDateString()}.`),
+        acceptance() && h('p', { class: 'small muted' }, `You agreed to the terms of service on this device on ${new Date(acceptance().at || Date.now()).toLocaleDateString()}.`),
         panels[3].el,
         h('div', { class: 'actions' },
           h('button', { class: 'btn ghost', onclick: () => startTour() }, '🧭 Take the tour'),

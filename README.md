@@ -47,11 +47,11 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 3. **Call sheet.** Open the booking and tap **Call sheet**. It's already filled in from the booking. Tap **Edit sheet** to add the schedule, then **Email crew** or **Print**.
 4. **Afterwards,** open the booking's **Money** block to make the quote or the invoice. Vdex suggests the lines from the shoot. Tap **Link for the client** to send a link that opens the invoice with Pay buttons, then **Record a payment** when the money arrives.
 
-Everything can be changed later. Nothing is ever lost by tapping the wrong thing: every screen has a back button.
+Everything can be changed later, and every screen has a back button.
 
 ## Keep your things safe
 
-- **Set a PIN** in Settings → Security. Then Vdex locks when you put the phone down, and you can open it with your fingerprint or face. While it's locked, your information is scrambled so no one else can read it.
+- **Set a PIN** in Settings → Security. Then Vdex locks when you put the phone down, and you can open it with your fingerprint or face. While it's locked, the information on this device is encrypted.
 - **Connect your cloud storage:** tap ☁ at the top, tap **Connect** next to Google Drive or iCloud, and sign in to your own account (Dropbox, OneDrive and more are under *More ways to keep a copy*). Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
 - **Nothing is sent anywhere by itself.** The [privacy policy](https://thecrowbro.github.io/Logi-Video-Production-app-/privacy.html) says in plain words what stays on your device and what leaves it, and when. The [terms of service](https://thecrowbro.github.io/Logi-Video-Production-app-/terms.html) cover using Vdex.
 - **Save a backup now and then:** Settings → Backups & data → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.

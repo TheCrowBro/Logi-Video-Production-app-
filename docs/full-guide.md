@@ -6,7 +6,7 @@ This is the long version. The short one is the [README](../README.md).
 
 - **No account, no subscription, no server.** Your data stays on your device and only goes where *you* send it (your own Google Drive, iCloud, Dropbox, OneDrive or server).
 - **Works offline** once installed, which matters on location.
-- **Locks with a PIN, or your fingerprint or face,** and keeps everything it stores encrypted whenever it is locked, in the background or closed. Never loses your data: automatic daily backups in your cloud storage, encrypted backup files, and a reminder when there's no recent copy.
+- **Locks with a PIN, or your fingerprint or face,** and keeps everything it stores encrypted whenever it is locked, in the background or closed. Helps you keep your data safe: automatic daily backups in your cloud storage, encrypted backup files, and a reminder when there's no recent copy.
 - **Phone and computer share one database** once you link a cloud storage.
 - **On a computer, one click installs it:** there is an installer for Windows, Mac and Linux, or use it in any browser.
 
@@ -264,7 +264,7 @@ Vdex has no payment processor in the middle, and no fees. Instead, every invoice
 
 1. **Tell Vdex how you get paid**, once: Settings → Quotes & invoices → Getting paid → **+ Add a way to pay**, as many as you like: PayPal, Venmo, Cash App, Zelle, a Stripe or Square payment link, Wise, Revolut, Monzo, Interac e-Transfer, UPI, a bank account, any other payment page, or plain instructions (cheque, cash, crypto…). Edit or remove them any time, and pick the currency for the links.
 2. **Every invoice then carries Pay buttons** for the balance due, your bank details, a QR code that European banking apps scan to fill in the transfer, and the invoice number as the reference. They are on the printed invoice, in the PDF, in the email and on the client's page.
-3. **Send the client a link.** On the invoice (or the quote), tap **Link for the client**. The whole document is packed inside the link, so nothing is stored online and nothing can go missing. Copy it, share it, email it, or let the client scan the QR code. It opens as a web page with the Pay buttons, Print and Save PDF.
+3. **Send the client a link.** On the invoice (or the quote), tap **Link for the client**. The whole document is packed inside the link, so nothing is stored online. Copy it, share it, email it, or let the client scan the QR code. It opens as a web page with the Pay buttons, Print and Save PDF.
 4. **Record payments** as they arrive with **Record a payment**: the amount proposed is the balance, so a full payment is one tap. Part payments show as "part paid" with the balance; when the balance reaches zero the invoice is marked paid and the pipeline is ticked. The Pay buttons always ask for what is still owed.
 5. **Chase gently.** An unpaid invoice past its due date shows as overdue, Vdex mentions it once a day when you open the app, and **Send a reminder** writes the email for you, with the balance, the date and the link.
 

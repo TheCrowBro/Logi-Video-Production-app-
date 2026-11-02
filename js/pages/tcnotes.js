@@ -254,7 +254,7 @@ function logView(log, setTimer) {
     : record
       ? `${r.label} · record run · ${rolling ? `recording take ${log.take || 1} since ${when(sync.ms)}` : `camera stopped, holding since ${when(sync.ms)}`}`
       : `${r.label} · free run · synced ${sync.how === 'camera' ? 'by camera scan' : 'by hand'} at ${when(sync.ms)}`);
-  const clockNote = sync && sync.dev && sync.dev !== link.me.id && !link.clockOffset(sync.dev) && h('div', { class: 'warn small' }, '⚠ Synced on another device whose clock hasn’t been measured against this one. Link the devices for frame-accurate stamps; until then they may be a second or so out.');
+  const clockNote = sync && sync.dev && sync.dev !== link.me.id && !link.clockOffset(sync.dev) && h('div', { class: 'warn small' }, '⚠ Synced on another device whose clock hasn’t been measured against this one. Link the devices for closer stamps; until then they may be a second or so out.');
   const peerLog = link.link.status === 'connected' && S.peerLog && S.peerLog !== log.id && byId('logs', S.peerLog);
   const follow = peerLog && h('div', { class: 'warn small card-row' }, h('span', null, `${link.link.peer?.name || 'The linked device'} is on “${peerLog.title}”.`), h('button', { class: 'btn ghost small', onclick: () => { S.id = peerLog.id; S.peerLog = null; S.view = 'notes'; try { localStorage.setItem('logi-tclog', peerLog.id); } catch { /* ignore */ } S.redraw(); } }, 'Follow'));
   const rollCut = record && h('div', { class: 'rollcut' },
