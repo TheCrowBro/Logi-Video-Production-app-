@@ -25,6 +25,10 @@ export const settings = {
   id: 'settings', label: 'Settings', icon: '⚙️',
   render(root) {
     const panels = [storagePanel(), calendarPanel(), securityPanel(), updatePanel()];
+    // The desktop app's licence (js/licence.js), loaded only there.
+    const licenceSlot = h('div', { class: 'licence-slot', hidden: true });
+    let licence = null, gone = false;
+    if (window.vdexDesktop && window.vdexDesktop.licence) import('../licence.js').then(m => { if (gone) return; licence = m.licencePanel(); licenceSlot.replaceChildren(licence.el); licenceSlot.hidden = false; }).catch(() => {});
     const display = displayPanel({ onTour: () => startTour() });
     // Sections remember whether you opened or closed them, so a saved setting or a sync does not fold the page up.
     const section = (title, status, body, open = false) => {
@@ -51,20 +55,21 @@ export const settings = {
       section('Project templates', projectTemplates().length ? `${projectTemplates().length} of yours` : 'none yet', projectTemplatesPanel()),
       section('Workflow templates', Object.keys(db.templates || {}).filter(k => k !== 'updatedAt').length ? 'customised' : 'defaults', templatesPanel()),
       section('Profile', db.profile.name || 'not set', profilePanel()),
-      !installState().standalone && section('Install', installState().canPrompt ? 'ready to install' : 'see how', h('div', { class: 'stack' },
+      installState().standalone ? '' : section('Install', installState().canPrompt ? 'ready to install' : 'see how', h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, 'Vdex runs in the browser as it is. Installing adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline.'),
         h('button', { class: 'btn primary', onclick: () => { const b = document.getElementById('installBtn'); if (b && !b.hidden) b.click(); else openInstallHelp(); } }, '⤓ Install Vdex'))),
       section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
       section('About', 'v' + VERSION + (BUILD !== 'dev' ? ' · ' + BUILD : ''), h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, `Vdex ${VERSION}${BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ' (' + BUILT + ')' : ''}` : ''}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link.`),
         acceptance() && h('p', { class: 'small muted' }, `You agreed to the terms of service on this device on ${new Date(acceptance().at || Date.now()).toLocaleDateString()}.`),
+        licenceSlot,
         panels[3].el,
         h('div', { class: 'actions' },
           h('button', { class: 'btn ghost', onclick: () => startTour() }, '🧭 Take the tour'),
           h('a', { class: 'btn ghost', href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms of service'),
           h('a', { class: 'btn ghost', href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy'),
           h('a', { class: 'btn ghost', href: 'vendor/LICENSES.md', target: '_blank', rel: 'noopener' }, 'Open-source licences')))));
-    return () => panels.forEach(p => p.destroy && p.destroy());
+    return () => { gone = true; panels.forEach(p => p.destroy && p.destroy()); if (licence) licence.destroy(); };
   },
 };
 

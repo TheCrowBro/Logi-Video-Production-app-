@@ -49,7 +49,11 @@ export function groupBy(arr, keyFn) {
   return m;
 }
 
+// While Vdex is read-only (js/licence.js), a refused change must not be followed by its "Saved".
+let toastsOffUntil = 0;
+export const muteToasts = ms => { toastsOffUntil = Date.now() + ms; };
 export function toast(msg) {
+  if (Date.now() < toastsOffUntil) return;
   const t = h('div', { class: 'toast', role: 'status' }, msg);
   document.body.append(t);
   setTimeout(() => t.classList.add('out'), 2200);

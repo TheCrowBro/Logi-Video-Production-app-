@@ -10,7 +10,7 @@
 import { cpSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PAGES, ROOT_FILES, DIRS as WEB_DIRS } from './site-files.mjs';
+import { PAGES, ROOT_FILES, DIRS as WEB_DIRS, WORKER_ROUTES } from './site-files.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const [dest, flag] = process.argv.slice(2);
@@ -34,7 +34,8 @@ if (missing.length) { console.error('The offline file list names files that are 
 // Every local file a page or the manifest points at must be published too.
 const refs = [...PAGES.flatMap(p => [...readFileSync(path.join(out, p), 'utf8').matchAll(/(?:href|src)="([^"#?]+)/g)].map(m => [p, m[1]])),
   ...JSON.parse(readFileSync(path.join(out, 'manifest.webmanifest'), 'utf8')).icons.map(i => ['manifest.webmanifest', i.src])];
-const broken = refs.filter(([, u]) => !/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(u) && u !== './' && !existsSync(path.join(out, u.replace(/^\.\//, ''))));
+const workerRoute = u => WORKER_ROUTES.some(r => (r.endsWith('/*') ? u.startsWith(r.slice(0, -1)) : u === r)); // answered by cloudflare/worker.mjs
+const broken = refs.filter(([, u]) => !/^([a-z][a-z0-9+.-]*:|\/\/)/i.test(u) && u !== './' && !workerRoute(u) && !existsSync(path.join(out, u.replace(/^\.\//, ''))));
 if (broken.length) { console.error('Links to files that are not published: ' + broken.map(([p, u]) => `${p} → ${u}`).join(', ')); process.exit(1); }
 
 if (flag === '--cloudflare') {

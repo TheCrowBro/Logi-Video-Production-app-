@@ -76,13 +76,21 @@ function persistLocal() {
   if (!writeQueued) { writeQueued = true; queueMicrotask(writeNow); }
 }
 
-// Mutate the db inside fn, then save + sync.
+// The desktop app makes Vdex read-only when its free trial is over and there is no licence (js/licence.js sets this
+// gate). Every change goes through update(), so this is the one place that refuses them; opening, searching, printing,
+// exporting, backups and sync from other devices keep working.
+let gate = null;
+export const setGate = fn => { gate = typeof fn === 'function' ? fn : null; };
+
+// Mutate the db inside fn, then save + sync. Returns false when the change was refused.
 export function update(fn) {
+  if (gate && !gate()) return false;
   fn(db);
   db.updatedAt = Date.now();
   persistLocal();
   emit();
   schedulePush();
+  return true;
 }
 
 export function upsert(list, item) {

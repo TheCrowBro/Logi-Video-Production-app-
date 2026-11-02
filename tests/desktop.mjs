@@ -15,7 +15,7 @@ await win.evaluate(t => { localStorage.setItem('logi-tour', 'done'); localStorag
 await win.reload();
 if (await win.locator('.lock').count()) await win.keyboard.type('2468');
 await win.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
-const info = await win.evaluate(async () => ({ url: location.href, bridge: !!window.vdexDesktop, state: window.vdexDesktop && (await window.vdexDesktop.updateState()).status, serviceWorkers: (await navigator.serviceWorker.getRegistrations()).length }));
+const info = await win.evaluate(async () => ({ url: location.href, bridge: !!window.vdexDesktop, state: window.vdexDesktop && (await window.vdexDesktop.updateState()).status, serviceWorkers: (await navigator.serviceWorker.getRegistrations()).length, licence: window.vdexDesktop && window.vdexDesktop.licence && (await window.vdexDesktop.licence.state()) }));
 // Sign-ins open in the web browser and come back through the local server, only for sign-ins the app started.
 const base = new URL(info.url).origin;
 const signin = {};
@@ -65,9 +65,14 @@ signin.pagesParse = parses(gHtml) && parses(aHtml);
 const aKey = (aHtml.match(/"key":"([^"]+)"/) || [])[1];
 const aPost = await fetch(aUrl, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: base, 'X-Vdex-Key': aKey }, body: JSON.stringify({ ckSession: 'ck-session-1' }) });
 signin.icloudAnswer = aPost.status === 204 && (await win.evaluate(() => window.__a)).ckSession === 'ck-session-1' && (await fetch(aUrl)).status === 404;
+// The licence bridge answers, and with no licence keys built in yet (desktop/licence-keys.json is empty) nobody is
+// asked for a code; a refused caller (a page that is not the app) gets nothing.
+const keysIn = Object.keys(JSON.parse((await import('node:fs')).readFileSync(resolve(repo, 'desktop/licence-keys.json'), 'utf8'))).length > 0;
+const licenceOk = !!info.licence && info.licence.canEdit === true && (keysIn ? ['trial', 'founder', 'licensed'].includes(info.licence.mode) : info.licence.mode === 'off');
+console.log((licenceOk ? 'PASS' : 'FAIL') + ' desktop licence bridge answers' + (keysIn ? '' : ' and stays out of the way until licence keys are built in') + ' —', JSON.stringify(info.licence));
 const signinOk = Object.values(signin).every(Boolean);
 console.log((signinOk ? 'PASS' : 'FAIL') + ' desktop sign-ins open in the web browser and come back only for sign-ins the app started —', JSON.stringify(signin));
 await app.close();
-const ok = signinOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
+const ok = licenceOk && signinOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
 console.log((ok ? 'PASS' : 'FAIL') + ' desktop app launches, serves locally, exposes the update bridge, keeps no service worker, no errors —', JSON.stringify(info), bad.join(' | '));
 process.exit(ok ? 0 : 1);

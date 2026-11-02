@@ -4,7 +4,7 @@
 // deliberately not part of the agreement (terms.html section 1).
 import { h } from './util.js';
 
-export const TERMS_VERSION = '2026-11-02.3'; // the terms' date, plus a count for a second change on the same day
+export const TERMS_VERSION = '2026-11-02.4'; // the terms' date, plus a count for a second change on the same day
 const KEY = 'logi-terms';
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; } };
 export const acceptance = () => { const r = read(); return r && r.v === TERMS_VERSION ? r : null; };

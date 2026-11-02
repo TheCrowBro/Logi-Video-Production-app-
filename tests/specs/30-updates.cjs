@@ -24,9 +24,9 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const cached = await page.evaluate(async () => (await (await caches.open('logi-dev')).keys()).length);
   ok('all app files precached', cached >= 48, cached + ' entries');
   ok('no "updated" bar on a fresh install', (await page.locator('.update-bar').count()) === 0);
-  fs.writeFileSync(verPath, origVer.replace("VERSION = '1.2.0'", "VERSION = '9.9.9'"));
+  fs.writeFileSync(verPath, origVer.replace(/VERSION = '[^']+'/, "VERSION = '9.9.9'"));
   const served = await page.evaluate(() => fetch('js/version.js', { cache: 'no-store' }).then(r => r.text()));
-  ok('cache-first: a changed file on the server is not mixed into the running version', /1\.2\.0/.test(served) && !/9\.9\.9/.test(served));
+  ok('cache-first: a changed file on the server is not mixed into the running version', !/9\.9\.9/.test(served) && /VERSION = /.test(served));
   const plain = await page.evaluate(() => import('./js/update.js').then(m => m.checkForUpdates()));
   ok('a check with no new build says current', plain.status === 'current', JSON.stringify(plain));
   fs.writeFileSync(swPath, origSw.replace("const BUILD = 'dev';", "const BUILD = 'test1';"));

@@ -537,6 +537,17 @@ html[data-motion=off] .lock.shake .pin-dots { animation: none; }
 .update-bar .btn { white-space: nowrap; }
 body.has-update-bar #page { padding-bottom: 110px; }
 @media (max-width: 480px) { .update-bar { flex-wrap: wrap; justify-content: center; border-radius: 16px; } }
+/* The desktop app's licence (js/licence.js): its bar sits above the update bar when both show. */
+.licence-bar.urgent { border-color: var(--danger); }
+body:has(.sheet-back) .licence-bar { display: none; } /* never over a sheet's buttons */
+body.has-update-bar .licence-bar { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 64px); }
+body.has-licence-bar #page { padding-bottom: 110px; }
+body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
+.licence-title { font-size: 1rem; margin: 4px 0 0; }
+.licence-warn { color: var(--danger); }
+.licence-code { width: 100%; font: 0.95rem/1.5 ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+.lic-computers { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.lic-computers li { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
 
 .theme-group { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; display: flex; flex-direction: column; gap: 2px; } .theme-group .twirl-sub { text-transform: none; letter-spacing: 0; }
 

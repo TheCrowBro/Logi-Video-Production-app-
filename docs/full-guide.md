@@ -516,13 +516,15 @@ On the phone, yes once a PIN is set: whenever Vdex is locked, in the background 
 
 ### The easy way: a one-click installer
 
-Open the repository's **Releases** page, download the file for your computer, and open it:
+Open https://vdex.crowmade.app/download.html, download the file for your computer, and open it:
 
 | Computer | File | Then |
 |---|---|---|
-| **Windows** | `Vdex-Setup-<version>.exe` | Double-click it. Vdex installs in a few seconds, opens, and gets a Start menu and desktop shortcut. If Windows shows *Windows protected your PC*, click **More info → Run anyway**: the installer isn't signed with a paid certificate, which is all that warning means. |
-| **Mac** | `Vdex-<version>.pkg` | Double-click it and follow the installer; Vdex lands in Applications. If macOS says it can't be opened because it's from an unidentified developer, right-click (Control-click) the file and choose **Open**, or go to **System Settings → Privacy & Security** and click **Open Anyway**. |
+| **Windows** | `Vdex-Setup.exe` | Double-click it. Vdex installs in a few seconds, opens, and gets a Start menu and desktop shortcut. While Vdex is new, Windows may show *Windows protected your PC*: click **More info**, check the publisher, then **Run anyway**. |
+| **Mac** | `Vdex.dmg` | Open it and drag Vdex into Applications. If macOS says it cannot check the app, go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. |
 | **Linux** | `Vdex-<version>.AppImage` | Make it executable (right-click → Properties → *Allow executing as program*, or `chmod +x`), then double-click it. |
+
+**The licence.** The desktop app is free to try for 30 days on each computer. After that it needs a licence code: **Buy a licence** in Settings → *About* (20 US dollars once, for up to 3 of your computers), then paste the code from your email under **Enter licence code**. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens, prints and exports, but nothing can be changed. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
 
 The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **☁ → A file in a synced folder**, which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Google Drive or iCloud (or Dropbox, OneDrive or WebDAV), and link the same one everywhere.
 
@@ -533,7 +535,7 @@ The installed app opens in its own window, works offline, and keeps its data on 
 - Break notifications pop up like any other app's. They have no buttons; clicking one brings Vdex to the front.
 - Backups, call sheets and exports save through a normal Save dialog instead of a share sheet.
 - The PIN lock works the same way (Settings → *Security*), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
-- **Updates:** the desktop app checks GitHub for a new release when it starts and every few hours. Windows and Linux download it in the background and install it on the next restart (Settings → *About* shows progress and has **Restart to update**). A Mac shows a notice with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
+- **Updates:** the desktop app checks download.crowmade.app for a new version when it starts and every few hours. Windows, Linux and a signed Mac download it in the background and install it on the next restart (Settings → *About* shows progress and has **Restart to update**). An unsigned Mac shows a notice with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
 - To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 - Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.
 

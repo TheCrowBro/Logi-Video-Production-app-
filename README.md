@@ -19,7 +19,7 @@ It works on an iPhone, an Android phone, and a computer. There is no account to 
 2. **Put it on your home screen** so it works like a normal app, even with no signal:
    - **iPhone:** open the address in Safari, tap the **Share** button (the square with an arrow), then **Add to Home Screen**.
    - **Android:** tap **Install** at the top of the page.
-   - **Computer:** tap **Install** at the top of the page. Or download the installer for Windows, Mac or Linux from the Releases page and double-click it.
+   - **Computer:** tap **Install** at the top of the page. Or get the desktop app for Windows, Mac or Linux from https://vdex.crowmade.app/download.html: a 30-day free trial, then 20 US dollars once for up to 3 of your computers.
 3. **Tap ? at the top of any page.** It walks you through that page, box by box. You can do this as often as you like.
 
 That's it. You're in.

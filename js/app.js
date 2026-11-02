@@ -130,3 +130,4 @@ idle(() => { import('./pages/gear.js').then(m => m.serviceNudge()); import('./mo
 if (localStorage.getItem('logi-provider') === 'gdrive' || store.db.calSync?.provider === 'google') import('./providers.js').then(p => p.signIn.available('google') && p.loadGIS()).catch(() => {}); // service and overdue-invoice reminders, once the first paint is out of the way
 if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
 initUpdates(); // service worker, offline copy, and the "new version" bar
+if (window.vdexDesktop && window.vdexDesktop.licence) import('./licence.js').then(m => m.initLicence()).catch(() => {}); // the desktop app's trial and licence

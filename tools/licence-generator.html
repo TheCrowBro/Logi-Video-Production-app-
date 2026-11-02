@@ -1,0 +1,418 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The only address this page can reach is vdex.crowmade.app, and only when you look up, clear or cancel a code.
+     Your key never leaves this page: it is unlocked into the browser in a form that can sign but cannot be read out. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://vdex.crowmade.app; img-src data:; form-action 'none'; base-uri 'none'">
+<meta name="color-scheme" content="dark light">
+<title>Vdex licence generator</title>
+<style>
+  :root { --bg: #14110f; --card: #25201b; --line: #3a332b; --text: #f1e6cf; --muted: #a09584; --accent: #e0a43a; --ok: #5fb376; --bad: #e5604d; color-scheme: dark; }
+  @media (prefers-color-scheme: light) { :root { --bg: #efe8da; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --ok: #2f7d4f; --bad: #b3261e; color-scheme: light; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; } h2 { font-size: 1.15rem; margin: 0 0 8px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin-top: 18px; }
+  label { display: block; margin: 12px 0 4px; font-weight: 600; } label.check { display: flex; gap: 8px; align-items: center; font-weight: 600; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; } .row > div { flex: 1 1 15rem; }
+  input, textarea, button { font: inherit; color: inherit; }
+  input[type=text], input[type=email], input[type=password], input[type=date], input[type=number], textarea { width: 100%; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: transparent; }
+  textarea { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; word-break: break-all; }
+  button { margin: 12px 8px 0 0; padding: 9px 16px; border-radius: 10px; border: 1px solid var(--accent); background: var(--accent); color: #14110f; font-weight: 700; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); } button:disabled { opacity: .5; cursor: default; }
+  .muted { color: var(--muted); font-size: .93rem; } .ok { color: var(--ok); } .bad { color: var(--bad); } [hidden] { display: none !important; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; margin-top: 8px; } td, th { border-bottom: 1px solid var(--line); padding: 5px 6px; text-align: left; vertical-align: top; }
+  #msg { position: sticky; bottom: 0; background: var(--bg); padding: 8px 0; min-height: 1.5em; }
+  ol li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<main>
+<h1>Vdex licence generator</h1>
+<p class="muted">For the owner only. Keep this file, your key files and your passphrase on your own computer. Making keys and codes works with no internet; looking up, clearing and cancelling codes talks to vdex.crowmade.app.</p>
+<p id="support" class="bad" hidden>This browser cannot sign licence codes. Open this file in an up-to-date Chrome, Edge, Firefox or Safari.</p>
+
+<section id="unlock">
+  <h2>1. Unlock your key</h2>
+  <p class="muted">Use vdex-licence-key-1.json (or your spare, vdex-licence-key-9-spare.json) and its passphrase.</p>
+  <label for="keyfile">Key file</label><input id="keyfile" type="file" accept=".json,application/json">
+  <label for="pass">Passphrase</label><input id="pass" type="password" autocomplete="off">
+  <button id="open">Unlock</button> <span id="keystate" class="muted"></span>
+  <div id="shopout" hidden><label for="shopsecret">The shop key, for Cloudflare (secret LICENCE_SHOP_KEY)</label><textarea id="shopsecret" rows="3" readonly></textarea></div>
+</section>
+
+<section id="make" hidden>
+  <h2>2. Make a licence code</h2>
+  <div class="row"><div><label for="name">Name</label><input id="name" type="text" maxlength="60" autocomplete="off" placeholder="Jane Smith"></div>
+  <div><label for="email">Email</label><input id="email" type="email" maxlength="64" autocomplete="off" placeholder="jane@example.com"></div></div>
+  <div class="row"><div><label class="check"><input id="comp" type="checkbox" checked> Free licence</label><span class="muted">Untick for a paid order you are sending by hand.</span></div>
+  <div><label for="seats">Computers</label><input id="seats" type="number" min="1" max="20" value="3"></div></div>
+  <label for="expires">Ends on (leave empty for a licence that never ends)</label><input id="expires" type="date">
+  <label for="note">Note for your records (not in the code)</label><input id="note" type="text" autocomplete="off" placeholder="e.g. beta tester, reviewer, order 1234">
+  <button id="issue">Make code</button>
+  <div id="result" hidden>
+    <label for="code">Code for <span id="for"></span></label><textarea id="code" rows="5" readonly></textarea>
+    <button id="copy" class="ghost">Copy</button> <a id="mail" href="#">Write the email</a>
+  </div>
+  <h2 style="margin-top:24px">Codes made</h2>
+  <p class="muted">Your ledger (ledger.csv) is the list of every code you have made. Open it before making codes, and save it afterwards.</p>
+  <label for="ledgerfile">Open ledger</label><input id="ledgerfile" type="file" accept=".csv,text/csv">
+  <button id="saveledger" class="ghost">Save ledger</button>
+  <table><thead><tr><th>Issued</th><th>Ref</th><th>Type</th><th>Name</th><th>Email</th><th>Ends</th><th>Note</th></tr></thead><tbody id="rows"></tbody></table>
+</section>
+
+<section id="manage" hidden>
+  <h2>3. Look up, clear or cancel a code</h2>
+  <p class="muted">Paste a code, or its ref from the ledger (like 2:3735928559; codes bought in the shop start with 2:, codes you made with 1:).</p>
+  <label for="which">Code or ref</label><input id="which" type="text" autocomplete="off">
+  <button id="look" class="ghost">Look up</button>
+  <button id="clear" class="ghost" title="Takes every computer off the code, so it can be activated afresh (a lost or broken computer)">Clear its computers</button>
+  <button id="cancel" class="ghost" title="Stops the code working: Vdex becomes read-only on its computers within about a week">Cancel the code</button>
+  <button id="restore" class="ghost">Restore a cancelled code</button>
+  <div id="lookout" class="muted"></div>
+</section>
+
+<section id="newkey">
+  <h2>First time only: make your keys</h2>
+  <p class="muted">Do this once, before selling. It makes three keys:</p>
+  <ol class="muted">
+    <li><b>Your key</b> (vdex-licence-key-1.json): makes free codes in this page.</li>
+    <li><b>The shop key</b> (vdex-licence-key-2-shop.json): Cloudflare uses it to make codes for paying customers. You paste it into Cloudflare once.</li>
+    <li><b>A spare</b> (vdex-licence-key-9-spare.json): replaces your key if it is ever lost or leaked. Keep it somewhere else, such as a USB stick in a drawer.</li>
+  </ol>
+  <p class="muted">All three are locked with the passphrase below. Keep it in your password manager: without it the key files are useless, to you as well.</p>
+  <div class="row"><div><label for="np1">New passphrase (12 or more characters)</label><input id="np1" type="password" autocomplete="new-password"></div><div><label for="np2">The same again</label><input id="np2" type="password" autocomplete="new-password"></div></div>
+  <button id="makekey" class="ghost">Make my keys</button>
+  <div id="newkeyout" hidden>
+    <label for="publine">Public keys: send this to the person who builds Vdex (it is not secret). It goes in desktop/licence-keys.json.</label><textarea id="publine" rows="3" readonly></textarea>
+    <label for="newshop">The shop key: paste it into Cloudflare as the secret LICENCE_SHOP_KEY (see docs/selling-desktop.md). Never email or share it.</label><textarea id="newshop" rows="3" readonly></textarea>
+    <label for="paper">Paper backups of your key and the spare: write them down and keep them like cash. Anyone holding one can make codes.</label><textarea id="paper" rows="4" readonly></textarea>
+  </div>
+</section>
+<p id="msg" role="status"></p>
+</main>
+
+<script>
+const Codes = (() => { const module = { exports: {} }; 
+// Vdex licence codes: the one implementation of the code format, shared by the desktop app (desktop/licence.js), the
+// website's Worker (cloudflare/worker.mjs, which sells and activates codes) and the owner's offline generator page
+// (tools/licence-generator.template.html, built by tools/build-generator.mjs). It uses only Web Crypto, which all three
+// have, so a code made by one is checked the same way by the others.
+//
+// A code is "VDEX-" followed by Crockford base32 (no I, L, O or U) of payload + Ed25519 signature, in groups of five.
+// The signature covers "VDEX-LICENCE\0" + payload. Notes signed with the same keys use other prefixes ("VDEX-ACTIVE\0"
+// for a computer's activation receipt, "VDEX-ADMIN\0" for the owner's requests to the Worker), so nothing signed for
+// one purpose can be passed off as another.
+//
+// Payload, format 1: version(1) kid(1) flags(1: bit 0 = free licence) edition(1: 1 = desktop) seats(1) serial(4)
+// issued(2) expires(2: 0 = never; both in days from 1 Jan 2026) nameLength(1) name nameLength... emailLength(1) email.
+'use strict';
+
+const enc = new TextEncoder();
+const subtle = () => globalThis.crypto.subtle;
+const EPOCH = Date.UTC(2026, 0, 1);
+const DAY = 86400e3;
+const HEADER = 13, SIG = 64, MAX_TEXT = 64, SEATS = 3;
+const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const FLAG_COMP = 1, EDITION_DESKTOP = 1;
+const PREFIX = { licence: 'VDEX-LICENCE\0', active: 'VDEX-ACTIVE\0', admin: 'VDEX-ADMIN\0' };
+// Key numbers: 1 = the owner's key (generator), 2 = the shop's key (a Worker secret), 9 = the owner's spare, kept
+// apart. Only the owner's keys may sign requests to change what the Worker holds about a code.
+const OWNER_KIDS = [1, 9];
+const PKCS8_ED25519 = Uint8Array.from([0x30, 0x2e, 0x02, 0x01, 0x00, 0x30, 0x05, 0x06, 0x03, 0x2b, 0x65, 0x70, 0x04, 0x22, 0x04, 0x20]);
+
+class LicenceError extends Error { constructor(status, message) { super(message); this.status = status; } }
+
+/* --------------------------------- bytes --------------------------------- */
+const b64u = {
+  enc: bytes => { let s = ''; for (const b of new Uint8Array(bytes)) s += String.fromCharCode(b); return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); },
+  dec: text => Uint8Array.from(atob(String(text).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)),
+};
+const concat = (...parts) => { const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0)); let i = 0; for (const p of parts) { out.set(p, i); i += p.length; } return out; };
+const prefixed = (kind, bytes) => concat(enc.encode(PREFIX[kind]), bytes);
+
+function b32encode(bytes) {
+  let out = '', bits = 0, value = 0;
+  for (const b of bytes) { value = (value << 8) | b; bits += 8; while (bits >= 5) { out += ALPHABET[(value >>> (bits - 5)) & 31]; bits -= 5; } value &= (1 << bits) - 1; }
+  if (bits > 0) out += ALPHABET[(value << (5 - bits)) & 31];
+  return out;
+}
+function b32decode(text) {
+  const clean = String(text).toUpperCase().replace(/[\s-]/g, '').replace(/O/g, '0').replace(/[IL]/g, '1');
+  const out = []; let bits = 0, value = 0;
+  for (const ch of clean) {
+    const v = ALPHABET.indexOf(ch);
+    if (v < 0) throw new LicenceError('invalid', 'The code has a character that does not belong in a Vdex code. Copy it again from your email.');
+    value = (value << 5) | v; bits += 5;
+    if (bits >= 8) { out.push((value >>> (bits - 8)) & 255); bits -= 8; }
+    value &= (1 << bits) - 1;
+  }
+  if (bits >= 5 || value !== 0) throw new LicenceError('invalid', 'The code is incomplete. Copy it again, including every group.');
+  return Uint8Array.from(out);
+}
+const formatCode = bytes => 'VDEX-' + b32encode(bytes).match(/.{1,5}/g).join('-');
+// Finds the code in pasted text ("Your code: VDEX-ABCDE-… Thanks!"), in any case, with its groups split across lines by
+// an email program. Groups are joined by dashes, so the words after the code are never taken as part of it.
+function extract(text) {
+  const m = String(text || '').slice(0, 4000).match(/VDEX-([0-9A-Z]+(?:\s*-\s*[0-9A-Z]+)*)/i);
+  if (!m) throw new LicenceError('invalid', 'Paste the whole code: it starts with VDEX-.');
+  return b32decode(m[1]);
+}
+const cleanCode = text => formatCode(extract(text));
+
+/* -------------------------------- payload -------------------------------- */
+const dayOf = date => { const t = Date.parse(String(date) + 'T00:00:00Z'); if (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || Number.isNaN(t)) throw new Error('Dates are written YYYY-MM-DD'); return Math.floor((t - EPOCH) / DAY); };
+const dateOf = day => new Date(EPOCH + day * DAY).toISOString().slice(0, 10);
+const textBytes = s => enc.encode(String(s || '').normalize('NFC').trim());
+const today = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
+// Shortens text to what fits in a code (64 bytes of UTF-8) without cutting a character in half.
+function fitText(s, max = MAX_TEXT) { let t = String(s || '').normalize('NFC').trim(); while (enc.encode(t).length > max) t = [...t].slice(0, -1).join(''); return t.trim(); }
+
+function packPayload({ kid, serial, name = '', email = '', comp = false, seats = SEATS, issued = today(), expires = '' }) {
+  const n = textBytes(name), e = textBytes(String(email || '').toLowerCase());
+  if (!n.length && !e.length) throw new Error('A licence needs a name or an email address');
+  if (n.length > MAX_TEXT || e.length > MAX_TEXT) throw new Error(`The name and the email address can be at most ${MAX_TEXT} letters each`);
+  if (!(Number.isInteger(kid) && kid >= 1 && kid <= 255)) throw new Error('The key number must be 1 to 255');
+  if (!(Number.isInteger(serial) && serial >= 1 && serial <= 0xffffffff)) throw new Error('The serial must be 1 to 4294967295');
+  if (!(Number.isInteger(seats) && seats >= 1 && seats <= 255)) throw new Error('A licence covers 1 to 255 computers');
+  const iss = dayOf(issued), exp = expires ? dayOf(expires) : 0;
+  if (!(iss >= 0 && iss <= 0xffff) || !(exp >= 0 && exp <= 0xffff) || (exp && exp < iss)) throw new Error('Dates must be from 2026 on, and the end date after the issue date');
+  const p = new Uint8Array(HEADER + 2 + n.length + e.length), v = new DataView(p.buffer);
+  p[0] = 1; p[1] = kid; p[2] = comp ? FLAG_COMP : 0; p[3] = EDITION_DESKTOP; p[4] = seats;
+  v.setUint32(5, serial); v.setUint16(9, iss); v.setUint16(11, exp);
+  p[13] = n.length; p.set(n, 14); p[14 + n.length] = e.length; p.set(e, 15 + n.length);
+  return p;
+}
+function unpackPayload(p) {
+  const not = () => new LicenceError('invalid', 'This is not a Vdex licence code.');
+  const newer = () => new LicenceError('newer', 'This code is for a newer version of Vdex. Update Vdex, then enter it again.');
+  if (p.length < HEADER + 2) throw not();
+  if (p[0] !== 1) throw p[0] > 1 ? newer() : not();
+  const nl = p[13]; if (nl > MAX_TEXT || 14 + nl >= p.length) throw not();
+  const el = p[14 + nl]; if (el > MAX_TEXT || 15 + nl + el !== p.length) throw not();
+  if (p[2] & ~FLAG_COMP) throw newer();
+  const v = new DataView(p.buffer, p.byteOffset, p.byteLength), exp = v.getUint16(11);
+  let name, email;
+  try { const d = new TextDecoder('utf-8', { fatal: true }); name = d.decode(p.subarray(14, 14 + nl)); email = d.decode(p.subarray(15 + nl, 15 + nl + el)); } catch { throw not(); }
+  return { version: 1, kid: p[1], comp: !!(p[2] & FLAG_COMP), edition: p[3], seats: p[4], serial: v.getUint32(5), issued: dateOf(v.getUint16(9)), expires: exp ? dateOf(exp) : '', name, email };
+}
+const refOf = (kid, serial) => `${kid}:${serial}`;
+const randomSerial = () => { const a = new Uint32Array(1); do globalThis.crypto.getRandomValues(a); while (a[0] === 0); return a[0]; };
+
+/* --------------------------------- keys ---------------------------------- */
+const pubCache = new Map();
+function publicKey(kid, keys) {
+  const x = keys && keys[kid]; if (!x || typeof x !== 'string') return null;
+  if (!pubCache.has(x)) pubCache.set(x, subtle().importKey('raw', b64u.dec(x), { name: 'Ed25519' }, false, ['verify']).catch(() => null));
+  return pubCache.get(x);
+}
+async function verifyBytes(kind, message, sig, kid, keys) {
+  const key = await publicKey(kid, keys); if (!key || sig.length !== SIG) return false;
+  try { return await subtle().verify({ name: 'Ed25519' }, key, sig, prefixed(kind, message)); } catch { return false; }
+}
+const signBytes = async (kind, privateKey, message) => new Uint8Array(await subtle().sign({ name: 'Ed25519' }, privateKey, prefixed(kind, message)));
+// A private key kept as text (the Worker's secret): base64url PKCS#8.
+const importPrivate = (pkcs8Text, extractable = false) => subtle().importKey('pkcs8', b64u.dec(String(pkcs8Text).trim()), { name: 'Ed25519' }, extractable, ['sign']);
+async function publicOf(privateKey) { return (await subtle().exportKey('jwk', privateKey)).x; } // needs an extractable key
+async function newKeyPair() {
+  const pair = await subtle().generateKey({ name: 'Ed25519' }, true, ['sign', 'verify']);
+  return { publicKey: b64u.enc(await subtle().exportKey('raw', pair.publicKey)), pkcs8: new Uint8Array(await subtle().exportKey('pkcs8', pair.privateKey)) };
+}
+
+/* --------------------------- making and checking --------------------------- */
+// Signs a code. The same fields and serial always give the same code (Ed25519 signatures are deterministic), which is
+// how the shop's thank-you page and its email show the same code.
+async function signCode(privateKey, kid, fields) {
+  const payload = packPayload({ ...fields, kid, serial: fields.serial || randomSerial() });
+  return formatCode(concat(payload, await signBytes('licence', privateKey, payload)));
+}
+// { status: 'valid' | 'expired', licence } or throws LicenceError ('invalid' | 'newer' | 'unknown-key').
+async function verifyCode(text, { keys, now = Date.now() } = {}) {
+  const bytes = extract(text);
+  if (bytes.length < HEADER + 2 + SIG) throw new LicenceError('invalid', 'The code is incomplete. Copy it again, including every group.');
+  const payload = bytes.subarray(0, bytes.length - SIG), sig = bytes.subarray(bytes.length - SIG);
+  const lic = unpackPayload(payload);
+  if (!keys || !keys[lic.kid]) throw new LicenceError('unknown-key', 'This version of Vdex does not recognise who made this code. Update Vdex, then enter it again.');
+  if (!(await verifyBytes('licence', payload, sig, lic.kid, keys))) throw new LicenceError('invalid', 'This code is not valid. Copy it again from your email, including every group.');
+  if (lic.edition !== EDITION_DESKTOP) throw new LicenceError('invalid', 'This code is not for the Vdex desktop app.');
+  lic.ref = refOf(lic.kid, lic.serial);
+  lic.code = formatCode(bytes);
+  if (lic.expires && now >= Date.parse(lic.expires + 'T00:00:00Z') + DAY) return { status: 'expired', licence: lic };
+  return { status: 'valid', licence: lic };
+}
+
+// Signed notes: { kid, data: "<JSON text>", sig: "<base64url>" }.
+async function signNote(kind, privateKey, kid, value) {
+  const data = JSON.stringify(value);
+  return { kid, data, sig: b64u.enc(await signBytes(kind, privateKey, enc.encode(data))) };
+}
+// The note's value if it is signed by one of `signers` (key numbers; all known keys when left out), else null.
+async function readNote(kind, note, { keys, signers } = {}) {
+  try {
+    if (!note || typeof note.data !== 'string' || note.data.length > 4000 || !Number.isInteger(note.kid)) return null;
+    if (signers && !signers.includes(note.kid)) return null;
+    if (!(await verifyBytes(kind, enc.encode(note.data), b64u.dec(String(note.sig)), note.kid, keys))) return null;
+    const v = JSON.parse(note.data); return v && typeof v === 'object' ? v : null;
+  } catch { return null; }
+}
+
+/* ---------------------- the owner's key files (generator) ---------------------- */
+// A key file holds the private key encrypted with the owner's passphrase (PBKDF2 → AES-GCM), so a copy of the file alone
+// cannot make codes.
+async function wrappingKey(passphrase, salt, iterations) {
+  if (String(passphrase).length < 12) throw new Error('Use a passphrase of at least 12 characters');
+  const base = await subtle().importKey('raw', enc.encode(String(passphrase).normalize('NFC')), 'PBKDF2', false, ['deriveKey']);
+  return subtle().deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+const aad = (kid, pub) => enc.encode(`vdex-licence-key|${kid}|${pub}`);
+async function sealKeyFile(kid, pkcs8, publicKeyText, passphrase, label = '', iterations = 600000) {
+  const salt = globalThis.crypto.getRandomValues(new Uint8Array(16)), iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const ct = await subtle().encrypt({ name: 'AES-GCM', iv, additionalData: aad(kid, publicKeyText) }, await wrappingKey(passphrase, salt, iterations), pkcs8);
+  return { type: 'vdex-licence-signing-key', version: 1, kid, label, alg: 'Ed25519', publicKey: publicKeyText, created: today(),
+    kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations, salt: b64u.enc(salt) }, cipher: { name: 'AES-GCM', iv: b64u.enc(iv) }, encryptedPrivateKey: b64u.enc(ct) };
+}
+async function createKeyFile({ kid, passphrase, label = '', iterations }) {
+  const { publicKey: pub, pkcs8 } = await newKeyPair();
+  try { return await sealKeyFile(kid, pkcs8, pub, passphrase, label, iterations); } finally { pkcs8.fill(0); }
+}
+async function decryptKeyFile(file, passphrase) {
+  if (!file || file.type !== 'vdex-licence-signing-key' || file.version !== 1) throw new Error('This is not a Vdex licence key file');
+  try {
+    return new Uint8Array(await subtle().decrypt({ name: 'AES-GCM', iv: b64u.dec(file.cipher.iv), additionalData: aad(file.kid, file.publicKey) },
+      await wrappingKey(passphrase, b64u.dec(file.kdf.salt), file.kdf.iterations), b64u.dec(file.encryptedPrivateKey)));
+  } catch (e) { if (/at least 12/.test(e.message)) throw e; throw new Error('Wrong passphrase, or the key file is damaged'); }
+}
+// Opens a key file for signing. The key cannot be read back out of the page, only used.
+async function openKeyFile(file, passphrase) {
+  const pkcs8 = await decryptKeyFile(file, passphrase);
+  let privateKey; try { privateKey = await subtle().importKey('pkcs8', pkcs8, { name: 'Ed25519' }, false, ['sign']); } finally { pkcs8.fill(0); }
+  const probe = enc.encode('self-test'), pub = await publicKey(file.kid, { [file.kid]: file.publicKey });
+  if (!pub || !(await subtle().verify({ name: 'Ed25519' }, pub, await subtle().sign({ name: 'Ed25519' }, privateKey, probe), probe))) throw new Error('The key file does not match its public key');
+  return { kid: file.kid, publicKey: file.publicKey, label: file.label || '', privateKey };
+}
+// The shop key as the text the Worker keeps as a secret (base64url PKCS#8).
+async function shopSecret(file, passphrase) { const pkcs8 = await decryptKeyFile(file, passphrase); try { return b64u.enc(pkcs8); } finally { pkcs8.fill(0); } }
+// Paper backup: the 32-byte private seed as 52 characters. Anyone holding it can make codes: store it like cash.
+async function paperBackup(file, passphrase) {
+  const pkcs8 = await decryptKeyFile(file, passphrase);
+  let k; try { k = await subtle().importKey('pkcs8', pkcs8, { name: 'Ed25519' }, true, ['sign']); } finally { pkcs8.fill(0); }
+  return `key ${file.kid}: ` + b32encode(b64u.dec((await subtle().exportKey('jwk', k)).d)).match(/.{1,4}/g).join(' ');
+}
+async function keyFileFromPaper(backup, passphrase, label = '') {
+  const m = String(backup).match(/^\s*key\s*(\d{1,3})\s*:([\s\S]*)$/i); if (!m) throw new Error('A paper backup starts with "key 1:" (or the key\'s number)');
+  const seed = b32decode(m[2]); if (seed.length !== 32) throw new Error('A paper backup has 52 characters after the key number');
+  const pkcs8 = concat(PKCS8_ED25519, seed);
+  try { const k = await subtle().importKey('pkcs8', pkcs8, { name: 'Ed25519' }, true, ['sign']); return await sealKeyFile(Number(m[1]), pkcs8, await publicOf(k), passphrase, label); } finally { pkcs8.fill(0); }
+}
+
+module.exports = {
+  EPOCH, DAY, SEATS, OWNER_KIDS, LicenceError, b64u, b32encode, b32decode, formatCode, extract, cleanCode, packPayload, unpackPayload,
+  refOf, today, fitText, randomSerial, signCode, verifyCode, signNote, readNote, importPrivate, publicOf, newKeyPair,
+  createKeyFile, openKeyFile, shopSecret, paperBackup, keyFileFromPaper,
+};
+
+return module.exports; })();
+const SITE = 'https://vdex.crowmade.app';
+(() => {
+  const $ = id => document.getElementById(id);
+  const say = (t, bad) => { $('msg').textContent = t; $('msg').className = bad ? 'bad' : 'ok'; };
+  const readFile = input => new Promise((res, rej) => { const f = input.files && input.files[0]; if (!f) return rej(new Error('Choose a file first')); const r = new FileReader(); r.onload = () => res(String(r.result)); r.onerror = () => rej(r.error); r.readAsText(f); });
+  const download = (name, text, type) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name; document.body.append(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1500); };
+  const csvCell = v => /[",\n\r]/.test(String(v)) ? `"${String(v).replace(/"/g, '""')}"` : String(v);
+  // A cell starting with = + - @ would run as a formula in a spreadsheet: keep it as text.
+  const safeCell = v => /^[=+\-@\t\r]/.test(String(v)) ? "'" + v : String(v);
+  const parseCsv = t => { const rows = []; let row = [], cell = '', q = false; for (let i = 0; i < t.length; i++) { const c = t[i]; if (q) { if (c === '"' && t[i + 1] === '"') { cell += '"'; i++; } else if (c === '"') q = false; else cell += c; } else if (c === '"') q = true; else if (c === ',') { row.push(cell); cell = ''; } else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; } else if (c !== '\r') cell += c; } if (cell || row.length) { row.push(cell); rows.push(row); } return rows; };
+  const HEAD = ['issued', 'ref', 'type', 'name', 'email', 'expires', 'seats', 'note', 'code'];
+  let key = null, ledger = [], unsaved = 0;
+  (async () => { try { await crypto.subtle.generateKey({ name: 'Ed25519' }, false, ['sign']); } catch { $('support').hidden = false; } })();
+  window.addEventListener('beforeunload', e => { if (unsaved) { e.preventDefault(); e.returnValue = ''; } });
+  const draw = () => $('rows').replaceChildren(...ledger.slice().reverse().map(r => { const tr = document.createElement('tr'); for (const k of HEAD.slice(0, 7)) { const td = document.createElement('td'); td.textContent = r[k] || ''; tr.append(td); } return tr; }));
+
+  $('open').onclick = async () => {
+    try {
+      const file = JSON.parse(await readFile($('keyfile')));
+      key = await Codes.openKeyFile(file, $('pass').value);
+      if (key.kid === 2) { $('shopsecret').value = await Codes.shopSecret(file, $('pass').value); $('shopout').hidden = false; }
+      $('pass').value = '';
+      $('keystate').textContent = `Key ${key.kid}${key.kid === 9 ? ' (spare)' : key.kid === 2 ? ' (shop)' : ''} unlocked.`;
+      $('make').hidden = false; $('manage').hidden = ![1, 9].includes(key.kid); say('');
+    } catch (e) { say(e.message, true); }
+  };
+
+  $('issue').onclick = async () => {
+    try {
+      const f = { name: $('name').value, email: $('email').value.trim(), comp: $('comp').checked, expires: $('expires').value, seats: Number($('seats').value) || 3, issued: Codes.today() };
+      if (f.email && !/^[^\s@]+@[^\s@]+$/.test(f.email)) throw new Error('That email address does not look right');
+      const code = await Codes.signCode(key.privateKey, key.kid, f);
+      const lic = (await Codes.verifyCode(code, { keys: { [key.kid]: key.publicKey } })).licence; // check it before handing it out
+      const row = { issued: f.issued, ref: lic.ref, type: f.comp ? 'free' : 'paid', name: lic.name, email: lic.email, expires: f.expires, seats: String(lic.seats), note: $('note').value.trim(), code };
+      ledger.push(row); unsaved++; draw();
+      $('code').value = code; $('for').textContent = row.name || row.email; $('result').hidden = false;
+      const body = `Hi${row.name ? ' ' + row.name.split(' ')[0] : ''},\n\nHere is your Vdex licence code${f.comp ? ', with my compliments' : ''}. It works on up to ${lic.seats} of your own computers${row.expires ? ', until ' + row.expires : ''}.\n\n${code}\n\nTo use it: download Vdex from ${SITE}/download.html, open it, go to Settings → About → Enter licence code, paste the whole code and press Activate.\n\nThanks!`;
+      $('mail').href = `mailto:${encodeURIComponent(row.email)}?subject=${encodeURIComponent('Your Vdex licence code')}&body=${encodeURIComponent(body)}`;
+      $('which').value = row.ref;
+      say('Code made. Save the ledger before you close this page.');
+    } catch (e) { say(e.message, true); }
+  };
+  $('copy').onclick = async () => { try { await navigator.clipboard.writeText($('code').value); say('Copied.'); } catch { $('code').select(); say('Press Ctrl+C (Cmd+C on a Mac) to copy.'); } };
+  $('ledgerfile').onchange = async () => {
+    try {
+      const rows = parseCsv(await readFile($('ledgerfile'))), head = (rows.shift() || []).map(x => x.trim());
+      if (!head.includes('ref') || !head.includes('code')) throw new Error('That is not a Vdex ledger');
+      const old = rows.filter(r => r.length > 1).map(r => Object.fromEntries(head.map((k, i) => [k, String(r[i] || '').replace(/^'(?=[=+\-@])/, '')])));
+      const known = new Set(old.map(r => r.ref)); ledger = old.concat(ledger.filter(r => !known.has(r.ref))); draw(); say(`Ledger opened: ${ledger.length} codes.`);
+    } catch (e) { say(e.message, true); }
+  };
+  $('saveledger').onclick = () => { download('ledger.csv', [HEAD.join(','), ...ledger.map(r => HEAD.map(k => csvCell(k === 'code' || k === 'ref' ? r[k] || '' : safeCell(r[k] || ''))).join(','))].join('\r\n') + '\r\n', 'text/csv'); unsaved = 0; say('Ledger saved to your Downloads. Keep it with your key file.'); };
+
+  // Requests to the shop, signed with the unlocked key, so only the owner can make them.
+  async function refOf(text) {
+    const t = String(text || '').trim();
+    if (/^\d{1,3}:\d{1,10}$/.test(t)) return t;
+    const b = Codes.extract(t), p = Codes.unpackPayload(b.subarray(0, b.length - 64)); return Codes.refOf(p.kid, p.serial);
+  }
+  async function ask(op) {
+    try {
+      const ref = await refOf($('which').value);
+      if (op === 'cancel' && !confirm(`Cancel ${ref}? Vdex becomes read-only on its computers within about a week.`)) return;
+      let at = Date.now();
+      for (let tries = 0; tries < 2; tries++) {
+        const note = await Codes.signNote('admin', key.privateKey, key.kid, { op, ref, at });
+        const r = await fetch(SITE + '/licence/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(note) });
+        const b = await r.json().catch(() => ({}));
+        if (b.error === 'stale' && b.now && !tries) { at = b.now; continue; } // this computer's clock is off: use the server's
+        if (!r.ok) throw new Error(b.error === 'not-signed' ? 'The shop did not accept your key. Is this the key built into Vdex?' : b.error === 'not-ready' ? 'The shop is not set up yet (see docs/selling-desktop.md).' : 'The shop answered ' + r.status);
+        const list = (b.computers || []).map(c => `${c.os} (added ${c.added}, last used ${c.seen})`).join('; ');
+        $('lookout').textContent = `${b.ref}: ${b.cancelled ? `CANCELLED (${b.cancelled.why}). ` : ''}${b.computers.length ? `on ${b.computers.length} computer${b.computers.length === 1 ? '' : 's'}: ${list}.` : 'not on any computer.'} Moved ${b.swaps} time${b.swaps === 1 ? '' : 's'} in the last 30 days.`;
+        say({ look: 'Looked up.', clear: 'Its computers are cleared: it can be activated afresh.', cancel: 'Cancelled.', restore: 'Restored.' }[op]);
+        return;
+      }
+    } catch (e) { say(e.message === 'Failed to fetch' ? 'Could not reach vdex.crowmade.app. Check the internet connection.' : e.message, true); }
+  }
+  for (const op of ['look', 'clear', 'cancel', 'restore']) $(op).onclick = () => ask(op);
+
+  $('makekey').onclick = async () => {
+    try {
+      const p = $('np1').value;
+      if (p !== $('np2').value) throw new Error('The two passphrases are different');
+      $('makekey').disabled = true; say('Making your keys…', false);
+      const owner = await Codes.createKeyFile({ kid: 1, passphrase: p, label: 'owner' });
+      const shop = await Codes.createKeyFile({ kid: 2, passphrase: p, label: 'shop' });
+      const spare = await Codes.createKeyFile({ kid: 9, passphrase: p, label: 'spare' });
+      download('vdex-licence-key-1.json', JSON.stringify(owner, null, 2) + '\n', 'application/json');
+      download('vdex-licence-key-2-shop.json', JSON.stringify(shop, null, 2) + '\n', 'application/json');
+      download('vdex-licence-key-9-spare.json', JSON.stringify(spare, null, 2) + '\n', 'application/json');
+      $('publine').value = JSON.stringify({ 1: owner.publicKey, 2: shop.publicKey, 9: spare.publicKey });
+      $('newshop').value = await Codes.shopSecret(shop, p);
+      $('paper').value = (await Codes.paperBackup(owner, p)) + '\n' + (await Codes.paperBackup(spare, p));
+      $('newkeyout').hidden = false; $('np1').value = $('np2').value = '';
+      say('Three key files saved to your Downloads. Copy them to two safe places now.');
+    } catch (e) { say(e.message, true); } finally { $('makekey').disabled = false; }
+  };
+})();
+</script>
+</body>
+</html>

@@ -4,6 +4,7 @@
 const { app, BrowserWindow, Menu, dialog, screen, session, shell, ipcMain } = require('electron');
 const crypto = require('crypto');
 const { initUpdater } = require('./updater.js');
+const { wireLicence } = require('./licence.js');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -281,6 +282,15 @@ app.whenReady().then(async () => {
   }
   setPermissions();
   setMenu();
+  // The licence (desktop/licence.js). An earlier version of Vdex ran here if it left desktop-state.json (written only
+  // by Vdex, when its window closes); that is read before this run opens a window, and those installs keep Vdex free.
+  // (Chromium's own storage folders are no sign: they can exist before any page has run.)
+  const dir = app.getPath('userData');
+  wireLicence({
+    ipcMain, fromApp, shell, dir, getWindow: () => win,
+    hasPriorData: () => fs.existsSync(path.join(dir, 'desktop-state.json')),
+    site: !app.isPackaged && /^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(process.env.VDEX_LICENCE_SITE || '') ? process.env.VDEX_LICENCE_SITE : '', // tests only
+  });
   createWindow();
   initUpdater(() => win);
 });

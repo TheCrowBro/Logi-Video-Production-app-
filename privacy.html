@@ -44,7 +44,7 @@
   <section class="summary">
     <h2>The short version</h2>
     <ul>
-      <li>Vdex has no accounts, no servers of its own, no advertising, no analytics and no tracking.</li>
+      <li>Vdex has no accounts, no advertising, no analytics and no tracking. Its only server of its own checks desktop licence codes, and never sees your work.</li>
       <li>Everything you type stays on your phone or computer. The people who make Vdex never receive it.</li>
       <li>Information leaves your device only when you use a feature that needs it: linking your own cloud storage or calendar, looking up the weather or an address, scanning a page, or sharing something. Every case is listed below.</li>
     </ul>
@@ -105,7 +105,11 @@
   <p>When you link two devices with 🔗 Link device in timecode notes, each device asks a Google server (stun.l.google.com) for its own internet address so the two can find each other. Google receives your device's IP address and nothing else. Your notes then travel directly between the two devices.</p>
 
   <h3>The website, updates and the app stores</h3>
-  <p>Vdex's files are served from vdex.crowmade.app by Cloudflare. When you open the app, or it checks for a new version, your browser requests files from Cloudflare, which keeps ordinary web server logs such as your IP address, browser type and the time, under its own privacy statement. The desktop app checks GitHub for new versions in the same way. If you installed Vdex from Google Play, Google gives us overall install and crash statistics. Those are not linked to anything inside Vdex.</p>
+  <p>Vdex's files are served from vdex.crowmade.app by Cloudflare. When you open the app, or it checks for a new version, your browser requests files from Cloudflare, which keeps ordinary web server logs such as your IP address, browser type and the time, under its own privacy statement. The desktop app downloads itself, and checks for new versions, from download.crowmade.app, which Cloudflare also runs, in the same way. If you installed Vdex from Google Play, Google gives us overall install and crash statistics. Those are not linked to anything inside Vdex.</p>
+
+  <h3>Buying and activating a desktop licence</h3>
+  <p>The desktop app has a 30-day free trial and then needs a licence code. If you buy one, you pay on Stripe's checkout page: Link, LLC is the seller, and Stripe handles your payment details under its own privacy policy. We never see your card. Stripe gives us your name, email address and the order, which stay in our Stripe account. We put your name and email address inside your licence code, so Vdex can show whom it is licensed to, and send the code to your email address through Resend. If we give you a free licence, we keep your name, email address and the code in our own records.</p>
+  <p>When a code is activated on a computer, the desktop app sends our licence server at vdex.crowmade.app (run on Cloudflare) the code, a random number made for that installation of Vdex, and whether the computer is a Mac, Windows or Linux. For each code, the server keeps the list of those numbers, with the type of computer and the dates each was added and last checked, so a code can be used on up to 3 computers. It also notes codes that have been cancelled, for example after a refund. The app checks again about once a week. Nothing else is sent: no hardware details, network names, location or anything from your work. Ask us and we will delete a code's list of computers.</p>
 
   <h3>The services Vdex may contact</h3>
   <table>
@@ -118,7 +122,10 @@
       <tr><td data-h="Service"><a href="https://osmfoundation.org/wiki/Privacy_Policy">OpenStreetMap</a></td><td data-h="When">Address lookups and maps</td><td data-h="What it receives">The address text and the map area shown</td></tr>
       <tr><td data-h="Service"><a href="https://www.cloudflare.com/privacypolicy/">cdnjs (Cloudflare)</a>, <a href="https://www.jsdelivr.com/terms/privacy-policy">jsDelivr</a>, Tesseract.js</td><td data-h="When">First use of script or timecode scanning</td><td data-h="What it receives">A request for a code library, like any web page</td></tr>
       <tr><td data-h="Service"><a href="https://www.cloudflare.com/privacypolicy/">Cloudflare</a></td><td data-h="When">Opening the app and checking for updates</td><td data-h="What it receives">Ordinary web server logs</td></tr>
-      <tr><td data-h="Service"><a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub</a></td><td data-h="When">The desktop app's update check</td><td data-h="What it receives">Ordinary web server logs</td></tr>
+      <tr><td data-h="Service"><a href="https://www.cloudflare.com/privacypolicy/">Cloudflare</a> (download.crowmade.app)</td><td data-h="When">Downloading the desktop app, and its update check</td><td data-h="What it receives">Ordinary web server logs</td></tr>
+      <tr><td data-h="Service">Vdex licence server (on <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare</a>)</td><td data-h="When">Activating a desktop licence, then about once a week</td><td data-h="What it receives">The licence code, a random number for that installation, and Mac, Windows or Linux</td></tr>
+      <tr><td data-h="Service"><a href="https://stripe.com/privacy">Stripe</a> and <a href="https://link.com/privacy">Link</a></td><td data-h="When">Buying a desktop licence</td><td data-h="What it receives">What you enter at checkout, including your payment details</td></tr>
+      <tr><td data-h="Service"><a href="https://resend.com/legal/privacy-policy">Resend</a></td><td data-h="When">Emailing a bought licence code</td><td data-h="What it receives">Your name, email address and licence code</td></tr>
     </tbody>
   </table>
 
@@ -146,7 +153,7 @@
   </ul>
 
   <h2>8. Security</h2>
-  <p>Vdex is delivered over HTTPS, runs only code from the addresses listed above, and stores nothing on any server of ours. With a PIN set, your information is encrypted on the device whenever Vdex is locked, hidden or closed. The source code is public for anyone to review.</p>
+  <p>Vdex is delivered over HTTPS, runs only code from the addresses listed above, and stores none of your work on any server of ours (the licence server keeps only what is described above). With a PIN set, your information is encrypted on the device whenever Vdex is locked, hidden or closed.</p>
 
   <h2>9. Changes to this policy</h2>
   <p>When this policy changes, the date at the top changes with it. A change that matters is also shown in the app.</p>

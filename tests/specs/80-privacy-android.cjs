@@ -20,7 +20,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('it is titled as the privacy policy', /privacy/i.test(await page.title()));
   const text = await page.evaluate(() => document.body.innerText);
   ok('it carries a last-updated date', /Last updated \d{1,2} \w+ \d{4}/.test(text));
-  for (const s of ['Open-Meteo', 'OpenStreetMap', 'Dropbox', 'Google', 'Microsoft', 'GitHub', 'Camera', 'Microphone', 'Location']) ok(`it covers ${s}`, text.includes(s));
+  for (const s of ['Open-Meteo', 'OpenStreetMap', 'Dropbox', 'Google', 'Microsoft', 'Stripe', 'Resend', 'licence server', 'Camera', 'Microphone', 'Location']) ok(`it covers ${s}`, text.includes(s));
   ok('it fits a phone without sideways scrolling', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   ok('its back link returns to the app', (await page.locator('a.back').getAttribute('href')) === './');
   ok('it points to the terms of service', (await page.locator('a[href="terms.html"]').count()) >= 1);

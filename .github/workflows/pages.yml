@@ -1,4 +1,5 @@
-# Publishes the app to https://vdex.crowmade.app (a Cloudflare Worker that only serves static files).
+# Publishes the app to https://vdex.crowmade.app (a Cloudflare Worker: the static website, plus the small licence script
+# in cloudflare/worker.mjs for /buy and /licence/…).
 #
 # How a change reaches the site: a push to the working branch runs the browser tests; when they pass, the
 # "mirror" job moves main to that same commit and starts this workflow again on main, where the "cloudflare" job
@@ -36,6 +37,7 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npx playwright install --with-deps chromium
+      - run: npm ci --prefix cloudflare   # Wrangler's runtime, for the licence Worker's spec
       - run: npm test
   mirror:
     # A tested push to the working branch becomes main, and main publishes.
@@ -67,7 +69,7 @@ jobs:
           TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
   cloudflare:
-    # The same website at https://vdex.crowmade.app, served by a Cloudflare Worker that only serves static files.
+    # The website at https://vdex.crowmade.app, served by a Cloudflare Worker (static files, plus cloudflare/worker.mjs).
     needs: cloudflare-ready
     if: github.ref == 'refs/heads/main' && needs.cloudflare-ready.outputs.go == '1'
     runs-on: ubuntu-latest
@@ -113,3 +115,6 @@ jobs:
           [ -n "$ok" ] || { echo "::error::$site is not serving build $build"; exit 1; }
           curl -fsS -o /dev/null -D - "$site/.well-known/assetlinks.json" | grep -qi '^content-type: application/json'
           curl -fsS -o /dev/null -D - "$site/index.html" | grep -qi '^content-security-policy:'
+          # The licence script answers its own addresses: a request without a code is refused by it, not a missing file.
+          lic=$(curl -sS -o /tmp/lic -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$site/licence/activate")
+          [ "$lic" = 400 ] && grep -q '"invalid"' /tmp/lic || { echo "::error::$site/licence/activate answered HTTP $lic, not the licence script"; exit 1; }
