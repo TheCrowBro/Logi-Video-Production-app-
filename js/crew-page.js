@@ -13,29 +13,57 @@ const section = (title, ...kids) => { const body = kids.flat().filter(Boolean); 
 const link = (href, text) => h('a', { href }, text);
 const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
-// A calendar file for the shoot, made here from what the link carries.
-const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
-const icsDate = (d, t) => d.replace(/-/g, '') + (t ? 'T' + t.replace(':', '').padEnd(4, '0') + '00' : '');
-const nextDay = d => { const [y, m, dd] = d.split('-').map(Number); const x = new Date(y, m - 1, dd + 1); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
+// A calendar file for the shoot, made here from what the link carries. Every value is cleaned first (a link can be
+// made by anyone), each line is folded at 75 bytes, and the event keeps one id per shoot so a newer link updates it.
+const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+const fold = line => { const out = []; let cur = '', bytes = 0; for (const ch of line) { const n = new TextEncoder().encode(ch).length; if (bytes + n > 74) { out.push(cur); cur = ' '; bytes = 1; } cur += ch; bytes += n; } out.push(cur); return out.join('\r\n'); };
+const TIME = /^(\d{1,2}):(\d{2})$/;
+const at = (d, t) => { const [y, m, dd] = d.split('-').map(Number), x = TIME.exec(t || ''); return x ? new Date(y, m - 1, dd, Number(x[1]), Number(x[2])) : null; };
+const stamp = x => `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}T${String(x.getHours()).padStart(2, '0')}${String(x.getMinutes()).padStart(2, '0')}00`;
+const dayStamp = (d, add = 0) => { const [y, m, dd] = d.split('-').map(Number), x = new Date(y, m - 1, dd + add); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
 function ics(snap) {
-  const last = snap.endDate || snap.date, start = snap.call.general || snap.start, end = snap.call.wrap || snap.end;
-  const timed = /^\d{1,2}:\d{2}$/.test(start || '') && (!end || /^\d{1,2}:\d{2}$/.test(end));
-  const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z');
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vdex//Crew//EN', 'BEGIN:VEVENT', `UID:crew-${snap.date}-${slug(snap.title)}-${snap.made || 0}@vdex`, `DTSTAMP:${stamp}`,
-    timed ? `DTSTART:${icsDate(snap.date, start.padStart(5, '0'))}` : `DTSTART;VALUE=DATE:${icsDate(snap.date)}`,
-    timed ? `DTEND:${icsDate(last, (end || start).padStart(5, '0'))}` : `DTEND;VALUE=DATE:${nextDay(last)}`,
+  const last = snap.endDate || snap.date, start = at(snap.date, snap.call.general || snap.start);
+  let end = at(last, snap.call.wrap || snap.end);
+  if (start && end && end <= start) end = new Date(end.getTime() + 864e5); // an overnight shoot wraps the next morning
+  if (start && !end) end = new Date(start.getTime() + 36e5);              // no wrap time: an hour, rather than no length
+  const made = snap.made || Date.now();
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vdex//Crew//EN', 'BEGIN:VEVENT',
+    `UID:crew-${slug(snap.ref || snap.title)}-${snap.date}@vdex`, `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}`,
+    `SEQUENCE:${Math.floor(made / 1000) % 2147483647}`, `LAST-MODIFIED:${new Date(made).toISOString().replace(/[-:]/g, '').replace(/\.\d+Z$/, 'Z')}`,
+    start ? `DTSTART:${stamp(start)}` : `DTSTART;VALUE=DATE:${dayStamp(snap.date)}`,
+    start ? `DTEND:${stamp(end)}` : `DTEND;VALUE=DATE:${dayStamp(last, 1)}`,
     `SUMMARY:${icsText(snap.title)}`, snap.location.address && `LOCATION:${icsText(snap.location.address)}`,
     `DESCRIPTION:${icsText([snap.producer && 'Producer: ' + snap.producer, snap.call.general && 'Call: ' + snap.call.general, 'Shoot info: ' + location.href].filter(Boolean).join('\n'))}`,
     'END:VEVENT', 'END:VCALENDAR'].filter(Boolean);
-  return lines.join('\r\n') + '\r\n';
+  return lines.map(l => fold(String(l).replace(/[\r\n]+/g, ' '))).join('\r\n') + '\r\n';
+}
+// Only the shapes this page expects: anything else in a link is dropped, never drawn or written into a file.
+function clean(raw) {
+  const s = v => (v == null ? '' : typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : '');
+  const time = v => (TIME.test(s(v)) ? s(v) : '');
+  const list = (v, f) => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object').map(f) : []);
+  const person = p => ({ name: s(p.name), role: s(p.role), phone: s(p.phone), email: s(p.email), call: s(p.call) });
+  const c = raw.call && typeof raw.call === 'object' ? raw.call : {}, l = raw.location && typeof raw.location === 'object' ? raw.location : {};
+  const date = s(raw.date), endDate = isDate(s(raw.endDate)) && s(raw.endDate) > date ? s(raw.endDate) : '';
+  return {
+    kind: s(raw.kind), ref: s(raw.ref), made: Number.isFinite(Number(raw.made)) ? Number(raw.made) : 0, title: s(raw.title), type: s(raw.type), date, endDate,
+    start: time(raw.start), end: time(raw.end), producer: s(raw.producer), client: s(raw.client),
+    call: { general: s(c.general), lunch: s(c.lunch), wrap: s(c.wrap), breaks: s(c.breaks), dress: s(c.dress), weather: s(c.weather), emergency: s(c.emergency) },
+    location: { venue: s(l.venue), address: s(l.address), access: s(l.access), parking: s(l.parking), power: s(l.power), hospital: s(l.hospital), rules: s(l.rules) },
+    schedule: list(raw.schedule, r => ({ date: isDate(s(r.date)) ? s(r.date) : '', time: s(r.time), item: s(r.item) })),
+    crew: list(raw.crew, person), contacts: list(raw.contacts, person), onSet: s(raw.onSet),
+    shots: list(raw.shots, x => ({ text: s(x.text), done: x.done === true })), kit: list(raw.kit, k => ({ name: s(k.name), cat: s(k.cat), qty: Math.max(1, Math.floor(Number(k.qty)) || 1) })),
+    deliverables: list(raw.deliverables, x => ({ name: s(x.name), duration: s(x.duration), due: isDate(s(x.due)) ? s(x.due) : '', status: s(x.status) })), notes: s(raw.notes),
+  };
 }
 const save = (text, name, type) => { const a = h('a', { href: URL.createObjectURL(new File([text], name, { type })), download: name }); document.body.append(a); a.click(); a.remove(); };
 
 (async () => {
   let snap;
   try { snap = await unpack(location.hash); } catch (e) { return fail(/document/.test(e.message || '') ? e.message : 'It is incomplete or damaged: part of it may have been cut off when it was copied.'); }
-  if (!snap || snap.kind !== 'crew' || !isDate(snap.date)) return fail('It is incomplete or damaged.');
-  snap.call = snap.call || {}; snap.location = snap.location || {};
+  if (!snap || typeof snap !== 'object') return fail('It is incomplete or damaged.');
+  snap = clean(snap);
+  if (snap.kind !== 'crew' || !isDate(snap.date)) return fail('It is incomplete or damaged.');
   const when = snap.endDate && snap.endDate > snap.date ? `${fmtLong(snap.date)} → ${fmtLong(snap.endDate)}` : fmtLong(snap.date);
   document.title = `${snap.title || 'Shoot'} — ${fmtShort(snap.date)}`;
   bar.replaceChildren(
@@ -44,7 +72,8 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
 
   const L = snap.location, C = snap.call;
   const days = [...new Set((snap.schedule || []).map(r => r.date || snap.date))].sort();
-  const schedule = (snap.schedule || []).length ? days.map(d => [days.length > 1 && isDate(d) && h('div', { class: 'day' }, fmtLong(d)),
+  const dayHeads = snap.endDate || days.some(d => d !== snap.date);
+  const schedule = (snap.schedule || []).length ? days.map(d => [dayHeads && isDate(d) && h('div', { class: 'day' }, fmtLong(d)),
     h('table', null, h('tbody', null, snap.schedule.filter(r => (r.date || snap.date) === d).map(r => h('tr', null, h('td', { style: 'width:5.5em;white-space:nowrap' }, r.time || ''), h('td', null, r.item || '')))))]) : null;
   const people = (list, withCall) => list.length ? h('table', null,
     h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Role'), withCall && h('th', null, 'Call'), h('th', null, 'Contact'))),

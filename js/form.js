@@ -114,7 +114,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
       if (f.list) listEl = h('datalist', { id: id + '-l' }, f.list.map(o => h('option', { value: o })));
       const input = control = h('input', {
         'data-key': f.key, id, type: f.type === 'url' ? 'text' : (f.type || 'text'), required: !!f.required, placeholder: f.placeholder || '',
-        value: val ?? '', list: f.list ? id + '-l' : null, step: f.type === 'number' ? (f.min != null ? 1 : 'any') : null, min: f.min ?? null,
+        value: val ?? '', list: f.list ? id + '-l' : null, step: f.type === 'number' ? (f.step ?? (f.min != null ? 1 : 'any')) : null, min: f.min ?? null,
         inputMode: f.type === 'tel' ? 'tel' : f.type === 'url' ? 'url' : null, autocomplete: 'off',
       });
       readers.push(() => [f.key, f.type === 'number' ? (input.value === '' ? '' : Number(input.value)) : input.value.trim()]);

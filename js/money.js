@@ -38,9 +38,19 @@ const shootDays = b => Math.max(1, Math.round((parseISO(endOf(b)) - parseISO(b.d
 const addDays = (iso, n) => { const d = parseISO(iso); return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
 export const isOverdue = b => { const inv = docOf(b, 'invoice'); return !!(inv && inv.status === 'Sent' && inv.due && inv.due < todayISO() && totals(inv).balance > 0); };
 const num = v => (v === '' || v == null ? '' : Number(v));
-// A crew rate is typed freely ("450", "$450/day", "£55 an hour", "1,200 per week"): its number, and whether it is per hour.
-export const rateOf = r => { const m = String(r ?? '').replace(/(\d),(?=\d{3}(\D|$))/g, '$1').match(/\d+(?:[.,]\d+)?/); return m ? Number(m[0].replace(',', '.')) : ''; };
-const perHour = r => /(\/|\bper\s*|\ban?\s+)(h|hr|hrs|hour)\b|\bhourly\b/i.test(String(r || ''));
+// A crew rate is typed freely: "450", "$450/day", "£55 an hour", "$500/day, OT $60/hr", "1.200,50 €". The amount
+// that counts is the one per day (or with no unit); an hourly amount is used only when there is nothing else. A
+// weekly rate, or nothing readable, gives '' so the line is left for the person to fill in.
+const toNumber = t => { const m = t.match(/^(.*?)(?:[.,](\d{1,2}))?$/), whole = m[1].replace(/[.,\s]/g, ''); return Number(whole + (m[2] ? '.' + m[2] : '')); };
+const RATE_UNIT = /^\s*(?:\/|per\b|an?\b|each\b)?\s*(hourly|hours?|hrs?|h|daily|days?|d|weekly|weeks?|wk)\b/i;
+export function parseRate(r) {
+  const s = String(r ?? ''), found = [], re = /\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?(?!\d)|\d+(?:[.,]\d{1,2})?(?!\d)/g;
+  for (let m; (m = re.exec(s));) { const u = ((s.slice(m.index + m[0].length).match(RATE_UNIT) || [])[1] || '').toLowerCase(); found.push({ n: toNumber(m[0]), unit: u[0] === 'h' ? 'hour' : u[0] === 'w' ? 'week' : u[0] === 'd' ? 'day' : '' }); }
+  const pick = found.find(f => f.unit === 'day') || found.find(f => f.unit === '') || found.find(f => f.unit === 'hour');
+  return pick && Number.isFinite(pick.n) ? { amount: pick.n, hourly: pick.unit === 'hour' } : { amount: '', hourly: false };
+}
+export const rateOf = r => parseRate(r).amount;
+const perHour = r => parseRate(r).hourly;
 
 // Suggested lines: from the booking, from the quote, or from the hours logged.
 export function suggestLines(b, kind, source = 'booking') {
@@ -266,8 +276,10 @@ export function budgetTotals(b) {
   const lines = (b.budget && b.budget.lines) || [];
   const est = lines.reduce((s, l) => s + lineEst(l), 0), spent = lines.reduce((s, l) => s + (hasActual(l) ? Number(l.actual) : 0), 0);
   const byCat = BUDGET_CATS.map(cat => { const ls = lines.filter(l => (BUDGET_CATS.includes(l.cat) ? l.cat : 'Other') === cat); return { cat, lines: ls, est: ls.reduce((s, l) => s + lineEst(l), 0), spent: ls.reduce((s, l) => s + (hasActual(l) ? Number(l.actual) : 0), 0) }; }).filter(c => c.lines.length);
+  const forecast = lines.reduce((s, l) => s + (hasActual(l) ? Number(l.actual) : lineEst(l)), 0); // actual costs where known, estimates for the rest
+  const toPay = lines.reduce((s, l) => s + (hasActual(l) ? 0 : lineEst(l)), 0);
   const q = docOf(b, 'quote'), quoted = q ? totals(q, 'quote').subtotal : null; // before tax: the tax is not yours to spend
-  return { lines, est, spent, left: est - spent, byCat, quoted, margin: quoted == null ? null : quoted - est };
+  return { lines, est, spent, forecast, toPay, byCat, quoted, margin: quoted == null ? null : quoted - forecast };
 }
 const patchBooking = (b, fn) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { x.budget = { lines: [], ...(x.budget || {}) }; x.budget.lines = [...(x.budget.lines || [])]; fn(x.budget); x.budget.updatedAt = Date.now(); x.updatedAt = Date.now(); } });
 function editBudgetLine(b, line) {
@@ -277,21 +289,21 @@ function editBudgetLine(b, line) {
     fields: [
       { key: 'cat', label: 'Category', type: 'select', options: BUDGET_CATS },
       { key: 'desc', label: 'What it is', required: true, placeholder: 'e.g. Gaffer, van hire, location fee' },
-      { key: 'qty', label: 'Quantity', type: 'number', min: 0 },
+      { key: 'qty', label: 'Quantity', type: 'number', min: 0, step: 'any', hint: 'Half days and part hours are fine, e.g. 1.5.' },
       { key: 'unit', label: 'Per', type: 'select', options: BUDGET_UNITS },
       { key: 'rate', label: 'Cost each (estimate)', type: 'number', hint: 'What it will cost you, not what you charge the client.' },
       { key: 'actual', label: 'Actual cost, once known', type: 'number', hint: 'The whole line, as it turned out. Leave blank until you know.' },
       { key: 'supplier', label: 'Paid to', placeholder: 'Person or company' },
     ],
     onSave: v => patchBooking(b, bd => { const next = { ...v, qty: v.qty === '' ? 1 : v.qty, id: (line && line.id) || uid(), src: line && line.src }; const i = bd.lines.findIndex(l => l.id === next.id); if (i >= 0) bd.lines[i] = next; else bd.lines.push(next); }),
-    onDelete: line ? () => patchBooking(b, bd => { bd.lines = bd.lines.filter(l => l.id !== line.id); }) : null,
+    onDelete: line ? () => patchBooking(b, bd => { bd.lines = bd.lines.filter(l => l.id !== line.id); if (line.src) bd.skip = [...new Set([...(bd.skip || []), line.src])]; }) : null, // Fill from booking leaves it out from now on
   });
 }
 // Lines from what the booking already knows: crew at their day rates, hires and licences at their cost. Only adds
 // what is not there yet, so it can be tapped again after the booking changes.
 export function fillBudget(b) {
   b = current(b);
-  const have = new Set(((b.budget && b.budget.lines) || []).map(l => l.src).filter(Boolean)), add = [], days = shootDays(b);
+  const have = new Set([...((b.budget && b.budget.lines) || []).map(l => l.src).filter(Boolean), ...((b.budget && b.budget.skip) || [])]), add = [], days = shootDays(b);
   for (const id of b.crew || []) { const c = byId('crew', id); if (c && !have.has('crew:' + id)) { const hourly = perHour(c.rate); add.push({ cat: 'Crew', desc: c.name + (c.role ? ` (${c.role})` : '') + (hourly ? ' — check the hours' : ''), qty: hourly ? days * 10 : days, unit: hourly ? 'hour' : 'day', rate: rateOf(c.rate), src: 'crew:' + id }); } }
   for (const hr of b.hires || []) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
   for (const lc of b.licences || []) if (!have.has('lic:' + lc.id)) add.push({ cat: 'Music & licences', desc: [lc.kind, lc.title].filter(Boolean).join(': '), qty: 1, unit: 'item', rate: rateOf(lc.cost), src: 'lic:' + lc.id });
@@ -299,11 +311,11 @@ export function fillBudget(b) {
   return add.length;
 }
 function budgetCsv(b) {
-  const t = budgetTotals(b), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const t = budgetTotals(b), q = v => '"' + String(v == null ? '' : v).replace(/^[=+\-@\t\r]/, "'$&").replace(/"/g, '""') + '"';
   const rows = [['Category', 'What it is', 'Quantity', 'Per', 'Cost each', 'Estimate', 'Actual', 'Paid to'].map(q).join(',')];
   for (const c of t.byCat) for (const l of c.lines) rows.push([c.cat, l.desc, l.qty, l.unit, l.rate, lineEst(l).toFixed(2), hasActual(l) ? Number(l.actual).toFixed(2) : '', l.supplier].map(q).join(','));
   rows.push(['Total', '', '', '', '', t.est.toFixed(2), t.spent.toFixed(2), ''].map(q).join(','));
-  return rows.join('\r\n');
+  return '\ufeff' + rows.join('\r\n');
 }
 export function budgetBlock(b) {
   const t = budgetTotals(b), cur = sym();
@@ -314,8 +326,9 @@ export function budgetBlock(b) {
   return h('section', { class: 'block', id: 'bk-budget' }, h('h3', null, 'Budget'),
     h('div', { class: 'card stack' },
       t.lines.length
-        ? [h('div', { class: 'stats' }, stat(fmtMoney(t.est), 'Estimate'), stat(fmtMoney(t.spent), 'Spent so far'), stat(fmtMoney(t.left), t.left < -0.005 ? 'Over the estimate' : 'Still to spend', t.left < -0.005 ? 'overdue' : '')),
-          t.quoted != null && h('p', { class: 'small' + (t.margin < 0 ? ' overdue' : '') }, `Quoted to the client: ${fmtMoney(t.quoted)} before tax. Left for you after this budget: ${fmtMoney(t.margin)}${t.quoted > 0 ? ` (${Math.round(t.margin / t.quoted * 100)}%)` : ''}.`),
+        ? [h('div', { class: 'stats' }, stat(fmtMoney(t.est), 'Estimate'), stat(fmtMoney(t.spent), 'Spent so far'), stat(fmtMoney(t.toPay), 'Still to pay')),
+          Math.abs(t.forecast - t.est) > 0.005 && h('p', { class: 'small' + (t.forecast > t.est ? ' overdue' : '') }, `Expected total cost, with the actual costs so far: ${fmtMoney(t.forecast)} (${t.forecast > t.est ? fmtMoney(t.forecast - t.est) + ' over' : fmtMoney(t.est - t.forecast) + ' under'} the estimate).`),
+          t.quoted != null && h('p', { class: 'small' + (t.margin < 0 ? ' overdue' : '') }, `Quoted to the client: ${fmtMoney(t.quoted)} before tax. Left for you after costs: ${fmtMoney(t.margin)}${t.quoted > 0 ? ` (${Math.round(t.margin / t.quoted * 100)}%)` : ''}.`),
           ...t.byCat.map(c => h('details', { class: 'twirl budget-cat' }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, c.cat), h('span', { class: 'twirl-sub' }, `${c.lines.length} line${c.lines.length === 1 ? '' : 's'} · ${fmtMoney(c.est)}${c.spent ? ' · spent ' + fmtMoney(c.spent) : ''}`))),
             h('div', { class: 'twirl-body stack' }, c.lines.map(line))))]
         : h('p', { class: 'muted small' }, `Plan what this job will cost you: crew, hires, travel, locations and more, in ${cur}. Only you see it: it never goes into a quote, an invoice or a crew link.`),

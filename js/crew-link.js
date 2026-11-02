@@ -4,7 +4,7 @@
 import { h, sheet, toast, fmtShort } from './util.js';
 import { byId, endOf, usedQty } from './store.js';
 import { callSheetData } from './callsheet.js';
-import { typeLabel } from './workflow.js';
+import { TYPES, baseType } from './workflow.js';
 import { pack } from './link-pack.js';
 import { SITE } from './version.js';
 
@@ -25,7 +25,8 @@ export function crewSnapshot(b, inc = choices()) {
   const d = callSheetData(b), { cs, v } = d;
   const snap = {
     v: 1, kind: 'crew', made: Date.now(),
-    title: str(b.title), type: typeLabel(b.type), date: b.date, endDate: endOf(b) > b.date ? endOf(b) : '', start: str(b.start), end: str(b.end),
+    ref: str(b.id), // a random id with nothing in it: lets the crew's calendar update the event instead of adding another
+    title: str(b.title), type: (TYPES.find(t => t[0] === baseType(b.type)) || [, ''])[1], date: b.date, // the built-in type, never the name of the producer's own template endDate: endOf(b) > b.date ? endOf(b) : '', start: str(b.start), end: str(b.end),
     producer: str(d.producerLine),
     call: { general: str(d.generalCall), lunch: str(cs.lunch), wrap: str(d.wrap), breaks: str(d.breaks), dress: str(cs.dress), weather: str(cs.weather), emergency: str(cs.emergency) },
     location: { venue: str(v && v.name), address: str(d.address), access: str(v && v.access), parking: str(v && v.parking), power: str(v && v.power), hospital: str(v && v.hospital), rules: inc.rules ? str(v && v.rules) : '' },
@@ -50,19 +51,29 @@ export function openCrewShare(b) {
   const mail = h('a', { class: 'btn ghost' }, '✉ Email the crew');
   const preview = h('a', { class: 'btn ghost small', target: '_blank', rel: 'noopener' }, 'Open preview');
   const qrBox = h('div', { class: 'share-qr' });
+  const qrNote = h('p', { class: 'small muted', style: 'text-align:center' }, 'Crew can scan this to open it on their phone');
   let url = '', seq = 0;
+  // While a new link is being made, nothing offers the old one: after unticking a part, the old link still has it.
+  const clear = () => { url = ''; area.value = ''; preview.removeAttribute('href'); mail.removeAttribute('href'); qrBox.replaceChildren(); qrNote.hidden = true; acts.forEach(x => { x.disabled = true; }); };
   const make = async () => {
-    const n = ++seq;
-    try { const u = await crewLink(b, inc); if (n !== seq) return; url = u; } catch (e) { toast('Could not make the link: ' + (e.message || e)); return; }
-    area.value = url; preview.href = url;
+    const n = ++seq; clear();
+    try { const u = await crewLink(b, inc); if (n !== seq) return; url = u; } catch (e) { if (n === seq) toast('Could not make the link: ' + (e.message || e)); return; }
+    area.value = url; preview.href = url; acts.forEach(x => { x.disabled = false; });
     const d = callSheetData(byId('bookings', b.id) || b), emails = d.crew.map(c => str(c.email).trim()).filter(Boolean);
     const subject = `Shoot info: ${b.title} — ${fmtShort(b.date)}`;
-    const body = `Hi all,\n\nHere is everything for ${b.title} on ${fmtShort(b.date)}${endOf(b) > b.date ? ' to ' + fmtShort(endOf(b)) : ''}: times, the location, who is on and what we are shooting.\n\n${url}\n\nIf plans change I'll send a new link.\n\nThanks,\n${d.producer}`;
+    // Very long links do not fit in an email link (some mail apps stop at about 2,000 characters): the link is copied
+    // instead, to be pasted into the email.
+    const long = url.length > 1700;
+    const body = `Hi all,\n\nHere is everything for ${b.title} on ${fmtShort(b.date)}${endOf(b) > b.date ? ' to ' + fmtShort(endOf(b)) : ''}: times, the location, who is on and what we are shooting.\n\n${long ? '[Paste the link here]' : url}\n\nIf plans change I'll send a new link.\n\nThanks,\n${d.producer}`;
     mail.href = `mailto:${emails.join(',')}?` + new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20');
-    import('./qr.js').then(m => m.qrSvg(url, { cellSize: 2 })).then(svg => { if (n === seq) qrBox.innerHTML = svg; }).catch(() => { qrBox.replaceChildren(); });
+    mail.dataset.long = long ? '1' : '';
+    if (url.length > 2800) return; // too long for a QR code: the link still works by copy, share or email
+    import('./qr.js').then(m => m.qrSvg(url, { cellSize: 2 })).then(svg => { if (n === seq) { qrBox.innerHTML = svg; qrNote.hidden = false; } }).catch(() => { if (n === seq) { qrBox.replaceChildren(); qrNote.hidden = true; } });
   };
-  const copy = async () => { try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { area.select(); toast('Select the link and copy it'); } };
-  const share = async () => { if (navigator.share) { try { await navigator.share({ title: `Shoot info: ${b.title}`, url }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
+  const copy = async () => { if (!url) return; try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { area.select(); toast('Select the link and copy it'); } };
+  mail.addEventListener('click', e => { if (!url || !mail.getAttribute('href')) { e.preventDefault(); return; } if (mail.dataset.long) { navigator.clipboard?.writeText(url).then(() => toast('The link is long, so it was copied: paste it into the email'), () => toast('Copy the link above and paste it into the email')); } });
+  const share = async () => { if (!url) return; if (navigator.share) { try { await navigator.share({ title: `Shoot info: ${b.title}`, url }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
+  const acts = [h('button', { class: 'btn primary', onclick: copy }, '📋 Copy link'), h('button', { class: 'btn ghost', onclick: share }, '📤 Share…')];
   const toggles = h('div', { class: 'crew-parts' }, PARTS.map(([k, label]) => h('label', { class: 'check' },
     h('input', { type: 'checkbox', checked: inc[k], onchange: e => { inc[k] = e.target.checked; remember(inc); make(); } }), h('span', null, label))));
   sheet(`Share with crew · ${b.title}`, h('div', { class: 'stack' },
@@ -70,7 +81,7 @@ export function openCrewShare(b) {
     h('p', { class: 'small muted' }, 'Prices, rates, budgets, quotes, invoices, kit values and your booking notes are never included. Everything is inside the link itself, so there is no server and nothing is stored online. Anyone who has the link can read it, so send it to your cast and crew only. If plans change, send a new link: an old one keeps showing what it had.'),
     toggles,
     area,
-    h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: copy }, '📋 Copy link'), h('button', { class: 'btn ghost', onclick: share }, '📤 Share…'), mail, preview),
-    qrBox, h('p', { class: 'small muted', style: 'text-align:center' }, 'Crew can scan this to open it on their phone')));
+    h('div', { class: 'actions' }, ...acts, mail, preview),
+    qrBox, qrNote));
   make();
 }

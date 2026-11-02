@@ -288,6 +288,10 @@ function mergeList(a, b, dead, mergeOne) {
   return [...m.values()].filter(x => !(dead[x.id] > (mergeOne === mergeNote ? nts(x) : ts(x))));
 }
 const newer = (x, y) => (ts(y) > ts(x) ? y : x);
+// A booking follows its newer copy, except its budget, which follows the newer budget: one device can plan costs while
+// another ticks the checklist, and neither loses the other's work.
+const budgetAt = b => Number(b && b.budget && b.budget.updatedAt) || 0;
+const mergeBooking = (x, y) => { const base = newer(x, y), other = base === x ? y : x; return budgetAt(other) > budgetAt(base) ? { ...base, budget: other.budget } : base; };
 const mergeNote = (x, y) => (nts(y) > nts(x) ? y : x);
 // A log's settings (sync point, mode, script…) follow the newer copy; its notes are the union of both.
 export function mergeLog(a, b, globalDead = db.deleted) {
@@ -305,7 +309,7 @@ export function mergeDb(local, remote) {
   const dead = { ...local.deleted };
   for (const [id, t] of Object.entries(remote.deleted || {})) dead[id] = Math.max(dead[id] || 0, t);
   const out = { ...local, deleted: dead };
-  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates']) out[list] = mergeList(local[list] || [], remote[list] || [], dead, newer);
+  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates']) out[list] = mergeList(local[list] || [], remote[list] || [], dead, list === 'bookings' ? mergeBooking : newer);
   out.logs = mergeList(local.logs, remote.logs, dead, (x, y) => mergeLog(x, y, dead));
   out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking

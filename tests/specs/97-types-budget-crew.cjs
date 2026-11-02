@@ -72,12 +72,38 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('.sheet input[type=number]').nth(2).fill('170');
   await page.locator('.sheet button:has-text("Save")').click(); await sleep(400);
   const text = await page.locator('#bk-budget').innerText();
-  ok('totals show the estimate, what is spent and what is left', text.includes(await money(450 + 150 + 60 + 160)) && text.includes(await money(170)) && /Still to spend/.test(text), text.slice(0, 200).replace(/\s+/g, ' '));
+  ok('totals show the estimate, what is spent and what is still to pay', text.includes(await money(450 + 150 + 60 + 160)) && text.includes(await money(170)) && /Still to pay/.test(text) && text.includes(await money(450 + 150 + 60)), text.slice(0, 200).replace(/\s+/g, ' '));
+  ok('…and the expected cost once actual costs are in', text.includes(`Expected total cost, with the actual costs so far: ${await money(830)} (${await money(10)} over the estimate)`), text.match(/Expected[^\n]*/)?.[0]);
   ok('…lines are grouped by category', (await page.locator('#bk-budget details.budget-cat').count()) === 4 && /Travel & transport/.test(text));
-  ok('…and compared with the quote before tax: what is left for you', text.includes(`Quoted to the client: ${await money(2500)} before tax`) && text.includes(`Left for you after this budget: ${await money(2500 - 820)}`), text.match(/Quoted[^\n]*/)?.[0]);
+  ok('…and compared with the quote before tax: what is left for you after costs', text.includes(`Quoted to the client: ${await money(2500)} before tax`) && text.includes(`Left for you after costs: ${await money(2500 - 830)}`), text.match(/Quoted[^\n]*/)?.[0]);
   const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }), page.locator('#bk-budget button:has-text("Export CSV")').click()]);
   const csv = require('fs').readFileSync(await dl.path(), 'utf8');
-  ok('the budget exports as a spreadsheet file', /^"Category","What it is"/.test(csv) && /"Travel & transport","Van","2","day","80","160.00","170.00"/.test(csv) && /"Total"/.test(csv), csv.split('\r\n')[1]);
+  ok('the budget exports as a spreadsheet file Excel reads correctly', csv.charCodeAt(0) === 0xfeff && /^\ufeff"Category","What it is"/.test(csv) && /"Travel & transport","Van","2","day","80","160.00","170.00"/.test(csv) && /"Total"/.test(csv), csv.split('\r\n')[1]);
+
+  // half days, deleted lines staying deleted, typed rates, and a budget edited on two devices
+  await page.locator('#bk-budget button:has-text("Add line")').click(); await page.waitForSelector('.sheet select');
+  await page.locator('.sheet input').nth(0).fill('Half-day grip');
+  await page.locator('.sheet input[type=number]').nth(0).fill('1.5');
+  await page.locator('.sheet input[type=number]').nth(1).fill('300');
+  await page.locator('.sheet button:has-text("Save")').click(); await sleep(400);
+  ok('a quantity can be a half day', await page.evaluate(id => import('./js/store.js').then(s => s.byId('bookings', id).budget.lines.some(l => l.desc === 'Half-day grip' && Number(l.qty) === 1.5)), seed.id));
+  await page.locator('#bk-budget details.budget-cat:has-text("Equipment hire")').evaluate(d => { d.open = true; });
+  await page.locator('#bk-budget button.budget-line:has-text("Prism lens")').click(); await page.waitForSelector('.sheet');
+  await page.locator('.sheet button:has-text("Delete")').click(); await sleep(400);
+  await page.locator('#bk-budget button:has-text("Fill from booking")').click(); await sleep(400);
+  ok('a line deleted on purpose is not brought back by Fill from booking', !(await page.evaluate(id => import('./js/store.js').then(s => s.byId('bookings', id).budget.lines.some(l => /Prism lens/.test(l.desc))), seed.id)));
+  const rates = await page.evaluate(() => import('./js/money.js').then(m => ['$500/day, OT $60/hr', '£55 an hour', '1.200,50 €', '1,200 per week', 'TBC'].map(r => [m.rateOf(r), m.parseRate(r).hourly])));
+  ok('typed crew rates are read sensibly: a day rate with an hourly overtime note stays a day rate', JSON.stringify(rates) === JSON.stringify([[500, false], [55, true], [1200.5, false], ['', false], ['', false]]), JSON.stringify(rates));
+  const merged = await page.evaluate(id => import('./js/store.js').then(s => {
+    const base = JSON.parse(s.serialize()), b = base.bookings.find(x => x.id === id);
+    const a = JSON.parse(JSON.stringify(base)), c = JSON.parse(JSON.stringify(base));
+    const ba = a.bookings.find(x => x.id === id), bc = c.bookings.find(x => x.id === id);
+    ba.budget = { ...(ba.budget || {}), lines: [...(ba.budget.lines || []), { id: 'zz', cat: 'Catering', desc: 'Lunch for 8', qty: 8, unit: 'person', rate: 15, actual: '' }], updatedAt: Date.now() + 1000 }; ba.updatedAt = Date.now() + 1000;
+    bc.checks = { ...(bc.checks || {}), 'x:ticked': 1 }; bc.updatedAt = Date.now() + 5000; // another device, later, did not touch the budget
+    const out = s.mergeDb(a, c).bookings.find(x => x.id === id);
+    return { lunch: out.budget.lines.some(l => l.desc === 'Lunch for 8'), ticked: !!(out.checks && out.checks['x:ticked']) };
+  }), seed.id);
+  ok('a budget edited on one device survives another device’s later edit to the same booking', merged.lunch && merged.ticked, JSON.stringify(merged));
 
   // ---- crew link ----
   await page.locator('.bk-detail button:has-text("Share with crew")').click();
@@ -90,14 +116,32 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const FORBIDDEN = ['rate', 'price', 'cost', 'value', 'actual', 'budget', 'quote', 'invoice', 'payments', 'pay', 'link', 'notesOnBooking'];
   ok('the link carries no money: no rates, prices, costs, values, budgets, quotes or invoices', !FORBIDDEN.some(k => keys.has(k)) && !/450|9876|2500|Q-0099|Van|SECRET BOOKING NOTE|private\.example/.test(raw), [...keys].join(','));
   ok('…and carries what the crew needs', snap.title === seed.title && snap.call.general === '07:30' && snap.schedule.some(r => r.item === 'First set-up on the quay') && snap.crew.some(c => c.name === seed.crewName && c.call === '07:30' && c.phone) && snap.shots.length === 2 && snap.kit.length === 1 && snap.notes === 'Bring a head torch' && snap.type === 'Vertical video (9:16)');
+  ok('the link carries a stable reference so a newer link updates the crew’s calendar event', snap.ref === seed.id);
+  const tpl = await page.evaluate(id => import('./js/store.js').then(async s => {
+    s.update(d => { d.projectTemplates = [...(d.projectTemplates || []), { id: 'tpl-gold', name: 'Gold package $4,500', base: 'vertical', updatedAt: Date.now() }]; const x = d.bookings.find(y => y.id === id); x.type = 'tpl-gold'; x.updatedAt = Date.now(); });
+    const m = await import('./js/crew-link.js'); const snp = m.crewSnapshot(s.byId('bookings', id));
+    s.update(d => { const x = d.bookings.find(y => y.id === id); x.type = 'vertical'; x.updatedAt = Date.now(); });
+    return { type: snp.type, raw: JSON.stringify(snp) };
+  }), seed.id);
+  ok('the name of the producer’s own template never goes in, only the built-in type', tpl.type === 'Vertical video (9:16)' && !/Gold package|4,500/.test(tpl.raw), tpl.type);
   ok('client contacts stay out unless ticked', !('contacts' in snap) && !/client@example\.com|555 0999/.test(raw));
   ok('Email the crew is addressed to the crew', /^mailto:sam@example\.com\?/.test(await page.locator('.sheet a:has-text("Email the crew")').getAttribute('href')));
-  await page.locator('.sheet label.check:has-text("Client contacts") input').check();
-  await page.waitForFunction(prev => document.querySelector('.sheet textarea.share-link').value !== prev, url, { timeout: 8000 });
+  // the tick and the check in one step: the old link must be gone at once, whatever the speed of the device
+  const during = await page.evaluate(() => { const cb = [...document.querySelectorAll('.sheet label.check')].find(l => /Client contacts/.test(l.textContent)).querySelector('input'); cb.click(); return { text: document.querySelector('.sheet textarea.share-link').value, copyOff: document.querySelector('.sheet button.btn.primary').disabled }; });
+  ok('after a change of ticks the old link is no longer offered while the new one is made', during.text === '' && during.copyOff, JSON.stringify(during));
+  await page.waitForFunction(prev => { const v = document.querySelector('.sheet textarea.share-link').value; return v.includes('crew.html#') && v !== prev; }, url, { timeout: 8000 });
   const url2 = await page.locator('.sheet textarea.share-link').inputValue();
   const snap2 = await page.evaluate(u => import('./js/link-pack.js').then(m => m.unpack(new URL(u).hash)), url2);
   ok('ticking a part puts it in, and the choice is remembered', snap2.contacts && snap2.contacts[0].email === 'client@example.com' && snap2.onSet === 'Talent arrives 09:00' && JSON.parse(await page.evaluate(() => localStorage.getItem('logi-crew-share'))).contacts === true);
   await page.locator('.sheet label.check:has-text("Client contacts") input').uncheck(); await sleep(400);
+  await page.keyboard.press('Escape'); await sleep(200);
+  await page.evaluate(id => import('./js/store.js').then(s => s.update(d => { const x = d.bookings.find(y => y.id === id); x.shots = Array.from({ length: 70 }, (_, i) => ({ id: 'ls' + i, text: `Shot ${i + 1}: ` + Array.from({ length: 6 }, () => Math.random().toString(36).slice(2, 8)).join(' '), done: false })); /* varied text, so packing cannot shrink it much */ x.updatedAt = Date.now(); })), seed.id);
+  await page.locator('.bk-detail button:has-text("Share with crew")').click();
+  await page.waitForFunction(() => (document.querySelector('.sheet textarea.share-link') || {}).value?.includes('crew.html#'), null, { timeout: 8000 });
+  const longHref = decodeURIComponent(await page.locator('.sheet a:has-text("Email the crew")').getAttribute('href'));
+  const longUrl = await page.locator('.sheet textarea.share-link').inputValue();
+  ok('a very long link is not squeezed into the email: the email asks for it to be pasted', longUrl.length > 1700 && longHref.includes('[Paste the link here]') && !longHref.includes(longUrl), `${longUrl.length} characters`);
+  ok('…and no broken QR code is shown for it', longUrl.length <= 2800 || ((await page.locator('.sheet .share-qr svg').count()) === 0 && !(await page.locator('.sheet p:has-text("Crew can scan")').isVisible())));
   await page.keyboard.press('Escape'); await sleep(200);
 
   // ---- the crew page ----
@@ -112,6 +156,15 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const icsText = require('fs').readFileSync(await ics.path(), 'utf8');
   ok('crew can add the shoot to their calendar', /BEGIN:VEVENT/.test(icsText) && icsText.includes('SUMMARY:' + seed.title.replace(/,/g, '\\,')) && /DTSTART:\d{8}T073000/.test(icsText), icsText.split('\r\n').filter(l => /^DT|^SUMMARY/.test(l)).join(' | '));
   ok('the page says it is a copy from when it was sent, and who made it', /if plans change, the producer sends a new link/.test(page2) && /cannot confirm who made this link/.test(await crew.locator('.foot').innerText()));
+  const packed = o => page.evaluate(x => import('./js/link-pack.js').then(m => m.pack(x)), o);
+  const icsOf = async o => { await crew.goto(BASE + 'crew.html#' + await packed(o)); await crew.waitForSelector('.paper h1'); const [d] = await Promise.all([crew.waitForEvent('download', { timeout: 8000 }), crew.locator('button:has-text("Add to calendar")').click()]); return require('fs').readFileSync(await d.path(), 'utf8'); };
+  const evil = await icsOf({ kind: 'crew', ref: 'r1', title: 'Shoot', date: '2026-11-10', made: '1\r\nURL:https://evil.example/pay', endDate: '2026-11-11\r\nBEGIN:VALARM\r\nACTION:DISPLAY\r\nEND:VALARM', call: { general: '07:30' }, location: {} });
+  ok('a tampered link cannot slip extra lines into the calendar file', !/^URL:|^BEGIN:VALARM|^ATTACH/m.test(evil) && /^DTEND:20261110T083000/m.test(evil), evil.split('\r\n').filter(l => /^(URL|BEGIN:VALARM|DTEND|UID)/.test(l)).join(' | '));
+  const night = await icsOf({ kind: 'crew', ref: 'r2', title: 'Night shoot', date: '2026-11-10', made: 1, call: { general: '18:00', wrap: '02:00' }, location: {} });
+  ok('an overnight shoot ends the next morning in the calendar', /^DTSTART:20261110T180000/m.test(night) && /^DTEND:20261111T020000/m.test(night));
+  const later = await icsOf({ kind: 'crew', ref: 'r2', title: 'Night shoot', date: '2026-11-10', made: 2000, call: { general: '19:00', wrap: '02:00' }, location: {} });
+  ok('a newer link for the same shoot updates the same calendar event', night.match(/^UID:.*$/m)[0] === later.match(/^UID:.*$/m)[0] && /^SEQUENCE:2$/m.test(later));
+  ok('calendar lines are folded at 75 bytes', icsText.split('\r\n').every(l => new TextEncoder().encode(l).length <= 75));
   await crew.goto(BASE + 'crew.html#1.garbage'); await sleep(600);
   ok('a damaged link says so plainly', /does not open shoot info/.test(await crew.locator('body').innerText()));
   await crew.close();
