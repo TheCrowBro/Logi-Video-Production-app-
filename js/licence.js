@@ -5,7 +5,7 @@
 // When the trial is over and there is no working licence, Vdex is read-only: the store refuses changes (store.setGate)
 // and says why, while opening, searching, printing and exporting keep working.
 import { h, sheet, toast, announce, muteToasts } from './util.js';
-import { setGate, redraw } from './store.js';
+import { setGate, redraw, setPaid } from './store.js';
 
 let P = null; // the licence: the desktop app's bridge, or the website's own
 let ready = null;
@@ -20,9 +20,13 @@ const web = () => !!P && P.kind === 'web';
 const play = () => web() && !!P.play;  // the Google Play app: no prices and no link to the shop (Google Play's rule)
 const here = () => (play() ? 'phone' : 'computer');
 
+// The states in which this device counts as having a licence (or licences are not switched on): cloud storage and
+// saving data files work only in these (store.setPaid).
+const PAID = new Set(['off', 'founder', 'licensed', 'pending', 'offline', 'released']);
 function set(s) {
   if (!s || s.error || !s.mode) return;
   S.cur = s;
+  setPaid(PAID.has(s.mode), needsLicence);
   if (s.canEdit !== false && S.roClose) closeReadOnly(); // licensed now: the read-only explanation is out of date
   S.listeners.forEach(f => { try { f(s); } catch { /* ignore */ } });
   paintBar();
@@ -190,6 +194,17 @@ function readOnlySheet() {
   // Focus goes to the sheet itself, not a button: someone still typing must not press Buy by accident.
   sh.el.tabIndex = -1;
   setTimeout(() => sh.el.focus(), 50);
+}
+// Asked for something that comes with a licence (cloud storage, a backup or a spreadsheet): say so, and offer one.
+function needsLicence(what) {
+  const s = S.cur || {};
+  const thing = what === 'cloud' ? 'Keeping a copy in your own cloud storage' : 'Saving backups and spreadsheet files';
+  const sh = sheet('Comes with a licence', h('div', { class: 'stack' },
+    h('p', null, `${thing} comes with a Vdex licence.`),
+    h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
+    h('div', { class: 'actions' }, ...actions(s, { buy: !play(), enter: true }, () => sh.close()))));
+  sh.el.classList.add('licence-needed');
+  sh.el.tabIndex = -1; setTimeout(() => sh.el.focus(), 50); // not a button: someone still typing must not press Buy by accident
 }
 function detailsSheet() {
   const s = S.cur, d = describe(s); if (!d) return;

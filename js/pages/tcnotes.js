@@ -197,7 +197,7 @@ function openExport(log) {
   sheet('Export notes', h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, `${log.notes.length} notes. The CSV imports into a spreadsheet or your edit software’s marker tools.`),
     h('button', { class: 'btn primary', onclick: () => shareFile(base + '.txt', 'text/plain', asText(log)) }, 'Share as text (.txt)'),
-    h('button', { class: 'btn ghost', onclick: () => shareFile(base + '.csv', 'text/csv', asCsv(log)) }, 'Share as spreadsheet (.csv)'),
+    h('button', { class: 'btn ghost', onclick: () => store.requirePaid('export') && shareFile(base + '.csv', 'text/csv', asCsv(log)) }, 'Share as spreadsheet (.csv)'),
     h('button', { class: 'btn ghost', onclick: copy }, 'Copy to clipboard'),
     h('pre', { class: 'export-preview' }, asText(log))));
 }

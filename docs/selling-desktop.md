@@ -13,7 +13,8 @@ Nothing changes for anyone yet. The app checks codes with licence keys that are 
 - **3 computers:** the first time a code is used on a computer, the app activates it at vdex.crowmade.app, which keeps a list of the computers on each code (a random number for that install and "Mac", "Windows" or "Linux"; nothing about the person or the hardware). A fourth computer is offered to move the code from one of the others, up to 3 times a month. The app checks about once a week, and needs the internet at least once every 90 days.
 - **Refunds:** refund in Stripe as usual. The code is cancelled automatically, and the app becomes read-only on its computers within about a week.
 - **Free codes:** you make them on your own computer with the licence generator page, and email them yourself.
-- **After the trial, without a code:** the app is read-only. Everything opens, prints and exports; nothing can be changed.
+- **After the trial, without a code:** the app is read-only. Everything opens and prints; nothing can be changed.
+- **From the start, without a licence (trial included):** cloud storage, backup files and spreadsheet (CSV) files are locked: pressing them explains and offers a licence. A storage someone linked before is paused (nothing read or written) and starts syncing again by itself once they have a licence. PDFs, printing and client and crew links always work. Desktop installs that ran before selling started, and licences switched off, are not affected.
 - **The website and the Android app** (once you switch them on in part 9): a 30-day trial in each browser, then read-only until the person presses **Sign in** and types the 6-digit code Vdex emails to their licence's address.
 
 ## What it costs

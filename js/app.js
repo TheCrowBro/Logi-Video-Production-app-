@@ -109,7 +109,7 @@ const cloudLabel = document.getElementById('cloudLabel');
 
 function paintCloud() {
   const s = store.cloud.status;
-  const text = { off: 'Local', synced: 'Synced', saving: 'Saving…', 'needs-permission': 'Sign in', error: 'Sync error' }[s];
+  const text = { off: 'Local', synced: 'Synced', saving: 'Saving…', 'needs-permission': 'Sign in', error: 'Sync error', paused: 'Paused' }[s];
   cloudLabel.textContent = text;
   cloudBtn.dataset.state = s;
 }

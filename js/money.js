@@ -4,7 +4,7 @@
 // summed up on the Money overview. Rates, the price list, numbering, tax and payment terms live in Settings → Quotes &
 // invoices.
 import { h, sheet, toast, nodes, fmtShort, fmtLong, todayISO, parseISO, ymd, uid } from './util.js';
-import { db, byId, upsert, update, endOf } from './store.js';
+import { db, byId, upsert, update, endOf, requirePaid } from './store.js';
 import { openForm } from './form.js';
 import { setCheck, itemId } from './workflow.js';
 import { stats, workedMs } from './hours.js';
@@ -348,7 +348,7 @@ export function budgetBlock(b) {
       h('div', { class: 'actions' },
         h('button', { class: 'btn ghost small', onclick: () => editBudgetLine(b, null) }, '+ Add line'),
         h('button', { class: 'btn ghost small', onclick: () => { const n = fillBudget(b); toast(n ? `${n} line${n === 1 ? '' : 's'} added from the booking` : 'Nothing new to add from the booking'); } }, '↻ Fill from booking'),
-        t.lines.length > 0 && h('button', { class: 'btn ghost small', onclick: () => saveOrShare(budgetCsv(b), `budget-${String(b.title || 'job').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}.csv`, 'text/csv') }, '⬇ Export CSV'))));
+        t.lines.length > 0 && h('button', { class: 'btn ghost small', onclick: () => requirePaid('export') && saveOrShare(budgetCsv(b), `budget-${String(b.title || 'job').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}.csv`, 'text/csv') }, '⬇ Export CSV'))));
 }
 
 /* --------------------------------- overview --------------------------------- */
@@ -373,6 +373,7 @@ export function openMoney(onOpen) {
     const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
     const rows = [['Number', 'Date', 'Due', 'Client', 'Project', 'Subtotal', 'Tax', 'Total', 'Paid', 'Balance', 'Status', 'Paid on'].map(q).join(',')];
     for (const b of list.filter(x => x.invoice).sort((x, y) => String(x.invoice.number).localeCompare(String(y.invoice.number)))) { const t = totals(b.invoice); rows.push([b.invoice.number, b.invoice.date, b.invoice.due, b.client, b.title, t.subtotal.toFixed(2), t.tax.toFixed(2), t.total.toFixed(2), t.paid.toFixed(2), t.balance.toFixed(2), b.invoice.status, b.invoice.paidAt ? ymd(new Date(b.invoice.paidAt)) : ''].map(q).join(',')); }
+    if (!requirePaid('export')) return; // spreadsheets come with a licence
     saveOrShare('﻿' + rows.join('\r\n'), `vdex-invoices-${today}.csv`, 'text/csv').then(ok => ok && toast('Invoices exported'));
   };
   const body = h('div', { class: 'stack' },

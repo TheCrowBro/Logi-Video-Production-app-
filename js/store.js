@@ -254,6 +254,28 @@ const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localSt
 
 function setStatus(status, error = '') { cloud.status = status; cloud.error = error; emit('status'); }
 
+// Cloud storage and saving data files (backups, spreadsheets) come with a licence; js/licence.js says whether this
+// device has one. Without one (the trial included) linking storage and exporting are refused with an explanation, and
+// a storage linked before is paused: nothing is copied either way, and syncing starts again once there is a licence.
+// Until the licence is known, the last answer this device saw is used, so a paused link stays paused from the start.
+let paid = lsGet('vdex-paid') !== '0', paidPrompt = null;
+cloud.paused = !paid;
+export const isPaid = () => paid;
+export function setPaid(on, prompt) {
+  if (prompt) paidPrompt = prompt;
+  const was = paid; paid = !!on; cloud.paused = !paid;
+  lsSet('vdex-paid', paid ? '1' : '0');
+  if (was === paid) return;
+  if (paid) { if (cloud.adapter) sync(); else emit('status'); }
+  else { clearTimeout(timer); if (cloud.adapter) setStatus('paused'); else emit('status'); }
+}
+// True when this device may (licensed, or licences not switched on); otherwise explains, offering a licence, and false.
+export function requirePaid(what) {
+  if (paid) return true;
+  if (paidPrompt) paidPrompt(what); else toast('This comes with a Vdex licence.');
+  return false;
+}
+
 export async function initCloud() {
   cloud.feedUrl = lsGet('logi-feed-url') || '';
   // Coming back from a sign-in page: finish it, or say why it did not work and leave nothing half-linked.
@@ -350,6 +372,7 @@ export async function sync(opts = {}) {
   while (syncing) await syncing.catch(() => {});
   if (sealed) { pendingSync = true; return; }
   if (!cloud.adapter) return;
+  if (cloud.paused) return setStatus('paused'); // no licence: nothing is read from or written to the storage
   syncing = runSync(opts);
   try { return await syncing; } finally { syncing = null; }
 }
@@ -376,7 +399,7 @@ export const setAuxWriter = fn => { auxWriter = fn; }; // calendar.js supplies t
 let pushing = Promise.resolve();
 function push() { const p = pushing.then(pushNow, pushNow); pushing = p.catch(() => {}); return p; }
 async function pushNow() {
-  const a = cloud.adapter; if (!a) return;
+  const a = cloud.adapter; if (!a || cloud.paused) return;
   if (sealed) { pendingSync = true; return; }
   try {
     setStatus('saving');
@@ -428,17 +451,19 @@ async function autoBackup(a = cloud.adapter) {
 let timer;
 function schedulePush() {
   if (sealed) { pendingSync = true; return; }
-  if (!cloud.adapter || cloud.status === 'needs-permission') return;
+  if (!cloud.adapter || cloud.paused || cloud.status === 'needs-permission') return;
   clearTimeout(timer);
   timer = setTimeout(push, 800);
 }
 
 export function reconnectNeeded(msg) { if (cloud.adapter) setStatus('needs-permission', msg || ''); }
-export async function reconnect() { const a = cloud.adapter; if (!a) return; if (!(await a.ready(true))) return setStatus('needs-permission'); cloud.notice = ''; return sync(); }
+export async function reconnect() { const a = cloud.adapter; if (!a || cloud.paused) return; if (!(await a.ready(true))) return setStatus('needs-permission'); cloud.notice = ''; return sync(); }
 
 // Sign in first, outside the sync lock, and link only once that has worked: a cancelled, abandoned or still-open
 // sign-in leaves nothing half-linked, and tapping Connect again simply starts a fresh one.
+const mustBePaid = () => { if (cloud.paused) throw new Error('Keeping a copy in your cloud storage comes with a Vdex licence.'); };
 async function link(adapter, provider, handle) {
+  mustBePaid();
   if (!(await adapter.ready(true))) throw new Error('The sign-in didn’t finish. Tap Connect to try again.');
   cloud.adapter = adapter; cloud.notice = '';
   lsSet('logi-provider', provider);
@@ -447,6 +472,7 @@ async function link(adapter, provider, handle) {
 }
 
 export async function createCloudFile() {
+  mustBePaid();
   const handle = await window.showSaveFilePicker({ suggestedName: 'vdex-production-db.json', types: [{ description: 'Vdex database', accept: { 'application/json': ['.json'] } }] });
   const a = fileAdapter(handle);
   await a.write(exportJSON()); // new file starts from the current data
@@ -454,11 +480,12 @@ export async function createCloudFile() {
 }
 
 export async function openCloudFile() {
+  mustBePaid();
   const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Vdex database', accept: { 'application/json': ['.json'] } }] });
   await link(fileAdapter(handle), null, handle);
 }
 
-export const connectDropbox = () => dropboxBegin(); // redirects away; initCloud finishes the link on return
+export const connectDropbox = () => { mustBePaid(); return dropboxBegin(); }; // redirects away; initCloud finishes the link on return
 // Link, and if the first sync fails (sign-in cancelled, window blocked, wrong password) go back to unlinked and say why.
 async function linkOrUndo(a, provider) {
   cloud.notice = '';

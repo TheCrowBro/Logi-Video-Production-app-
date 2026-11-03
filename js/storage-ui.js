@@ -10,7 +10,7 @@ export const SWITCH_ON = REPO + '/blob/main/docs/turn-on-sign-in.md';
 export function preloadSignIn() {
   if (providers.signIn.available('google')) providers.loadGIS().catch(() => {});
 }
-const STATUS = { synced: 'Up to date', saving: 'Saving…', 'needs-permission': 'Needs you to sign in again', error: 'Could not reach it', off: 'Not copied yet' };
+const STATUS = { synced: 'Up to date', saving: 'Saving…', 'needs-permission': 'Needs you to sign in again', error: 'Could not reach it', off: 'Not copied yet', paused: 'Paused: cloud storage comes with a licence' };
 const ICLOUD_SUB = 'Sign in with your Apple ID and tick “Keep me signed in”: Apple then asks again about every two weeks. Uses a little of your iCloud storage.';
 export const BROWSER = 'Carry on in your web browser: sign in there, then come back to Vdex.';
 
@@ -28,6 +28,8 @@ export function storagePanel() {
       else if (c.error) toast(`Not copied yet: ${c.error}. Your changes are safe on this device.`);
     } catch (e) { if (e.name !== 'AbortError') toast(e.message); draw(); }
   };
+  // Linking storage, and syncing it, come with a licence: without one these explain and offer it instead.
+  const paidRun = (fn, done) => { const go = run(fn, done); return () => (store.requirePaid('cloud') ? go() : undefined); };
   const draw = () => el.replaceChildren(store.cloud.adapter ? linked() : choices());
 
   // Connected: who, where, how it is going, and the three things you can do.
@@ -39,9 +41,11 @@ export function storagePanel() {
         h('p', { class: 'status-line', 'data-state': c.status }, [STATUS[c.status] || c.status, c.error && c.status !== 'synced' ? c.error : ''].filter(Boolean).join(' · ')),
         ownApp(a) ? h('p', { class: 'small muted' }, 'This sign-in uses your own developer app (set under For developers), so the copy is in that app’s folder. Every device has to use the same app to share it.')
           : a.where && h('p', { class: 'small muted' }, `Vdex keeps its copy in ${a.where}, and nothing else of yours is touched. Your phone and computer share it when both are connected the same way.`),
+        c.paused && h('p', { class: 'small' }, 'Nothing is copied to or from it until this device has a licence: your data stays here, and the copy there stays as it is. Syncing starts again by itself once you have one.'),
         h('div', { class: 'actions' },
-          c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: run(() => (a.id === 'dropbox' ? store.connectDropbox() : store.reconnect()), 'Signed in again. Up to date.') }, 'Sign in again'),
-          h('button', { class: 'btn ' + (c.status === 'needs-permission' ? 'ghost' : 'primary'), onclick: run(() => store.reconnect(), 'Up to date. Your copy is saved.') }, 'Sync now'),
+          c.paused && h('button', { class: 'btn primary', onclick: () => store.requirePaid('cloud') }, 'Get a licence'),
+          !c.paused && c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: paidRun(() => (a.id === 'dropbox' ? store.connectDropbox() : store.reconnect()), 'Signed in again. Up to date.') }, 'Sign in again'),
+          !c.paused && h('button', { class: 'btn ' + (c.status === 'needs-permission' ? 'ghost' : 'primary'), onclick: paidRun(() => store.reconnect(), 'Up to date. Your copy is saved.') }, 'Sync now'),
           h('button', { class: 'btn ghost', onclick: run(store.unlinkCloud, false) }, 'Disconnect'))),
       h('p', { class: 'small muted' }, 'Disconnecting stops the copying. Everything stays on this device, and the copy in your storage stays where it is.'),
       a.erase && h('button', { class: 'btn ghost small', onclick: () => { if (confirm(`Delete Vdex’s copy and its backups from ${a.label}? Everything stays on this device, and Vdex disconnects.`)) run(async () => { await store.eraseCloudCopy(); toast(`Vdex’s copy was deleted from ${a.label}. Everything is still on this device.`); }, false)(); } }, `Delete Vdex’s copy from ${a.label}…`));
@@ -55,7 +59,7 @@ export function storagePanel() {
     return h('div', { class: 'card cloud-choice' + (on ? '' : ' off'), 'data-svc': id },
       h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, ICON[id]),
       h('div', { class: 'grow' }, h('strong', null, name), h('div', { class: 'small muted' }, on ? sub : `Not ready yet: sign-in for ${name} is still being set up for Vdex.${folded ? '' : ' Until then, see More ways below.'}`, !on && [' ', h('a', { href: SWITCH_ON, target: '_blank', rel: 'noopener', class: 'publisher-link' }, 'For the Vdex publisher: how to switch it on')])),
-      h('button', { class: 'btn primary', disabled: !on, onclick: run(connect), 'aria-label': `Connect ${name}` }, 'Connect'));
+      h('button', { class: 'btn primary', disabled: !on, onclick: paidRun(connect), 'aria-label': `Connect ${name}` }, 'Connect'));
   };
   const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const field = (label, get, set, ph, type = 'text') => h('label', { class: 'field' }, h('span', null, label), h('input', { type, placeholder: ph, 'aria-label': label, value: get(), autocomplete: type === 'password' ? 'current-password' : 'off', spellcheck: false, autocapitalize: 'off', oninput: e => set(e.target.value) }));
@@ -70,6 +74,7 @@ export function storagePanel() {
     const nc = wd.kind === 'nextcloud';
     return h('div', { class: 'stack' },
       c.notice && h('div', { class: 'warn small' }, c.notice),
+      c.paused && h('p', { class: 'small licence-note' }, 'Cloud storage comes with a Vdex licence. Until then your data is kept on this device.'),
       h('p', null, 'Sign in to your own cloud storage and Vdex keeps a copy of everything there. Your phone and computer then share the same information, and a backup is made every day.'),
       h('p', { class: 'small muted' }, 'Vdex only uses a space of its own. It cannot see, change or share any of your other files.'),
       h('div', { class: 'stack cloud-choices' },
@@ -89,12 +94,12 @@ export function storagePanel() {
           field('Username', () => wd.user || '', v => setWd({ user: v.trim() }), 'Username'),
           field('App password', () => wd.pass || '', v => setWd({ pass: v }), 'App password', 'password'),
           h('p', { class: 'small muted' }, nc ? 'Make an app password in Nextcloud under Settings → Security → Devices & sessions, so your main password never leaves Nextcloud. Vdex makes a folder called Vdex in your files.' : 'Use an app password, not your main one. Vdex makes the folder if it is not there yet.'),
-          h('button', { class: 'btn primary', onclick: run(store.connectWebdav) }, 'Connect'),
+          h('button', { class: 'btn primary', onclick: paidRun(store.connectWebdav) }, 'Connect'),
           h('p', { class: 'small muted' }, `The server has to allow Vdex to reach it from ${location.origin}. If it does not, Vdex says so; the person who runs the server can allow it.`)),
         h('div', { class: 'card stack' }, h('strong', null, '🗂️ A file in a synced folder (computers)'),
           c.supported
             ? [h('p', { class: 'small muted' }, 'Save the database file inside a folder that iCloud Drive, OneDrive, Google Drive, Dropbox, Box or another sync app already copies, and that app carries it between your computers.'),
-              h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: run(store.createCloudFile) }, 'Create database file…'), h('button', { class: 'btn ghost', onclick: run(store.openCloudFile) }, 'Open existing file…'))]
+              h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: paidRun(store.createCloudFile) }, 'Create database file…'), h('button', { class: 'btn ghost', onclick: paidRun(store.openCloudFile) }, 'Open existing file…'))]
             : h('p', { class: 'small muted' }, ios ? 'Not on iPhone or iPad: they cannot give an app a file to keep writing to. Use Google Drive or iCloud above.' : 'Needs Chrome, Edge or the Vdex desktop app on a computer.')),
         h('div', { class: 'card stack' }, h('strong', null, '💾 No cloud at all'),
           h('p', { class: 'small muted' }, 'Keep everything on this device and save a backup file now and then under Backups & data.')),
@@ -108,7 +113,8 @@ export function storagePanel() {
   }
   draw();
   let last = store.cloud.status, lastA = store.cloud.adapter;
-  const unsub = store.subscribe(() => { if (store.cloud.status !== last || store.cloud.adapter !== lastA) { last = store.cloud.status; lastA = store.cloud.adapter; draw(); } });
+  let lastP = store.cloud.paused;
+  const unsub = store.subscribe(() => { if (store.cloud.status !== last || store.cloud.adapter !== lastA || store.cloud.paused !== lastP) { last = store.cloud.status; lastA = store.cloud.adapter; lastP = store.cloud.paused; draw(); } });
   return { el, destroy: unsub, refresh: draw };
 }
 

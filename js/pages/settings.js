@@ -42,7 +42,7 @@ export const settings = {
     const calStatus = cs.provider ? `${cs.provider === 'google' ? 'Google' : 'Microsoft'} · ${calState.status}` : cs.feed ? 'live feed on' : 'not linked';
     root.append(
       h('div', { class: 'page-head' }, h('h1', null, 'Settings')),
-      section('Storage & sync', c.adapter ? `${c.adapter.label} · ${c.status}` : 'this device only', panels[0].el, !c.adapter),
+      section('Storage & sync', c.adapter ? `${c.adapter.label} · ${c.paused ? 'paused' : c.status}` : 'this device only', panels[0].el, !c.adapter),
       section('Security', lockEnabled() ? `PIN set${(lockConfig() || {}).bio ? ' · fingerprint / face' : ''}` : '⚠ no PIN', panels[2].el),
       section('Calendar & email', calStatus, panels[1].el),
       section('Display & accessibility', prefsSummary(), display.el),
@@ -58,7 +58,7 @@ export const settings = {
       installState().standalone ? '' : section('Install', installState().canPrompt ? 'ready to install' : 'see how', h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, 'Vdex runs in the browser as it is. Installing adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline.'),
         h('button', { class: 'btn primary', onclick: () => { const b = document.getElementById('installBtn'); if (b && !b.hidden) b.click(); else openInstallHelp(); } }, '⤓ Install Vdex'))),
-      section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
+      section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, !store.isPaid() ? 'backups with a licence' : backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
       section('About', 'v' + VERSION + (BUILD !== 'dev' ? ' · ' + BUILD : ''), h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, `Vdex ${VERSION}${BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ' (' + BUILT + ')' : ''}` : ''}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link.`),
         acceptance() && h('p', { class: 'small muted' }, `You agreed to the terms of service on this device on ${new Date(acceptance().at || Date.now()).toLocaleDateString()}.`),
