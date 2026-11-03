@@ -4,7 +4,7 @@
 
 It keeps your shoots, your crew, your camera gear, the places you film and your insurance in one place. On the day of a shoot it clocks your hours, prints your call sheet and tells you when the sun sets. Afterwards it makes the quote and the invoice.
 
-It works on an iPhone, an Android phone, and a computer. There is no account to make and nothing to pay. Your information stays on your own phone or computer unless you choose to copy it somewhere.
+It works on an iPhone, an Android phone, and a computer. It is free to try for 30 days, then a one-time licence; no subscription, and no account for your work. Your information stays on your own phone or computer unless you choose to copy it somewhere.
 
 ## Start here (two minutes)
 

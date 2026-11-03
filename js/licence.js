@@ -23,6 +23,7 @@ const here = () => (play() ? 'phone' : 'computer');
 function set(s) {
   if (!s || s.error || !s.mode) return;
   S.cur = s;
+  if (s.canEdit !== false && S.roClose) { S.roClose(); S.roClose = null; } // licensed now: the read-only explanation is out of date
   S.listeners.forEach(f => { try { f(s); } catch { /* ignore */ } });
   paintBar();
 }
@@ -37,6 +38,8 @@ async function start() {
     : (await import('./licence-web.js')).webLicence();
   set(await P.state().catch(() => null));
   P.onChange(set);
+  // Another window signed in or out (the website keeps its sign-in in this browser's storage).
+  window.addEventListener('storage', e => { if (e.key === 'vdex-licence' && web()) P.state().then(set).catch(() => {}); });
   setGate(({ form = false } = {}) => {
     if (!S.cur || S.cur.canEdit !== false) return true;
     muteToasts(600);
@@ -82,7 +85,7 @@ function describe(s) {
       : { line: `Licensed to ${who(l)}, but not activated on this computer yet: Vdex needs the internet once to do that${s.daysLeft > 0 ? ` (${plural(s.daysLeft, 'day')} left)` : ''}.`, tone: s.daysLeft > 0 ? '' : 'warn', retry: true, remove: true };
     case 'released': return { line: `This ${here()} is not on your licence: it is in use on ${plural(seats, 'other device')}, its limit. ${web() ? 'Add this phone' : 'Activate it here again'} to choose which device to take off.`, tone: 'warn', again: true, [web() ? 'release' : 'remove']: true };
     case 'cancelled': return { line: `This licence has been cancelled, for example after a refund. If you think that is a mistake, reply to the email your licence came in.`, tone: 'warn', buy: shop, enter: true, remove: !web() };
-    case 'expired': return { line: `Your licence ended on ${day(l && l.expires)}.`, tone: 'warn', buy: shop, enter: true, remove: true };
+    case 'expired': return { line: `Your licence ended on ${day(l && l.expires)}.`, tone: 'warn', buy: shop, enter: true, [web() ? 'release' : 'remove']: true };
     case 'offline': return { line: `Vdex has not been able to check your ${web() ? 'sign-in' : 'licence'} for 90 days. Connect to the internet and press Try again.`, tone: 'warn', retry: true };
     default: return null;
   }
@@ -175,6 +178,7 @@ function readOnlySheet() {
     h('p', { class: 'small muted' }, 'That change was not saved. Everything already in Vdex is safe, and with a licence you can change everything again here.'),
     h('div', { class: 'actions' }, ...actions(s, d, () => sh.close()))));
   sh.el.classList.add('licence-readonly');
+  S.roClose = sh.close;
   announce('Vdex is read-only. That change was not saved.');
   // Focus goes to the sheet itself, not a button: someone still typing must not press Buy by accident.
   sh.el.tabIndex = -1;
@@ -195,6 +199,7 @@ function chooser(msg, r, pick, what) {
     h('span', null, `Your licence is already in use on ${plural((r.computers || []).length, 'device')}, its limit. To use it on this ${what}, choose one to take it off. `),
     h('span', { class: 'muted' }, r.swapsLeft ? `You can move it ${plural(r.swapsLeft, 'more time')} this month.` : 'It has been moved 3 times this month already: reply to the email your licence came in and we will help.'),
     list);
+  setTimeout(() => { const b = list.querySelector('button:not([disabled])'); if (b) b.focus(); }, 30);
 }
 
 // Desktop: pastes and activates a code. When all its devices are taken, offers to move it from one of them.
@@ -229,7 +234,7 @@ export function signIn() {
   let useCode = false, to = '';
   const toggle = h('button', { type: 'button', class: 'btn ghost small', onclick: () => { useCode = !useCode; codeBox.hidden = !useCode; email.hidden = useCode; toggle.textContent = useCode ? 'Use your email address instead' : 'Have a licence code? Use it instead'; (useCode ? codeBox : email).focus(); } }, 'Have a licence code? Use it instead');
   const send = h('button', { type: 'submit', class: 'btn primary' }, 'Email me a code');
-  const step1 = h('form', { class: 'stack', onsubmit: async e => {
+  const step1 = h('form', { class: 'stack', novalidate: true, onsubmit: async e => {
     e.preventDefault(); msg.textContent = ''; msg.className = 'small';
     const addr = email.value.trim();
     if (!useCode && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) { msg.textContent = 'Type the email address your licence belongs to.'; msg.className = 'small licence-warn'; return; }
@@ -248,14 +253,23 @@ export function signIn() {
   const whereTo = h('p', { class: 'small muted', role: 'status' });
   const digits = h('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 7, pattern: '[0-9 ]*', 'aria-label': '6-digit code', placeholder: '123456', class: 'licence-digits' });
   const verify = h('button', { type: 'submit', class: 'btn primary' }, 'Sign in');
-  const again = h('button', { type: 'button', class: 'btn ghost', onclick: () => { step2.hidden = true; step1.hidden = false; msg.textContent = ''; digits.value = ''; } }, 'Send a new code');
+  const again = h('button', { type: 'button', class: 'btn ghost', onclick: () => { step2.hidden = true; step1.hidden = false; msg.textContent = ''; digits.value = ''; send.focus(); } }, 'Send a new code');
   const step2 = h('form', { class: 'stack', hidden: true, onsubmit: async e => {
     e.preventDefault(); msg.textContent = ''; msg.className = 'small';
     const addr = to;
     verify.disabled = true; verify.textContent = 'Signing in…';
     const r = await l.verify(addr, digits.value);
     verify.disabled = false; verify.textContent = 'Sign in';
-    if (r && r.full) { set(r); step2.hidden = true; return chooser(msg, r.full, async tag => { const x = await l.seat(tag); if (x && x.error && x.error !== 'full') { msg.textContent = x.error; msg.className = 'small licence-warn'; return; } set(await l.state()); sh.close(); toast('Signed in. Thank you!'); }, 'phone'); }
+    if (r && r.full) {
+      set(r); step2.hidden = true;
+      const pick = async tag => {
+        const x = await l.seat(tag);
+        if (x && x.error === 'full') return chooser(msg, x, pick, 'phone');
+        if (!x || x.error || x.offline || x.mode !== 'licensed') { msg.textContent = (x && typeof x.error === 'string' && x.error !== 'full' && x.error) || 'Vdex could not reach the licence server. Try again when you are online.'; msg.className = 'small licence-warn'; return; }
+        set(x); sh.close(); toast('Signed in. Thank you!');
+      };
+      return chooser(msg, r.full, pick, 'phone');
+    }
     if (!r || r.error) { msg.textContent = (r && r.error) || 'Something went wrong. Try again.'; msg.className = 'small licence-warn'; return; }
     set(r); sh.close();
     toast(r.mode === 'licensed' ? 'Signed in. Thank you!' : r.mode === 'pending' ? 'Signed in. Vdex adds this phone to your licence the next time it is online.' : 'Signed in.');

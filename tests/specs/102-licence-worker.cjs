@@ -154,11 +154,13 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const pc = lastCode('pat@example.com'), sent = mails().at(-1);
     ok('the buyer\'s email (any case) gets a 6-digit code, which the email says works for 15 minutes', st.status === 200 && /^\d{6}$/.test(pc || '') && /15 minutes/.test(sent.text) && !sent.text.includes(code));
     const wrong = await web('verify', { email: 'pat@example.com', code: pc === '000000' ? '111111' : '000000' });
-    ok('a wrong code is refused and counts down the tries', wrong.status === 400 && wrong.error === 'wrong-code' && wrong.triesLeft === 4);
+    ok('a wrong code is refused', wrong.status === 400 && wrong.error === 'wrong-code');
+    const probe = await web('verify', { email: 'nobody@example.com', code: '000000' });
+    ok('checking a code says nothing about whether the email has a licence (same answer for one with none)', JSON.stringify(probe) === JSON.stringify(wrong));
     const good = await web('verify', { email: 'pat@example.com', code: pc });
     const tok = good.token && (await codes.readNote('web', good.token, { keys: KEYS, signers: [2] }));
     ok('the right code signs in: a token signed by the shop for that email and licence', good.status === 200 && tok && tok.email === 'pat@example.com' && tok.ref === v.licence.ref && good.licence.seats === 3 && good.licence.email === 'pat@example.com');
-    ok('each code works once', (await web('verify', { email: 'pat@example.com', code: pc })).error === 'expired');
+    ok('each code works once', (await web('verify', { email: 'pat@example.com', code: pc })).error === 'wrong-code');
     ok('a signed-in browser checks back and is confirmed', (await web('check', { token: good.token })).ok === true);
     ok('a made-up or edited token is refused', (await web('check', { token: { ...good.token, data: good.token.data.replace('pat@', 'pam@') } })).status === 401 && (await web('check', { token: await codes.signNote('web', ownerKey, 1, { email: 'x@example.com', ref: '1:1', iat: 1 }) })).status === 401);
     await adm('cancel', v.licence.ref);
@@ -167,7 +169,7 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     // Five tries, and five codes an hour.
     await web('start', { email: 'pat@example.com' });
     for (let i = 0; i < 5; i++) await web('verify', { email: 'pat@example.com', code: '999999' === lastCode('pat@example.com') ? '888888' : '999999' });
-    ok('after 5 wrong tries even the right code is refused until a new one is sent', (await web('verify', { email: 'pat@example.com', code: lastCode('pat@example.com') })).error === 'too-many');
+    ok('after 5 wrong tries even the right code is refused until a new one is sent', (await web('verify', { email: 'pat@example.com', code: lastCode('pat@example.com') })).error === 'wrong-code');
     const before = mails().filter(x => x.to[0] === 'pat@example.com').length;
     for (let i = 0; i < 6; i++) await web('start', { email: 'pat@example.com' });
     ok('no more than 5 codes an hour go to one address', mails().filter(x => x.to[0] === 'pat@example.com').length - before <= 3, `${mails().filter(x => x.to[0] === 'pat@example.com').length - before} more`);
@@ -198,7 +200,31 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const p4 = await web('activate', { token: robinTok, install: 'install-play-000000000004' });
     ok('a fourth device is told the licence is full, as on a computer', p4.status === 409 && p4.error === 'full' && p4.computers.length === 3);
     ok('signing out in the Play app gives its place back', (await web('release', { token: robinTok, install: 'install-play-000000000001' })).ok === true && (await adm('look', rb.licence.ref)).computers.length === 2);
+    // Two licences on one email: a full one does not stop the phone using the other.
+    const second = await codes.signCode(ownerKey, 1, { name: 'Robin Free', email: 'robin@example.com', comp: true, issued: '2026-11-02', serial: 777 });
+    await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'link', ref: '1:777', code: second, at: Date.now() }));
+    await web('activate', { token: robinTok, install: 'install-play-000000000005' }); // the first licence is full again (3 places)
+    const moved = await web('activate', { token: robinTok, install: 'install-play-000000000006' });
+    const mt = moved.token && (await codes.readNote('web', moved.token, { keys: KEYS, signers: [2] }));
+    ok('when the signed-in licence is full and the same email has another with room, the phone goes there with a token for it', moved.status === 200 && mt && mt.ref === '1:777' && moved.licence.ref === '1:777');
     ok('a place cannot be taken without a real sign-in', (await web('activate', { token: { kid: 2, data: '{}', sig: 'x' }, install: 'install-play-000000000009' })).status === 401);
+
+    // Website sign-in switched off: buyers are not told to sign in on the website; and the day's email cap.
+    ok('with website sign-in on, the thank-you page tells buyers how to sign in on the website', /On the website or in the Android app/.test(await (await get('/licence/thanks?session_id=' + sid)).text()));
+    mf2 = new Miniflare(opts({ ...env, WEB_SIGN_IN: '' }));
+    calls.length = 0;
+    const offPage = await (await mf2.dispatchFetch(SITE + '/licence/thanks?session_id=' + sid)).text();
+    const t2 = Math.floor(Date.now() / 1000), raw2 = JSON.stringify(done), sig2 = crypto.createHmac('sha256', env.STRIPE_WEBHOOK_SECRET).update(`${t2}.${raw2}`).digest('hex');
+    await mf2.dispatchFetch(SITE + '/licence/stripe-webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Stripe-Signature': `t=${t2},v1=${sig2}` }, body: raw2 });
+    const offMail = mails().at(-1);
+    ok('with it off, neither the thank-you page nor the purchase email mentions website sign-in', offPage.includes(code) && !/Sign in|sign in with this email/.test(offPage) && offMail && offMail.text.includes(code) && !/sign in with this email/.test(offMail.text));
+    await mf2.dispose();
+    mf2 = new Miniflare(opts({ ...env, SIGN_IN_EMAILS_PER_DAY: '1' }));
+    const kv2 = await mf2.getKVNamespace('LICENCES'); await kv2.put('e:pat@example.com', JSON.stringify({ licences: [{ ref: v.licence.ref, seats: 3 }] }));
+    const firstOk = (await post('/licence/web/start', { email: 'pat@example.com' }, mf2)).status;
+    const capLic = await (await post('/licence/web/start', { email: 'pat@example.com' }, mf2)).json(), capNone = await (await post('/licence/web/start', { email: 'nobody@example.com' }, mf2)).json();
+    ok('once the day\'s sign-in emails are used up, everyone gets the same "try tomorrow" answer (purchase emails keep their room)', firstOk === 200 && capLic.error === 'busy' && JSON.stringify(capLic) === JSON.stringify(capNone));
+    await mf2.dispose();
 
     /* ----------------------------- not set up ----------------------------- */
     mf2 = new Miniflare(opts({}));

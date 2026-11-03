@@ -92,7 +92,7 @@ const DAY = 86400e3;
     await page.screenshot({ path: OUT + '/licence-web-code.png' });
     await sh.locator('.licence-digits').fill('000000' === sent ? '111111' : '000000');
     await sh.getByRole('button', { name: 'Sign in' }).click(); await sleep(400);
-    ok('a wrong code says so, with the tries left', /not right \(4 tries left\)/.test(await sh.innerText()));
+    ok('a wrong code says so', /That code is not right, or has run out/.test(await sh.innerText()));
     await sh.locator('.licence-digits').fill(sent);
     await sh.getByRole('button', { name: 'Sign in' }).click();
     await page.waitForFunction(() => !document.querySelector('.sheet'), null, { timeout: 8000 });
@@ -102,10 +102,26 @@ const DAY = 86400e3;
     ok('Settings shows who is signed in, with Sign out (no code to copy on the website)', /Signed in as jo@example\.com · up to 3 devices/.test(await page.locator('.licence-panel').innerText()) && (await page.locator('.licence-panel').getByRole('button', { name: 'Sign out' }).count()) === 1 && (await page.locator('.licence-panel').getByRole('button', { name: 'Copy the code' }).count()) === 0);
     await page.reload(); await page.waitForSelector('#rolodex .drum-btn'); await sleep(1800);
     ok('the sign-in is kept when the page is opened again', (await page.locator('.licence-bar').count()) === 0 && !!(await lic(page)).token);
+    // A firewall, Cloudflare challenge or school filter answering instead of the licence server does not sign anyone out.
+    await page.route('**/licence/web/check', r => r.fulfill({ status: 403, contentType: 'text/html', body: '<html>Blocked by your network</html>' }));
+    await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.checked = Date.now() - 2 * 86400e3; localStorage.setItem('vdex-licence', JSON.stringify(s)); });
+    const afterBlock = await page.evaluate(() => import('./js/licence.js').then(async () => { const { webLicence } = await import('./js/licence-web.js'); return webLicence().recheck(true); }));
+    ok('a refusal from something other than the licence server keeps the sign-in', afterBlock.mode === 'licensed' && !!(await lic(page)).token);
+    await page.unroute('**/licence/web/check');
     await about(page);
     await page.locator('.licence-panel').getByRole('button', { name: 'Sign out' }).click();
     await page.locator('.sheet').getByRole('button', { name: 'Sign out' }).click(); await sleep(400);
     ok('signing out goes back to read-only (the trial is over)', !(await lic(page)).token && /trial has ended/.test(await page.locator('.licence-bar').innerText()));
+    await ctx.close();
+
+    // Switched off and on again: the trial carries on where it was, it did not run while off.
+    ({ ctx, page } = await open({ storage: { on: true, statusAt: Date.now() - 7 * 3600e3, first: Date.now() - 25 * DAY, seen: Date.now() - 15 * DAY } })); // 10 days of trial used
+    await mf.dispose(); mf = worker(false);
+    await page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(true)));
+    await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.offAt = Date.now() - 15 * 86400e3; localStorage.setItem('vdex-licence', JSON.stringify(s)); }); // switched off 15 days ago
+    await mf.dispose(); mf = worker(true); await link();
+    const resumed = await page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(true)));
+    ok('switching sign-in off pauses the trial: switched on again, it carries on rather than ending at once', resumed.mode === 'trial' && resumed.trialLeft >= 19 && resumed.trialLeft <= 21, `${resumed.mode} ${resumed.trialLeft}`);
     await ctx.close();
 
     // A refund signs the browser out at its next check.

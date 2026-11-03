@@ -22,7 +22,7 @@ export function termsGate() {
     const form = h('form', { class: 'terms-card' },
       h('img', { src: 'icons/icon.svg', alt: '', class: 'terms-icon' }),
       h('h1', { id: 'terms-title' }, changed ? 'The terms have changed' : 'Before you start'),
-      h('p', null, changed ? 'Please read and agree to the updated terms of service to keep using Vdex. Your information is safe and stays where it is.' : 'Vdex is free. To use it, please read and agree to its terms of service.'),
+      h('p', null, changed ? 'Please read and agree to the updated terms of service to keep using Vdex. Your information is safe and stays where it is.' : 'Vdex is free to try for 30 days, then needs a licence. To use it, please read and agree to its terms of service.'),
       h('ul', { class: 'terms-points' },
         h('li', null, 'Vdex comes as it is. It can have mistakes or lose information, so keep your own backups.'),
         h('li', null, 'You stay responsible for your shoots, your call sheets, quotes and invoices, your taxes, people’s safety, and the information you keep about others.'),

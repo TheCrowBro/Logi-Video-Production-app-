@@ -137,9 +137,10 @@ Even signed, a new Windows app shows a milder "not commonly downloaded" prompt n
 
 Until you do this, the website stays free for everyone. Once you do it, every browser (including people who already use the website) gets a 30-day trial from their next visit, and is then read-only until they sign in with a licence. The Android app works the same way, and each phone also takes one of the licence's 3 places.
 
-1. Make sure part 4 (Resend) is done: signing in works by emailing a code.
-2. In Cloudflare (as in part 2), add a **Text** variable (or a Secret) named `WEB_SIGN_IN` with the value `on`. Within about 6 hours every open copy of Vdex picks it up. To switch it off again, delete it.
-3. Try it: in a private browser window open https://vdex.crowmade.app, Settings → About → **Sign in**, and use the email address you bought your test licence with.
+1. Make sure part 4 (Resend) is done: signing in works by emailing a code. Resend's free plan sends at most 100 emails a day (3,000 a month), shared with purchase emails, so Vdex sends at most 60 sign-in codes a day in all and keeps the rest for purchases; when the 60 are used up, sign-in says to try again tomorrow. Once many people use the website, take a paid Resend plan (from about 20 USD a month for 50,000 emails) and add the Cloudflare setting `SIGN_IN_EMAILS_PER_DAY` with a higher number, such as `1000`.
+2. Update the Google Play Data safety answers (docs/google-play.md) if the Android app is already listed: signing in collects an email address.
+3. In Cloudflare (as in part 2), add a **Text** variable (or a Secret) named `WEB_SIGN_IN` with the value `on`. Within about 6 hours every open copy of Vdex picks it up. To switch it off again, delete it: trials then pause, and carry on where they were if you switch it on again.
+4. Try it: in a private browser window open https://vdex.crowmade.app, Settings → About → **Sign in**, with a licence that is live: for example a free code you made for your own email address in part 7 (the generator links it). A refunded test purchase, or one made in Stripe's test mode, cannot sign in.
 
 Who can sign in: anyone who bought through the shop (with the email they paid with, found in Stripe if needed), anyone you made a free code for with an email address (the generator page links it when you make the code, or press **Link for website sign-in** later), and anyone who has entered their code in the desktop app. Someone with a code can also use **Have a licence code? Use it instead**: the sign-in code then goes to the email address inside it.
 
@@ -162,5 +163,6 @@ Cloudflare's free plan allows 1,000 changes a day to the licence storage; each s
 | `REPLY_TO` | your support email, part 4 | emails |
 | `MAIL_FROM` (optional) | | emails |
 | `WEB_SIGN_IN` | `on`, part 9 | the website and the Android app asking for a licence |
+| `SIGN_IN_EMAILS_PER_DAY` (optional) | a number, part 9 | more than 60 sign-in emails a day, on a paid Resend plan |
 
 The list of devices for each licence, which email addresses belong to which licences, and the cancelled codes are kept in the KV namespace `vdex-licences`, which Cloudflare made by itself the first time the new version was published.

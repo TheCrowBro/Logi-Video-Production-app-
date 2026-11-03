@@ -26,17 +26,11 @@ This is the step-by-step for putting Vdex in the Google Play store, written for 
 3. Pay the one-time registration fee (US $25) and complete the identity check. Google asks for an ID document and may take a few days to confirm it.
 4. Google also asks for a contact email that will be shown publicly on the store page, and a phone number for its own use.
 
-## Step 1b. Get ready to sell (one time)
+## Step 1b. Your developer details (one time)
 
-Do these in order; the bank check can take a few days, so start early.
+1. **Trader status.** Play Console → **Manage account** → **Account details** → **About you**, and declare that you are a trader (selling Vdex licences makes you one). Google then shows your name, a phone number and your legal address on the store page. That address must be a real street address that matches your ID: Google does not accept a PO box, so on a personal account it is normally your home address. (Showing a different address needs an organization account with its own registered address.) The phone number is entered separately, so a business number is fine.
 
-1. **Check your country can sell.** On https://support.google.com/googleplay/android-developer/answer/9306917 the United States has a tick in the merchant column, so you can.
-2. **Trader status.** Play Console → **Manage account** → **Account details** → **About you**, and declare that you are a trader (selling apps makes you one). Google then shows your name, a phone number and the legal address from your payments profile (next step) on the store page. That address must be a real street address that matches your ID: Google does not accept a PO box, so on a personal account it is normally your home address. (Showing a different address needs an organization account with its own registered address.) The phone number is entered separately, so a business number is fine.
-3. **Payments profile.** **Manage account** → **Play apps settings** → **Monetization settings** → **Payments profile**: use the profile linked when you signed up, or press **Create payments profile**, with a real street address (no PO box). Its country and type can never change.
-4. **Bank account.** On the payments profile: **How you get paid** → **Add payment method**. Confirm the small test deposit if asked.
-5. **Tax form.** On the payments profile: **United States tax info** → **Edit** → **Add tax info**, and fill in the **W-9**. Choose **Individual/sole proprietor** and enter your legal name and your Social Security number exactly as on your tax return: Google says individuals who file with their SSN must use it here, and it allows only a few attempts, so check every digit before **Submit**. (An EIN is for a company such as an LLC, which needs an organization account; ask a tax adviser before going that way.)
-6. **The 15% fee.** **Manage account** → **Account details** → **Associated developer accounts** → **Create account group**. Name it after yourself, press **Start**, answer **No** (no other accounts) and save. On the banner about the 15% service fee press **Review and enroll** and accept. Without it Google takes about 25% in the US instead of 15%.
-7. **Japan.** Google sends an invitation to the **Payment Collection Authorization**, which Japan's law requires of anyone outside Japan who sells to buyers there. It can arrive by email, in the Play Console or in Payments Center (https://pay.google.com/), so check all three. Open it, press **Continue** and submit it by the deadline it gives (Google announced 1 December 2026). If you miss it, Google holds **all** your earnings in every country until it is done, not just sales in Japan.
+The Android app is a free download (people pay for the licence on the website), so Google's payments profile, bank account, tax form, 15% fee programme and Japan's payment authorization are not needed.
 
 ## Step 2. Let GitHub sign the real app (one time)
 
@@ -50,7 +44,7 @@ Until the passphrase is in GitHub, the builds are signed with a temporary key, a
 4. Open https://github.com/TheCrowBro/Logi-Video-Production-app-/actions/workflows/android.yml and press **Run workflow**, then the green **Run workflow** button.
 5. About five minutes later the run turns green. Open it: its summary says "Signed with the upload key", and **Artifacts** at the bottom has `vdex-android`. That zip holds `vdex-android.aab`, the build to give Google.
 
-The app is no longer on a public download page on GitHub: it is sold on Google Play. Each build's `.aab` stays in its run's **Artifacts** for 3 days. While the code on GitHub is public, anyone signed in to GitHub could still download it, which matters little: it cannot be installed on a phone as it is, and it only opens the website. Once the code is private, only you can.
+The app is no longer on a public download page on GitHub: it is distributed through Google Play. Each build's `.aab` stays in its run's **Artifacts** for 3 days. While the code on GitHub is public, anyone signed in to GitHub could still download it, which matters little: it cannot be installed on a phone as it is, and it only opens the website. Once the code is private, only you can.
 
 If the passphrase is ever lost, say so: a new key can be made, and Google has a process for registering a replacement upload key that takes a couple of days.
 
@@ -114,7 +108,7 @@ Google requires new personal accounts to run a closed test with at least 12 test
 2. Each of them opens the link while signed in to the same Google account, presses **Become a tester**, then follows the Play Store link to install Vdex.
 3. Ask them to keep it installed and to open it now and then for two weeks. Google counts testers who stay opted in for 14 days in a row, and it looks for some real use.
 
-**Testers have to buy a paid app too.** Give each one a promo code so it costs them nothing: **Monetize with Play** → **Promo codes** → **Create promo code**, choose the paid-app type, one code per tester, dates covering at least three weeks, status **On**. Send each tester their code with the opt-in link; they redeem it in the Play Store (profile → **Payments & subscriptions** → **Redeem code**). If a code will not redeem during the test, the fallback is to let them buy it and refund them later from **Order management** (Google keeps a small fee per refund). Refund only after Google has granted production access (Step 9): a refund uninstalls the app from the tester's phone, so they would drop out of the test. Ask testers not to press the Play Store's own refund button in the first two hours either, for the same reason.
+**Testers install it free.** The app is a free download with a 30-day trial, which covers the 14-day test.
 
 ## Step 8. Remove the browser bar at the top (asset link)
 
@@ -172,17 +166,19 @@ Works offline. Tap ? on any page for a walkthrough.
 
 ## Data safety answers
 
-Google asks what the app does with people's information. Vdex sends nothing to us. One feature sends information to an outside service: the weather forecast, which sends the coordinates of the shoot location, or of the phone's own location if that is what is set, to Open-Meteo. It is used once and not kept. The honest declaration is therefore:
+Google asks what the app does with people's information. Two things leave the phone. The weather forecast sends the coordinates of the shoot location, or of the phone's own location if that is what is set, to Open-Meteo, which uses them once and does not keep them. And the licence: after the 30-day trial, signing in sends the email address the person types to Vdex's licence server, which keeps which email addresses belong to which licences and emails them a sign-in code; the phone then takes one of the licence's places, which sends a random number made for that installation. The honest declaration is therefore:
 
 | Question | Answer |
 |---|---|
 | Does your app collect or share any of the required user data types? | **Yes** |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** |
-| Do you provide a way for users to request that their data is deleted? | **No, but the data isn't collected in a way that can be deleted** (choose the option that says the data is processed ephemerally / not stored). If the form insists on yes or no, answer **Yes** and point to Settings → Backups & data → Erase everything. |
+| Do you provide a way for users to request that their data is deleted? | **Yes**: by email, at the address in the privacy policy. |
+| Data types: **Personal info → Email address** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **No**. Required or optional: **Required** (to keep using the app after the 30-day trial). Purposes: **App functionality**, **Account management**. |
+| Data types: **Device or other IDs** | Collected: **Yes** (a random number made for the installation, to count the licence's devices). Shared: **No**. Processed ephemerally: **No**. Required. Purpose: **App functionality**. |
 | Data types: **Location → Approximate location** and **Precise location** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **Yes**. Required or optional: **Optional** (users can choose whether to use it). Purpose: **App functionality**. |
-| Every other data type (personal info, financial info, messages, photos, files, contacts, app activity, device IDs…) | **Not collected.** |
+| Every other data type (financial info, messages, photos, files, contacts, app activity…) | **Not collected.** |
 
-Why "not collected" for the rest: everything a user types stays on the device. When a user links their own Google Drive, iCloud, Dropbox or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer. The privacy policy explains all of it.
+Why "not collected" for the rest: everything a user types into Vdex about their work stays on the device. When a user links their own Google Drive, iCloud, Dropbox or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer. Update these answers before switching website sign-in on (docs/selling-desktop.md, part 9). The privacy policy explains all of it.
 
 If a Google reviewer asks for changes to this section, send me what they wrote and I will adjust the wording.
 

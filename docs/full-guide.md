@@ -4,7 +4,7 @@ This is the long version. The short one is the [README](../README.md).
 
 **Vdex is a production deck for freelance videographers and small video businesses.** Bookings, crew, kit, venues, insurance, a shoot-day clock, timecode notes, pre- and post-production checklists and a few field tools, all in one app that lives on your phone and works on your computer too.
 
-- **No account, no subscription, no server.** Your data stays on your device and only goes where *you* send it (your own Google Drive, iCloud, Dropbox, OneDrive or server).
+- **No subscription, and no server for your work.** A 30-day free trial, then a one-time licence (you sign in with its email address on the website). Your data stays on your device and only goes where *you* send it (your own Google Drive, iCloud, Dropbox, OneDrive or server).
 - **Works offline** once installed, which matters on location.
 - **Locks with a PIN, or your fingerprint or face,** and keeps everything it stores encrypted whenever it is locked, in the background or closed. Helps you keep your data safe: automatic daily backups in your cloud storage, encrypted backup files, and a reminder when there's no recent copy.
 - **Phone and computer share one database** once you link a cloud storage.
