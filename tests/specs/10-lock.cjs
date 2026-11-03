@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const fs = require('fs');
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
 const S = process.env.S;
@@ -9,6 +10,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const ctx = await browser.newContext({ viewport: { width: 420, height: 860 }, acceptDownloads: true });
   await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' })); // no live weather calls in tests
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+  await ctx.addInitScript(acceptTerms());
   const page = await ctx.newPage();
   const csp = [], errors = [];
   page.on('console', m => { const t = m.text(); if (/Content Security Policy|Refused to/.test(t)) csp.push(t); else if (m.type() === 'error') errors.push(t); });
@@ -112,9 +114,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.waitForFunction(() => !localStorage.getItem('logi-lock'), null, { timeout: 15000 });
   ok('PIN removed: no lock config, no vault, plaintext present, lock button hidden', (await ls('logi-vault')) === null && (await ls('logi-db-v1')) !== null && !(await page.locator('#lockBtn').isVisible()));
 
-  // --- CSP: third-party script with integrity still loads; no CSP violations so far ---
-  const msal = await page.evaluate(() => new Promise(res => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js'; s.integrity = 'sha384-B5PXeUfgiegchZiX5iMRssMrHd9NfPhFnITob1HyW1CY76udptWpBsniaDsH/+BY'; s.crossOrigin = 'anonymous'; s.onload = () => res('loaded ' + typeof window.msal); s.onerror = () => res('error'); document.head.append(s); setTimeout(() => res('timeout'), 30000); }));
-  ok('MSAL loads under CSP with integrity', /^loaded object/.test(msal), msal);
+  // --- CSP: no CSP violations so far ---
   ok('no CSP violations during the run', csp.length === 0, csp.slice(0, 3).join(' | '));
   ok('no page errors during the run', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();

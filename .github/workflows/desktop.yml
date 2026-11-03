@@ -1,9 +1,25 @@
-# Builds the one-click installers: Vdex-Setup-<version>.exe (Windows), Vdex-<version>.pkg (Mac) and
-# Vdex-<version>.AppImage (Linux), plus the latest*.yml update metadata that installed apps read. Run it from the Actions tab (Run workflow) and download the files from the
-# run's Artifacts, or push a tag such as v1.1.0 and the installers are attached to a release of that name.
+# Builds the desktop installers: Vdex-Setup-<version>.exe (Windows), Vdex-<version>.dmg and .zip (Mac) and
+# Vdex-<version>.AppImage (Linux), plus the latest*.yml files installed apps read to update themselves.
+#
+# "Run workflow" builds them as the run's Artifacts (kept 3 days). Tick "Publish" (or push a tag such as v1.3.0) and
+# they are also uploaded to https://download.crowmade.app/vdex/ (the vdex-downloads bucket in Cloudflare R2), where the
+# download page links and installed copies of Vdex look for updates. The version is the one in js/version.js.
+#
+# Signing is optional and switches itself on: with the Apple secrets the Mac app is signed and notarized (and can
+# update itself); with the Azure secrets and variables the Windows installer is signed through Azure Artifact Signing.
+# Without them the installers come out unsigned. docs/selling-desktop.md lists every secret.
 name: Build desktop installers
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish to download.crowmade.app (installed copies update to it)
+        type: boolean
+        default: false
+      replace:
+        description: Replace a version that is already published (only to fix a broken upload)
+        type: boolean
+        default: false
   push:
     tags: ['v*']
 permissions:
@@ -31,48 +47,123 @@ jobs:
       - run: node tools/stamp-build.mjs
         env:
           BUILD_SHA: ${{ github.sha }}
-      # Signing is optional: add the secrets named in the README and the builds come out signed (and the Mac one
-      # notarized, which lets it update itself). Without them the installers are unsigned, as before.
       - id: certs
         shell: bash
         run: |
           echo "mac=$([ -n "$MAC_P12" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "notarize=$([ -n "$MAC_P12" ] && [ -n "$APPLE_ID" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "azure=$([ -n "$AZ_SECRET" ] && [ -n "$AZ_ACCOUNT" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
         env:
           MAC_P12: ${{ secrets.MAC_CERT_P12 }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
-      - run: npm run dist -- ${{ matrix.args }} ${{ matrix.os == 'macos-latest' && steps.certs.outputs.notarize == 'true' && '--config.mac.notarize=true' || '' }}
+          AZ_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZ_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+      - name: Build
+        shell: bash
+        run: |
+          # An empty CSC_LINK is read as a certificate path (the project folder) and stops the Mac build
+          [ -n "$CSC_LINK" ] || unset CSC_LINK CSC_KEY_PASSWORD
+          extra=()
+          if [ "$RUNNER_OS" = macOS ] && [ "$NOTARIZE" = true ]; then extra+=(--config.mac.notarize=true); fi
+          # No certificate: sign ad hoc, or Apple silicon Macs call the app "damaged" instead of offering Open Anyway
+          if [ "$RUNNER_OS" = macOS ] && [ -z "${CSC_LINK:-}" ]; then extra+=(--config.mac.identity=-); fi
+          if [ "$RUNNER_OS" = Windows ] && [ "$AZURE" = true ]; then
+            extra+=("--config.win.azureSignOptions.publisherName=$AZ_PUBLISHER"
+                    "--config.win.azureSignOptions.endpoint=$AZ_ENDPOINT"
+                    "--config.win.azureSignOptions.codeSigningAccountName=$AZ_ACCOUNT"
+                    "--config.win.azureSignOptions.certificateProfileName=$AZ_PROFILE")
+          fi
+          npm run dist -- ${{ matrix.args }} "${extra[@]}"
         env:
+          NOTARIZE: ${{ steps.certs.outputs.notarize }}
+          AZURE: ${{ steps.certs.outputs.azure }}
+          # Mac: a Developer ID Application certificate (.p12, base64) and notarization
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ steps.certs.outputs.mac }}
           CSC_LINK: ${{ secrets.MAC_CERT_P12 }}
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WIN_CSC_LINK: ${{ secrets.WIN_CERT_PFX }}
-          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CERT_PASSWORD }}
+          # Windows: Azure Artifact Signing (an app registration with the "Artifact Signing Certificate Profile Signer" role)
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZ_PUBLISHER: ${{ vars.AZURE_SIGNING_PUBLISHER }}   # the name on the certificate: the owner's legal name
+          AZ_ENDPOINT: ${{ vars.AZURE_SIGNING_ENDPOINT }}     # e.g. https://wus2.codesigning.azure.net
+          AZ_ACCOUNT: ${{ vars.AZURE_SIGNING_ACCOUNT }}
+          AZ_PROFILE: ${{ vars.AZURE_SIGNING_PROFILE }}
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vdex-${{ matrix.os }}
           path: |
             dist/*.exe
-            dist/*.pkg
+            dist/*.dmg
             dist/*.AppImage
             dist/*.zip
-            dist/*.yml
+            dist/latest*.yml
             dist/*.blockmap
           if-no-files-found: error
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
+          retention-days: 3
+
+  publish:
+    # Uploads to https://download.crowmade.app/vdex/: the installers first, the latest*.yml files installed apps read
+    # last, so an app never sees a version whose files are not there yet.
+    if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write   # only this job creates the release
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloudflare/package-lock.json
+      - run: npm ci --prefix cloudflare   # the Wrangler version the website uses
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           path: installers
           merge-multiple: true
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          files: installers/*
+      - name: Upload to download.crowmade.app
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}   # the website's token: it includes R2 (Workers R2 Storage: Edit)
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          DEST: vdex-downloads/vdex
+          WRANGLER_SEND_METRICS: "false"
+          REPLACE: ${{ inputs.replace }}
+        run: |
+          set -euo pipefail
+          [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ] || { echo "::error::The Cloudflare secrets are missing (docs/cloudflare.md)"; exit 1; }
+          W="$PWD/cloudflare/node_modules/.bin/wrangler"
+          V=$(node -p "/VERSION\\s*=\\s*'([^']+)'/.exec(require('fs').readFileSync('js/version.js', 'utf8'))[1]")
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME#v}" != "$V" ]; then echo "::error::Tag $GITHUB_REF_NAME does not match version $V in js/version.js"; exit 1; fi
+          # A version's installers are cached for a year once published: publishing the same version again (a second
+          # run, or adding signing secrets) would leave old copies in caches that no longer match latest.yml, and
+          # updates would fail their checksum. Bump VERSION in js/version.js instead.
+          if curl -fsS "https://download.crowmade.app/vdex/latest.yml" 2>/dev/null | grep -q "^version: $V\$" && [ "$REPLACE" != true ]; then
+            echo "::error::Vdex $V is already published. Bump VERSION in js/version.js for a new release (or tick Replace to fix a broken upload)."; exit 1
+          fi
+          cd installers
+          for y in latest.yml latest-mac.yml latest-linux.yml; do
+            grep -q "^version: $V\$" "$y" || { echo "::error::$y is not version $V"; exit 1; }
+          done
+          type_of() { case "$1" in *.exe) echo application/vnd.microsoft.portable-executable;; *.dmg) echo application/x-apple-diskimage;; *.zip) echo application/zip;; *.yml) echo text/yaml;; *) echo application/octet-stream;; esac; }
+          put() { # file, key, cache-control
+            [ "$(stat -c %s "$1")" -le 314572800 ] || { echo "::error::$1 is over Wrangler's 300 MiB limit; upload it with the S3 API instead"; exit 1; }
+            "$W" r2 object put "$DEST/$2" --file "$1" --remote --content-type "$(type_of "$1")" --cache-control "$3"
+          }
+          # 1. this version's installers and blockmaps (they never change)
+          for f in *; do case "$f" in *.yml) ;; *) put "$f" "$f" "public, max-age=31536000, immutable";; esac; done
+          # 2. the fixed names the download page links to
+          put "Vdex-Setup-$V.exe" "Vdex-Setup.exe" "public, max-age=300"
+          put "Vdex-$V.dmg"       "Vdex.dmg"       "public, max-age=300"
+          put "Vdex-$V.AppImage"  "Vdex.AppImage"  "public, max-age=300"
+          # 3. last, the files installed apps read
+          for y in latest.yml latest-mac.yml latest-linux.yml; do put "$y" "$y" "no-cache"; done
+          echo "Published Vdex $V to https://download.crowmade.app/vdex/" >> "$GITHUB_STEP_SUMMARY"
+      - name: Check the download address
+        run: |
+          V=$(node -p "/VERSION\\s*=\\s*'([^']+)'/.exec(require('fs').readFileSync('js/version.js', 'utf8'))[1]")
+          for y in latest.yml latest-mac.yml latest-linux.yml; do
+            curl -fsS "https://download.crowmade.app/vdex/$y" | grep -q "^version: $V$" || { echo "::error::https://download.crowmade.app/vdex/$y is not version $V (is the bucket's custom domain set up? docs/selling-desktop.md)"; exit 1; }
+          done

@@ -101,6 +101,8 @@ a { color: var(--accent); }
 .card.hero { border-left: 4px solid var(--accent); display: grid; gap: 4px; }
 .card.center { text-align: center; }
 .card-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-row > div:first-child { min-width: 0; overflow-wrap: break-word; } .card.stack { grid-template-columns: minmax(0, 1fr); } /* text wraps by word, buttons stay on screen */
+.stack .card-row > .btn, .stack .card-row > button.btn { width: auto; flex: none; } /* a button beside text keeps its own size, never squeezing the text */
 .list { display: grid; gap: 0; } .list > .card { margin-bottom: 10px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; } .actions.center { justify-content: center; }
 .empty { text-align: center; color: var(--muted); padding: 28px 12px; border: 1px dashed var(--line); border-radius: var(--radius); display: grid; gap: 12px; justify-items: center; }
@@ -190,7 +192,8 @@ input[type=range] { min-height: var(--hit); padding: 0; accent-color: var(--acce
 /* accessibility */
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .skip { position: absolute; left: 8px; top: -60px; z-index: 300; background: var(--accent); color: var(--accent-ink); padding: 10px 14px; border-radius: 10px; font-weight: 700; } .skip:focus { top: 8px; }
-.top-actions { display: flex; gap: 8px; }
+.top-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; } /* narrow phones: wraps rather than pushing the page sideways */
+@media (max-width: 400px) { #installBtn > span:not(.cloud-ico) { display: none; } }
 button, .btn, a.btn, .chip, .check, .day, .tab, summary { touch-action: manipulation; }
 .btn, .chip, .icon-btn, .day, .card.tap, .seg button, .tab, .tc-badge, .sc-badge { transition: transform .12s ease, background-color .15s ease, border-color .15s ease, box-shadow .15s ease, opacity .15s ease, filter .15s ease; }
 .btn:active, .chip:active, .icon-btn:active, .day:active, .card.tap:active, .seg button:active, .tc-badge:active, .sc-badge:active { transform: scale(.96); }
@@ -320,7 +323,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
   .bk-month .day { min-height: 110px; }
   /* booking detail: two columns of sections under the header */
   .bk-detail { display: grid; grid-template-columns: 1fr 1fr; column-gap: 28px; align-items: start; }
-  .bk-detail > .page-head, .bk-detail > .hero, .bk-detail > .sunline { grid-column: 1 / -1; }
+  .bk-detail > .page-head, .bk-detail > .hero, .bk-detail > .sunline, .bk-detail > .bk-tools { grid-column: 1 / -1; }
   .bk-detail .block .list { grid-template-columns: 1fr; }
   /* timecode notes: script beside notes */
   .tc-split { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 0 28px; align-items: start; }
@@ -534,6 +537,20 @@ html[data-motion=off] .lock.shake .pin-dots { animation: none; }
 .update-bar .btn { white-space: nowrap; }
 body.has-update-bar #page { padding-bottom: 110px; }
 @media (max-width: 480px) { .update-bar { flex-wrap: wrap; justify-content: center; border-radius: 16px; } }
+/* The desktop app's licence (js/licence.js): its bar sits above the update bar when both show. */
+.licence-bar.urgent { border-color: var(--danger); }
+body:has(.sheet-back) .licence-bar, body:has(.sc-bar) .licence-bar { display: none; } /* never over a sheet's buttons, or the script's Mark */
+.licence-bar { left: 16px; right: 16px; transform: none; width: fit-content; margin-inline: auto; flex-wrap: wrap; justify-content: center; }
+@media (max-width: 560px) { .licence-bar { gap: 6px 8px; padding: 8px 10px; border-radius: 16px; } .licence-bar > span { flex: 1 1 100%; text-align: center; line-height: 1.3; padding: 0 28px; } .licence-bar > .icon-btn { position: absolute; top: 2px; right: 2px; } }
+body.has-licence-bar .toast { z-index: 260; pointer-events: none; } /* messages show above the bar, and never block its buttons */
+body.has-update-bar .licence-bar { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 64px); }
+body.has-licence-bar #page { padding-bottom: 110px; }
+body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
+.licence-title { font-size: 1rem; margin: 4px 0 0; }
+.licence-warn { color: var(--danger); }
+.licence-code { width: 100%; font: 0.95rem/1.5 ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }
+.lic-computers { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 8px; }
+.lic-computers li { display: flex; gap: 10px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
 
 .theme-group { font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; display: flex; flex-direction: column; gap: 2px; } .theme-group .twirl-sub { text-transform: none; letter-spacing: 0; }
 
@@ -567,3 +584,105 @@ body.has-update-bar #page { padding-bottom: 110px; }
 .loc-chip { margin-top: 6px; }
 .loc-chip.empty { opacity: .65; }
 .gear-line .muted { text-align: right; }
+
+/* Connecting a cloud storage or calendar: one card per service, sign in with one tap */
+.cloud-choices { gap: 8px; }
+.cloud-choice { display: flex; align-items: center; gap: 12px; padding: 12px 14px; }
+.cloud-choice .grow { flex: 1 1 auto; min-width: 0; }
+.stack .cloud-choice .btn { flex: none; width: auto; min-width: 6.5rem; } /* not the full-width buttons of other panels */
+.cloud-choice.off { opacity: .75; }
+.cloud-choice.off .btn { opacity: .6; }
+.cloud-ico { font-size: 1.6rem; width: 2rem; text-align: center; flex: none; }
+.cloud-head { display: flex; align-items: center; gap: 12px; }
+.storage label.field > span { font-size: .85rem; color: var(--muted); }
+.storage .twirl > summary { grid-template-columns: minmax(0, 1fr) auto; }
+@media (max-width: 340px) { .cloud-choice { flex-wrap: wrap; } .stack .cloud-choice .btn { width: 100%; } }
+
+/* The storage panel's fold-down: More ways to keep a copy, with a quieter fold for developers inside it */
+:root { interpolate-size: allow-keywords; }
+.storage .twirl::details-content { block-size: 0; overflow: clip; transition: block-size .28s ease, content-visibility .28s allow-discrete; }
+.storage .twirl[open]::details-content { block-size: auto; }
+html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .storage .twirl::details-content { transition: none; }
+@media (prefers-reduced-motion: reduce) { .storage .twirl::details-content { transition: none; } }
+.storage .twirl-more { background: var(--card); border-radius: var(--radius); margin-top: 4px; }
+.storage .twirl-more > summary { padding: 14px 16px; }
+.storage .twirl-more > summary::after { content: '⌄'; font-size: 1.3rem; line-height: 1; transform: none; transition: transform .2s ease; }
+.storage .twirl-more[open] > summary::after { transform: rotate(180deg); }
+.storage .twirl-more > .twirl-body { padding: 0 12px 14px; }
+.storage .twirl-more .card { background: var(--bg2); }
+.storage .twirl-inner { background: transparent; border-style: dashed; margin: 4px 0 0; }
+.storage .twirl-inner > summary { min-height: 40px; padding: 8px 12px; }
+.storage .twirl-inner .twirl-name { font-weight: 600; font-size: .9rem; }
+
+/* Terms gate: shown before anything else runs, until the terms of service and privacy policy are accepted */
+.terms-gate { position: fixed; inset: 0; z-index: 290; background: var(--bg); color: var(--text); overflow: auto; display: flex; justify-content: center; padding: max(24px, env(safe-area-inset-top, 0px)) 16px max(24px, env(safe-area-inset-bottom, 0px)); }
+.terms-card { width: min(520px, 100%); margin: auto 0; display: grid; gap: 14px; }
+.terms-card h1 { font-size: 1.6rem; line-height: 1.2; margin: 0; }
+.terms-card p { margin: 0; line-height: 1.5; }
+.terms-icon { width: 64px; height: 64px; border-radius: 16px; }
+.terms-points { margin: 0; padding: 14px 18px 14px 34px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); display: grid; gap: 8px; line-height: 1.45; }
+.terms-links { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.terms-links a { min-height: var(--hit); display: inline-flex; align-items: center; }
+.terms-check { align-items: flex-start; font-weight: 600; }
+.terms-check input { flex: none; width: 24px; height: 24px; margin-top: 1px; }
+.terms-card .btn.primary { width: 100%; }
+.terms-card .btn.primary:disabled { opacity: .45; cursor: not-allowed; }
+
+/* Budget on a booking */
+.budget-amts { display: grid; justify-items: end; gap: 2px; text-align: right; white-space: nowrap; }
+#bk-budget .card.stack { grid-template-columns: minmax(0, 1fr); }
+#bk-budget .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+#bk-budget .stat b { font-size: clamp(.9rem, 3.8vw, 1.15rem); overflow-wrap: anywhere; }
+.budget-cat > summary { grid-template-columns: minmax(0, 1fr) auto; } /* name and chevron: the chevron turns in place */
+.budget-cat .twirl-body { gap: 8px; }
+.crew-parts { display: grid; gap: 2px; }
+/* Price list: the editor's lines and the picker's tick rows (the price under the name, never squeezed) */
+.price-item { display: grid; gap: 2px; text-align: left; min-width: 0; overflow-wrap: break-word; } .price-item strong { font-size: 1rem; }
+.price-group { gap: 0; } .price-group h4 { margin: 10px 0 2px; }
+.price-pick { align-items: flex-start; } .price-pick input { margin-top: 2px; }
+.price-pick-text { flex: 1; display: grid; gap: 1px; min-width: 0; overflow-wrap: break-word; } .price-pick-text > span { font-size: 1rem; }
+.sheet-body:has(.price-picker) { scroll-padding-bottom: 84px; } /* a ticked row reached with Tab is never under the Add bar */
+/* Rows in a form (quote lines, contacts, deliverables): the first text box on a line of its own, the rest below it */
+.field .rows .row-edit { flex-wrap: wrap; } .field .rows .row-edit > input { flex: 1 1 0; min-width: 0; } .field .rows .row-edit > input[type=text]:first-child { flex: 1 1 100%; }
+/* Stripboard: one strip per scene in the paper-board colours (white interior day, yellow exterior day, blue interior
+   night, green exterior night), black "end of day" strips, brown banners. The colours are the same in every theme.
+   Sizes are in rem, so the strips grow with Settings → Display → Text size. */
+.sb-page .status-line { margin: 6px 0 10px; }
+.sb-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 10px; }
+.sb-chip { font-size: .8rem; font-weight: 700; letter-spacing: .03em; padding: 3px 9px; border-radius: 999px; border: 1px solid #0003; }
+.sb-board { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sb-board > li, .sb-ghost { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr); align-items: stretch; border-radius: 8px; border: 1px solid #0002; min-height: 48px; list-style: none; box-sizing: border-box; }
+.sb-int-day { background: #fbfaf6; color: #1d1a16; } .sb-ext-day { background: #f6dc5c; color: #1d1a16; }
+.sb-int-night { background: #35609f; color: #fff; } .sb-ext-night { background: #226b43; color: #fff; }
+.sb-break { background: #16130f; color: #f4efe6; border-color: #000 !important; box-shadow: inset 0 0 0 1px #ffffff2e; } .sb-banner { background: #6b5640; color: #fff; }
+.sb-handle { display: grid; place-items: center; background: transparent; border: 0; color: inherit; opacity: .75; font-size: 1.15rem; cursor: grab; touch-action: none; min-height: 44px; border-radius: 8px 0 0 8px; -webkit-user-select: none; user-select: none; }
+.sb-handle:active { cursor: grabbing; }
+.sb-handle:focus-visible, .sb-body:focus-visible, .sb-break-x:focus-visible { outline: 3px solid currentColor; outline-offset: -5px; box-shadow: inset 0 0 0 6px color-mix(in srgb, currentColor 18%, transparent); opacity: 1; border-radius: 8px; }
+.sb-body { all: unset; box-sizing: border-box; cursor: pointer; padding: 7px 10px 7px 2px; display: grid; grid-template-columns: minmax(2.4rem, auto) minmax(0, auto) minmax(0, 1fr) auto; grid-template-areas: "num set set pages" "num desc desc desc" "num ie cast cast"; column-gap: 8px; row-gap: 1px; min-width: 0; color: inherit; }
+.sb-num { grid-area: num; font-weight: 800; font-size: 1.05rem; align-self: center; text-align: center; min-width: 0; overflow-wrap: anywhere; }
+.sb-set { grid-area: set; font-weight: 700; font-size: 1rem; min-width: 0; overflow-wrap: anywhere; }
+.sb-desc { grid-area: desc; font-size: .85rem; opacity: .85; min-width: 0; overflow-wrap: break-word; }
+.sb-int-night .sb-desc, .sb-ext-night .sb-desc, .sb-banner .sb-desc { opacity: 1; }
+.sb-ie { grid-area: ie; font-size: .78rem; font-weight: 700; letter-spacing: .03em; min-width: 0; overflow-wrap: anywhere; }
+.sb-cast { grid-area: cast; font-size: .8rem; text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.sb-pages { grid-area: pages; font-weight: 800; font-size: 1rem; white-space: nowrap; text-align: right; }
+@media (min-width: 700px) {
+  .sb-body { grid-template-columns: minmax(3rem, auto) minmax(0, 9.5rem) minmax(0, 1fr) minmax(4rem, 9rem) 3.6rem; grid-template-areas: "num ie set cast pages" "num ie desc cast pages"; }
+  .sb-ie, .sb-cast, .sb-pages { align-self: center; }
+}
+.sb-break { grid-template-columns: 2.6rem minmax(0, 1fr) auto !important; }
+.sb-break-text { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; padding: 8px 4px; font-size: .9rem; min-width: 0; }
+.sb-break-text b { text-transform: uppercase; letter-spacing: .06em; }
+.sb-break-x { color: inherit; opacity: .75; align-self: center; }
+.sb-pool-head { grid-column: 1 / -1; background: var(--bg); color: var(--text); padding: 14px 4px 4px; font-weight: 700; border-top: 1px solid #000; }
+.sb-banner .sb-body { display: block; text-align: center; font-weight: 700; padding: 10px; }
+.sb-placeholder { opacity: .35; outline: 2px dashed var(--accent); outline-offset: -2px; }
+.sb-board > li.sb-drop { display: block; min-height: 0; height: 5px; border: 0; border-radius: 4px; background: var(--accent); margin: 1px 0; box-shadow: 0 0 0 2px var(--bg), 0 0 10px var(--accent); }
+.sb-ghost { box-shadow: 0 10px 28px #0007; opacity: .72; }
+body.sb-dragging { -webkit-user-select: none; user-select: none; cursor: grabbing; }
+.sb-cast-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 6px; }
+/* Booking tools (Call sheet, Stripboard, Share with crew, templates): an even grid under the booking's summary,
+   two equal buttons to a row on a phone and four on a wider screen. */
+.actions.bk-tools { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 10px 0 4px; }
+.actions.bk-tools > .btn { width: 100%; min-width: 0; justify-content: center; text-align: center; white-space: normal; overflow-wrap: anywhere; }
+@media (min-width: 700px) { .actions.bk-tools { grid-template-columns: repeat(4, minmax(0, 1fr)); } }

@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -8,6 +9,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const ctx = await browser.newContext({ viewport: { width: 420, height: 860 } });
   await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' })); // no live weather calls in tests
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+  await ctx.addInitScript(acceptTerms());
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (/Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
   page.on('dialog', d => d.accept());

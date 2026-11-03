@@ -6,6 +6,7 @@ import { h, sheet, toast, parseISO, ymd, fmtLong, fmtShort } from './util.js';
 import { db, byId, update, subscribe, activeBookings, endOf, cloud } from './store.js';
 import * as store from './store.js';
 import * as providers from './providers.js';
+import { SWITCH_ON, preloadSignIn } from './storage-ui.js';
 
 const pad = n => String(n).padStart(2, '0');
 const utc = d => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
@@ -86,6 +87,8 @@ export function openAddToCalendar(b) {
 
 /* ------------------------------ two-way sync ------------------------------ */
 export const calState = { status: 'idle', error: '', at: 0 }; // idle | syncing | ok | error | needs-auth
+const CAL_WORDS = { ok: 'Up to date', syncing: 'Updating…', 'needs-auth': 'Paused: tap Sync now and sign in to carry on', error: 'Could not update', idle: 'Connected' };
+let pausedSaid = false; // a background update that needs a sign-in says so once, outside this panel
 const subs = new Set(); export const onCalChange = fn => { subs.add(fn); return () => subs.delete(fn); };
 const emit = () => subs.forEach(fn => fn(calState));
 const setState = (status, error = '') => { calState.status = status; calState.error = error; if (status === 'ok') calState.at = Date.now(); emit(); };
@@ -125,15 +128,27 @@ export async function syncCalendar({ interactive = false } = {}) {
       else if (m.hash !== hash) { await ad.update(calendarId, m.id, e); mapping[key] = { id: m.id, hash, at: Date.now() }; }
     }
     for (const [bid, m] of Object.entries(mapping)) if (!wantIds.has(bid)) { if (byLogi.has(bid)) await ad.remove(calendarId, m.id); delete mapping[bid]; }
-    setState('ok');
+    setState('ok'); pausedSaid = false;
   } catch (e) {
-    setState(/auth|sign|token|consent|expired|401/i.test(e.message || '') ? 'needs-auth' : 'error', e.message || String(e));
+    const status = e.name === 'NotAllowedError' || /auth|sign|token|consent|expired|401/i.test(e.message || '') ? 'needs-auth' : 'error';
+    setState(status, e.message || String(e));
+    if (status === 'needs-auth' && !interactive && !pausedSaid) { pausedSaid = true; toast(`${cs.provider === 'google' ? 'Google Calendar' : 'Outlook'} is paused until you sign in again: Bookings → Calendar & email → Sync now.`); }
   } finally {
     busy = false;
     update(d => { d.calSync = { ...d.calSync, calendarId, events: mapping, updatedAt: Date.now() }; });
   }
 }
-export function connectCalendar(provider) { update(d => { d.calSync = { ...d.calSync, provider, calendarId: null, events: {}, updatedAt: Date.now() }; }); return syncCalendar({ interactive: true }); }
+// Connect = sign in and make the calendar. If the sign-in is cancelled or fails, go back to not connected and say why.
+export async function connectCalendar(provider) {
+  // Sign in first, and connect only once that has worked: an abandoned or cancelled sign-in leaves nothing half-done.
+  // (Microsoft's sign-in goes to its page and back; the way back connects it.)
+  try { await ADAPTERS[provider].signIn(); }
+  catch (e) { if (e.name === 'AbortError') return; if (/^Carry on in your web browser/.test(e.message)) { toast(e.message); return; } throw e; }
+  update(d => { d.calSync = { ...d.calSync, provider, calendarId: null, events: {}, updatedAt: Date.now() }; });
+  await syncCalendar({ interactive: true });
+  if (/^Carry on in your web browser/.test(calState.error || '')) { toast(calState.error); return; } // carries on in the web browser (desktop app)
+  if (['error', 'needs-auth'].includes(calState.status) && !db.calSync?.calendarId) { const msg = calState.error || 'Sign-in did not finish'; update(d => { d.calSync = { ...d.calSync, provider: null, updatedAt: Date.now() }; }); setState('idle'); throw new Error(msg); }
+}
 export function disconnectCalendar() { ADAPTERS[db.calSync?.provider]?.signOut?.(); update(d => { d.calSync = { ...d.calSync, provider: null, calendarId: null, events: {}, updatedAt: Date.now() }; }); setState('idle'); }
 
 // Push automatically after booking edits while a provider is connected (only when a token is already in hand).
@@ -176,6 +191,7 @@ const google = {
   async create(id, e) { return (await (await google.call(`/calendars/${encodeURIComponent(id)}/events`, { method: 'POST', body: JSON.stringify(gbody(e)) })).json()).id; },
   async update(id, eid, e) { await google.call(`/calendars/${encodeURIComponent(id)}/events/${encodeURIComponent(eid)}`, { method: 'PATCH', body: JSON.stringify(gbody(e)) }); },
   async remove(id, eid) { await google.call(`/calendars/${encodeURIComponent(id)}/events/${encodeURIComponent(eid)}`, { method: 'DELETE' }); },
+  signIn: () => providers.googleToken(google.scope, true),
   signOut() { providers.forgetGoogleToken(google.scope); },
 };
 
@@ -187,9 +203,9 @@ const mbody = e => ({ subject: e.title, body: { contentType: 'text', content: e.
 const GRAPH = 'https://graph.microsoft.com/v1.0';
 const microsoft = {
   async call(path, init = {}, interactive = false) {
-    const token = await providers.microsoftToken(['Calendars.ReadWrite'], interactive);
+    const token = await providers.microsoftToken([providers.MS_CAL], interactive, 'calendar');
     const r = await fetch(GRAPH + path, { ...init, headers: { ...(init.headers || {}), Authorization: 'Bearer ' + token, 'Content-Type': 'application/json', Prefer: `outlook.timezone="${TZ}"` } });
-    if (r.status === 401) throw new Error('Microsoft sign-in expired — tap Sync now to reconnect');
+    if (r.status === 401) throw new Error('Microsoft wants you to sign in again — tap Sync now');
     if (!r.ok && r.status !== 404) throw new Error('Microsoft 365 ' + r.status + ': ' + ((await r.json().catch(() => ({}))).error?.message || 'request failed'));
     return r;
   },
@@ -211,29 +227,38 @@ const microsoft = {
   async create(id, e) { return (await (await microsoft.call(`/me/calendars/${id}/events`, { method: 'POST', body: JSON.stringify(mbody(e)) })).json()).id; },
   async update(id, eid, e) { await microsoft.call(`/me/events/${eid}`, { method: 'PATCH', body: JSON.stringify(mbody(e)) }); },
   async remove(id, eid) { await microsoft.call(`/me/events/${eid}`, { method: 'DELETE' }); },
-  signOut() { providers.microsoftSignOut(); },
+  signIn: () => providers.microsoftToken([providers.MS_CAL], true, 'calendar'),
+  signOut() { providers.microsoftSignOut({ keepToken: localStorage.getItem('logi-provider') === 'onedrive', keepWho: true }); }, // OneDrive storage shares the sign-in, and the account line is the storage's
 };
 export const ADAPTERS = { google, microsoft };
 
 /* --------------------------------- sheet --------------------------------- */
 export function calendarPanel() {
   const body = h('div', { class: 'stack' });
-  const keyField = (label, get, set, ph) => h('input', { type: 'text', placeholder: ph, 'aria-label': label, value: get(), autocomplete: 'off', spellcheck: false, oninput: e => set(e.target.value) });
+  preloadSignIn();
   const help = text => h('details', { class: 'help' }, h('summary', null, 'Setup'), h('div', { class: 'small muted' }, text));
+  // One tap: sign in and allow. Greyed out with a pointer to the switch-on guide until this copy of Vdex has its apps registered.
+  const calChoice = (svc, name, sub) => { const on = providers.signIn.available(svc === 'google' ? 'google-calendar' : svc);
+    return h('div', { class: 'card cloud-choice' + (on ? '' : ' off'), 'data-svc': svc }, h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, svc === 'google' ? '📅' : '📆'),
+      h('div', { class: 'grow' }, h('strong', null, name), h('div', { class: 'small muted' }, on ? sub : `Not ready yet: sign-in for ${name} is still being set up for Vdex.`, !on && [' ', h('a', { href: SWITCH_ON, target: '_blank', rel: 'noopener', class: 'publisher-link' }, 'For the Vdex publisher: how to switch it on')])),
+      h('button', { class: 'btn primary', disabled: !on, 'aria-label': `Connect ${name}`, onclick: () => connectCalendar(svc).then(draw).catch(e => toast(e.message)) }, 'Connect')); };
   const copy = url => async () => { try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { toast('Select the link and copy it'); } };
   const draw = () => {
     const cs = db.calSync || {}, n = activeBookings().length, a = cloud.adapter;
     body.replaceChildren(
       h('div', { class: 'card' }, h('strong', null, 'Export once'),
         h('p', { class: 'small muted' }, `Save or share all ${n} active booking${n === 1 ? '' : 's'} as a calendar file. Any calendar app imports it.`),
-        h('button', { class: 'btn ghost', onclick: shareAll }, '📤 Share bookings (.ics)')),
+        h('button', { class: 'btn ghost', onclick: () => store.requirePaid('export') && shareAll() }, '📤 Share bookings (.ics)')),
       h('div', { class: 'card' }, h('strong', null, 'Live feed (any calendar app)'),
         h('p', { class: 'small muted' }, 'Vdex keeps a vdex-bookings.ics file in your linked cloud storage up to date. Subscribe to its link once and your calendar follows every change by itself. One-way, from Vdex to the calendar.'),
         !a ? h('p', { class: 'note' }, 'Link a cloud storage first (☁ at the top).')
+          : cloud.paused ? h('p', { class: 'note' }, `${a.label} is paused: cloud storage comes with a licence, so the feed is not updated until then.`)
+          : !a.writeAux ? h('p', { class: 'note' }, `${a.label} keeps Vdex’s copy private, so it can’t give your calendar a link to follow. Use Two-way sync below, or Export once.`)
           : [h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cs.feed, onchange: async e => { await store.setFeed(e.target.checked); draw(); } }), h('span', null, `Publish the feed to ${a.label}`)),
             cs.feed && a.id === 'file' && h('div', { class: 'stack' },
               cloud.auxName ? h('p', { class: 'small' }, `Feed file: ${cloud.auxName}. Share that file from your Dropbox / Drive / OneDrive app and use the link’s direct-download form (Dropbox: dl=1, OneDrive: ?download=1, Google Drive: drive.google.com/uc?export=download&id=…).`) : h('button', { class: 'btn ghost', onclick: async () => { try { await store.createFeedFile(); draw(); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } } }, 'Choose where to save logi-bookings.ics…')),
-            cs.feed && a.id !== 'file' && h('div', { class: 'stack' },
+            cs.feed && a.id !== 'file' && !a.shareLink && h('p', { class: 'small' }, `Vdex keeps vdex-bookings.ics up to date in its folder on ${a.label}. Share that file from your server (Nextcloud: Share → Share link) and subscribe to that link.`),
+            cs.feed && a.id !== 'file' && a.shareLink && h('div', { class: 'stack' },
               cloud.feedUrl ? [h('div', { class: 'link-text' }, cloud.feedUrl), h('button', { class: 'btn ghost small', onclick: copy(cloud.feedUrl) }, 'Copy subscription link')]
                 : h('button', { class: 'btn ghost', onclick: async () => { try { await store.feedLink(); draw(); } catch (e) { toast(e.message); } } }, 'Get the subscription link'),
               cloud.feedError && h('div', { class: 'warn small' }, cloud.feedError)),
@@ -241,16 +266,12 @@ export function calendarPanel() {
       h('div', { class: 'card' }, h('strong', null, 'Two-way sync'),
         h('p', { class: 'small muted' }, 'Keeps a “Vdex bookings” calendar in your account: bookings go to it, and date, time, title or location edits made there come back into Vdex.'),
         cs.provider
-          ? [h('p', { class: 'status-line', 'data-state': calState.status === 'ok' ? 'synced' : calState.status === 'error' ? 'error' : '' }, `${cs.provider === 'google' ? 'Google Calendar' : 'Microsoft 365 / Outlook'} — ${calState.status}${calState.at ? ' · ' + new Date(calState.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}${calState.error ? ' (' + calState.error + ')' : ''}`),
+          ? [h('p', { class: 'status-line', 'data-state': calState.status === 'ok' ? 'synced' : calState.status === 'error' ? 'error' : '' }, `${cs.provider === 'google' ? 'Google Calendar' : 'Microsoft 365 / Outlook'} — ${CAL_WORDS[calState.status] ?? calState.status}${calState.at && calState.status === 'ok' ? ' · ' + new Date(calState.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}${calState.error && calState.status === 'error' ? ' (' + calState.error + ')' : ''}`),
             h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => syncCalendar({ interactive: true }) }, 'Sync now'), h('button', { class: 'btn ghost', onclick: () => { disconnectCalendar(); draw(); } }, 'Disconnect'))]
-          : [h('div', { class: 'provider' }, h('strong', null, 'Google Calendar'),
-              keyField('Google OAuth client ID', providers.settings.gdriveId, providers.settings.setGdriveId, 'Google OAuth client ID'),
-              h('button', { class: 'btn primary', onclick: () => connectCalendar('google').then(draw) }, 'Connect Google Calendar'),
-              help(`Same Google Cloud client ID as the Drive link (OAuth client, Web application, authorised JavaScript origin ${location.origin}); also enable the Google Calendar API in that project. The app only touches the calendar it creates. Google asks you to re-approve about hourly, so background pushes pause until you tap Sync now.`)),
-            h('div', { class: 'provider' }, h('strong', null, 'Microsoft 365 / Outlook'),
-              keyField('Microsoft application (client) ID', providers.settings.msId, providers.settings.setMsId, 'Microsoft application (client) ID'),
-              h('button', { class: 'btn primary', onclick: () => connectCalendar('microsoft').then(draw) }, 'Connect Microsoft'),
-              help(`Azure portal → App registrations → New: accounts in any organisational directory and personal Microsoft accounts; platform Single-page application with redirect URI ${location.origin + location.pathname}; API permission Calendars.ReadWrite (delegated). Paste the Application (client) ID. Sign-in stays refreshed in the background.`))]));
+          : [h('p', { class: 'small muted' }, 'Sign in to your calendar account and tap Allow. Vdex only touches the “Vdex bookings” calendar it makes.'),
+            h('div', { class: 'stack cloud-choices' },
+              calChoice('google', 'Google Calendar', 'About once an hour Google asks again: tap Sync now here.'),
+              calChoice('microsoft', 'Outlook / Microsoft 365', 'Personal accounts work straight away; work accounts may need IT approval. About once a day, tap Sync now here.'))]));
   };
   draw();
   const un1 = onCalChange(draw), un2 = store.subscribe(() => { if (document.activeElement?.tagName !== 'INPUT') draw(); });

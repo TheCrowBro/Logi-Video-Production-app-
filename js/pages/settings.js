@@ -1,5 +1,6 @@
 // Settings: everything that isn't a record — storage, calendar links, display, field-tool defaults, backups, about.
 import { h, toast, nodes } from '../util.js';
+import { acceptance } from '../terms.js';
 import { db, update } from '../store.js';
 import * as store from '../store.js';
 import { storagePanel, backupPanel } from '../storage-ui.js';
@@ -7,7 +8,7 @@ import { displayPanel, prefsSummary } from '../a11y.js';
 import { calendarPanel, calState } from '../calendar.js';
 import { openInstallHelp, installState } from '../install.js';
 import { startTour } from '../tour.js';
-import { VERSION, BUILD, BUILT, REPO } from '../version.js';
+import { VERSION, BUILD, BUILT } from '../version.js';
 import { updatePanel } from '../update.js';
 import * as notify from '../notify.js';
 import { templatesPanel, projectTemplatesPanel, projectTemplates } from '../workflow.js';
@@ -24,6 +25,10 @@ export const settings = {
   id: 'settings', label: 'Settings', icon: '⚙️',
   render(root) {
     const panels = [storagePanel(), calendarPanel(), securityPanel(), updatePanel()];
+    // The licence (js/licence.js): it shows itself only once licences are switched on.
+    const licenceSlot = h('div', { class: 'licence-slot' });
+    let licence = null, gone = false;
+    import('../licence.js').then(m => { if (gone) return; licence = m.licencePanel(); licenceSlot.replaceChildren(licence.el); }).catch(() => {});
     const display = displayPanel({ onTour: () => startTour() });
     // Sections remember whether you opened or closed them, so a saved setting or a sync does not fold the page up.
     const section = (title, status, body, open = false) => {
@@ -37,7 +42,7 @@ export const settings = {
     const calStatus = cs.provider ? `${cs.provider === 'google' ? 'Google' : 'Microsoft'} · ${calState.status}` : cs.feed ? 'live feed on' : 'not linked';
     root.append(
       h('div', { class: 'page-head' }, h('h1', null, 'Settings')),
-      section('Storage & sync', c.adapter ? `${c.adapter.label} · ${c.status}` : 'this device only', panels[0].el, !c.adapter),
+      section('Storage & sync', c.adapter ? `${c.adapter.label} · ${c.paused ? 'paused' : c.status}` : 'this device only', panels[0].el, !c.adapter),
       section('Security', lockEnabled() ? `PIN set${(lockConfig() || {}).bio ? ' · fingerprint / face' : ''}` : '⚠ no PIN', panels[2].el),
       section('Calendar & email', calStatus, panels[1].el),
       section('Display & accessibility', prefsSummary(), display.el),
@@ -50,19 +55,27 @@ export const settings = {
       section('Project templates', projectTemplates().length ? `${projectTemplates().length} of yours` : 'none yet', projectTemplatesPanel()),
       section('Workflow templates', Object.keys(db.templates || {}).filter(k => k !== 'updatedAt').length ? 'customised' : 'defaults', templatesPanel()),
       section('Profile', db.profile.name || 'not set', profilePanel()),
-      !installState().standalone && section('Install', installState().canPrompt ? 'ready to install' : 'see how', h('div', { class: 'stack' },
+      installState().standalone ? '' : section('Install', installState().canPrompt ? 'ready to install' : 'see how', h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, 'Vdex runs in the browser as it is. Installing adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline.'),
         h('button', { class: 'btn primary', onclick: () => { const b = document.getElementById('installBtn'); if (b && !b.hidden) b.click(); else openInstallHelp(); } }, '⤓ Install Vdex'))),
-      section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
+      section('Backups & data', [`${db.bookings.length} bookings · ${db.gear.length} items`, !store.isPaid() ? 'backups with a licence' : backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · '), backupPanel()),
       section('About', 'v' + VERSION + (BUILD !== 'dev' ? ' · ' + BUILD : ''), h('div', { class: 'stack' },
         h('p', { class: 'small muted' }, `Vdex ${VERSION}${BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ' (' + BUILT + ')' : ''}` : ''}. Bookings, crew, kit, venues, insurance, field tools and timecode notes for freelance videographers. Runs entirely in your browser; your data stays on your device and in the storage you link.`),
+        acceptance() && h('p', { class: 'small muted' }, `You agreed to the terms of service on this device on ${new Date(acceptance().at || Date.now()).toLocaleDateString()}.`),
+        licenceSlot,
         panels[3].el,
         h('div', { class: 'actions' },
           h('button', { class: 'btn ghost', onclick: () => startTour() }, '🧭 Take the tour'),
+          h('a', { class: 'btn ghost', href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms of service'),
           h('a', { class: 'btn ghost', href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy'),
-          h('a', { class: 'btn ghost', href: 'vendor/LICENSES.md', target: '_blank', rel: 'noopener' }, 'Open-source licences'),
-          h('a', { class: 'btn ghost', href: REPO, target: '_blank', rel: 'noopener noreferrer' }, 'Source on GitHub')))));
-    return () => panels.forEach(p => p.destroy && p.destroy());
+          h('a', { class: 'btn ghost', href: 'vendor/LICENSES.md', target: '_blank', rel: 'noopener' }, 'Open-source licences')))));
+    // A sign-in changes what Backups & data says it can do: update its summary in place (the page is not redrawn).
+    const unPaid = store.subscribe(reason => {
+      if (reason !== 'licence') return;
+      const s = [...root.querySelectorAll('details.settings-section')].find(x => x.querySelector('.ss-title')?.textContent === 'Backups & data');
+      const st = s && s.querySelector('.ss-status'); if (st) st.textContent = [`${db.bookings.length} bookings · ${db.gear.length} items`, !store.isPaid() ? 'backups with a licence' : backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · ');
+    });
+    return () => { gone = true; unPaid(); panels.forEach(p => p.destroy && p.destroy()); if (licence) licence.destroy(); };
   },
 };
 

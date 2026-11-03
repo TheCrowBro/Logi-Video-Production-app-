@@ -1,0 +1,8 @@
+{
+  "name": "vdex-cloudflare",
+  "private": true,
+  "description": "Pins the Wrangler version that deploys the website (see wrangler.jsonc).",
+  "devDependencies": {
+    "wrangler": "4.151.1"
+  }
+}

@@ -7,12 +7,12 @@ import * as C from './crypto.js';
 import { haptic } from './a11y.js';
 
 const CFG = 'logi-lock', VAULT = 'logi-vault', DB = 'logi-db-v1';
-const SEALED = ['logi-dbx-token', 'logi-webdav', 'logi-loc', 'logi-wx']; // secrets and private settings that live outside the database
+const SEALED = ['logi-dbx-token', 'logi-ms-token', 'logi-google-tokens', 'logi-webdav', 'logi-loc', 'logi-wx', 'logi-cloud-who', 'logi-google-email', 'logi-icloud-session']; // secrets and private settings that live outside the database
 export const AUTO_LOCK = [[0, 'Straight away'], [1, 'After 1 minute'], [5, 'After 5 minutes'], [15, 'After 15 minutes'], [-1, 'Only when Vdex is closed']];
 const WAITS = [[12, 900], [9, 300], [7, 60], [5, 30]]; // wrong attempts → seconds before the next try
 export const WIPE_AT = 10;
 
-const S = { cfg: null, key: null, raw: null, locked: false, screen: null, hiddenAt: 0, timer: null, vaultRev: -1, extras: {}, extrasJson: '', pending: null, op: Promise.resolve(), resolveBoot: null, listeners: new Set(), entry: '', checking: false, keys: null };
+const S = { cfg: null, key: null, raw: null, locked: false, screen: null, hiddenAt: 0, timer: null, vaultRev: -1, extras: {}, extrasJson: '', vaultExtras: null, pending: null, op: Promise.resolve(), resolveBoot: null, listeners: new Set(), entry: '', checking: false, keys: null };
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { /* ignore */ } };
 const readCfg = () => { try { const c = JSON.parse(lsGet(CFG)); return c && c.pin ? c : null; } catch { return null; } };
@@ -31,11 +31,12 @@ async function writeVault(force = false) {
   if (!S.key) return;
   const rev = store.revision();
   if (!store.isSealed()) { S.extras = extrasNow(); S.extrasJson = JSON.stringify(S.extras); } // while sealed the plaintext copies are gone: keep what we had
-  if (!force && S.vaultRev === rev && lsGet(VAULT)) return;
-  const db = store.serialize();
+  // A sign-in can change with no change to the data (iCloud's session changes with every request): rewrite then too.
+  if (!force && S.vaultRev === rev && lsGet(VAULT) && S.vaultExtras === S.extrasJson) return;
+  const db = store.serialize(), extrasJson = S.extrasJson;
   const box = await C.encrypt(S.key, JSON.stringify({ db, extras: S.extras }));
   lsSet(VAULT, JSON.stringify({ v: 1, iv: box.iv, ct: box.ct }));
-  S.vaultRev = rev; S.lastDb = db;
+  S.vaultRev = rev; S.lastDb = db; S.vaultExtras = extrasJson; // exactly what the vault now holds
 }
 const scheduleVault = () => { if (!S.key) return; clearTimeout(S.pending); S.pending = setTimeout(() => chain(() => writeVault()), 200); };
 
@@ -43,7 +44,7 @@ const scheduleVault = () => { if (!S.key) return; clearTimeout(S.pending); S.pen
 // is synchronous, which matters on the way out of a page, where nothing asynchronous gets to finish.
 function sealSync() {
   if (!S.key || store.isSealed()) return true;
-  const current = lsGet(VAULT) && store.serialize() === S.lastDb && JSON.stringify(extrasNow()) === S.extrasJson;
+  const current = lsGet(VAULT) && store.serialize() === S.lastDb && JSON.stringify(extrasNow()) === S.vaultExtras;
   if (!current) return false;
   for (const k of [DB, ...sealedKeys()]) lsSet(k, null);
   store.setSealed(true);
@@ -67,7 +68,7 @@ async function unseal(boot = false) {
   if (raw) {
     const { db, extras } = JSON.parse(await C.decryptText(S.key, JSON.parse(raw)));
     if (S.unloading) return; // the page went away while decrypting: leave the storage sealed
-    S.extras = extras || {}; S.extrasJson = JSON.stringify(S.extras); S.lastDb = db;
+    S.extras = extras || {}; S.extrasJson = JSON.stringify(S.extras); S.lastDb = db; S.vaultExtras = S.extrasJson;
     for (const [k, v] of Object.entries(S.extras)) if (lsGet(k) == null) lsSet(k, v);
     if (boot) { const have = lsGet(DB); if (have == null || dbTime(db) > dbTime(have)) lsSet(DB, db); }
   }
@@ -284,6 +285,7 @@ export async function gate() {
 
 export function init() {
   store.subscribe(() => { if (S.key && !store.isSealed()) scheduleVault(); });
+  addEventListener('vdex-secrets', () => { if (S.key && !store.isSealed()) scheduleVault(); }); // a sign-in changed on its own
   document.addEventListener('visibilitychange', () => {
     if (!S.cfg || S.unloading) return;
     const m = S.cfg.autoLock == null ? 1 : S.cfg.autoLock;

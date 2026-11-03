@@ -21,9 +21,9 @@ plugins {
 }
 
 def twaManifest = [
-    applicationId: 'io.github.thecrowbro.vdex',
-    hostName: 'thecrowbro.github.io', // The domain being opened in the TWA.
-    launchUrl: '/Logi-Video-Production-app-/index.html', // The start path for the TWA. Must be relative to the domain.
+    applicationId: 'app.crowmade.vdex',
+    hostName: 'vdex.crowmade.app', // The domain being opened in the TWA.
+    launchUrl: '/index.html?src=play', // The start path for the TWA. Must be relative to the domain.
     name: 'Vdex', // The application name.
     launcherName: 'Vdex', // The name shown on the Android Launcher.
     themeColor: '#14110F', // The color used for the status bar.
@@ -52,13 +52,13 @@ def twaManifest = [
 
 android {
     compileSdkVersion 36
-    namespace "io.github.thecrowbro.vdex"
+    namespace "app.crowmade.vdex"
     defaultConfig {
-        applicationId "io.github.thecrowbro.vdex"
+        applicationId "app.crowmade.vdex"
         minSdkVersion 26
         targetSdkVersion 36
         versionCode 1
-        versionName "1.2.0"
+        versionName "1.3.0"
 
         // The name for the application
         resValue "string", "appName", twaManifest.name
@@ -76,14 +76,14 @@ android {
             // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
             // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
             // the TWA, as it will probably give a better user experience for non-mobile devices.
-            resValue "string", "webManifestUrl", 'http://127.0.0.1:8765/manifest.webmanifest'
+            resValue "string", "webManifestUrl", 'https://vdex.crowmade.app/manifest.webmanifest'
         
 
         
 
         
             // The data for the app to support web share target.
-            resValue "string", "shareTarget", '{\\"action\\":\\"/Logi-Video-Production-app-/share\\",\\"method\\":\\"POST\\",\\"enctype\\":\\"multipart/form-data\\",\\"params\\":{\\"title\\":\\"title\\",\\"text\\":\\"text\\",\\"files\\":[{\\"name\\":\\"file\\",\\"accept\\":[\\".docx\\",\\".txt\\",\\".md\\",\\".fountain\\",\\"text/plain\\",\\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\\"]}]}}'
+            resValue "string", "shareTarget", '{\\"action\\":\\"https://vdex.crowmade.app/share\\",\\"method\\":\\"POST\\",\\"enctype\\":\\"multipart/form-data\\",\\"params\\":{\\"title\\":\\"title\\",\\"text\\":\\"text\\",\\"files\\":[{\\"name\\":\\"file\\",\\"accept\\":[\\"text/plain\\",\\"text/markdown\\",\\"text/x-markdown\\",\\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\\"]}]}}'
         
 
         // The hostname is used when building the intent-filter, so the TWA is able to

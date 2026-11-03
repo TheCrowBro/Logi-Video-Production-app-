@@ -4,16 +4,19 @@ This is the step-by-step for putting Vdex in the Google Play store, written for 
 
 **Do this on a computer if you can.** Google's Play Console works in a phone browser, but it is a lot of forms, and a bigger screen helps.
 
+**First, the website's own address.** The Android app opens https://vdex.crowmade.app, so set that address up before anything else: follow [cloudflare.md](cloudflare.md). Until it loads, the app shows an error.
+
 ## What you will paste or upload
 
 | What | Where it is |
 |---|---|
-| Privacy policy address | https://thecrowbro.github.io/Logi-Video-Production-app-/privacy.html |
-| The app file for Google Play (`vdex-android.aab`) | https://github.com/TheCrowBro/Logi-Video-Production-app-/releases/tag/android-latest |
-| The app file to try on a phone first (`vdex-android.apk`) | same page |
-| Icon, 512 × 512 | https://thecrowbro.github.io/Logi-Video-Production-app-/store/android/icon-512.png |
-| Feature graphic, 1024 × 500 | https://thecrowbro.github.io/Logi-Video-Production-app-/store/android/feature-graphic.jpg |
-| Phone and tablet screenshots | https://thecrowbro.github.io/Logi-Video-Production-app-/store/android/screenshots/ (the files are listed at the end of this page) |
+| Privacy policy address | https://vdex.crowmade.app/privacy.html |
+| Terms of service address | https://vdex.crowmade.app/terms.html |
+| The app file for Google Play (`vdex-android.aab`) | the newest run at https://github.com/TheCrowBro/Logi-Video-Production-app-/actions/workflows/android.yml → **Artifacts** at the bottom → `vdex-android` (a zip; kept for 3 days, so press **Run workflow** there for a fresh one). Every build has the same version number, so Google Play takes it only once: later releases reuse the uploaded bundle (Step 9) or need a raised version (see "Later: updates") |
+| Icon, 512 × 512 | https://github.com/TheCrowBro/Logi-Video-Production-app-/blob/main/store/android/icon-512.png (press the download button) |
+| Feature graphic, 1024 × 500 | https://github.com/TheCrowBro/Logi-Video-Production-app-/blob/main/store/android/feature-graphic.jpg |
+| Phone and tablet screenshots | https://github.com/TheCrowBro/Logi-Video-Production-app-/tree/main/store/android/screenshots (the files are listed at the end of this page) |
+| The app's package name (it can never change) | `app.crowmade.vdex` |
 | The texts | the "Texts to paste" section below |
 
 ## Step 1. Open a Google Play developer account
@@ -23,17 +26,25 @@ This is the step-by-step for putting Vdex in the Google Play store, written for 
 3. Pay the one-time registration fee (US $25) and complete the identity check. Google asks for an ID document and may take a few days to confirm it.
 4. Google also asks for a contact email that will be shown publicly on the store page, and a phone number for its own use.
 
+## Step 1b. Your developer details (one time)
+
+1. **Trader status.** Play Console → **Manage account** → **Account details** → **About you**, and declare that you are a trader (selling Vdex licences makes you one). Google then shows your name, a phone number and your legal address on the store page. That address must be a real street address that matches your ID: Google does not accept a PO box, so on a personal account it is normally your home address. (Showing a different address needs an organization account with its own registered address.) The phone number is entered separately, so a business number is fine.
+
+The Android app is a free download (people pay for the licence on the website), so Google's payments profile, bank account, tax form, 15% fee programme and Japan's payment authorization are not needed.
+
 ## Step 2. Let GitHub sign the real app (one time)
 
 The app has to be signed with a key that stays the same for every version, so that Google and phones accept each update. That key already exists. GitHub holds an encrypted copy, and the passphrase that unlocks it was sent to you privately in our chat, together with a backup copy of the key. Keep both in a password manager.
 
-Until the passphrase is in GitHub, the builds on the release page are signed with a temporary key. They are fine for trying on a phone, but Google Play will not accept them.
+Until the passphrase is in GitHub, the builds are signed with a temporary key, and GitHub keeps no app file from them. Never upload a file from such a build to Google Play: Play would accept it, because the first upload sets the key it expects from then on, and every real build after it would be refused until Google resets the key, which takes days.
 
 1. Open https://github.com/TheCrowBro/Logi-Video-Production-app-/settings/secrets/actions
 2. Press **New repository secret**.
 3. Name: `ANDROID_KEY_PASSPHRASE`. Secret: paste the passphrase exactly as it was sent to you. Press **Add secret**.
 4. Open https://github.com/TheCrowBro/Logi-Video-Production-app-/actions/workflows/android.yml and press **Run workflow**, then the green **Run workflow** button.
-5. About five minutes later the release page (link in the table above) has new files. Its notes say "Signed with the upload key". That is the build to give Google.
+5. About five minutes later the run turns green. Open it: its summary says "Signed with the upload key", and **Artifacts** at the bottom has `vdex-android`. That zip holds `vdex-android.aab`, the build to give Google.
+
+The app is no longer on a public download page on GitHub: it is distributed through Google Play. Each build's `.aab` stays in its run's **Artifacts** for 3 days. While the code on GitHub is public, anyone signed in to GitHub could still download it, which matters little: it cannot be installed on a phone as it is, and it only opens the website. Once the code is private, only you can.
 
 If the passphrase is ever lost, say so: a new key can be made, and Google has a process for registering a replacement upload key that takes a couple of days.
 
@@ -41,6 +52,9 @@ If the passphrase is ever lost, say so: a new key can be made, and Google has a 
 
 1. In the Play Console press **Create app**.
 2. App name: `Vdex`. Default language: English. App or game: **App**. Free or paid: **Free**.
+
+   > **Free, because the licence is the payment.** The Android app has the same 30-day trial as the website, then asks people to sign in with the licence they bought on vdex.crowmade.app (one licence covers 3 devices, and the phone takes one of them). Charging on Google Play too would make people pay twice. Google never lets an app offered for free become a paid one, so this choice is for good: if you would rather sell the Android app on Google Play instead, say so before creating the app.
+
 3. Tick the declarations (developer programme policies and US export laws) and press **Create app**.
 
 ## Step 4. The store listing
@@ -54,7 +68,9 @@ Left menu → **Grow users** → **Store presence** → **Main store listing** (
 5. **Phone screenshots:** upload the `phone-*.jpg` files. **7-inch and 10-inch tablet screenshots:** upload the `tablet-*.jpg` files for both.
 6. Save.
 
-Then **Store settings**: app category **Productivity**; contact email: the address you want shown; website: `https://thecrowbro.github.io/Logi-Video-Production-app-/`.
+Then **Store settings**: app category **Productivity**; contact email: the address you want shown; website: `https://vdex.crowmade.app/`.
+
+Then **Monetize with Play** → **Products** → **App pricing**: leave the app **Free**. The Android app has the same 30-day trial as the website, then people sign in with the email address of the licence they bought on vdex.crowmade.app (20 USD, for up to 3 devices; the phone takes one of the 3 places). Charging on Google Play as well would make them pay twice. Inside the Android app Vdex never shows a price or a link to buy, because Google Play only allows buying through Google Play inside a Play app; people buy on the website.
 
 ## Step 5. The questionnaires
 
@@ -64,7 +80,7 @@ Left menu → **Monitor and manage** → **Policy and programmes** → **App con
 |---|---|
 | Privacy policy | The privacy policy address from the table above. |
 | Ads | **No, my app does not contain ads.** |
-| App access | **All functionality is available without special access.** If asked for notes: "No account is needed. The PIN lock is optional and only set by the user." |
+| App access | **All or some functionality is restricted.** Instructions for Google: "Everything except cloud storage and saving backup or spreadsheet files works without signing in for 30 days from the first time the app is opened. Those, and everything after 30 days, need a Vdex licence: press Sign in (Settings → About) and type the email address below; Vdex emails a 6-digit code to it." Then give the login of an email account you made for Google's reviewers (for example a new Gmail address and its password) that has a free licence: make it in the generator page with that email address (it is linked by itself). The PIN lock is optional and only set by the user. |
 | Content rating | Start the questionnaire, enter your email, choose **Utility, Productivity, Communication, or Other**, and answer **No** to every question (no violence, no sexual content, no bad language, no drugs, no gambling, no user-to-user interaction, no location sharing with other users, no purchases). The rating comes out as "Everyone". |
 | Target audience and content | Age group: **18 and over** only. Designed for children: **No**. |
 | News apps | **No.** |
@@ -83,7 +99,7 @@ Google requires new personal accounts to run a closed test with at least 12 test
 2. **Testers** tab → **Create email list** → name it, paste the Google account emails of at least 12 coworkers (more is safer, in case some do not install), save, tick the list.
 3. **Releases** tab → **Create new release**.
 4. If Google asks about app signing, keep the default (**Use Google-generated key** / let Google manage the signing key) and continue.
-5. Upload `vdex-android.aab` from the release page (download it to your computer first).
+5. Upload `vdex-android.aab` (from the `vdex-android` zip in the table above; unzip it first). The first upload fixes the app's package name, `app.crowmade.vdex`, for good.
 6. Release notes: `First test build.` Press **Next**, fix anything it flags, then **Save**, **Review release**, and **Start rollout to Closed testing**.
 
 ## Step 7. The testers
@@ -92,17 +108,19 @@ Google requires new personal accounts to run a closed test with at least 12 test
 2. Each of them opens the link while signed in to the same Google account, presses **Become a tester**, then follows the Play Store link to install Vdex.
 3. Ask them to keep it installed and to open it now and then for two weeks. Google counts testers who stay opted in for 14 days in a row, and it looks for some real use.
 
+**Testers install it free.** The app is a free download with a 30-day trial, which covers the 14-day test.
+
 ## Step 8. Remove the browser bar at the top (asset link)
 
 The Android app opens the website inside itself. Android shows a thin browser bar at the top until the website proves that the app belongs to it. That proof is a small file on the website containing the fingerprint of Google's signing certificate for the app. Two things are needed:
 
 1. **The fingerprint.** After the first upload, in the Play Console go to **Test and release** → **Setup** → **App signing** (sometimes under "App integrity"). Under **App signing key certificate**, copy the **SHA-256 certificate fingerprint** and send it to me. I add it to the website file.
-2. **The website on its own address.** Android looks for the proof at the root of the site's domain. The current address is a shared GitHub one, so the proof file cannot sit at the root. Once Vdex has its own domain name (see the README), the file is served automatically. Without this, the app still works fully; it just shows that thin bar.
+2. **The website on its own address.** Android looks for the proof at the root of the site's own domain, https://vdex.crowmade.app/.well-known/assetlinks.json, which the website already serves. Without the fingerprint, the app still works fully; it just shows that thin bar.
 
 ## Step 9. Apply for production, then publish
 
 1. After the 14 days, the Play Console dashboard shows **Apply for production access**. Press it and answer the short questions about the test: what was tested, what feedback came back, what changed. Google answers within a few days.
-2. Then **Test and release** → **Production** → **Create new release**. Upload the current `vdex-android.aab` from the release page, choose the countries (all), **Review release**, **Start rollout to Production**.
+2. Then **Test and release** → **Testing** → **Closed testing** → `Coworkers` → **Promote release** → **Production**. This sends the same bundle the testers used. Don't upload a new file: every build has the same version number, and Play refuses a version number it has already seen. (The same thing another way: **Production** → **Create new release** → **Add from library**, and pick that bundle.) Choose the countries: all of them. Then **Review release** and **Start rollout to Production**.
 3. Google reviews a first production release. It usually takes a few days, occasionally a week. After that Vdex is in the store.
 
 ## Later: updates
@@ -120,7 +138,7 @@ Shoots, crew, kit, call sheets, timecode notes and invoices, all on your phone.
 **Full description:**
 
 ```
-Vdex is the videographer's deck: everything about your shoots in one place, on your phone and your computer, with no account to make and nothing to pay.
+Vdex is the videographer's deck: everything about your shoots in one place, on your phone and your computer, with no subscription and no ads. Free to try for 30 days, then sign in with your Vdex licence.
 
 BOOKINGS
 A calendar of your shoots. Each one holds the client, the contacts, the address, the crew and the kit you're taking, a pipeline from enquiry to paid, and the hours you worked.
@@ -128,8 +146,11 @@ A calendar of your shoots. Each one holds the client, the contacts, the address,
 CALL SHEETS
 Built in the app from the booking, with the schedule, the weather and the sunset time, the crew list and the venue notes. Edit it on the spot, then email it to the crew or print it.
 
+STRIPBOARD
+Turn the script into colour-coded scene strips (white interior day, yellow exterior day, blue interior night, green exterior night) with the cast and page counts, and drag them into shooting days. Each day adds up its pages, and the call sheet lists the day's scenes.
+
 QUOTES AND INVOICES
-Vdex suggests the lines from the shoot: days, crew rates, kit, deliverables. Send the client a link that opens the invoice with Pay buttons for PayPal, Venmo, Cash App, your card payment page or a bank transfer, record payments as they arrive, and see what is still unpaid.
+Vdex suggests the lines from the shoot: days, crew rates, kit, deliverables. Or tick them from your own price list, which starts from typical freelance rates where you work. Send the client a link that opens the invoice with Pay buttons for PayPal, Venmo, Cash App, your card payment page or a bank transfer, record payments as they arrive, and see what is still unpaid.
 
 CREW, EQUIPMENT, VENUES, INSURANCE
 Your people and how to reach them. Everything you own, with serial numbers, values, warranties and a service log. Kits for the jobs you do often. The places you film, with access notes and a map. Your policies and their renewal dates.
@@ -138,30 +159,33 @@ ON SET
 Sunrise and sunset, a white balance reader, a sound level meter and a range finder. Timecode notes stamped with the camera's clock, synced from the audio feed, exported for the editor.
 
 YOURS, PRIVATELY
-Vdex keeps everything on your device. Set a PIN and it locks with your fingerprint or face. Link your own Dropbox, Google Drive or OneDrive to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
+Vdex keeps everything on your device. Set a PIN and it locks with your fingerprint or face. With a licence, link your own Google Drive or iCloud (or Dropbox or OneDrive) to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
 
 Works offline. Tap ? on any page for a walkthrough.
 ```
 
 ## Data safety answers
 
-Google asks what the app does with people's information. Vdex sends nothing to us. One feature sends information to an outside service: the weather forecast, which sends the coordinates of the shoot location, or of the phone's own location if that is what is set, to Open-Meteo. It is used once and not kept. The honest declaration is therefore:
+Google asks what the app does with people's information. Two things leave the phone. The weather forecast sends the coordinates of the shoot location, or of the phone's own location if that is what is set, to Open-Meteo, which uses them once and does not keep them. And the licence: after the 30-day trial, signing in sends the email address the person types to Vdex's licence server, which keeps which email addresses belong to which licences and emails them a sign-in code; the phone then takes one of the licence's places, which sends a random number made for that installation. The honest declaration is therefore:
 
 | Question | Answer |
 |---|---|
 | Does your app collect or share any of the required user data types? | **Yes** |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** |
-| Do you provide a way for users to request that their data is deleted? | **No, but the data isn't collected in a way that can be deleted** (choose the option that says the data is processed ephemerally / not stored). If the form insists on yes or no, answer **Yes** and point to Settings → Backups & data → Erase everything. |
+| Do you provide a way for users to request that their data is deleted? | **Yes**: by email, at the address in the privacy policy. |
+| Data types: **Personal info → Email address** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **No**. Required or optional: **Required** (to keep using the app after the 30-day trial). Purposes: **App functionality**, **Account management**. |
+| Data types: **Device or other IDs** | Collected: **Yes** (a random number made for the installation, to count the licence's devices). Shared: **No**. Processed ephemerally: **No**. Required. Purpose: **App functionality**. |
 | Data types: **Location → Approximate location** and **Precise location** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **Yes**. Required or optional: **Optional** (users can choose whether to use it). Purpose: **App functionality**. |
-| Every other data type (personal info, financial info, messages, photos, files, contacts, app activity, device IDs…) | **Not collected.** |
+| Every other data type (financial info, messages, photos, files, contacts, app activity…) | **Not collected.** |
 
-Why "not collected" for the rest: everything a user types stays on the device. When a user links their own Dropbox, Google Drive or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer. The privacy policy explains all of it.
+Why "not collected" for the rest: everything a user types into Vdex about their work stays on the device. When a user links their own Google Drive, iCloud, Dropbox or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer. Update these answers before switching website sign-in on (docs/selling-desktop.md, part 9). The privacy policy explains all of it.
 
 If a Google reviewer asks for changes to this section, send me what they wrote and I will adjust the wording.
 
 ## If something goes wrong
 
-- **"The Android App Bundle was signed with the wrong key"** on the second upload: the first upload was a temporary-key build. Finish Step 2, re-run the workflow, and upload the new file. If a temporary-key build already went live, say so: Google can reset the upload key.
+- **"The Android App Bundle was signed with the wrong key"**: the first upload was signed with another key. Tell me: Google can reset the upload key (it takes a few days), and the version number has to go up before the next upload.
+- **"Version code 1 has already been used"**: Play already has this bundle. Use **Promote release** or **Add from library** instead of uploading (Step 9). A new file is only accepted after the version number goes up; tell me and I raise it.
 - **The upload is rejected for the target Android version:** tell me; I will update the Android project and rebuild.
 - **Testers cannot find the app:** they must open the opt-in link while signed in with the exact Google account that is on the list, and the release must have finished rolling out (it can take a few hours the first time).
 - **The dashboard does not offer "Apply for production access":** the 14 days have not completed with 12 testers opted in the whole time. Add more testers and wait.

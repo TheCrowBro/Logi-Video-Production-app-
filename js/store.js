@@ -1,8 +1,8 @@
 // Single JSON database. Lives in localStorage for speed/offline, and is mirrored to a
 // file you pick inside any cloud-synced folder (Google Drive, Dropbox, OneDrive, iCloud Drive...)
 // using the File System Access API where available. Export/Import covers everything else.
-import { uid, ymd } from './util.js';
-import { fileAdapter, dropboxAdapter, gdriveAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish } from './providers.js';
+import { uid, ymd, toast } from './util.js';
+import { fileAdapter, dropboxAdapter, gdriveAdapter, icloudAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish, icloudFinish, microsoftFinish } from './providers.js';
 
 const KEY = 'logi-db-v1';
 const blank = () => ({
@@ -14,6 +14,7 @@ const blank = () => ({
   templates: {}, // per job type: edited checklist lines per stage
   projectTemplates: [], // the user's own job types: defaults for a new booking (times, kit, crew, deliverables, schedule…)
   billing: { updatedAt: 0 }, // rates, numbering, tax and payment terms for quotes and invoices
+  priceList: { list: null, region: '', updatedAt: 0 }, // the lines picked into quotes and invoices (null: not set up yet)
 });
 
 function load() {
@@ -42,6 +43,7 @@ function normalise(raw) {
     templates: raw.templates && typeof raw.templates === 'object' ? raw.templates : {},
     projectTemplates: Array.isArray(raw.projectTemplates) ? raw.projectTemplates : [],
     billing: raw.billing && typeof raw.billing === 'object' ? raw.billing : { updatedAt: 0 },
+    priceList: raw.priceList && typeof raw.priceList === 'object' ? raw.priceList : b.priceList,
   };
 }
 
@@ -51,7 +53,8 @@ let sealed = false, dirty = false, pendingSync = false, rev = 0;
 export const revision = () => rev;
 export const isSealed = () => sealed;
 export const serialize = () => JSON.stringify(db);
-export function setSealed(on) { if (on && writeQueued) writeNow(); sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; schedulePush(); } } }
+// Unlocking runs what waited: deferred work is a full sync, which reads and merges what is in the cloud before writing.
+export function setSealed(on) { if (on && writeQueued) writeNow(); sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; sync({ quiet: true }); } } }
 export function flush() { rev++; writeNow(); }
 export function reload() { db = load(); rev++; emit(); }
 export const touch = () => { rev++; emit(); };
@@ -73,17 +76,31 @@ function persistLocal() {
   if (!writeQueued) { writeQueued = true; queueMicrotask(writeNow); }
 }
 
-// Mutate the db inside fn, then save + sync.
+// Vdex is read-only when its free trial is over and there is no licence (js/licence.js sets this gate). Every change
+// goes through update(), so this is the one place that refuses them; opening, searching and printing keep working
+// (backups, spreadsheets and cloud storage come with a licence: setPaid below).
+let gate = null;
+export const setGate = fn => { gate = typeof fn === 'function' ? fn : null; };
+
+// Whether a change would be accepted now (and, when not, the gate explains why). Forms check it before closing.
+export const canChange = () => !gate || gate({ form: true });
+
+// Redraws the page from what is stored (after a refused change, so a ticked box shows the stored value again).
+export const redraw = () => emit();
+
+// Mutate the db inside fn, then save + sync. Returns false when the change was refused.
 export function update(fn) {
+  if (gate && !gate()) return false;
   fn(db);
   db.updatedAt = Date.now();
   persistLocal();
   emit();
   schedulePush();
+  return true;
 }
 
 export function upsert(list, item) {
-  update(d => {
+  return update(d => {
     const arr = d[list];
     const i = arr.findIndex(x => x.id === item.id);
     const stamped = { ...item, id: item.id || uid(), updatedAt: Date.now() };
@@ -92,7 +109,7 @@ export function upsert(list, item) {
 }
 
 export function remove(list, id) {
-  update(d => {
+  return update(d => {
     d[list] = d[list].filter(x => x.id !== id);
     d.deleted[id] = Date.now();
     if (list === 'gear') { d.bookings.forEach(b => { b.gear = (b.gear || []).filter(g => g !== id); if (b.gearQty) delete b.gearQty[id]; }); d.kits.forEach(k => { if (k.gearQty) delete k.gearQty[id]; }); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
@@ -211,6 +228,7 @@ export function loadSample() {
 /* ------------------------------ cloud sync ------------------------------ */
 
 export const cloud = {
+  notice: '', // why the last sign-in did not finish, shown in the storage panel
   supported: typeof window.showSaveFilePicker === 'function', // local-file linking
   adapter: null,
   auxName: '', feedUrl: '', feedError: '', // calendar feed (see calendar.js)
@@ -236,15 +254,55 @@ const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localSt
 
 function setStatus(status, error = '') { cloud.status = status; cloud.error = error; emit('status'); }
 
+// Cloud storage and saving data files (backups, spreadsheets) come with a licence; js/licence.js says whether this
+// device has one. Without one (the trial included) linking storage and exporting are refused with an explanation, and
+// a storage linked before is paused: nothing is copied either way, and syncing starts again once there is a licence.
+// Until the licence is known, the last answer this device saw is used, so a paused link stays paused from the start.
+let paid = lsGet('vdex-paid') !== '0', paidPrompt = null;
+cloud.paused = !paid;
+export const isPaid = () => paid;
+export function setPaid(on, prompt) {
+  if (prompt) paidPrompt = prompt;
+  const was = paid; paid = !!on; cloud.paused = !paid;
+  lsSet('vdex-paid', paid ? '1' : '0');
+  if (was === paid) return;
+  // 'licence': panels that show it (storage) redraw themselves; the page is not redrawn, so focus stays where it is.
+  if (paid) { if (cloud.adapter) sync(); else emit('licence'); }
+  else { clearTimeout(timer); if (cloud.adapter) setStatus('paused'); else emit('licence'); }
+}
+// True when this device may (licensed, or licences not switched on); otherwise explains, offering a licence, and false.
+export function requirePaid(what) {
+  if (paid) return true;
+  if (paidPrompt) paidPrompt(what);
+  else import('./licence.js').then(m => m.initLicence()).then(() => (paidPrompt ? paidPrompt(what) : toast('This comes with a Vdex licence.'))).catch(() => toast('This comes with a Vdex licence.'));
+  return false;
+}
+
 export async function initCloud() {
   cloud.feedUrl = lsGet('logi-feed-url') || '';
+  // Coming back from a sign-in page: finish it, or say why it did not work and leave nothing half-linked.
+  const say = msg => setTimeout(() => toast(msg), 700);
   try {
-    if (await dropboxFinish()) { lsSet('logi-provider', 'dropbox'); }
-  } catch (e) { setStatus('error', e.message); }
+    if (await dropboxFinish()) { lsSet('logi-provider', 'dropbox'); cloud.notice = ''; say('Connected to Dropbox'); }
+  } catch (e) { cloud.notice = e.message; say(e.message); }
+  let icloudFirst = false;
+  try {
+    if (icloudFinish()) { lsSet('logi-provider', 'icloud'); cloud.notice = ''; icloudFirst = true; }
+  } catch (e) { cloud.notice = e.message; say(e.message); }
+  try {
+    const intent = await microsoftFinish();
+    if (intent === 'onedrive') { lsSet('logi-provider', 'onedrive'); cloud.notice = ''; say('Connected to OneDrive'); }
+    else if (intent === 'calendar') { update(d => { d.calSync = { ...d.calSync, provider: 'microsoft', updatedAt: Date.now() }; }); say('Connected to Outlook'); import('./calendar.js').then(m => m.syncCalendar({ interactive: false })).catch(() => {}); }
+  } catch (e) {
+    cloud.notice = e.message; say(e.message);
+    if (e.intent === 'onedrive' && e.first && lsGet('logi-provider') === 'onedrive') lsSet('logi-provider', null);
+    if (e.intent === 'calendar' && !db.calSync?.calendarId) update(d => { d.calSync = { ...d.calSync, provider: null, updatedAt: Date.now() }; });
+  }
   try {
     const provider = lsGet('logi-provider');
     if (provider === 'dropbox') cloud.adapter = dropboxAdapter();
     else if (provider === 'gdrive') cloud.adapter = gdriveAdapter();
+    else if (provider === 'icloud') cloud.adapter = icloudAdapter();
     else if (provider === 'onedrive') cloud.adapter = onedriveAdapter();
     else if (provider === 'webdav') cloud.adapter = webdavAdapter();
     else if (cloud.supported) {
@@ -252,6 +310,10 @@ export async function initCloud() {
       if (handle) { const aux = await kv('readonly', s => s.get('auxHandle')); cloud.adapter = fileAdapter(handle, aux || null); cloud.auxName = aux ? aux.name : ''; }
     }
     if (cloud.adapter) await sync();
+    if (icloudFirst) {
+      if (cloud.status === 'synced' || sealed) say('Connected to iCloud'); // behind the PIN lock the first copy waits for the unlock
+      else { const msg = cloud.error || 'iCloud didn’t finish connecting. Tap Connect to try again.'; cloud.adapter?.signOut?.(); cloud.adapter = null; lsSet('logi-provider', null); cloud.notice = msg; setStatus('off'); say(msg); }
+    }
   } catch (e) { setStatus('error', e.message); }
   document.addEventListener('visibilitychange', () => { if (!document.hidden && cloud.adapter && cloud.status === 'synced') sync(); });
 }
@@ -266,6 +328,11 @@ function mergeList(a, b, dead, mergeOne) {
   return [...m.values()].filter(x => !(dead[x.id] > (mergeOne === mergeNote ? nts(x) : ts(x))));
 }
 const newer = (x, y) => (ts(y) > ts(x) ? y : x);
+// A booking follows its newer copy, except its budget, which follows the newer budget: one device can plan costs while
+// another ticks the checklist, and neither loses the other's work.
+const budgetAt = b => Number(b && b.budget && b.budget.updatedAt) || 0, boardAt = b => Number(b && b.board && b.board.updatedAt) || 0;
+// The budget and the stripboard each keep their own time, so a newer one survives a newer edit elsewhere on the booking.
+const mergeBooking = (x, y) => { const base = newer(x, y), other = base === x ? y : x; let out = base; if (budgetAt(other) > budgetAt(base)) out = { ...out, budget: other.budget }; if (boardAt(other) > boardAt(base)) out = { ...out, board: other.board }; return out; };
 const mergeNote = (x, y) => (nts(y) > nts(x) ? y : x);
 // A log's settings (sync point, mode, script…) follow the newer copy; its notes are the union of both.
 export function mergeLog(a, b, globalDead = db.deleted) {
@@ -283,7 +350,7 @@ export function mergeDb(local, remote) {
   const dead = { ...local.deleted };
   for (const [id, t] of Object.entries(remote.deleted || {})) dead[id] = Math.max(dead[id] || 0, t);
   const out = { ...local, deleted: dead };
-  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates']) out[list] = mergeList(local[list] || [], remote[list] || [], dead, newer);
+  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates']) out[list] = mergeList(local[list] || [], remote[list] || [], dead, list === 'bookings' ? mergeBooking : newer);
   out.logs = mergeList(local.logs, remote.logs, dead, (x, y) => mergeLog(x, y, dead));
   out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking
@@ -294,52 +361,69 @@ export function mergeDb(local, remote) {
   }
   out.templates = ts(remote.templates) > ts(local.templates) ? remote.templates : local.templates;
   out.billing = ts(remote.billing) > ts(local.billing) ? remote.billing : local.billing;
+  out.priceList = ts(remote.priceList) > ts(local.priceList) ? remote.priceList : local.priceList; // its own record: a change to the other billing settings never undoes it
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }
 
 // Merge the remote copy in, then push if anything here isn't in it yet. `quiet` skips the "Saving…" flicker (background polls).
-let syncing = false;
-export async function sync({ ask = false, quiet = false } = {}) {
-  const a = cloud.adapter;
+// One sync at a time. A sync asked for while another is running waits for it and then runs, so a fresh link (or a
+// change made meanwhile) is never skipped.
+let syncing = null;
+export async function sync(opts = {}) {
+  while (syncing) await syncing.catch(() => {});
   if (sealed) { pendingSync = true; return; }
-  if (!a || syncing) return;
-  syncing = true;
+  if (!cloud.adapter) return;
+  if (cloud.paused) return setStatus('paused'); // no licence: nothing is read from or written to the storage
+  syncing = runSync(opts);
+  try { return await syncing; } finally { syncing = null; }
+}
+async function runSync({ ask = false, quiet = false } = {}) {
+  const a = cloud.adapter;
   try {
     if (!(await a.ready(ask))) return setStatus('needs-permission');
+    if (sealed) { pendingSync = true; return; } // locked while the sign-in was open: nothing is copied until it is unlocked
     if (!quiet) setStatus('saving');
     const remote = await a.read();
+    if (cloud.paused) return setStatus('paused'); // paused while reading: nothing is merged or written
     if (!remote) return await push();
     const merged = mergeDb(db, normalise(remote));
     const localChanged = JSON.stringify(merged) !== JSON.stringify(db);
     const remoteStale = JSON.stringify(merged) !== JSON.stringify(normalise(remote));
     if (localChanged) { db = merged; persistLocal(); emit(); }
-    if (remoteStale) await push(); else { lsSet('logi-sync-at', String(Date.now())); setStatus('synced'); }
+    if (remoteStale) await push(); else { lsSet('logi-sync-at', String(Date.now())); setStatus(cloud.paused ? 'paused' : 'synced'); }
   } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
-  finally { syncing = false; }
 }
 
 let auxWriter = null;
 export const setAuxWriter = fn => { auxWriter = fn; }; // calendar.js supplies the feed contents
-async function push() {
-  if (!cloud.adapter) return;
+// One copy is written at a time (a timed push and a sync's push never overlap), never while locked, and always to
+// the storage that was linked when it started.
+let pushing = Promise.resolve();
+function push() { const p = pushing.then(pushNow, pushNow); pushing = p.catch(() => {}); return p; }
+async function pushNow() {
+  const a = cloud.adapter; if (!a || cloud.paused) return;
+  if (sealed) { pendingSync = true; return; }
   try {
     setStatus('saving');
-    await cloud.adapter.write(exportJSON());
+    await a.write(exportJSON());
     lsSet('logi-sync-at', String(Date.now()));
-    await autoBackup();
-    if (db.calSync?.feed && auxWriter && cloud.adapter.writeAux) {
-      try { await cloud.adapter.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
+    if (cloud.paused) { if (cloud.adapter === a) setStatus('paused'); return; } // paused meanwhile: no backup or feed after it
+    await autoBackup(a);
+    if (db.calSync?.feed && auxWriter && a.writeAux) {
+      try { await a.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
     }
-    setStatus('synced');
-  } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
+    if (cloud.adapter === a) setStatus(cloud.paused ? 'paused' : 'synced');
+  } catch (e) { if (cloud.adapter === a) setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
 }
 export async function setFeed(on) {
+  if (on) mustBePaid();
   if (on && cloud.adapter?.enableFeed) await cloud.adapter.enableFeed();
   update(d => { d.calSync = { ...d.calSync, feed: !!on, updatedAt: Date.now() }; });
   if (on) await push();
 }
 export async function createFeedFile() { // local-file storage: pick where the feed file lives (same synced folder)
+  mustBePaid();
   const handle = await window.showSaveFilePicker({ suggestedName: 'vdex-bookings.ics', types: [{ description: 'Calendar feed', accept: { 'text/calendar': ['.ics'] } }] });
   await kv('readwrite', s => s.put(handle, 'auxHandle'));
   if (cloud.adapter) cloud.adapter.aux = handle;
@@ -347,6 +431,7 @@ export async function createFeedFile() { // local-file storage: pick where the f
   await push();
 }
 export async function feedLink() {
+  mustBePaid();
   if (!cloud.adapter?.shareLink) throw new Error('No link for this storage');
   await push();
   cloud.feedUrl = await cloud.adapter.shareLink('vdex-bookings.ics');
@@ -355,8 +440,8 @@ export async function feedLink() {
 }
 
 // Once a day, after a change, a dated copy goes next to the database: one file per weekday and one per month.
-async function autoBackup() {
-  const a = cloud.adapter; if (!a || !a.writeExtra) return;
+async function autoBackup(a = cloud.adapter) {
+  if (!a || !a.writeExtra || cloud.adapter !== a) return;
   const now = new Date(), day = ymd(now), month = day.slice(0, 7);
   let last = {}; try { last = JSON.parse(lsGet('logi-backup-cloud')) || {}; } catch { /* none yet */ }
   if (last.day === day) return;
@@ -373,21 +458,28 @@ async function autoBackup() {
 let timer;
 function schedulePush() {
   if (sealed) { pendingSync = true; return; }
-  if (!cloud.adapter || cloud.status === 'needs-permission') return;
+  if (!cloud.adapter || cloud.paused || cloud.status === 'needs-permission') return;
   clearTimeout(timer);
   timer = setTimeout(push, 800);
 }
 
-export const reconnect = () => sync({ ask: true });
+export function reconnectNeeded(msg) { if (cloud.adapter) setStatus('needs-permission', msg || ''); }
+export async function reconnect() { const a = cloud.adapter; if (!a || cloud.paused) return; if (!(await a.ready(true))) return setStatus('needs-permission'); cloud.notice = ''; return sync(); }
 
+// Sign in first, outside the sync lock, and link only once that has worked: a cancelled, abandoned or still-open
+// sign-in leaves nothing half-linked, and tapping Connect again simply starts a fresh one.
+const mustBePaid = () => { if (cloud.paused) throw new Error('Keeping a copy in your cloud storage comes with a Vdex licence.'); };
 async function link(adapter, provider, handle) {
-  cloud.adapter = adapter;
+  mustBePaid();
+  if (!(await adapter.ready(true))) throw new Error('The sign-in didn’t finish. Tap Connect to try again.');
+  cloud.adapter = adapter; cloud.notice = '';
   lsSet('logi-provider', provider);
   if (handle) await kv('readwrite', s => s.put(handle, 'fileHandle'));
-  await sync({ ask: true });
+  await sync();
 }
 
 export async function createCloudFile() {
+  mustBePaid();
   const handle = await window.showSaveFilePicker({ suggestedName: 'vdex-production-db.json', types: [{ description: 'Vdex database', accept: { 'application/json': ['.json'] } }] });
   const a = fileAdapter(handle);
   await a.write(exportJSON()); // new file starts from the current data
@@ -395,17 +487,36 @@ export async function createCloudFile() {
 }
 
 export async function openCloudFile() {
+  mustBePaid();
   const [handle] = await window.showOpenFilePicker({ types: [{ description: 'Vdex database', accept: { 'application/json': ['.json'] } }] });
   await link(fileAdapter(handle), null, handle);
 }
 
-export const connectDropbox = () => dropboxBegin(); // redirects away; initCloud finishes the link on return
-export const connectGdrive = () => link(gdriveAdapter(), 'gdrive');
-export const connectOneDrive = () => link(onedriveAdapter(), 'onedrive');
-export async function connectWebdav() { const a = webdavAdapter(); if (!(await a.ready())) throw new Error('Enter the server address and username first'); await link(a, 'webdav'); if (cloud.status === 'error') { const msg = cloud.error; cloud.adapter = null; lsSet('logi-provider', null); setStatus('off'); throw new Error(msg); } }
+export const connectDropbox = () => { mustBePaid(); return dropboxBegin(); }; // redirects away; initCloud finishes the link on return
+// Link, and if the first sync fails (sign-in cancelled, window blocked, wrong password) go back to unlinked and say why.
+async function linkOrUndo(a, provider) {
+  cloud.notice = '';
+  await link(a, provider);
+  if (cloud.status === 'error' || cloud.status === 'needs-permission') { const msg = cloud.error || 'Sign-in did not finish'; cloud.adapter = null; lsSet('logi-provider', null); setStatus('off'); throw new Error(msg); }
+}
+export const connectGdrive = () => linkOrUndo(gdriveAdapter(), 'gdrive');
+export const connectIcloud = () => linkOrUndo(icloudAdapter(), 'icloud');
+export const connectOneDrive = () => linkOrUndo(onedriveAdapter(), 'onedrive');
+export async function connectWebdav() { const a = webdavAdapter(); if (!(await a.ready())) throw new Error('Enter the server address, your username and the app password first'); await a.ensureFolder(); await linkOrUndo(a, 'webdav'); }
 
+// iCloud only: delete Vdex's copy and backups there, then unlink. This device keeps everything. Nothing new is copied
+// or backed up while deleting, and a copy already on its way finishes first, so nothing lands after the delete.
+export async function eraseCloudCopy() {
+  const a = cloud.adapter; if (!a?.erase) return 0;
+  if (!(await a.ready(false))) throw new Error(`Sign in to ${a.label} again first (Sign in again, above), then delete.`); // never off to a sign-in page from here
+  clearTimeout(timer); cloud.adapter = null;
+  let n;
+  try { while (syncing) await syncing.catch(() => {}); await pushing; n = await a.erase(); }
+  catch (e) { cloud.adapter = a; if (e.name === 'NotAllowedError') setStatus('needs-permission', e.message); throw e; }
+  cloud.adapter = a; await unlinkCloud(); return n;
+}
 export async function unlinkCloud() {
-  cloud.adapter?.signOut?.();
+  cloud.adapter?.signOut?.({ keepToken: db.calSync?.provider === 'microsoft' }); // the Outlook link shares the Microsoft sign-in
   cloud.adapter = null; cloud.auxName = ''; cloud.feedUrl = ''; lsSet('logi-feed-url', null);
   await kv('readwrite', s => s.delete('auxHandle'));
   lsSet('logi-provider', null);

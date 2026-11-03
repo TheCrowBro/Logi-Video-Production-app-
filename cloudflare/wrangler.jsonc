@@ -1,0 +1,28 @@
+// The website at https://vdex.crowmade.app: a Cloudflare Worker that serves the static files, plus a small script
+// (worker.mjs) that answers only /buy and /licence/… (selling and activating desktop licences); every other address is
+// served straight from the files without running it. The address is a Custom Domain: on the first publish Cloudflare
+// creates its DNS record and certificate by itself, in the crowmade.app zone, touching nothing else there. The files
+// come from cloudflare/site, built by tools/stage-site.mjs. html_handling "none" serves /index.html, /invoice.html and the rest by their own names (the
+// offline copy and every shared link use them) instead of redirecting them.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vdex",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [{ "pattern": "vdex.crowmade.app", "custom_domain": true }],
+  "main": "worker.mjs",
+  // Secrets and variables set in the Cloudflare dashboard stay when a new version is published.
+  "keep_vars": true,
+  // The computers on each licence code and the cancelled codes. No id: Wrangler creates the namespace (vdex-licences)
+  // on the first publish and keeps using it.
+  "kv_namespaces": [{ "binding": "LICENCES" }],
+  "assets": {
+    "directory": "./site",
+    "binding": "ASSETS",
+    "html_handling": "none",
+    "not_found_handling": "none",
+    "run_worker_first": ["/buy", "/licence/*"]
+  },
+  "observability": { "enabled": true }
+}

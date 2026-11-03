@@ -1,4 +1,5 @@
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const fs = require('fs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -7,6 +8,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 }, acceptDownloads: true });
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-loc', JSON.stringify({ lat: 51.5, lon: -0.12 })); });
+  await ctx.addInitScript(acceptTerms());
   // Forecast API mocked: a fixed sunny-then-showery day
   await ctx.route('https://api.open-meteo.com/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ daily_units: { temperature_2m_max: '°C' }, daily: { time: ['2026-11-01'], weather_code: [80], temperature_2m_max: [14.2], temperature_2m_min: [8.6], precipitation_probability_max: [60], wind_speed_10m_max: [24.1], wind_gusts_10m_max: [45.3] } }) }));
   const page = await ctx.newPage();
@@ -112,7 +114,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await lf.locator('button[type=submit]').click();
   await page.waitForFunction(() => import('./js/store.js').then(s => (s.byId('gear', window.__g).log || []).length === 1), null, { timeout: 8000 }).catch(() => {}); // the save is synchronous, but a loaded machine can be slow to get there
   const g = await page.evaluate(() => import('./js/store.js').then(s => s.byId('gear', window.__g)));
-  ok('log entry saved and firmware updated', g.log.length === 1 && g.log[0].kind === 'clean' && g.firmware === '2.10');
+  ok('log entry saved and firmware updated', g.log && g.log.length === 1 && g.log[0].kind === 'clean' && g.firmware === '2.10', JSON.stringify({ log: g.log, fw: g.firmware, sheets: await page.locator('.sheet').count(), toast: await page.evaluate(() => (document.querySelector('.toast') || {}).textContent || '') }));
   const due = await page.evaluate(() => import('./js/pages/gear.js').then(m => import('./js/store.js').then(s => m.serviceDue(s.byId('gear', window.__g)))));
   const d0 = new Date(), pad2 = n => String(n).padStart(2, '0');
   ok('next service is a year after the clean', due === `${d0.getFullYear() + 1}-${pad2(d0.getMonth() + 1)}-${pad2(d0.getDate())}`, due);

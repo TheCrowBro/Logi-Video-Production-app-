@@ -27,13 +27,23 @@ export function health() {
   const when = days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
   return { level: days > 7 ? 'warn' : 'ok', at, via, days, when, text: `Last off-device copy: ${when} (${via}).` };
 }
+// Kept up to date by itself when the licence changes (a sign-in), without redrawing the page around it.
 export function healthLine() {
+  const el = h('div', { class: 'health-line' });
+  const draw = () => el.replaceChildren(healthText());
+  draw();
+  const un = store.subscribe(reason => { if (!el.isConnected && el.dataset.drawn) return un(); el.dataset.drawn = '1'; if (reason === 'licence') draw(); });
+  return el;
+}
+function healthText() {
+  if (!store.isPaid()) return h('p', { class: 'small muted' }, 'Backup files and cloud storage come with a Vdex licence. Your data is kept on this device.');
   const hl = health();
   return h('p', { class: hl.level === 'ok' ? 'status-line' : hl.level === 'empty' ? 'small muted' : 'warn small', 'data-state': hl.level === 'ok' ? 'synced' : undefined },
     (hl.level === 'ok' ? '✅ ' : hl.level === 'empty' ? '' : '⚠ ') + hl.text + (store.cloud.adapter ? '' : ' Link a cloud storage for a daily automatic backup.'));
 }
 // A quiet reminder at most every three days when the only copy is on this device or the last copy is old.
 export function nudgeIfStale() {
+  if (!store.isPaid()) return; // backing up comes with a licence: no reminder to do what cannot be done yet
   const hl = health(); if (hl.level === 'ok' || hl.level === 'empty') return;
   const last = Number(lsGet('logi-backup-nudge')) || 0; if (Date.now() - last < 3 * 864e5) return;
   lsSet('logi-backup-nudge', String(Date.now()));
@@ -50,6 +60,7 @@ export async function saveOrShare(text, name, type) {
 }
 
 export async function exportFile({ encrypted = false } = {}) {
+  if (!store.requirePaid('export')) return;
   let text = store.exportJSON(), name = `vdex-backup-${todayISO()}.json`;
   if (encrypted) {
     const pass = await askSecret({ title: 'Passphrase for this backup', confirm: true, numeric: false, minLength: 8, intro: 'Anyone with the file and this passphrase can open it, and a forgotten passphrase cannot be recovered.' });
@@ -77,13 +88,18 @@ export async function importFile(e) {
 }
 
 export async function restoreFromCloud() {
+  if (!store.requirePaid('cloud')) return;
   const a = store.cloud.adapter;
-  if (!a || !a.readExtra) return toast('Link Dropbox, Google Drive, OneDrive or WebDAV first');
+  if (!a || !a.readExtra) return toast('Link a cloud storage first, such as Google Drive or iCloud');
   const list = h('div', { class: 'stack' }, h('p', { class: 'small muted' }, 'Looking for backups…'));
   const { close } = sheet('Restore a cloud backup', list);
   const found = [];
   for (const name of backupNames()) {
-    try { const text = await a.readExtra(name); if (text) { const d = JSON.parse(text); found.push({ name, text, at: Number(d.updatedAt) || 0, n: (d.bookings || []).length }); } } catch { /* skip that one */ }
+    try { const text = await a.readExtra(name); if (text) { const d = JSON.parse(text); found.push({ name, text, at: Number(d.updatedAt) || 0, n: (d.bookings || []).length }); } }
+    catch (e) { // a sign-in that ran out is not "no backups": say so, and stop asking
+      if (e.name === 'NotAllowedError') { close(); store.reconnectNeeded(e.message); return toast(`${a.label} wants you to sign in again before backups can be listed: tap ☁, then Sign in again.`); }
+      /* an unreadable one is skipped */
+    }
   }
   found.sort((x, y) => y.at - x.at);
   list.replaceChildren(...nodes(
@@ -96,6 +112,7 @@ export async function restoreFromCloud() {
 
 // Everything you own, with serial numbers and values: keep a copy with your insurer, and hand it to the police if kit goes missing.
 export async function exportAssetRegister() {
+  if (!store.requirePaid('export')) return;
   const sym = store.db.profile.currency || '$';
   const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
   const lastService = g => (g.log || []).filter(e => ['service', 'clean', 'calibration', 'check'].includes(e.kind) && e.date).map(e => e.date).sort().pop() || '';

@@ -1,9 +1,10 @@
 // Quotes and invoices, one of each per booking. Lines are suggested from the booking (shoot days, crew with their
 // day rates, kit, the deliverables a template put there) or, for the invoice, copied from the quote or built from the
 // hours logged; the user edits them. Printed from the app, saved as PDF, emailed to the client's contacts, and
-// summed up on the Money overview. Rates, numbering, tax and payment terms live in Settings → Quotes & invoices.
+// summed up on the Money overview. Rates, the price list, numbering, tax and payment terms live in Settings → Quotes &
+// invoices.
 import { h, sheet, toast, nodes, fmtShort, fmtLong, todayISO, parseISO, ymd, uid } from './util.js';
-import { db, byId, upsert, update, endOf } from './store.js';
+import { db, byId, upsert, update, endOf, requirePaid } from './store.js';
 import { openForm } from './form.js';
 import { setCheck, itemId } from './workflow.js';
 import { stats, workedMs } from './hours.js';
@@ -38,6 +39,26 @@ const shootDays = b => Math.max(1, Math.round((parseISO(endOf(b)) - parseISO(b.d
 const addDays = (iso, n) => { const d = parseISO(iso); return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
 export const isOverdue = b => { const inv = docOf(b, 'invoice'); return !!(inv && inv.status === 'Sent' && inv.due && inv.due < todayISO() && totals(inv).balance > 0); };
 const num = v => (v === '' || v == null ? '' : Number(v));
+// A crew rate is typed freely: "450", "$450/day", "£55 an hour", "$500/day, OT $60/hr", "1.200,50 €". The amount
+// that counts is the one per day (or with no unit); an hourly amount is used only when there is nothing else. A
+// weekly rate, or nothing readable, gives '' so the line is left for the person to fill in.
+const toNumber = t => { const m = t.match(/^(.*?)(?:[.,](\d{1,2}))?$/), whole = m[1].replace(/[.,\s]/g, ''); return Number(whole + (m[2] ? '.' + m[2] : '')); };
+const RATE_UNIT = /^\s*(?:(?:\/|per\b|an?\b|each\b)\s*(hours?|hrs?|h|days?|d|weeks?|wk)|(hourly|daily|weekly))\b/i;
+const COUNT = /^\s*(hours?|hrs?|h|days?|d|weeks?|wk|people|persons?|crew)\b/i; // "2 days at 450", "10hr day": a count, not a price
+export function parseRate(r) {
+  const s = String(r ?? ''), found = [], re = /\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?(?!\d)|\d+(?:[.,]\d{1,2})?(?!\d)/g;
+  for (let m; (m = re.exec(s));) {
+    let rest = s.slice(m.index + m[0].length), n = toNumber(m[0]);
+    if (/^k\b/i.test(rest)) { n *= 1000; rest = rest.slice(1); } // "$1k/day"
+    const um = rest.match(RATE_UNIT), u = ((um && (um[1] || um[2])) || '').toLowerCase();
+    if (!um && COUNT.test(rest)) continue;
+    found.push({ n, unit: u[0] === 'h' ? 'hour' : u[0] === 'w' ? 'week' : u[0] === 'd' ? 'day' : '' });
+  }
+  const pick = found.find(f => f.unit === 'day') || found.find(f => f.unit === '') || found.find(f => f.unit === 'hour');
+  return pick && Number.isFinite(pick.n) ? { amount: pick.n, hourly: pick.unit === 'hour' } : { amount: '', hourly: false };
+}
+export const rateOf = r => parseRate(r).amount;
+const perHour = r => parseRate(r).hourly;
 
 // Suggested lines: from the booking, from the quote, or from the hours logged.
 export function suggestLines(b, kind, source = 'booking') {
@@ -56,7 +77,7 @@ export function suggestLines(b, kind, source = 'booking') {
     return lines;
   }
   line(`Shoot day${days === 1 ? '' : 's'} — ${b.title}`, days, 'day', bl.dayRate);
-  for (const id of b.crew || []) { const c = byId('crew', id); if (c) line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, days, 'day', c.rate); }
+  for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const hourly = perHour(c.rate); line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, hourly ? days * 10 : days, hourly ? 'hour' : 'day', rateOf(c.rate)); } }
   if ((b.gear || []).length || (b.kits || []).length) line('Equipment package', days, 'day', bl.kitRate);
   for (const dl of b.deliverables || []) line(`${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
   if (kind === 'invoice') for (const hr of b.hires || []) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
@@ -89,8 +110,8 @@ export function editMoney(b, kind, onDone, preset) {
       { key: 'date', label: 'Date', type: 'date', required: true },
       { key: K.dateKey, label: K.dateLabel, type: 'date' },
       { key: 'lines', label: 'Lines', type: 'rows', columns: [{ key: 'desc', label: 'Description' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'unit', label: 'Unit' }, { key: 'price', label: `Price (${sym()})`, type: 'number' }], hint: 'Quantity × price per line. Units are free text: day, hour, each…' },
-      { key: 'taxRate', label: `${bl.taxLabel || 'Tax'} rate (%)`, type: 'number', min: 0, hint: '0 if you don’t charge it.' },
-      ...(kind === 'invoice' ? [{ key: 'deposit', label: 'Already paid / deposit', type: 'number', min: 0 }] : []),
+      { key: 'taxRate', label: `${bl.taxLabel || 'Tax'} rate (%)`, type: 'number', min: 0, step: 'any', hint: '0 if you don’t charge it.' },
+      ...(kind === 'invoice' ? [{ key: 'deposit', label: 'Already paid / deposit', type: 'number', min: 0, step: 'any' }] : []),
       { key: 'status', label: 'Status', type: 'select', options: K.statuses },
       { key: 'notes', label: kind === 'quote' ? 'What is included / notes' : 'Payment terms / notes', type: 'textarea', rows: 3 },
     ],
@@ -147,7 +168,7 @@ export async function openShareSheet(b, kind) {
   const share = async () => { if (navigator.share) { try { await navigator.share({ title: docTitle(snap), text: `${K.label} ${doc.number} — ${b.title}`, url }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const qrBox = h('div', { class: 'share-qr' }); qrSvg(url, { cellSize: 2 }).then(svg => { qrBox.innerHTML = svg; }).catch(() => qrBox.remove());
   sheet(`Link for the client · ${K.label} ${doc.number}`, h('div', { class: 'stack' },
-    h('p', { class: 'small muted' }, `The whole ${K.label.toLowerCase()} is inside the link itself, so nothing is stored online and nothing can go missing. Anyone who has the link can read it, so send it to the client only.${kind === 'invoice' && payButtons(snap).length ? ' It opens with Pay buttons for the balance.' : ''}`),
+    h('p', { class: 'small muted' }, `The whole ${K.label.toLowerCase()} is inside the link itself, so nothing is stored online. Anyone who has the link can read it, so send it to the client only.${kind === 'invoice' && payButtons(snap).length ? ' It opens with Pay buttons for the balance.' : ''}`),
     area,
     h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: copy }, '📋 Copy link'), h('button', { class: 'btn ghost', onclick: share }, '📤 Share…'), h('a', { class: 'btn ghost', href: mailtoFor(b, kind, url, 'send') }, '✉ Email it'), h('a', { class: 'btn ghost small', href: url, target: '_blank', rel: 'noopener' }, 'Open preview')),
     qrBox, h('p', { class: 'small muted', style: 'text-align:center' }, 'Scan to open it on a phone')));
@@ -202,6 +223,8 @@ export function moneyPage(b, kind, go) {
   const pdf = async () => { try { if (await saveOrShare(await moneyPdf(byId('bookings', b.id), kind), `${kind}-${slug(doc.number)}-${slug(b.title)}.pdf`, 'application/pdf')) toast('PDF saved'); } catch (e) { toast('Could not make the PDF: ' + (e.message || e)); } };
   const web = () => saveOrShare(htmlDocument(`${K.label} ${doc.number} — ${b.title}`, renderMoneyDoc(byId('bookings', b.id), kind)), `${kind}-${slug(doc.number)}.html`, 'text/html');
   const addLines = (source, label) => { const have = new Set((doc.lines || []).map(l => (l.desc || '').toLowerCase())); const add = suggestLines(b, kind, source).filter(l => !have.has((l.desc || '').toLowerCase())); if (!add.length) return toast('Nothing new to add'); saveDoc(b.id, kind, { ...doc, lines: [...(doc.lines || []), ...add] }); toast(`${add.length} line${add.length === 1 ? '' : 's'} added from ${label}`); };
+  // Lines picked from the price list go onto the document; with no document yet they start a new one in the editor.
+  const fromList = () => import('./price-list.js').then(m => m.pickFromPriceList(b, lines => { const now = byId('bookings', b.id); if (!now) return toast('That booking has been removed'); const d = docOf(now, kind); if (!d) return editMoney(now, kind, refresh, { lines }); saveDoc(b.id, kind, { ...d, lines: [...(d.lines || []), ...lines] }); toast(`${lines.length} line${lines.length === 1 ? '' : 's'} added from the price list`); })).catch(e => toast('Could not open the price list: ' + (e.message || e)));
   const t = doc && totals(doc);
   const stateCls = doc && (doc.status === 'Paid' || doc.status === 'Accepted' ? 'synced' : isOverdue(b) || doc.status === 'Declined' ? 'error' : '');
   // The email carries the client's link once it is made (it is packed asynchronously); the plain text goes first.
@@ -222,6 +245,7 @@ export function moneyPage(b, kind, go) {
         kind === 'quote' && doc.status === 'Sent' && h('button', { class: 'btn ghost', onclick: () => setDocStatus(b.id, kind, 'Accepted') }, '✅ Accepted'),
         kind === 'invoice' && doc.status === 'Sent' && h('button', { class: 'btn ghost', onclick: () => setDocStatus(b.id, kind, 'Paid') }, '✅ Paid in full'),
         h('button', { class: 'btn ghost small', onclick: () => addLines('booking', 'the booking') }, '＋ Lines from the booking'),
+        h('button', { class: 'btn ghost small', onclick: fromList }, '＋ From the price list'),
         kind === 'invoice' && b.quote && h('button', { class: 'btn ghost small', onclick: () => addLines('quote', 'the quote') }, '＋ Lines from the quote'),
         kind === 'invoice' && h('button', { class: 'btn ghost small', onclick: () => addLines('hours', 'the hours logged') }, '＋ Lines from hours logged')),
       h('div', { class: 'actions' },
@@ -244,12 +268,87 @@ export function moneyPage(b, kind, go) {
         h('button', { class: 'btn primary', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'booking') }) }, '＋ From the booking'),
         kind === 'invoice' && b.quote && h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'quote'), taxRate: b.quote.taxRate }) }, '＋ From the quote'),
         kind === 'invoice' && h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'hours') }) }, '＋ From hours logged'),
+        h('button', { class: 'btn ghost', onclick: fromList }, '＋ From the price list'),
         h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh) }, 'Start blank')),
       !billing().dayRate && h('p', { class: 'small muted' }, 'Tip: set your day, hour and kit rates under Settings → Quotes & invoices, and each person’s day rate on the Crew page, and the suggested lines come priced.')));
 }
 export function moneyBlock(b, go) {
   const row = kind => { const doc = docOf(b, kind), K = KINDS[kind]; return h('div', { class: 'card-row' }, h('div', null, h('strong', null, K.label), h('div', { class: 'muted small' }, doc ? `${doc.number} · ${doc.status}${isOverdue(b) && kind === 'invoice' ? ' · overdue' : ''} · ${fmtMoney(totals(doc).total)}${kind === 'invoice' && doc.status !== 'Paid' && totals(doc).paid > 0 ? ` · ${fmtMoney(totals(doc).balance)} due` : ''}` : 'none yet')), h('button', { class: 'btn ghost small', onclick: () => go({ view: 'money', id: b.id, kind }) }, doc ? 'Open' : 'Create')); };
   return h('section', { class: 'block', id: 'bk-money' }, h('h3', null, 'Money'), h('div', { class: 'card stack' }, row('quote'), row('invoice')));
+}
+
+/* ---------------------------------- budget ---------------------------------- */
+// What a job will cost you, line by line, with each line in a category picked from a list. Private: it never goes
+// into a quote, an invoice, a call sheet or a crew link. Compared with the quote, it shows what is left for you.
+export const BUDGET_CATS = ['Crew', 'Cast & talent', 'Equipment hire', 'Locations & permits', 'Travel & transport', 'Accommodation', 'Catering', 'Art, props & wardrobe', 'Hair & make-up', 'Post-production', 'Music & licences', 'Insurance', 'Marketing & distribution', 'Contingency', 'Other'];
+const BUDGET_UNITS = ['item', 'day', 'half day', 'hour', 'week', 'person', 'night', 'km', 'mile'];
+const unitText = (q, u = 'item') => (Number(q) === 1 ? u : ({ person: 'people', km: 'km' }[u] || u + 's'));
+const lineEst = l => (Number(l.qty) || 0) * (Number(l.rate) || 0);
+const hasActual = l => l.actual !== '' && l.actual != null && Number.isFinite(Number(l.actual));
+export function budgetTotals(b) {
+  const lines = (b.budget && b.budget.lines) || [];
+  const est = lines.reduce((s, l) => s + lineEst(l), 0), spent = lines.reduce((s, l) => s + (hasActual(l) ? Number(l.actual) : 0), 0);
+  const byCat = BUDGET_CATS.map(cat => { const ls = lines.filter(l => (BUDGET_CATS.includes(l.cat) ? l.cat : 'Other') === cat); return { cat, lines: ls, est: ls.reduce((s, l) => s + lineEst(l), 0), spent: ls.reduce((s, l) => s + (hasActual(l) ? Number(l.actual) : 0), 0) }; }).filter(c => c.lines.length);
+  const forecast = lines.reduce((s, l) => s + (hasActual(l) ? Number(l.actual) : lineEst(l)), 0); // actual costs where known, estimates for the rest
+  const toPay = lines.reduce((s, l) => s + (hasActual(l) ? 0 : lineEst(l)), 0);
+  const q = docOf(b, 'quote'), quoted = q ? totals(q, 'quote').subtotal : null; // before tax: the tax is not yours to spend
+  return { lines, est, spent, forecast, toPay, byCat, quoted, margin: quoted == null ? null : quoted - forecast };
+}
+const patchBooking = (b, fn) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { x.budget = { lines: [], ...(x.budget || {}) }; x.budget.lines = [...(x.budget.lines || [])]; fn(x.budget); x.budget.updatedAt = Date.now(); x.updatedAt = Date.now(); } });
+function editBudgetLine(b, line) {
+  openForm({
+    title: line ? 'Edit budget line' : 'Add budget line',
+    values: line || { cat: 'Crew', desc: '', qty: 1, unit: 'day', rate: '', actual: '', supplier: '' },
+    fields: [
+      { key: 'cat', label: 'Category', type: 'select', options: BUDGET_CATS },
+      { key: 'desc', label: 'What it is', required: true, placeholder: 'e.g. Gaffer, van hire, location fee' },
+      { key: 'qty', label: 'Quantity', type: 'number', min: 0, step: 'any', hint: 'Half days and part hours are fine, e.g. 1.5.' },
+      { key: 'unit', label: 'Per', type: 'select', options: BUDGET_UNITS },
+      { key: 'rate', label: 'Cost each (estimate)', type: 'number', hint: 'What it will cost you, not what you charge the client.' },
+      { key: 'actual', label: 'Actual cost, once known', type: 'number', hint: 'The whole line, as it turned out. Leave blank until you know.' },
+      { key: 'supplier', label: 'Paid to', placeholder: 'Person or company' },
+    ],
+    onSave: v => patchBooking(b, bd => { const next = { ...v, qty: v.qty === '' ? 1 : v.qty, id: (line && line.id) || uid(), src: line && line.src }; const i = bd.lines.findIndex(l => l.id === next.id); if (i >= 0) bd.lines[i] = next; else bd.lines.push(next); }),
+    onDelete: line ? () => patchBooking(b, bd => { bd.lines = bd.lines.filter(l => l.id !== line.id); if (line.src) bd.skip = [...new Set([...(bd.skip || []), line.src])]; }) : null, // Fill from booking leaves it out from now on
+  });
+}
+// Lines from what the booking already knows: crew at their day rates, hires and licences at their cost. Only adds
+// what is not there yet, so it can be tapped again after the booking changes.
+export function fillBudget(b) {
+  b = current(b);
+  const have = new Set([...((b.budget && b.budget.lines) || []).map(l => l.src).filter(Boolean), ...((b.budget && b.budget.skip) || [])]), add = [], days = shootDays(b);
+  for (const id of b.crew || []) { const c = byId('crew', id); if (c && !have.has('crew:' + id)) { const hourly = perHour(c.rate); add.push({ cat: 'Crew', desc: c.name + (c.role ? ` (${c.role})` : '') + (hourly ? ' — check the hours' : ''), qty: hourly ? days * 10 : days, unit: hourly ? 'hour' : 'day', rate: rateOf(c.rate), src: 'crew:' + id }); } }
+  for (const hr of b.hires || []) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
+  for (const lc of b.licences || []) if (!have.has('lic:' + lc.id)) add.push({ cat: 'Music & licences', desc: [lc.kind, lc.title].filter(Boolean).join(': '), qty: 1, unit: 'item', rate: rateOf(lc.cost), src: 'lic:' + lc.id });
+  if (add.length) patchBooking(b, bd => { bd.lines.push(...add.map(l => ({ ...l, id: uid(), actual: '', supplier: '' }))); });
+  return add.length;
+}
+function budgetCsv(b) {
+  const t = budgetTotals(b), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', tx = v => q(String(v == null ? '' : v).replace(/^[=+\-@\t\r]/, "'$&")); // tx: text a spreadsheet must not run as a formula
+  const rows = [['Category', 'What it is', 'Quantity', 'Per', 'Cost each', 'Estimate', 'Actual', 'Paid to'].map(q).join(',')];
+  for (const c of t.byCat) for (const l of c.lines) rows.push([tx(c.cat), tx(l.desc), q(l.qty), tx(l.unit), q(l.rate), q(lineEst(l).toFixed(2)), q(hasActual(l) ? Number(l.actual).toFixed(2) : ''), tx(l.supplier)].join(','));
+  rows.push(['Total', '', '', '', '', t.est.toFixed(2), t.spent.toFixed(2), ''].map(q).join(','));
+  return '\ufeff' + rows.join('\r\n');
+}
+export function budgetBlock(b) {
+  const t = budgetTotals(b);
+  const line = l => h('button', { class: 'card tap budget-line', type: 'button', onclick: () => editBudgetLine(b, l) },
+    h('div', { class: 'card-row' }, h('div', null, h('strong', null, l.desc), h('div', { class: 'muted small' }, [`${l.qty || 0} ${unitText(l.qty, l.unit || 'item')} × ${fmtMoney(l.rate)}`, l.supplier].filter(Boolean).join(' · '))),
+      h('div', { class: 'budget-amts' }, h('span', null, fmtMoney(lineEst(l))), hasActual(l) && h('span', { class: 'small ' + (Number(l.actual) > lineEst(l) + 0.005 ? 'overdue' : 'muted') }, 'actual ' + fmtMoney(l.actual)))));
+  const stat = (v, l, cls = '') => h('div', { class: 'stat ' + cls }, h('b', null, v), h('span', null, l));
+  return h('section', { class: 'block', id: 'bk-budget' }, h('h3', null, 'Budget'),
+    h('div', { class: 'card stack' },
+      t.lines.length
+        ? [h('div', { class: 'stats' }, stat(fmtMoney(t.est), 'Estimate'), stat(fmtMoney(t.spent), 'Spent so far'), stat(fmtMoney(t.toPay), 'Still to pay')),
+          Math.abs(t.forecast - t.est) > 0.005 && h('p', { class: 'small' + (t.forecast > t.est ? ' overdue' : '') }, `Expected total cost, with the actual costs so far: ${fmtMoney(t.forecast)} (${t.forecast > t.est ? fmtMoney(t.forecast - t.est) + ' over' : fmtMoney(t.est - t.forecast) + ' under'} the estimate).`),
+          t.quoted != null && h('p', { class: 'small' + (t.margin < 0 ? ' overdue' : '') }, `Quoted to the client: ${fmtMoney(t.quoted)} before tax. Left for you after costs: ${fmtMoney(t.margin)}${t.quoted > 0 ? ` (${Math.round(t.margin / t.quoted * 100)}%)` : ''}.`),
+          ...t.byCat.map(c => h('details', { class: 'twirl budget-cat' }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, c.cat), h('span', { class: 'twirl-sub' }, `${c.lines.length} line${c.lines.length === 1 ? '' : 's'} · ${fmtMoney(c.est)}${c.spent ? ' · spent ' + fmtMoney(c.spent) : ''}`))),
+            h('div', { class: 'twirl-body stack' }, c.lines.map(line))))]
+        : h('p', { class: 'muted small' }, 'Plan what this job will cost you: crew, hires, travel, locations and more. Only you see it: it never goes into a quote, an invoice or a crew link.'),
+      h('div', { class: 'actions' },
+        h('button', { class: 'btn ghost small', onclick: () => editBudgetLine(b, null) }, '+ Add line'),
+        h('button', { class: 'btn ghost small', onclick: () => { const n = fillBudget(b); toast(n ? `${n} line${n === 1 ? '' : 's'} added from the booking` : 'Nothing new to add from the booking'); } }, '↻ Fill from booking'),
+        t.lines.length > 0 && h('button', { class: 'btn ghost small', onclick: () => requirePaid('export') && saveOrShare(budgetCsv(b), `budget-${String(b.title || 'job').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 40)}.csv`, 'text/csv') }, '⬇ Export CSV'))));
 }
 
 /* --------------------------------- overview --------------------------------- */
@@ -274,6 +373,7 @@ export function openMoney(onOpen) {
     const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
     const rows = [['Number', 'Date', 'Due', 'Client', 'Project', 'Subtotal', 'Tax', 'Total', 'Paid', 'Balance', 'Status', 'Paid on'].map(q).join(',')];
     for (const b of list.filter(x => x.invoice).sort((x, y) => String(x.invoice.number).localeCompare(String(y.invoice.number)))) { const t = totals(b.invoice); rows.push([b.invoice.number, b.invoice.date, b.invoice.due, b.client, b.title, t.subtotal.toFixed(2), t.tax.toFixed(2), t.total.toFixed(2), t.paid.toFixed(2), t.balance.toFixed(2), b.invoice.status, b.invoice.paidAt ? ymd(new Date(b.invoice.paidAt)) : ''].map(q).join(',')); }
+    if (!requirePaid('export')) return; // spreadsheets come with a licence
     saveOrShare('﻿' + rows.join('\r\n'), `vdex-invoices-${today}.csv`, 'text/csv').then(ok => ok && toast('Invoices exported'));
   };
   const body = h('div', { class: 'stack' },
@@ -321,6 +421,9 @@ export function billingPanel() {
     h('div', { class: 'grid2' }, field(`Day rate (${sym()})`, 'dayRate', 'number', { min: 0 }), field(`Hour rate for editing (${sym()})`, 'hourRate', 'number', { min: 0 }), field(`Overtime hour rate (${sym()})`, 'overtimeRate', 'number', { min: 0 }), field(`Equipment package per day (${sym()})`, 'kitRate', 'number', { min: 0 })),
     h('div', { class: 'grid2' }, field('Tax name', 'taxLabel'), field('Tax rate (%)', 'taxRate', 'number', { min: 0 }), field('Quote number prefix', 'quotePrefix'), field('Next quote number', 'nextQuote', 'number', { min: 1 }), field('Invoice number prefix', 'invoicePrefix'), field('Next invoice number', 'nextInvoice', 'number', { min: 1 }), field('Quotes valid for (days)', 'validDays', 'number', { min: 1 }), field('Invoices due in (days)', 'dueDays', 'number', { min: 0 })),
     field('Payment terms (on every invoice)', 'terms', 'textarea'),
+    h('h4', { class: 'pay-head' }, 'Price list'),
+    h('p', { class: 'small muted' }, 'The lines you charge for again and again, with your prices, to pick into a quote or an invoice with ＋ From the price list. It starts from typical freelance rates where you work: change any price to yours.'),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => import('./price-list.js').then(m => m.openPriceList()).catch(e => toast('Could not open the price list: ' + (e.message || e))) }, '🏷 Edit the price list')),
     h('h4', { class: 'pay-head' }, 'Getting paid'),
     h('p', { class: 'small muted' }, 'Add the ways you like to be paid, as many as you want. Every invoice then carries a Pay button for each one that has a link, with the balance filled in, plain instructions for the ones that do not, bank details with a QR code banking apps can scan, and the invoice number as the reference. The link you send a client opens the invoice with the same buttons.'),
     h('div', { class: 'field' }, h('label', null, 'Currency for payment links'), h('select', { 'aria-label': 'Currency for payment links', onchange: e => setBilling({ currencyCode: e.target.value }) }, ...CURRENCIES.map(([c, sy]) => h('option', { value: c, selected: c === code() ? 'selected' : null }, `${c} ${sy.trim()}`)))),

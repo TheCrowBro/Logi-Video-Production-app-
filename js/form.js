@@ -1,6 +1,7 @@
 // Schema-driven edit form shown in a sheet.
 import { h, sheet, groupBy, toast } from './util.js';
 import { parseMapLink, geocode } from './map.js';
+import { canChange } from './store.js';
 
 /*
  fields: [{ key, label, type, options, required, placeholder, list, rows, columns, empty, hint }]
@@ -102,6 +103,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
         list.replaceChildren(...rows.map((r, ri) => h('div', { class: 'row-edit' },
           f.columns.map(c => h('input', {
             type: c.type || 'text', placeholder: c.label, 'aria-label': c.label, value: r[c.key] ?? '',
+            step: c.type === 'number' ? (c.step ?? 'any') : null, inputMode: c.type === 'number' ? 'decimal' : null, // prices like 0.76 or 12.50
             oninput: e => { r[c.key] = e.target.value; },
           })),
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Remove row', onclick: () => { rows.splice(ri, 1); draw(); } }, '✕'))));
@@ -114,7 +116,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
       if (f.list) listEl = h('datalist', { id: id + '-l' }, f.list.map(o => h('option', { value: o })));
       const input = control = h('input', {
         'data-key': f.key, id, type: f.type === 'url' ? 'text' : (f.type || 'text'), required: !!f.required, placeholder: f.placeholder || '',
-        value: val ?? '', list: f.list ? id + '-l' : null, step: f.type === 'number' ? (f.min != null ? 1 : 'any') : null, min: f.min ?? null,
+        value: val ?? '', list: f.list ? id + '-l' : null, step: f.type === 'number' ? (f.step ?? (f.min != null ? 1 : 'any')) : null, min: f.min ?? null,
         inputMode: f.type === 'tel' ? 'tel' : f.type === 'url' ? 'url' : null, autocomplete: 'off',
       });
       readers.push(() => [f.key, f.type === 'number' ? (input.value === '' ? '' : Number(input.value)) : input.value.trim()]);
@@ -136,8 +138,9 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     e.preventDefault();
     const out = { ...values };
     readers.forEach(r => { const [k, v] = r(); out[k] = v; });
+    if (!canChange()) return; // read-only (the desktop app after its trial): keep the form and what was typed
     close();
     onSave(out);
   });
-  setTimeout(() => form.querySelector('input,textarea,select')?.focus(), 50);
+  setTimeout(() => { if (!form.contains(document.activeElement)) form.querySelector('input,textarea,select')?.focus(); }, 50); // never take the cursor from a box someone is already typing in
 }

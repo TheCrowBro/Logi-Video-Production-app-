@@ -66,7 +66,7 @@ export function createRolodex(root, tabs, { onSelect, start = 0 }) {
 
   document.addEventListener('keydown', e => {
     if (/input|textarea|select/i.test(e.target.tagName) || e.target.isContentEditable) return;
-    if (document.querySelector('.sheet-back')) return;
+    if (e.defaultPrevented || document.querySelector('.sheet-back')) return; // a control that used the key (a stripboard handle) keeps it
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(index + 1);
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') go(index - 1);
   });

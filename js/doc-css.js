@@ -16,6 +16,8 @@ const RULES = [
   ['.money-parties', 'display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0'], ['.money-parties h4', 'margin:0 0 4px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#555'],
   ['.money-totals', 'margin:8px 0 0 auto;max-width:320px'], ['.money-totals .cs-kv', 'grid-template-columns:1fr auto;text-align:right'], ['.money-totals .total b', 'font-size:15px'], ['th.num,td.num', 'text-align:right;white-space:nowrap'],
   ['.cs-day', 'font-weight:700;margin:8px 0 2px'], ['.cs-pre', 'white-space:pre-wrap;margin:4px 0'], ['.cs-foot', 'margin-top:22px;padding-top:8px;border-top:1px solid #ddd;font-size:11px;color:#666'],
+  ['.sb-row td', 'vertical-align:top;-webkit-print-color-adjust:exact;print-color-adjust:exact'], ['.sb-int-day td', 'background:#fbfaf6'], ['.sb-ext-day td', 'background:#f6dc5c'],
+  ['.sb-int-night td', 'background:#35609f;color:#fff'], ['.sb-ext-night td', 'background:#226b43;color:#fff'], ['.sb-banner td', 'background:#6b5640;color:#fff;text-align:center;font-weight:700'],
   ['.pay-buttons', 'display:flex;flex-wrap:wrap;gap:8px;margin:8px 0'],
   ['.pay-btn', 'display:inline-block;padding:9px 14px;border:1.5px solid #1a4e8a;border-radius:10px;color:#1a4e8a;font-weight:700;text-decoration:none;font-size:13px'],
   ['.pay-qr', 'display:flex;gap:14px;align-items:center;margin:8px 0;break-inside:avoid'], ['.pay-qr svg', 'width:112px;height:112px;flex:none;background:#fff;border:1px solid #ddd;border-radius:6px;padding:3px'],

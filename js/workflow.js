@@ -14,7 +14,8 @@ export const slugStatus = s => String(s || 'Enquiry').toLowerCase().replace(/\s+
 export const stageIndex = s => Math.max(0, STAGES.findIndex(x => x[0] === s));
 export const PHASE = s => (stageIndex(s) <= 3 ? 'Pre-production' : stageIndex(s) === 4 ? 'Production' : 'Post-production');
 
-export const TYPES = [['brand', 'Brand / commercial'], ['corporate', 'Corporate / interview'], ['event', 'Event'], ['wedding', 'Wedding'], ['music', 'Music video'], ['realestate', 'Real estate'], ['doc', 'Documentary'], ['other', 'Other']];
+export const TYPES = [['brand', 'Brand / commercial'], ['corporate', 'Corporate / interview'], ['event', 'Event'], ['wedding', 'Wedding'], ['music', 'Music video'], ['realestate', 'Real estate'], ['doc', 'Documentary'],
+  ['social', 'Social media'], ['short', 'Short film'], ['vertical', 'Vertical video (9:16)'], ['series', 'Series / episodic'], ['feature', 'Feature film'], ['other', 'Other']];
 
 /* ---------------------------- project templates ---------------------------- */
 // The user's own job types. Each one starts from a built-in type's checklists (editable like any type under
@@ -145,6 +146,11 @@ const EXTRA = {
   music: { Prepped: ['Playback track and speaker arranged', 'Performance blocking planned'] },
   realestate: { Prepped: ['Property staged and clear on the day', 'Drone permission for the area'] },
   doc: { Confirmed: ['Contributor consent and releases'], 'In post': ['Transcripts / paper edit'] },
+  social: { Quoted: ['Platforms, lengths and aspect ratios agreed'], Prepped: ['Hooks for the first seconds planned', 'Captions and on-screen text planned'], Shot: ['Platform safe zones kept clear of key action'], 'In post': ['A cut for each platform and aspect ratio', 'Captions burned in and checked'] },
+  short: { Confirmed: ['Script locked', 'Cast confirmed, releases prepared'], Prepped: ['Table read or rehearsal held', 'Continuity notes ready'], Shot: ['Continuity photos taken'], 'In post': ['Festival or platform delivery specs checked'] },
+  vertical: { Prepped: ['Framing and safe zones agreed for 9:16', 'Camera or rig set up for vertical'], Shot: ['Key action kept inside the 9:16 safe area'], 'In post': ['Exports at 1080 × 1920'] },
+  series: { Confirmed: ['Episode list and shooting order agreed'], Prepped: ['Series bible and episode notes ready', 'Block schedule across episodes'], Shot: ['Continuity logged per episode'], 'In post': ['Grade, titles and sound consistent across episodes'] },
+  feature: { Confirmed: ['Cast and key crew contracts signed', 'Production insurance in place'], Prepped: ['Stripboard and shooting schedule done', 'Daily call sheets planned', 'Script supervisor booked'], Shot: ['Daily production report filed'], 'In post': ['Delivery specs confirmed (DCP, M&E, captions)'] },
 };
 const slug = s => String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 export const itemId = (stage, text) => slugStatus(stage) + ':' + slug(text);

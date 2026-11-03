@@ -1,6 +1,7 @@
 // Getting paid: payment settings, Pay buttons and the bank QR on an invoice, payments and balances, the client's
 // link and the public invoice page, reminders, the overview and the CSV.
 const { chromium } = require('playwright');
+const { acceptTerms } = require('../helpers.cjs');
 const fs = require('fs');
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -10,6 +11,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const ctx = await browser.newContext({ viewport: { width: 420, height: 860 }, acceptDownloads: true });
   await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+  await ctx.addInitScript(acceptTerms());
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
   page.on('dialog', d => d.accept());

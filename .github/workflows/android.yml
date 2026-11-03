@@ -3,8 +3,11 @@
 #
 # Signing: the upload key lives in android/upload-key.keystore.enc, unlocked with the ANDROID_KEY_PASSPHRASE
 # repository secret. Without that secret the build is signed with a throwaway key: fine for trying the .apk on a
-# phone, not accepted by Google Play. Either way the .aab (for Play) and the .apk (for phones) are attached to the
-# rolling "android-latest" pre-release so they have a stable download address.
+# phone, but never to be uploaded to Google Play (the first upload fixes the key Play expects), so such a build keeps no
+# files. A build signed with the upload key keeps only vdex-android.aab, the file Google Play takes, as this run's
+# artifact for 3 days: the app is sold on Google Play, so it is not on a public release page any more. (While the
+# repository is public, anyone signed in to GitHub can download a run's artifacts; an .aab does not install on a phone
+# as it is, and the app only opens the website.)
 name: Android app
 on:
   push:
@@ -12,7 +15,7 @@ on:
     paths: ['android/**', '.github/workflows/android.yml']
   workflow_dispatch:
 permissions:
-  contents: write   # publishes the android-latest pre-release
+  contents: read
 concurrency:
   group: android
   cancel-in-progress: true
@@ -55,25 +58,47 @@ jobs:
           "$BT/apksigner" verify --print-certs vdex-android.apk | grep -i "SHA-256" | sed 's/.*: //' > fingerprint.txt
           echo "Signed with the $KEY_KIND. Certificate SHA-256: $(cat fingerprint.txt)"
           rm -f upload-key.keystore aligned.apk
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - if: env.KEY_KIND == 'upload key'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: vdex-android
-          path: |
-            android/vdex-android.aab
-            android/vdex-android.apk
-      - name: Publish the rolling android-latest pre-release
+          retention-days: 3
+          path: android/vdex-android.aab
+      - name: Where to find the files
+        run: |
+          {
+            echo "### Android app $(python3 -c "import json; m=json.load(open('android/twa-manifest.json')); print(m['appVersionName'] + ' (build ' + str(m['appVersionCode']) + ')')")"
+            echo ""
+            if [ "$KEY_KIND" = "upload key" ]; then
+              echo "Download **vdex-android** under *Artifacts* at the bottom of this page (kept for 3 days). It holds **vdex-android.aab**, the file Google Play takes."
+            else
+              echo "**Not for Google Play:** this build was signed with a temporary key, so no file was kept. Add the ANDROID_KEY_PASSPHRASE secret (docs/google-play.md, Step 2) and run it again."
+            fi
+            echo ""
+            echo "Signed with the ${KEY_KIND}. Certificate SHA-256: $(cat android/fingerprint.txt)"
+          } >> "$GITHUB_STEP_SUMMARY"
+  unpublish:
+    # The app is sold on Google Play, so the old public "android-latest" pre-release (a free download of the app) and
+    # the app files kept by earlier runs are removed. Its own job, so it runs even if a build fails and only it holds
+    # write access. A release that is already gone is fine; any other error fails the run.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - name: Remove the old public android-latest pre-release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cd android
-          VER=$(python3 -c "import json; m=json.load(open('twa-manifest.json')); print(m['appVersionName'] + ' (build ' + str(m['appVersionCode']) + ')')")
-          NOTES="Android app ${VER}, built from ${GITHUB_SHA::7}.
-
-          - **vdex-android.aab** is the file Google Play takes (Create release → upload).
-          - **vdex-android.apk** installs directly on an Android phone for testing.
-
-          Signed with the ${KEY_KIND}. Certificate SHA-256: $(cat fingerprint.txt)
-
-          The app is a thin shell that opens the live website, so it updates whenever the website does; a new shell build is only needed when the icon, address, name or permissions change."
-          gh release delete android-latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY" 2>/dev/null || true
-          gh release create android-latest vdex-android.aab vdex-android.apk --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --title "Android app ${VER}" --notes "$NOTES"
+          if gh release view android-latest --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release delete android-latest --cleanup-tag --yes --repo "$GITHUB_REPOSITORY"
+            echo "Removed the android-latest pre-release."
+          else
+            echo "No android-latest pre-release: nothing to remove."
+          fi
+      - name: Remove the app files kept by earlier runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts?name=vdex-android&per_page=100" --jq ".artifacts[] | select(.workflow_run.id != $GITHUB_RUN_ID) | .id" |
+            while read -r id; do gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/artifacts/$id" && echo "Removed artifact $id"; done

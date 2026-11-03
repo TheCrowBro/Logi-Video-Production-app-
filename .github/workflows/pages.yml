@@ -1,11 +1,14 @@
-# Publishes the app to GitHub Pages.
+# Publishes the app to https://vdex.crowmade.app (a Cloudflare Worker: the static website, plus the small licence script
+# in cloudflare/worker.mjs for /buy and /licence/…).
 #
 # How a change reaches the site: a push to the working branch runs the browser tests; when they pass, the
-# "mirror" job moves main to that same commit and starts this workflow again on main, where the "deploy" job
-# stamps the build and publishes. GitHub's github-pages environment only accepts deployments made from main,
-# which is why the deploy always happens from there, and why main is always exactly what is live.
-# "Run workflow" on main from the Actions tab publishes on demand.
-name: Deploy to GitHub Pages
+# "mirror" job moves main to that same commit and starts this workflow again on main, where the "cloudflare" job
+# stamps the build and publishes it. So main is always exactly what is live, and each change is tested once (the run
+# on main publishes the commit that was just tested). "Run workflow" on main from the Actions tab publishes on demand.
+# Only the website's own files are published (tools/stage-site.mjs), never the Android, desktop, docs or test sources.
+# Publishing needs the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets (docs/cloudflare.md); until
+# they exist the run says so and stays green. (GitHub Pages, the old address, stopped when the repository went private.)
+name: Publish the website
 on:
   push:
     branches:
@@ -14,14 +17,14 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
   group: pages
   cancel-in-progress: false   # runs queue up; the newest pending one replaces older pending ones
 jobs:
   test:
-    # The site only updates when the browser specs pass, so a broken push never reaches people's phones.
+    # The site only updates when the browser specs pass, so a broken push never reaches people's phones. The run on
+    # main publishes the commit this job already tested, so it is not tested twice.
+    if: github.ref != 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -34,6 +37,7 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
       - run: npx playwright install --with-deps chromium
+      - run: npm ci --prefix cloudflare   # Wrangler's runtime, for the licence Worker's spec
       - run: npm test
   mirror:
     # A tested push to the working branch becomes main, and main publishes.
@@ -50,23 +54,67 @@ jobs:
           gh workflow run pages.yml --ref main --repo "$GITHUB_REPOSITORY"
         env:
           GH_TOKEN: ${{ github.token }}
-  deploy:
-    needs: test
+  cloudflare-ready:
+    # Is Cloudflare set up yet? Until both secrets exist the "cloudflare" job is skipped, which never turns a run red.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      go: ${{ steps.ready.outputs.go }}
+    steps:
+      - id: ready
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$ACCOUNT" ]; then echo "go=1" >> "$GITHUB_OUTPUT"
+          else echo "::notice::Cloudflare is not set up yet (no CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets), so vdex.crowmade.app was not published. See docs/cloudflare.md."; fi
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+  cloudflare:
+    # The website at https://vdex.crowmade.app, served by a Cloudflare Worker (static files, plus cloudflare/worker.mjs).
+    needs: cloudflare-ready
+    if: github.ref == 'refs/heads/main' && needs.cloudflare-ready.outputs.go == '1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - run: node tools/stamp-build.mjs   # stamps this commit into the app so installed copies notice the update
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cloudflare/package-lock.json
+      - run: node tools/stamp-build.mjs && node tools/stage-site.mjs cloudflare/site --cloudflare
         env:
           BUILD_SHA: ${{ github.sha }}
-      - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5
+      - run: npm ci   # Wrangler at the exact version in cloudflare/package-lock.json
+        working-directory: cloudflare
+      - name: Deploy to Cloudflare
+        uses: cloudflare/wrangler-action@953926a2e2182532811c01a25e53647d93bf07c0 # v4.1.3
         with:
-          enablement: true   # switches Pages on for the repo the first time
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3.0.1
-        with:
-          path: .
-      - id: deployment
-        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare
+          command: deploy
+        env:
+          WRANGLER_SEND_METRICS: "false"
+      - name: Check the live site (once vdex.crowmade.app is attached)
+        run: |
+          site=https://vdex.crowmade.app
+          rc=0; code=$(curl -sS -o /dev/null -D /tmp/h -w '%{http_code}' "$site/sw.js") || rc=$?
+          case $rc in
+            0) ;;
+            6|7|35|60) echo "::notice::$site does not answer yet: a new address can take a few minutes after the first publish (docs/cloudflare.md)."; exit 0 ;;
+            *) echo "::error::$site/sw.js could not be fetched (curl exit $rc)"; exit 1 ;;
+          esac
+          if [ "$code" = 403 ] && grep -qi '^cf-mitigated: *challenge' /tmp/h; then echo "::warning::Cloudflare challenged GitHub's check (Bot Fight Mode, docs/cloudflare.md step 6), so the live checks were skipped."; exit 0; fi
+          [ "$code" = 200 ] || { echo "::error::$site/sw.js answered HTTP $code after the deploy"; exit 1; }
+          build=${GITHUB_SHA::7}; ok=
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS "$site/sw.js" | grep -q "const BUILD = '$build'"; then ok=1; break; fi
+            sleep 10
+          done
+          [ -n "$ok" ] || { echo "::error::$site is not serving build $build"; exit 1; }
+          curl -fsS -o /dev/null -D - "$site/.well-known/assetlinks.json" | grep -qi '^content-type: application/json'
+          curl -fsS -o /dev/null -D - "$site/index.html" | grep -qi '^content-security-policy:'
+          # The licence script answers its own addresses: a request without a code is refused by it, not a missing file.
+          lic=$(curl -sS -o /tmp/lic -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$site/licence/activate")
+          [ "$lic" = 400 ] && grep -q '"invalid"' /tmp/lic || { echo "::error::$site/licence/activate answered HTTP $lic, not the licence script"; exit 1; }

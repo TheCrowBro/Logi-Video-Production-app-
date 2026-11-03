@@ -81,7 +81,8 @@ export function updatePanel() {
         : s === 'available' ? `Vdex ${ds.available} is available to download.`
         : s === 'current' ? `Up to date${when ? ' · checked ' + when : ''}.`
         : s === 'error' ? `Could not check for updates (${ds.error || 'no connection'}).`
-        : 'Vdex checks GitHub for new releases when it starts and every few hours.';
+        : s === 'store' ? 'Updates come from the store this copy was installed from.'
+        : 'Vdex checks for new versions when it starts and every few hours.';
       if (s === 'ready') actions.push(h('button', { class: 'btn primary', onclick: () => d.installUpdate() }, '↻ Restart to update'));
       if (s === 'available' || s === 'error') actions.push(h('button', { class: 'btn ghost', onclick: () => d.openDownload() }, '⤓ Download the new version'));
     } else {
@@ -90,7 +91,7 @@ export function updatePanel() {
         : `Up to date${when ? ' · checked ' + when : ''}. New versions are fetched in the background whenever you open Vdex.`;
       if (st.ready) actions.push(h('button', { class: 'btn primary', onclick: reloadNow }, '↻ Reload now'));
     }
-    const showCheck = d ? (ds ? ds.status !== 'dev' : true) : st.supported && !st.ready;
+    const showCheck = d ? (ds ? !['dev', 'store'].includes(ds.status) : true) : st.supported && !st.ready;
     if (showCheck) actions.push(h('button', { class: 'btn ghost', disabled: busy, onclick: async () => { busy = true; draw(); try { await checkForUpdates(); } finally { busy = false; draw(); } } }, busy ? 'Checking…' : 'Check for updates'));
     el.replaceChildren(h('p', { class: 'small muted' }, line), actions.length ? h('div', { class: 'actions' }, ...actions) : '');
   };

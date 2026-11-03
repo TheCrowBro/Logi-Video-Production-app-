@@ -60,7 +60,7 @@ export async function docxToLines(file) {
     const text = paragraphText(p).replace(/ /g, ' ').trim();
     if (!text) continue;
     const style = p.getElementsByTagNameNS(W, 'pStyle')[0]?.getAttributeNS(W, 'val') || '';
-    lines.push({ text, heading: /heading|title/i.test(style) });
+    lines.push({ text, heading: /heading|title/i.test(style), style }); // the style lets the stripboard read screenplay formatting (Character, Dialogue…)
   }
   return lines;
 }

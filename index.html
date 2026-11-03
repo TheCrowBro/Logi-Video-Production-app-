@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline' https://accounts.google.com; frame-src https://accounts.google.com https://login.microsoftonline.com https://login.live.com; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://www.dropbox.com; manifest-src 'self'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline' https://accounts.google.com; frame-src https://accounts.google.com; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://www.dropbox.com; manifest-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#14110f">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,7 +22,7 @@
     <div class="brand"><span class="dot"></span>VDEX <small>production deck</small></div>
     <div class="top-actions">
     <button id="helpBtn" class="cloud" aria-label="Tutorial for this page" title="Tutorial for this page"><span class="cloud-ico" aria-hidden="true">?</span></button>
-    <button id="installBtn" class="cloud" hidden><span class="cloud-ico" aria-hidden="true">⤓</span><span>Install</span></button>
+    <button id="installBtn" class="cloud" hidden aria-label="Install Vdex" title="Install Vdex"><span class="cloud-ico" aria-hidden="true">⤓</span><span>Install</span></button>
     <button id="lockBtn" class="cloud" hidden aria-label="Lock Vdex" title="Lock Vdex"><span class="cloud-ico" aria-hidden="true">🔒</span></button>
     <button id="displayBtn" class="cloud" aria-label="Display and accessibility settings"><span class="cloud-ico" aria-hidden="true">Aa</span></button>
     <button id="cloudBtn" class="cloud" aria-label="Storage and sync"><span class="cloud-ico">☁</span><span id="cloudLabel">Local</span></button>
@@ -34,6 +34,7 @@
 </div>
 <noscript>This app needs JavaScript.</noscript>
 <!-- The start-up modules, named here so a first visit fetches them all at once instead of discovering them level by level. -->
+<link rel="modulepreload" href="js/board.js">
 <link rel="modulepreload" href="js/calendar.js">
 <link rel="modulepreload" href="js/clock.js">
 <link rel="modulepreload" href="js/install.js">
@@ -54,6 +55,7 @@
 <link rel="modulepreload" href="js/providers.js">
 <link rel="modulepreload" href="js/version.js">
 <link rel="modulepreload" href="js/workflow.js">
+<link rel="modulepreload" href="js/cloud-config.js">
 <link rel="modulepreload" href="js/crypto.js">
 <link rel="modulepreload" href="js/doc-css.js">
 <link rel="modulepreload" href="js/form.js">
@@ -64,6 +66,7 @@
 <link rel="modulepreload" href="js/weather.js">
 <link rel="modulepreload" href="js/map.js">
 <link rel="modulepreload" href="js/pay.js">
+<link rel="modulepreload" href="js/terms.js">
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

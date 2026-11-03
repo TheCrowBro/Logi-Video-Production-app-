@@ -9,7 +9,7 @@ const STEPS = [
   { go: 'venues', target: ['.page-head'], title: 'Venues', text: 'Rules, permits, contacts and a map pin for every place you shoot. A booking warns if your kit breaks a venue’s rules.' },
   { go: 'field', target: ['.seg.tools'], title: 'Field tools', text: 'Sun and golden hour, Polaris, white balance, a noise meter and a range finder.' },
   { go: 'tcnotes', target: ['.page-head'], title: 'Timecode notes', text: 'Sync once to your camera’s timecode and every note is stamped for the edit. Link your laptop to write on both at once.' },
-  { go: 'settings', target: ['.page-head'], title: 'Settings', text: 'Storage and sync (your data stays on this device until you link Dropbox, Google Drive or a synced folder), calendar links, display and accessibility, field-tool defaults, backups, and this tour again.' },
+  { go: 'settings', target: ['.page-head'], title: 'Settings', text: 'Storage and sync (your data stays on this device until you link Google Drive, iCloud or another storage), calendar links, display and accessibility, field-tool defaults, backups, and this tour again.' },
 ];
 const done = () => { try { localStorage.setItem('logi-tour', 'done'); } catch { /* ignore */ } };
 export const tourSeen = () => { try { return !!localStorage.getItem('logi-tour'); } catch { return true; } };
@@ -28,6 +28,7 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   const wasInert = !!(app && app.inert);
   document.body.append(layer); if (app) app.inert = true;
   let i = from, target = null, dir = 1;
+  const seen = new Set(); // steps already shown: they keep their place in the count when going back
   const stop = () => { if (!active) return; active = null; layer.remove(); if (app) app.inert = wasInert; window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
   active = { stop };
   const keys = e => { if (e.key === 'Escape') { e.stopPropagation(); stop(); } else if (e.key === 'ArrowRight') { e.stopPropagation(); next(); } else if (e.key === 'ArrowLeft') { e.stopPropagation(); dir = -1; show(i - 1); } };
@@ -42,23 +43,29 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   };
   let busy = false; // a tap during a transition must not double-advance
   const show = async n => { if (busy) return; busy = true; try { await step(n); } finally { busy = false; } };
+  // The steps that will actually show: a step whose box is not on screen is skipped, so it must not be counted either
+  // (a booking with no venue has no venue box). Steps that move to a page or prepare something first are counted, as
+  // their box only appears then. Worked out again at every step, so the count and "Done" are always right.
+  const find = s => { const scope = (root && root()) || document; return s.target ? s.target.map(sel => { try { return scope.querySelector(sel); } catch { return null; } }).find(el => el && el.offsetParent !== null) || null : null; };
+  const willShow = s => !s.target || !!s.go || !!s.before || !!find(s);
   const step = async n => {
     if (n < 0) return;
     if (n >= STEPS.length) return stop();
     i = n; const s = STEPS[n];
     if (s.go) { window.logiGo?.(s.go); await new Promise(r => setTimeout(r, 650)); }
     if (s.before) { try { await s.before(); } catch { /* the step still shows */ } await new Promise(r => setTimeout(r, 250)); }
-    const scope = (root && root()) || document;
-    target = s.target ? s.target.map(sel => { try { return scope.querySelector(sel); } catch { return null; } }).find(el => el && el.offsetParent !== null) || null : null;
+    target = find(s);
     if (s.target && !target) return step(n + dir); // nothing to point at here, skip
     if (target) { target.scrollIntoView({ block: 'center', inline: 'nearest' }); await new Promise(r => setTimeout(r, 250)); }
+    const shown = STEPS.map((x, k) => (k === n || (k > n ? willShow(x) : seen.has(k)) ? k : -1)).filter(k => k >= 0), pos = shown.indexOf(n), isLast = pos === shown.length - 1;
+    seen.add(n);
     card.replaceChildren(
-      h('div', { class: 'tour-step muted small' }, `${n + 1} / ${STEPS.length}`),
+      h('div', { class: 'tour-step muted small' }, `${pos + 1} / ${shown.length}`),
       h('h2', { id: 'tour-title' }, s.title), h('p', null, s.text),
       h('div', { class: 'tour-actions' },
         h('button', { class: 'btn ghost small', onclick: stop }, 'Skip'), footer && footer(n, stop), h('span', { class: 'spacer' }),
-        n > 0 && h('button', { class: 'btn ghost', onclick: () => { dir = -1; show(n - 1); } }, 'Back'),
-        h('button', { class: 'btn primary', onclick: next }, n === STEPS.length - 1 ? 'Done' : 'Next')));
+        pos > 0 && h('button', { class: 'btn ghost', onclick: () => { dir = -1; show(n - 1); } }, 'Back'),
+        h('button', { class: 'btn primary', onclick: isLast ? stop : next }, isLast ? 'Done' : 'Next')));
     spot.classList.remove('tour-pulse'); void spot.offsetWidth; spot.classList.add('tour-pulse');
     place();
     card.querySelector('.btn.primary')?.focus();

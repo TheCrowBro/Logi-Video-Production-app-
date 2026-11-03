@@ -20,7 +20,7 @@
      application, the package attribute will need to reflect the correct path in order to use
      the abbreviated format. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="io.github.thecrowbro.vdex">
+    package="app.crowmade.vdex">
 
     
         <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
@@ -150,21 +150,16 @@
                     
                     <category android:name="android.intent.category.DEFAULT" />
                     
+                        
                         <data android:mimeType="text/plain" />
                     
-                        <data android:mimeType=".docx" />
+                        <data android:mimeType="text/markdown" />
                     
-                        <data android:mimeType=".txt" />
-                    
-                        <data android:mimeType=".md" />
-                    
-                        <data android:mimeType=".fountain" />
-                    
-                        <data android:mimeType="text/plain" />
+                        <data android:mimeType="text/x-markdown" />
                     
                         <data android:mimeType="application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
                     
-                </intent-filter>
+</intent-filter>
             
 
             <intent-filter>

@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="dark light">
+<title>Vdex for Windows, Mac and Linux</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+  :root { --bg: #14110f; --card: #25201b; --line: #3a332b; --text: #f1e6cf; --muted: #a09584; --accent: #e0a43a; --ink: #1a1305; color-scheme: dark; }
+  @media (prefers-color-scheme: light) { :root { --bg: #efe8da; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --ink: #ffffff; color-scheme: light; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  header img { width: 56px; height: 56px; border-radius: 14px; flex: none; }
+  h1 { font-size: 1.7rem; line-height: 1.2; margin: 0; }
+  h2 { font-size: 1.2rem; margin: 32px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  p, li { max-width: 68ch; }
+  li { margin: 6px 0; }
+  a { color: var(--accent); }
+  .lead { font-size: 1.05rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 18px 0; }
+  .dl { display: block; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; text-decoration: none; color: var(--text); }
+  .dl:hover, .dl:focus-visible { border-color: var(--accent); }
+  .dl b { display: block; font-size: 1.1rem; } .dl span { color: var(--muted); font-size: .9rem; }
+  .buy { display: inline-block; background: var(--accent); color: var(--ink); font-weight: 700; padding: 12px 22px; border-radius: 12px; text-decoration: none; margin: 4px 12px 4px 0; }
+  .muted { color: var(--muted); }
+  code { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: .92em; }
+  .back { display: inline-block; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/icon.svg" alt="">
+    <h1>Vdex for Windows, Mac and Linux</h1>
+  </header>
+  <p class="lead">The same Vdex as the website, in its own window, with your work kept on your computer. Try it free for 30 days (cloud storage and backup files come with the licence). Then it is 20 US dollars once, for up to 3 of your own devices, and the same licence lets you sign in on the website. No subscription.</p>
+
+  <div class="grid">
+    <a class="dl" href="https://download.crowmade.app/vdex/Vdex-Setup.exe"><b>Windows</b><span>Windows 10 or 11 · Vdex-Setup.exe</span></a>
+    <a class="dl" href="https://download.crowmade.app/vdex/Vdex.dmg"><b>Mac</b><span>macOS 12 or later, Apple or Intel · Vdex.dmg</span></a>
+    <a class="dl" href="https://download.crowmade.app/vdex/Vdex.AppImage"><b>Linux</b><span>64-bit · Vdex.AppImage</span></a>
+  </div>
+  <p><a class="buy" href="/buy">Buy a licence · 20 USD</a> <span class="muted">You can also buy from inside Vdex, at any time during the trial.</span></p>
+
+  <h2>Already bought, or given a code?</h2>
+  <ol>
+    <li>Download Vdex above and open it.</li>
+    <li>Go to <b>Settings → About → Enter licence code</b>.</li>
+    <li>Paste the whole code from your email (it starts with <code>VDEX-</code>) and press <b>Activate</b>. Vdex needs the internet for this, once.</li>
+  </ol>
+  <p>One licence works on up to 3 of your devices: computers with the desktop app, and the Android app. To move it to a new one, use <b>Release this computer</b> (or <b>Sign out</b> in the Android app) on the old one, or choose which device to move it from when you activate the new one. On the website, press <b>Sign in</b> and use the email address you bought with; Vdex emails you a 6-digit code.</p>
+
+  <h2>Installing</h2>
+  <ul>
+    <li><b>Windows:</b> open Vdex-Setup.exe. While Vdex is new, Windows may show "Windows protected your PC" or say the app is not commonly downloaded: choose <b>More info</b>, check the publisher, then <b>Run anyway</b>. Vdex updates itself after that.</li>
+    <li><b>Mac:</b> open Vdex.dmg and drag Vdex into Applications. If macOS says it cannot check the app, open <b>System Settings → Privacy &amp; Security</b>, scroll down and choose <b>Open Anyway</b>.</li>
+    <li><b>Linux:</b> make the file runnable (<code>chmod +x Vdex.AppImage</code>, or tick "Allow executing file as program" in its properties) and open it. On Ubuntu 22.04 and later, install <code>libfuse2</code> first (<code>libfuse2t64</code> on 24.04).</li>
+  </ul>
+
+  <h2>Bringing your work from the website</h2>
+  <p>The website and the desktop app keep their own copies. To move yours across, link the same cloud storage on both (☁ at the top of Vdex), or on the website use <b>Settings → Backups &amp; data → Export backup</b> and then <b>Import backup…</b> in the desktop app. Both come with the licence.</p>
+
+  <p class="muted">Buying is covered by the <a href="terms.html#paid">terms of service</a> (including refunds within 14 days), and the <a href="privacy.html">privacy policy</a> explains what the licence check sends.</p>
+  <a class="back" href="./">← Back to Vdex</a>
+</main>
+</body>
+</html>
