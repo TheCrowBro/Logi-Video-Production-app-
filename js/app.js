@@ -80,6 +80,7 @@ function redraw() {
 }
 store.subscribe(reason => {
   paintCloud();
+  if (reason === 'licence') return; // the licence changed what may be linked or saved: the panels concerned redraw themselves
   if (reason === 'status' && tabs[current] && tabs[current].id !== 'settings') return; // sync status alone is not worth redrawing a page for
   if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); }
 });

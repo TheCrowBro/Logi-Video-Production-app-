@@ -266,8 +266,9 @@ export function setPaid(on, prompt) {
   const was = paid; paid = !!on; cloud.paused = !paid;
   lsSet('vdex-paid', paid ? '1' : '0');
   if (was === paid) return;
-  if (paid) { if (cloud.adapter) sync(); else emit('status'); }
-  else { clearTimeout(timer); if (cloud.adapter) setStatus('paused'); else emit('status'); }
+  // 'licence': panels that show it (storage) redraw themselves; the page is not redrawn, so focus stays where it is.
+  if (paid) { if (cloud.adapter) sync(); else emit('licence'); }
+  else { clearTimeout(timer); if (cloud.adapter) setStatus('paused'); else emit('licence'); }
 }
 // True when this device may (licensed, or licences not switched on); otherwise explains, offering a licence, and false.
 export function requirePaid(what) {
