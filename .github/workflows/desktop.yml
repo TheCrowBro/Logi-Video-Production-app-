@@ -61,8 +61,12 @@ jobs:
       - name: Build
         shell: bash
         run: |
+          # An empty CSC_LINK is read as a certificate path (the project folder) and stops the Mac build
+          [ -n "$CSC_LINK" ] || unset CSC_LINK CSC_KEY_PASSWORD
           extra=()
           if [ "$RUNNER_OS" = macOS ] && [ "$NOTARIZE" = true ]; then extra+=(--config.mac.notarize=true); fi
+          # No certificate: sign ad hoc, or Apple silicon Macs call the app "damaged" instead of offering Open Anyway
+          if [ "$RUNNER_OS" = macOS ] && [ -z "${CSC_LINK:-}" ]; then extra+=(--config.mac.identity=-); fi
           if [ "$RUNNER_OS" = Windows ] && [ "$AZURE" = true ]; then
             extra+=("--config.win.azureSignOptions.publisherName=$AZ_PUBLISHER"
                     "--config.win.azureSignOptions.endpoint=$AZ_ENDPOINT"

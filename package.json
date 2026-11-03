@@ -48,6 +48,7 @@
     ],
     "asar": true,
     "win": {
+      "icon": "desktop/build/icon.png",
       "target": [
         {
           "target": "nsis",
@@ -67,6 +68,7 @@
       "deleteAppDataOnUninstall": false
     },
     "mac": {
+      "icon": "desktop/build/icon.png",
       "target": [
         {
           "target": "dmg",
@@ -95,6 +97,7 @@
       "notarize": false
     },
     "linux": {
+      "icon": "desktop/build/icon.png",
       "target": [
         {
           "target": "AppImage",
