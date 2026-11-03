@@ -120,7 +120,7 @@ The Android app opens the website inside itself. Android shows a thin browser ba
 ## Step 9. Apply for production, then publish
 
 1. After the 14 days, the Play Console dashboard shows **Apply for production access**. Press it and answer the short questions about the test: what was tested, what feedback came back, what changed. Google answers within a few days.
-2. Then **Test and release** → **Testing** → **Closed testing** → `Coworkers` → **Promote release** → **Production**. This sends the same bundle the testers used. Don't upload a new file: every build has the same version number, and Play refuses a version number it has already seen. (The same thing another way: **Production** → **Create new release** → **Add from library**, and pick that bundle.) Choose the countries: all of them if the Japan authorization (Step 1b) is submitted, otherwise all except Japan, adding Japan once it is done. Then **Review release** and **Start rollout to Production**.
+2. Then **Test and release** → **Testing** → **Closed testing** → `Coworkers` → **Promote release** → **Production**. This sends the same bundle the testers used. Don't upload a new file: every build has the same version number, and Play refuses a version number it has already seen. (The same thing another way: **Production** → **Create new release** → **Add from library**, and pick that bundle.) Choose the countries: all of them. Then **Review release** and **Start rollout to Production**.
 3. Google reviews a first production release. It usually takes a few days, occasionally a week. After that Vdex is in the store.
 
 ## Later: updates

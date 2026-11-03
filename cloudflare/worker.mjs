@@ -224,7 +224,7 @@ async function release(request, env) {
 const cleanEmail = v => { const e = String(v || '').trim().toLowerCase(); return e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : ''; };
 async function linkEmail(env, email, lic) {
   email = cleanEmail(email); if (!email || !env.LICENCES || !lic || !lic.ref) return;
-  const rec = (await env.LICENCES.get('e:' + email, 'json').catch(() => null)) || {};
+  const rec = (await env.LICENCES.get('e:' + email, 'json')) || {}; // a failed read throws: never overwrite the record with less
   const list = Array.isArray(rec.licences) ? rec.licences : [];
   if (list.some(l => l.ref === lic.ref)) return;
   list.push({ ref: lic.ref, seats: lic.seats || 3, name: lic.name || '', comp: !!lic.comp, expires: lic.expires || '' });
@@ -256,7 +256,7 @@ const shownLicence = (l, email) => ({ email, name: l.name || '', ref: l.ref, sea
 // The website (and the Google Play app, which is the website) asks for a licence after its trial. Someone signs in
 // with the email address their licence belongs to: a 6-digit code goes to that address (only if it has a licence, so
 // nobody else is emailed), works for 15 minutes and for 5 tries, and becomes a token the page keeps.
-const CODE_TTL = 15 * 60e3, CODE_TRIES = 5, CODES_PER_HOUR = 5;
+const CODE_TTL = 15 * 60e3, CODE_TRIES = 5, CODES_PER_HOUR = 5, CODES_PER_DAY = 4;
 // Sign-in emails a day, for everyone together, kept below Resend's daily quota (100 on its free plan) so purchase
 // emails always have room. SIGN_IN_EMAILS_PER_DAY raises it on a paid Resend plan.
 const emailsPerDay = env => Math.max(1, Number(env.SIGN_IN_EMAILS_PER_DAY) || 60);
@@ -282,13 +282,16 @@ async function webStart(request, env) {
   if ((await licencesFor(env, email)).length) {
     const key = 'w:' + email, now = Date.now();
     const rec = (await env.LICENCES.get(key, 'json').catch(() => null)) || {};
-    const sent = (Array.isArray(rec.sent) ? rec.sent : []).filter(t => now - t < 3600e3);
-    if (sent.length < CODES_PER_HOUR) {
+    const sent = (Array.isArray(rec.sent) ? rec.sent : []).filter(t => now - t < 86400e3);
+    const lastHour = sent.filter(t => now - t < 3600e3).length, sameDay = sent.filter(t => today(t) === today(now)).length;
+    // At most 5 an hour and 4 a day to one address (so nobody can flood an inbox, or use up the day's emails alone);
+    // past that, the same answer and no email.
+    if (lastHour < CODES_PER_HOUR && sameDay < CODES_PER_DAY) {
       const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
       const salt = codes.b64u.enc(crypto.getRandomValues(new Uint8Array(12)));
-      await env.LICENCES.put(key, JSON.stringify({ h: hex(await sha256(`${salt}|${email}|${code}`)), salt, exp: now + CODE_TTL, tries: 0, sent: [...sent, now] }), { expirationTtl: 3600 });
-      await env.LICENCES.put(dayKey, String(usedToday + 1), { expirationTtl: 2 * 86400 });
+      await env.LICENCES.put(key, JSON.stringify({ h: hex(await sha256(`${salt}|${email}|${code}`)), salt, exp: now + CODE_TTL, tries: 0, sent: [...sent, now] }), { expirationTtl: 86400 });
       if (!(await sendSignIn(env, email, code))) return json(502, { error: 'email-failed' });
+      await env.LICENCES.put(dayKey, String(usedToday + 1), { expirationTtl: 2 * 86400 }).catch(e => console.error('Could not count a sign-in email: ' + e.message)); // a count, not a lock
     }
   }
   // The same answer whether or not the email has a licence. With a code, the email it holds (whoever has the code can
@@ -303,10 +306,10 @@ async function webVerify(request, env) {
   const key = 'w:' + email, rec = await env.LICENCES.get(key, 'json').catch(() => null);
   if (!rec || !rec.h || Date.now() > rec.exp || (rec.tries || 0) >= CODE_TRIES) return json(400, { error: 'wrong-code' });
   if (hex(await sha256(`${rec.salt}|${email}|${code}`)) !== rec.h) {
-    rec.tries = (rec.tries || 0) + 1; await env.LICENCES.put(key, JSON.stringify(rec), { expirationTtl: 3600 });
+    rec.tries = (rec.tries || 0) + 1; await env.LICENCES.put(key, JSON.stringify(rec), { expirationTtl: 86400 });
     return json(400, { error: 'wrong-code' });
   }
-  await env.LICENCES.put(key, JSON.stringify({ sent: rec.sent || [] }), { expirationTtl: 3600 }); // each code works once
+  await env.LICENCES.put(key, JSON.stringify({ sent: rec.sent || [] }), { expirationTtl: 86400 }); // each code works once
   const list = await licencesFor(env, email); if (!list.length) return json(403, { error: 'no-licence' });
   const token = await codes.signNote('web', await shopKey(env), SHOP_KID, { email, ref: list[0].ref, iat: Date.now() });
   return json(200, { ok: true, token, licence: shownLicence(list[0], email) });
@@ -334,8 +337,14 @@ async function webActivate(request, env) {
   if (!b.install || !validInstall(b.install)) return json(400, { error: 'invalid' });
   if (!env.LICENCES) return json(503, { error: 'not-ready' });
   const key = await shopKey(env); if (!key) return json(503, { error: 'not-ready' });
-  const list = await licencesFor(env, v.email), l = list.find(x => x.ref === v.ref);
-  if (!l) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : 'signed-out' });
+  const list = await licencesFor(env, v.email);
+  let l = list.find(x => x.ref === v.ref);
+  if (!l && !list.length) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : (await endedFor(env, v)) ? 'expired' : 'signed-out' });
+  if (!l) { // the signed-in licence ended or was refunded, but the email has another: carry on with that one, as /check does
+    l = list[0];
+    const res = await takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os: 'Android', release: b.release });
+    return json(res.status, { ...(await res.json()), token: await codes.signNote('web', key, SHOP_KID, { email: v.email, ref: l.ref, iat: Date.now() }), licence: shownLicence(l, v.email) });
+  }
   if (!b.release && list.length > 1) {
     const r = await seats(env, l.ref);
     const room = r.computers.some(c => c.id === b.install) || r.computers.length < (l.seats || 3);

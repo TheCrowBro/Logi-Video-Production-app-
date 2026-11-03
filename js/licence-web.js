@@ -90,6 +90,7 @@ export function webLicence() {
     let r; try { r = await call('activate', { token: read().token, install: read().install, ...(release ? { release } : {}) }); } catch { update(x => { x.seatTried = now(); }); return { offline: true }; }
     const b = r.body;
     if (r.status === 200 && b.ok) { update(x => { x.seat = 'ok'; x.seatChecked = x.seatTried = now(); if (b.token) { x.token = b.token; x.licence = b.licence || x.licence; } }); return { ok: true }; } // b.token: moved to another of this email's licences, which had room
+    if (b.token) update(x => { x.token = b.token; x.licence = b.licence || x.licence; }); // moved to another of this email's licences
     if (b.error === 'full') { update(x => { x.seat = x.seat === 'ok' ? 'released' : 'full'; x.seatTried = now(); }); return { full: true, computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft }; }
     if (b.error === 'swaps') return { error: 'This licence has been moved between devices 3 times in the last 30 days, so it cannot move again yet. Reply to the email your licence came in and we will sort it out.' };
     if (r.answered && ['cancelled', 'signed-out', 'expired'].includes(b.error)) { signedOut(b.error); return { error: { cancelled: 'This licence has been cancelled.', 'signed-out': 'You have been signed out. Sign in again.', expired: 'This licence has ended.' }[b.error] }; }

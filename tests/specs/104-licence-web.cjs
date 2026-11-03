@@ -124,6 +124,20 @@ const DAY = 86400e3;
     ok('switching sign-in off pauses the trial: switched on again, it carries on rather than ending at once', resumed.mode === 'trial' && resumed.trialLeft >= 19 && resumed.trialLeft <= 21, `${resumed.mode} ${resumed.trialLeft}`);
     await ctx.close();
 
+    // Signing in from the "read-only" explanation: it closes, and focus goes back to the field that was changed.
+    ({ ctx, page } = await open({ storage: { on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY } }));
+    await page.waitForSelector('.licence-bar', { timeout: 5000 });
+    await page.evaluate(() => window.logiGo('settings')); await sleep(400);
+    await page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => /Profile/.test(x.querySelector('.ss-title').textContent)); d.open = true; d.scrollIntoView(); });
+    await page.locator('input[aria-label="Currency symbol"]').fill('£'); await page.locator('input[aria-label="Currency symbol"]').press('Enter'); await sleep(300);
+    await page.locator('.sheet.licence-readonly').getByRole('button', { name: 'Sign in' }).click();
+    await page.locator('.sheet input[type="email"]').last().fill('jo@example.com'); await page.locator('.sheet').last().getByRole('button', { name: 'Email me a code' }).click();
+    await page.waitForFunction(() => document.querySelector('.licence-digits')?.offsetParent != null, null, { timeout: 8000 });
+    await page.locator('.sheet .licence-digits').fill(codeFor('jo@example.com')); await page.locator('.sheet').last().getByRole('button', { name: 'Sign in' }).click();
+    await page.waitForFunction(() => !document.querySelector('.sheet'), null, { timeout: 8000 }); await sleep(400);
+    ok('signing in from the read-only explanation closes it and puts focus back on the field', (await page.locator('.licence-readonly').count()) === 0 && (await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))) === 'Currency symbol');
+    await ctx.close();
+
     // A refund signs the browser out at its next check.
     ({ ctx, page } = await open({ storage: { on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY } }));
     await page.evaluate(async () => { const m = await import('./js/licence.js'); await m.initLicence(); });

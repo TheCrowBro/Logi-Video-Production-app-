@@ -172,7 +172,7 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('after 5 wrong tries even the right code is refused until a new one is sent', (await web('verify', { email: 'pat@example.com', code: lastCode('pat@example.com') })).error === 'wrong-code');
     const before = mails().filter(x => x.to[0] === 'pat@example.com').length;
     for (let i = 0; i < 6; i++) await web('start', { email: 'pat@example.com' });
-    ok('no more than 5 codes an hour go to one address', mails().filter(x => x.to[0] === 'pat@example.com').length - before <= 3, `${mails().filter(x => x.to[0] === 'pat@example.com').length - before} more`);
+    ok('no more than 5 codes an hour, and 4 a day, go to one address', mails().filter(x => x.to[0] === 'pat@example.com').length - before <= 2, `${mails().filter(x => x.to[0] === 'pat@example.com').length - before} more`);
     // A free code: linked by the generator, or used instead of an email.
     const freeCode = await codes.signCode(ownerKey, 1, { name: 'Robin Free', email: 'robin@example.com', comp: true, issued: '2026-11-02' });
     const viaCode = await web('start', { code: freeCode });
@@ -207,6 +207,11 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const moved = await web('activate', { token: robinTok, install: 'install-play-000000000006' });
     const mt = moved.token && (await codes.readNote('web', moved.token, { keys: KEYS, signers: [2] }));
     ok('when the signed-in licence is full and the same email has another with room, the phone goes there with a token for it', moved.status === 200 && mt && mt.ref === '1:777' && moved.licence.ref === '1:777');
+    await adm('cancel', '1:777');
+    const back = await web('activate', { token: moved.token, install: 'install-play-000000000006' });
+    const bt = back.token && (await codes.readNote('web', back.token, { keys: KEYS, signers: [2] }));
+    ok('when that licence is then refunded, the phone carries on with the email\'s other licence instead of being signed out', !!bt && bt.ref === rb.licence.ref && back.licence.ref === rb.licence.ref && back.error !== 'cancelled');
+    await adm('restore', '1:777');
     ok('a place cannot be taken without a real sign-in', (await web('activate', { token: { kid: 2, data: '{}', sig: 'x' }, install: 'install-play-000000000009' })).status === 401);
 
     // Website sign-in switched off: buyers are not told to sign in on the website; and the day's email cap.

@@ -23,7 +23,7 @@ const here = () => (play() ? 'phone' : 'computer');
 function set(s) {
   if (!s || s.error || !s.mode) return;
   S.cur = s;
-  if (s.canEdit !== false && S.roClose) { S.roClose(); S.roClose = null; } // licensed now: the read-only explanation is out of date
+  if (s.canEdit !== false && S.roClose) closeReadOnly(); // licensed now: the read-only explanation is out of date
   S.listeners.forEach(f => { try { f(s); } catch { /* ignore */ } });
   paintBar();
 }
@@ -171,6 +171,13 @@ function rememberFocus() {
   el.dataset.fk = 'licence-ro';
   return () => { const twin = [...page.querySelectorAll(el.tagName)].filter(e => sig(e) === want)[nth]; if (twin && twin !== el) twin.dataset.fk = 'licence-ro'; };
 }
+// Closes the read-only explanation once nothing is open over it (a sign-in sheet started from it), so focus goes
+// back where it came from.
+function closeReadOnly() {
+  const backs = [...document.querySelectorAll('.sheet-back')], top = backs[backs.length - 1];
+  if (top && !top.querySelector('.licence-readonly')) { clearTimeout(S.roWait); S.roWait = setTimeout(closeReadOnly, 200); return; }
+  const close = S.roClose; S.roClose = null; if (close) close();
+}
 function readOnlySheet() {
   const s = S.cur, d = describe(s) || {};
   const sh = sheet('Vdex is read-only', h('div', { class: 'stack' },
@@ -199,7 +206,7 @@ function chooser(msg, r, pick, what) {
     h('span', null, `Your licence is already in use on ${plural((r.computers || []).length, 'device')}, its limit. To use it on this ${what}, choose one to take it off. `),
     h('span', { class: 'muted' }, r.swapsLeft ? `You can move it ${plural(r.swapsLeft, 'more time')} this month.` : 'It has been moved 3 times this month already: reply to the email your licence came in and we will help.'),
     list);
-  setTimeout(() => { const b = list.querySelector('button:not([disabled])'); if (b) b.focus(); }, 30);
+  msg.tabIndex = -1; setTimeout(() => msg.focus(), 30); // the explanation, not a button: a stray Enter must not move the licence
 }
 
 // Desktop: pastes and activates a code. When all its devices are taken, offers to move it from one of them.

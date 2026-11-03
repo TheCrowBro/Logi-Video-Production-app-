@@ -137,7 +137,7 @@ Even signed, a new Windows app shows a milder "not commonly downloaded" prompt n
 
 Until you do this, the website stays free for everyone. Once you do it, every browser (including people who already use the website) gets a 30-day trial from their next visit, and is then read-only until they sign in with a licence. The Android app works the same way, and each phone also takes one of the licence's 3 places.
 
-1. Make sure part 4 (Resend) is done: signing in works by emailing a code. Resend's free plan sends at most 100 emails a day (3,000 a month), shared with purchase emails, so Vdex sends at most 60 sign-in codes a day in all and keeps the rest for purchases; when the 60 are used up, sign-in says to try again tomorrow. Once many people use the website, take a paid Resend plan (from about 20 USD a month for 50,000 emails) and add the Cloudflare setting `SIGN_IN_EMAILS_PER_DAY` with a higher number, such as `1000`.
+1. Make sure part 4 (Resend) is done: signing in works by emailing a code. Resend's free plan sends at most 100 emails a day (3,000 a month), shared with purchase emails, so Vdex sends at most 60 sign-in codes a day in all (and at most 4 a day to any one address) and keeps the rest for purchases; when the 60 are used up, sign-in says to try again tomorrow. Once many people use the website, take a paid Resend plan (from about 20 USD a month for 50,000 emails) and add the Cloudflare setting `SIGN_IN_EMAILS_PER_DAY` with a higher number, such as `1000`.
 2. Update the Google Play Data safety answers (docs/google-play.md) if the Android app is already listed: signing in collects an email address.
 3. In Cloudflare (as in part 2), add a **Text** variable (or a Secret) named `WEB_SIGN_IN` with the value `on`. Within about 6 hours every open copy of Vdex picks it up. To switch it off again, delete it: trials then pause, and carry on where they were if you switch it on again.
 4. Try it: in a private browser window open https://vdex.crowmade.app, Settings → About → **Sign in**, with a licence that is live: for example a free code you made for your own email address in part 7 (the generator links it). A refunded test purchase, or one made in Stripe's test mode, cannot sign in.
@@ -146,7 +146,7 @@ Who can sign in: anyone who bought through the shop (with the email they paid wi
 
 The Android app on Google Play should be a **free** download (docs/google-play.md): people pay for the licence on the website. Google Play does not allow a Play app to link to another way to pay, so inside the Android app Vdex shows no price and no Buy button, only **Sign in**.
 
-Cloudflare's free plan allows 1,000 changes a day to the licence storage; each sign-in uses about two, so it is enough for a few hundred sign-ins a day. Beyond that, Cloudflare's Workers Paid plan (5 USD a month) raises it to a million.
+Cloudflare's free plan allows 1,000 changes a day to the licence storage; each sign-in uses about three, so it is enough for about 300 sign-ins a day. Beyond that, Cloudflare's Workers Paid plan (5 USD a month) raises it to a million.
 
 **Don't** stop the vdex Worker or delete the `vdex-licences` storage in Cloudflare: buyers' apps need it to activate and to keep working. If Vdex ever stops being sold, tell me first, and I publish a version that no longer needs it, as the terms promise.
 
