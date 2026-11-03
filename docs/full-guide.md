@@ -43,7 +43,7 @@ Why install it rather than keep it in a Safari tab:
 - **Notifications only work in the installed app.** Safari tabs can't show them. Camera, microphone and location work in the installed app on iOS 16.4 or later.
 - **It opens full-screen and works offline.**
 
-**One thing to know:** the installed app and the Safari tab are two separate copies with separate data. If you entered bookings in Safari before installing, export a backup there (Settings → *Backups & data* → **Export backup**) and import it in the installed app, or link the same cloud storage on both and they merge.
+**One thing to know:** the installed app and the Safari tab are two separate copies with separate data. If you entered bookings in Safari before installing, export a backup there (with a licence; Settings → *Backups & data* → **Export backup** (with a licence)) and import it in the installed app, or link the same cloud storage on both and they merge.
 
 ### Let Vdex use the camera, microphone and location
 
@@ -158,7 +158,7 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Where it lives.** Inside the installed app on this phone. Nothing is uploaded unless you link a storage of your own.
 
-**Backups.** Settings → *Backups & data* → **Export backup** opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
+**Backups.** Settings → *Backups & data* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
 
 **Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
@@ -217,16 +217,16 @@ A stolen, lost or broken phone should cost you a phone, not your business record
 - **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
 - **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
-- **Equipment → Asset register (CSV)** exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
+- **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
 - **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
 
 ### iPhone questions and answers
 
 **I installed it and my bookings vanished.**
-They're still in Safari: the installed app and the Safari tab are separate copies. In Safari, Settings → *Backups & data* → **Export backup**, then **Import backup** in the installed app.
+They're still in Safari: the installed app and the Safari tab are separate copies. In Safari, Settings → *Backups & data* → **Export backup** (with a licence), then **Import backup** in the installed app.
 
 **My data disappeared after a few weeks.**
-Safari clears website data it hasn't seen for a while. Use the installed app, link a cloud storage, and export a backup now and then.
+Safari clears website data it hasn't seen for a while. Use the installed app, link a cloud storage, and export a backup now and then (with a licence).
 
 **The Install button only shows instructions.**
 That's how iPhones work: web apps are added through Safari's Share button, not a download.
@@ -404,7 +404,7 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Where it lives.** In Chrome's storage for the Vdex site, which the installed app shares. Nothing is uploaded unless you link a storage of your own. Clearing Chrome's browsing or site data removes it, so keep a backup.
 
-**Backups.** Settings → *Backups & data* → **Export backup** opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
+**Backups.** Settings → *Backups & data* → **Export backup** (with a licence) opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
 
 **Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
@@ -463,7 +463,7 @@ A stolen, lost or broken phone should cost you a phone, not your business record
 - **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
 - **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
-- **Equipment → Asset register (CSV)** exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
+- **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
 - **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
 
 ### Android questions and answers
@@ -490,7 +490,7 @@ That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Si
 Put both on the same Wi‑Fi or on the phone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
 
 **My bookings aren't on my other device.**
-Each device starts with its own data. Link the same storage on both (☁), or export a backup on one and import it on the other.
+Each device starts with its own data. Link the same storage on both (☁), or export a backup on one and import it on the other (with a licence).
 
 **Can clients log in to review or approve?**
 No. Vdex is your side of the job: you record their feedback and send them the documents.
@@ -524,7 +524,7 @@ Open https://vdex.crowmade.app/download.html, download the file for your compute
 | **Mac** | `Vdex.dmg` | Open it and drag Vdex into Applications. If macOS says it cannot check the app, go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. |
 | **Linux** | `Vdex.AppImage` | Make it executable (right-click → Properties → *Allow executing as program*, or `chmod +x`), then double-click it. |
 
-**The licence.** Vdex is free to try for 30 days, on the website, on each computer and in the Android app. After that it needs a licence: **Buy a licence** in Settings → *About* (20 US dollars once, for up to 3 of your devices). On the website and in the Android app, press **Sign in** and use the email address you bought with: Vdex emails you a 6-digit code to type in. In the desktop app, paste the code from your email under **Enter licence code**. Keeping a copy in cloud storage, and saving backup and spreadsheet files, come with the licence (during the trial too); a storage linked before is paused until then. PDFs, printing and links for clients and crew always work. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens, prints and exports, but nothing can be changed. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
+**The licence.** Vdex is free to try for 30 days, on the website, on each computer and in the Android app. After that it needs a licence: **Buy a licence** in Settings → *About* (20 US dollars once, for up to 3 of your devices). On the website and in the Android app, press **Sign in** and use the email address you bought with: Vdex emails you a 6-digit code to type in. In the desktop app, paste the code from your email under **Enter licence code**. Keeping a copy in cloud storage, and saving backup and spreadsheet files, come with the licence (during the trial too); a storage linked before is paused until then. PDFs, printing and links for clients and crew always work. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens and prints, but nothing can be changed. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
 
 The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **☁ → A file in a synced folder**, which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Google Drive or iCloud (or Dropbox, OneDrive or WebDAV), and link the same one everywhere.
 

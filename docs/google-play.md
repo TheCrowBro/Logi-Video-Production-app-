@@ -80,7 +80,7 @@ Left menu → **Monitor and manage** → **Policy and programmes** → **App con
 |---|---|
 | Privacy policy | The privacy policy address from the table above. |
 | Ads | **No, my app does not contain ads.** |
-| App access | **All functionality is available without special access.** If asked for notes: "Everything works for 30 days from the first time the app is opened, with no account. After that, Vdex asks the user to sign in with the email address of their Vdex licence. The PIN lock is optional and only set by the user." |
+| App access | **All or some functionality is restricted.** Instructions for Google: "Everything except cloud storage and saving backup or spreadsheet files works without signing in for 30 days from the first time the app is opened. Those, and everything after 30 days, need a Vdex licence: press Sign in (Settings → About) and type the email address below; Vdex emails a 6-digit code to it." Then give the login of an email account you made for Google's reviewers (for example a new Gmail address and its password) that has a free licence: make it in the generator page with that email address (it is linked by itself). The PIN lock is optional and only set by the user. |
 | Content rating | Start the questionnaire, enter your email, choose **Utility, Productivity, Communication, or Other**, and answer **No** to every question (no violence, no sexual content, no bad language, no drugs, no gambling, no user-to-user interaction, no location sharing with other users, no purchases). The rating comes out as "Everyone". |
 | Target audience and content | Age group: **18 and over** only. Designed for children: **No**. |
 | News apps | **No.** |
@@ -159,7 +159,7 @@ ON SET
 Sunrise and sunset, a white balance reader, a sound level meter and a range finder. Timecode notes stamped with the camera's clock, synced from the audio feed, exported for the editor.
 
 YOURS, PRIVATELY
-Vdex keeps everything on your device. Set a PIN and it locks with your fingerprint or face. Link your own Google Drive or iCloud (or Dropbox or OneDrive) to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
+Vdex keeps everything on your device. Set a PIN and it locks with your fingerprint or face. With a licence, link your own Google Drive or iCloud (or Dropbox or OneDrive) to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
 
 Works offline. Tap ? on any page for a walkthrough.
 ```

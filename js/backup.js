@@ -27,7 +27,15 @@ export function health() {
   const when = days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
   return { level: days > 7 ? 'warn' : 'ok', at, via, days, when, text: `Last off-device copy: ${when} (${via}).` };
 }
+// Kept up to date by itself when the licence changes (a sign-in), without redrawing the page around it.
 export function healthLine() {
+  const el = h('div', { class: 'health-line' });
+  const draw = () => el.replaceChildren(healthText());
+  draw();
+  const un = store.subscribe(reason => { if (!el.isConnected && el.dataset.drawn) return un(); el.dataset.drawn = '1'; if (reason === 'licence') draw(); });
+  return el;
+}
+function healthText() {
   if (!store.isPaid()) return h('p', { class: 'small muted' }, 'Backup files and cloud storage come with a Vdex licence. Your data is kept on this device.');
   const hl = health();
   return h('p', { class: hl.level === 'ok' ? 'status-line' : hl.level === 'empty' ? 'small muted' : 'warn small', 'data-state': hl.level === 'ok' ? 'synced' : undefined },

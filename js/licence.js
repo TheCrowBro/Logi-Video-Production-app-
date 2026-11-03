@@ -3,7 +3,8 @@
 //   desktop: desktop/licence.js through window.vdexDesktop.licence (30-day trial → a licence code → up to 3 devices)
 //   website: js/licence-web.js (30-day trial → sign in with the licence's email; the Play app takes one of the 3 places)
 // When the trial is over and there is no working licence, Vdex is read-only: the store refuses changes (store.setGate)
-// and says why, while opening, searching, printing and exporting keep working.
+// and says why, while opening, searching and printing keep working. Cloud storage and saving backup and spreadsheet
+// files need a licence from the start (store.setPaid).
 import { h, sheet, toast, announce, muteToasts } from './util.js';
 import { setGate, redraw, setPaid } from './store.js';
 
@@ -27,7 +28,8 @@ function set(s) {
   if (!s || s.error || !s.mode) return;
   S.cur = s;
   setPaid(PAID.has(s.mode), needsLicence);
-  if (s.canEdit !== false && S.roClose) closeReadOnly(); // licensed now: the read-only explanation is out of date
+  if (PAID.has(s.mode) && S.needClose) closeWhenOnTop('licence-needed', 'needClose'); // just signed in: the offer is out of date
+  if (s.canEdit !== false && S.roClose) closeWhenOnTop('licence-readonly', 'roClose'); // licensed now: the read-only explanation is out of date
   S.listeners.forEach(f => { try { f(s); } catch { /* ignore */ } });
   paintBar();
 }
@@ -80,7 +82,7 @@ function describe(s) {
   switch (s.mode) {
     case 'founder': return { line: 'Free licence: thank you for using Vdex from the start.', tone: 'ok' };
     case 'trial': return { line: `Free trial: ${plural(s.trialLeft, 'day')} left${s.trialEnds ? ` (until ${day(s.trialEnds)})` : ''}. After that Vdex is read-only here until you ${offer}.`, buy: shop, enter: true };
-    case 'ended': return { line: `Your free trial has ended, so Vdex is read-only here: you can open, search, print and export everything, but not change it. To change things again, ${offer}.`, tone: 'warn', buy: shop, enter: true };
+    case 'ended': return { line: `Your free trial has ended, so Vdex is read-only here: you can open, search and print everything, but not change it. To change things again, ${offer}.`, tone: 'warn', buy: shop, enter: true };
     case 'licensed': return web()
       ? { line: `Signed in as ${l.email}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${play() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true }
       : { line: `Licensed to ${who(l)}${l && l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}.`, tone: 'ok', copy: true, release: true };
@@ -175,12 +177,12 @@ function rememberFocus() {
   el.dataset.fk = 'licence-ro';
   return () => { const twin = [...page.querySelectorAll(el.tagName)].filter(e => sig(e) === want)[nth]; if (twin && twin !== el) twin.dataset.fk = 'licence-ro'; };
 }
-// Closes the read-only explanation once nothing is open over it (a sign-in sheet started from it), so focus goes
-// back where it came from.
-function closeReadOnly() {
+// Closes an explanation that is out of date (read-only, or "comes with a licence") once nothing is open over it (a
+// sign-in sheet started from it), so focus goes back where it came from.
+function closeWhenOnTop(cls, key) {
   const backs = [...document.querySelectorAll('.sheet-back')], top = backs[backs.length - 1];
-  if (top && !top.querySelector('.licence-readonly')) { clearTimeout(S.roWait); S.roWait = setTimeout(closeReadOnly, 200); return; }
-  const close = S.roClose; S.roClose = null; if (close) close();
+  if (top && !top.querySelector('.' + cls)) { clearTimeout(S[key + 'Wait']); S[key + 'Wait'] = setTimeout(() => closeWhenOnTop(cls, key), 200); return; }
+  const close = S[key]; S[key] = null; if (close) close();
 }
 function readOnlySheet() {
   const s = S.cur, d = describe(s) || {};
@@ -204,6 +206,7 @@ function needsLicence(what) {
     h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
     h('div', { class: 'actions' }, ...actions(s, { buy: !play(), enter: true }, () => sh.close()))));
   sh.el.classList.add('licence-needed');
+  S.needClose = sh.close;
   sh.el.tabIndex = -1; setTimeout(() => sh.el.focus(), 50); // not a button: someone still typing must not press Buy by accident
 }
 function detailsSheet() {

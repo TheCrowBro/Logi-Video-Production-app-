@@ -69,7 +69,13 @@ export const settings = {
           h('a', { class: 'btn ghost', href: 'terms.html', target: '_blank', rel: 'noopener' }, 'Terms of service'),
           h('a', { class: 'btn ghost', href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy policy'),
           h('a', { class: 'btn ghost', href: 'vendor/LICENSES.md', target: '_blank', rel: 'noopener' }, 'Open-source licences')))));
-    return () => { gone = true; panels.forEach(p => p.destroy && p.destroy()); if (licence) licence.destroy(); };
+    // A sign-in changes what Backups & data says it can do: update its summary in place (the page is not redrawn).
+    const unPaid = store.subscribe(reason => {
+      if (reason !== 'licence') return;
+      const s = [...root.querySelectorAll('details.settings-section')].find(x => x.querySelector('.ss-title')?.textContent === 'Backups & data');
+      const st = s && s.querySelector('.ss-status'); if (st) st.textContent = [`${db.bookings.length} bookings · ${db.gear.length} items`, !store.isPaid() ? 'backups with a licence' : backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · ');
+    });
+    return () => { gone = true; unPaid(); panels.forEach(p => p.destroy && p.destroy()); if (licence) licence.destroy(); };
   },
 };
 

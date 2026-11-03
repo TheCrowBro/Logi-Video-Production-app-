@@ -54,9 +54,9 @@ Everything can be changed later, and every screen has a back button.
 ## Keep your things safe
 
 - **Set a PIN** in Settings → Security. Then Vdex locks when you put the phone down, and you can open it with your fingerprint or face. While it's locked, the information on this device is encrypted.
-- **Connect your cloud storage:** tap ☁ at the top, tap **Connect** next to Google Drive or iCloud, and sign in to your own account (Dropbox, OneDrive and more are under *More ways to keep a copy*). Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
+- **Connect your cloud storage** (with a licence): tap ☁ at the top, tap **Connect** next to Google Drive or iCloud, and sign in to your own account (Dropbox, OneDrive and more are under *More ways to keep a copy*). Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
 - **Nothing is sent anywhere by itself.** The [privacy policy](https://vdex.crowmade.app/privacy.html) says in plain words what stays on your device and what leaves it, and when. The [terms of service](https://thecrowbro.github.io/Logi-Video-Production-app-/terms.html) cover using Vdex.
-- **Save a backup now and then:** Settings → Backups & data → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.
+- **Save a backup now and then** (with a licence): Settings → Backups & data → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.
 
 ## Need help?
 
@@ -67,7 +67,7 @@ Everything can be changed later, and every screen has a back button.
 ### If something isn't working
 
 - **The camera, microphone or location won't start.** Your phone asked for permission once and you said no. Open your phone's Settings, find Vdex or your browser, and allow it.
-- **My shoots aren't on my other device.** Connect the same storage, with the same account, on both devices with the ☁ button, or export a backup on one and import it on the other.
+- **My shoots aren't on my other device.** Connect the same storage, with the same account, on both devices with the ☁ button, or export a backup on one and import it on the other (both with a licence).
 - **The Connect buttons are grey.** Sign-in hasn't been switched on in this copy of Vdex yet. The person who looks after the tech does it once: see [Turning on sign-in](docs/turn-on-sign-in.md).
 - **I forgot my PIN.** It can't be recovered. Tap **Forgot PIN?** on the lock screen, erase this device, then link your storage or import a backup and everything comes back.
 - **Something looks out of date.** Close Vdex fully and open it again. New versions arrive by themselves; a bar at the bottom offers to reload when one has.

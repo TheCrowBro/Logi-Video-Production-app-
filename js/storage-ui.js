@@ -102,7 +102,7 @@ export function storagePanel() {
               h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: paidRun(store.createCloudFile) }, 'Create database file…'), h('button', { class: 'btn ghost', onclick: paidRun(store.openCloudFile) }, 'Open existing file…'))]
             : h('p', { class: 'small muted' }, ios ? 'Not on iPhone or iPad: they cannot give an app a file to keep writing to. Use Google Drive or iCloud above.' : 'Needs Chrome, Edge or the Vdex desktop app on a computer.')),
         h('div', { class: 'card stack' }, h('strong', null, '💾 No cloud at all'),
-          h('p', { class: 'small muted' }, 'Keep everything on this device and save a backup file now and then under Backups & data.')),
+          h('p', { class: 'small muted' }, store.isPaid() ? 'Keep everything on this device and save a backup file now and then under Backups & data.' : 'Everything stays on this device. Backup files come with a licence.')),
         more('For developers: use your own app', 'Only if you run your own copy of Vdex', [
           h('p', { class: 'small muted' }, 'Only needed if you host Vdex yourself or want sign-ins to go through an app you registered. A key here replaces the built-in one on this device; leave it empty to use the built-in one.'),
           field('Dropbox app key', providers.settings.ownDropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),

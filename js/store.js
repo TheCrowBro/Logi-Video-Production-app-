@@ -76,9 +76,9 @@ function persistLocal() {
   if (!writeQueued) { writeQueued = true; queueMicrotask(writeNow); }
 }
 
-// The desktop app makes Vdex read-only when its free trial is over and there is no licence (js/licence.js sets this
-// gate). Every change goes through update(), so this is the one place that refuses them; opening, searching, printing,
-// exporting, backups and sync from other devices keep working.
+// Vdex is read-only when its free trial is over and there is no licence (js/licence.js sets this gate). Every change
+// goes through update(), so this is the one place that refuses them; opening, searching and printing keep working
+// (backups, spreadsheets and cloud storage come with a licence: setPaid below).
 let gate = null;
 export const setGate = fn => { gate = typeof fn === 'function' ? fn : null; };
 
@@ -273,7 +273,8 @@ export function setPaid(on, prompt) {
 // True when this device may (licensed, or licences not switched on); otherwise explains, offering a licence, and false.
 export function requirePaid(what) {
   if (paid) return true;
-  if (paidPrompt) paidPrompt(what); else toast('This comes with a Vdex licence.');
+  if (paidPrompt) paidPrompt(what);
+  else import('./licence.js').then(m => m.initLicence()).then(() => (paidPrompt ? paidPrompt(what) : toast('This comes with a Vdex licence.'))).catch(() => toast('This comes with a Vdex licence.'));
   return false;
 }
 
@@ -384,12 +385,13 @@ async function runSync({ ask = false, quiet = false } = {}) {
     if (sealed) { pendingSync = true; return; } // locked while the sign-in was open: nothing is copied until it is unlocked
     if (!quiet) setStatus('saving');
     const remote = await a.read();
+    if (cloud.paused) return setStatus('paused'); // paused while reading: nothing is merged or written
     if (!remote) return await push();
     const merged = mergeDb(db, normalise(remote));
     const localChanged = JSON.stringify(merged) !== JSON.stringify(db);
     const remoteStale = JSON.stringify(merged) !== JSON.stringify(normalise(remote));
     if (localChanged) { db = merged; persistLocal(); emit(); }
-    if (remoteStale) await push(); else { lsSet('logi-sync-at', String(Date.now())); setStatus('synced'); }
+    if (remoteStale) await push(); else { lsSet('logi-sync-at', String(Date.now())); setStatus(cloud.paused ? 'paused' : 'synced'); }
   } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
 }
 
@@ -406,19 +408,22 @@ async function pushNow() {
     setStatus('saving');
     await a.write(exportJSON());
     lsSet('logi-sync-at', String(Date.now()));
+    if (cloud.paused) { if (cloud.adapter === a) setStatus('paused'); return; } // paused meanwhile: no backup or feed after it
     await autoBackup(a);
     if (db.calSync?.feed && auxWriter && a.writeAux) {
       try { await a.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
     }
-    if (cloud.adapter === a) setStatus('synced');
+    if (cloud.adapter === a) setStatus(cloud.paused ? 'paused' : 'synced');
   } catch (e) { if (cloud.adapter === a) setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
 }
 export async function setFeed(on) {
+  if (on) mustBePaid();
   if (on && cloud.adapter?.enableFeed) await cloud.adapter.enableFeed();
   update(d => { d.calSync = { ...d.calSync, feed: !!on, updatedAt: Date.now() }; });
   if (on) await push();
 }
 export async function createFeedFile() { // local-file storage: pick where the feed file lives (same synced folder)
+  mustBePaid();
   const handle = await window.showSaveFilePicker({ suggestedName: 'vdex-bookings.ics', types: [{ description: 'Calendar feed', accept: { 'text/calendar': ['.ics'] } }] });
   await kv('readwrite', s => s.put(handle, 'auxHandle'));
   if (cloud.adapter) cloud.adapter.aux = handle;
@@ -426,6 +431,7 @@ export async function createFeedFile() { // local-file storage: pick where the f
   await push();
 }
 export async function feedLink() {
+  mustBePaid();
   if (!cloud.adapter?.shareLink) throw new Error('No link for this storage');
   await push();
   cloud.feedUrl = await cloud.adapter.shareLink('vdex-bookings.ics');
