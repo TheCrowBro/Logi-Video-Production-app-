@@ -25,10 +25,10 @@ export const settings = {
   id: 'settings', label: 'Settings', icon: '⚙️',
   render(root) {
     const panels = [storagePanel(), calendarPanel(), securityPanel(), updatePanel()];
-    // The desktop app's licence (js/licence.js), loaded only there.
-    const licenceSlot = h('div', { class: 'licence-slot', hidden: true });
+    // The licence (js/licence.js): it shows itself only once licences are switched on.
+    const licenceSlot = h('div', { class: 'licence-slot' });
     let licence = null, gone = false;
-    if (window.vdexDesktop && window.vdexDesktop.licence) import('../licence.js').then(m => { if (gone) return; licence = m.licencePanel(); licenceSlot.replaceChildren(licence.el); licenceSlot.hidden = false; }).catch(() => {});
+    import('../licence.js').then(m => { if (gone) return; licence = m.licencePanel(); licenceSlot.replaceChildren(licence.el); }).catch(() => {});
     const display = displayPanel({ onTour: () => startTour() });
     // Sections remember whether you opened or closed them, so a saved setting or a sync does not fold the page up.
     const section = (title, status, body, open = false) => {

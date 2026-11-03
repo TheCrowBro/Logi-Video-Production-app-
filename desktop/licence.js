@@ -26,7 +26,7 @@ const OS = { darwin: 'Mac', win32: 'Windows', linux: 'Linux' };
 
 const MESSAGES = {
   cancelled: 'This code has been cancelled, for example after a refund. If you think that is a mistake, reply to the email your code came in.',
-  swaps: 'This code has been moved between computers 3 times in the last 30 days, so it cannot move again yet. Reply to the email your code came in and we will sort it out.',
+  swaps: 'This code has been moved between devices 3 times in the last 30 days, so it cannot move again yet. Reply to the email your code came in and we will sort it out.',
   invalid: 'The licence server does not recognise this code. Check you copied all of it, or reply to the email your code came in.',
 };
 

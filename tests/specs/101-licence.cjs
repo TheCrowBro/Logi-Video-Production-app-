@@ -194,6 +194,8 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     const page = await ctx.newPage();
     const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     const requests = []; page.on('request', q => { if (!q.url().startsWith('file:') && !q.url().startsWith('blob:') && !q.url().startsWith('data:')) requests.push(q.url()); });
+    const linked = []; // the shop is never really contacted from a test: its answers are made up here
+    await page.route('https://vdex.crowmade.app/**', async r => { const body = r.request().postData(); if (r.request().method() === 'POST') linked.push(JSON.parse(body)); await r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ ok: true, ref: '1:1', computers: [], swaps: 0, cancelled: null }) }); });
     const genFile = path.join(os.tmpdir(), 'vdex-generator-' + process.pid + '.html'); fs.writeFileSync(genFile, built);
     await page.goto('file://' + genFile);
     ok('the page opens from a file with no errors and says the browser can sign', (await page.locator('#support').isHidden()) && !errors.length, errors.join(' | '));
@@ -220,9 +222,13 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     const mr = await codes.verifyCode(made, { keys: genKeys });
     ok('a free code made in the page is accepted by the app\'s own check', mr.status === 'valid' && mr.licence.comp && mr.licence.name === 'Riley Free' && mr.licence.seats === 3 && mr.licence.ref.startsWith('1:'));
     ok('the email it writes carries the code and the steps', decodeURIComponent(await page.getAttribute('#mail', 'href')).includes(made) && /Enter licence code/.test(decodeURIComponent(await page.getAttribute('#mail', 'href'))));
+    await page.waitForFunction(() => /linked to its email/.test(document.getElementById('msg').textContent), null, { timeout: 10000 }).catch(() => {});
+    ok('the page says the code is linked for website sign-in', /linked to its email for website sign-in/.test(await page.textContent('#msg')));
     const dl = page.waitForEvent('download'); await page.click('#saveledger'); const ledger = fs.readFileSync(await (await dl).path(), 'utf8');
     ok('the ledger lists the code, and a note that looks like a formula is kept as text', ledger.startsWith('issued,ref,type,name,email,expires,seats,note,code') && ledger.includes(made) && ledger.includes(`'=HYPERLINK`));
-    ok('the page made no network requests while making keys and codes', requests.length === 0, requests.join(', '));
+    await page.waitForTimeout(500);
+    const linkNote = linked[0] && (await codes.readNote('admin', linked[0], { keys: genKeys, signers: codes.OWNER_KIDS }));
+    ok('making keys and codes contacts nothing except, for a code with an email, one signed request to link it for website sign-in', requests.every(u => u === 'https://vdex.crowmade.app/licence/admin') && linked.length === 1 && linkNote && linkNote.op === "link" && linkNote.code === made && linkNote.ref === mr.licence.ref, requests.join(', '));
     await browser.close(); fs.rmSync(genFile, { force: true });
   } catch (e) {
     console.log('FAIL spec crashed — ' + (e && e.stack || e));

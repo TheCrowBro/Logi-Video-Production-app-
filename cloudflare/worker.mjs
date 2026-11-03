@@ -7,6 +7,9 @@
 //   /licence/activate          a desktop app puts its computer on a code's list (at most 3 computers per code)
 //   /licence/release           a desktop app takes its computer off the list
 //   /licence/admin             the owner's generator page: look at, clear, cancel or restore a code (signed requests)
+//   /licence/web/…             the website's sign-in: a 6-digit code emailed to a licence holder, then a signed token
+//                              (status, start, verify, check), and a place on the licence for the Google Play app
+//                              (activate, release)
 //
 // Codes are made and checked by desktop/licence-codes.js, the same file the app and the generator use. The list of
 // computers for each code, and which codes are cancelled, are kept in the LICENCES KV namespace (created by Wrangler on
@@ -18,6 +21,7 @@
 //   BUY_URL                the payment link's address (https://buy.stripe.com/…)
 //   RESEND_API_KEY         Resend, to email codes (optional: without it the code is only shown after paying)
 //   MAIL_FROM, REPLY_TO    the email's sender (default "Vdex <licences@vdex.crowmade.app>") and where replies go
+//   WEB_SIGN_IN            "on" makes the website and the Google Play app ask for a licence after their 30-day trial
 import codes from '../desktop/licence-codes.js';
 import KEYS from '../desktop/licence-keys.json';
 
@@ -103,9 +107,10 @@ async function thanks(url, env) {
   if (r.error) return page(404, 'We could not find that order', '<h1>We could not find that order</h1><p>If you have just paid, wait a minute and reload this page. If it still does not work, reply to your receipt email and we will send your licence code.</p>');
   const who = r.name || r.email;
   return page(200, 'Thank you! Here is your Vdex licence code', `<h1>Thank you! Here is your licence code</h1>
-<p>${who ? `Licensed to <b>${esc(who)}</b>. ` : ''}It works on up to 3 of your own computers.${env.RESEND_API_KEY && r.email ? ` We have also emailed it to ${esc(r.email)}.` : ' Keep a copy: this page is the only place it is shown.'}</p>
+<p>${who ? `Licensed to <b>${esc(who)}</b>. ` : ''}It works on up to 3 of your own devices.${env.RESEND_API_KEY && r.email ? ` We have also emailed it to ${esc(r.email)}.` : ' Keep a copy: this page is the only place it is shown.'}</p>
 <div class="card"><label for="code" class="muted">Your licence code</label><textarea id="code" rows="5" readonly>${esc(r.code)}</textarea><button id="copy" type="button">Copy the code</button> <span id="copied" class="muted" role="status"></span></div>
-<ol><li><a href="/download.html">Download Vdex</a> and open it, if you haven't yet.</li><li>In Vdex, open <b>Settings → About → Enter licence code</b>.</li><li>Paste the whole code and press <b>Activate</b>.</li></ol>
+<p><b>On the website or in the Android app:</b> press <b>Sign in</b> and use ${r.email ? `<b>${esc(r.email)}</b>` : 'the email address you paid with'}. Vdex emails you a 6-digit code to type in.</p>
+<p><b>In the desktop app:</b></p><ol><li><a href="/download.html">Download Vdex</a> and open it, if you haven't yet.</li><li>In Vdex, open <b>Settings → About → Enter licence code</b>.</li><li>Paste the whole code and press <b>Activate</b>.</li></ol>
 <p class="muted">The receipt from Stripe is your proof of purchase. Questions? Reply to the email your code comes in.</p>`,
   "document.getElementById('copy').onclick=async()=>{const t=document.getElementById('code'),m=document.getElementById('copied');try{await navigator.clipboard.writeText(t.value);m.textContent='Copied.'}catch(e){t.select();m.textContent='Press Ctrl+C (Cmd+C on a Mac) to copy.'}}");
 }
@@ -129,6 +134,7 @@ async function webhook(request, env) {
     const r = await licenceForSession(o, env);
     if (r.error === 'not-ready') return json(503, { error: 'not-ready' }); // Stripe tries again for up to 3 days
     if (r.error) return json(200, { ignored: r.error });
+    const v = await readCode(r.code); if (v && r.email) await linkEmail(env, r.email, v.licence); // the website signs in with it
     if (env.RESEND_API_KEY && r.email && !(await sendCode(env, r))) return json(502, { error: 'email-failed' });
     return json(200, { ok: true, ref: r.ref });
   }
@@ -146,8 +152,8 @@ async function webhook(request, env) {
   return json(200, { ignored: ev.type });
 }
 async function sendCode(env, r) {
-  const text = `Thank you for buying Vdex.\n\nYour licence code:\n\n${r.code}\n\nTo use it: open Vdex on your computer, go to Settings → About → Enter licence code, paste the whole code and press Activate. It works on up to 3 of your own computers.\n\nDownload Vdex: ${SITE}/download.html\n\nKeep this email: it is your copy of the code.${env.REPLY_TO ? ' If you need help, reply to it.' : ''}\n`;
-  const html = `<p>Thank you for buying Vdex.</p><p>Your licence code:</p><p style="font:15px/1.5 ui-monospace,Menlo,Consolas,monospace;word-break:break-all;background:#f4efe6;padding:12px;border-radius:8px">${esc(r.code)}</p><p>To use it: open Vdex on your computer, go to <b>Settings → About → Enter licence code</b>, paste the whole code and press <b>Activate</b>. It works on up to 3 of your own computers.</p><p><a href="${SITE}/download.html">Download Vdex</a></p><p>Keep this email: it is your copy of the code.${env.REPLY_TO ? ' If you need help, reply to it.' : ''}</p>`;
+  const text = `Thank you for buying Vdex.\n\nYour licence code:\n\n${r.code}\n\nTo use it: open Vdex on your computer, go to Settings → About → Enter licence code, paste the whole code and press Activate. On the website (${SITE}) and in the Android app, sign in with this email address instead. It works on up to 3 of your own devices.\n\nDownload Vdex: ${SITE}/download.html\n\nKeep this email: it is your copy of the code.${env.REPLY_TO ? ' If you need help, reply to it.' : ''}\n`;
+  const html = `<p>Thank you for buying Vdex.</p><p>Your licence code:</p><p style="font:15px/1.5 ui-monospace,Menlo,Consolas,monospace;word-break:break-all;background:#f4efe6;padding:12px;border-radius:8px">${esc(r.code)}</p><p>To use it: open Vdex on your computer, go to <b>Settings → About → Enter licence code</b>, paste the whole code and press <b>Activate</b>. On <a href="${SITE}/">the website</a> and in the Android app, sign in with this email address instead. It works on up to 3 of your own devices.</p><p><a href="${SITE}/download.html">Download Vdex</a></p><p>Keep this email: it is your copy of the code.${env.REPLY_TO ? ' If you need help, reply to it.' : ''}</p>`;
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Idempotency-Key': 'vdex-licence-' + r.sessionId },
@@ -158,11 +164,12 @@ async function sendCode(env, r) {
   return false;
 }
 
-/* ------------------------------ 3 computers ------------------------------- */
-// A computer is listed by the random ID its install made. Other computers only ever see a short tag made from it, so
-// one computer cannot take another off the list except through a counted swap.
+/* ------------------------------ 3 devices ------------------------------- */
+// A device (a computer running the desktop app, or the Google Play app) is listed by the random ID its install made.
+// Other devices only ever see a short tag made from it, so one cannot take another off the list except through a
+// counted swap.
 const tagOf = async id => codes.b64u.enc(await sha256('vdex-seat|' + id)).slice(0, 12);
-const OS = new Set(['Mac', 'Windows', 'Linux']);
+const OS = new Set(['Mac', 'Windows', 'Linux', 'Android']);
 const validInstall = v => typeof v === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(v);
 async function readCode(text) { try { const r = await codes.verifyCode(String(text || ''), { keys: KEYS }); return r; } catch { return null; } }
 async function seats(env, ref) {
@@ -178,8 +185,12 @@ async function activate(request, env) {
   const key = await shopKey(env); if (!key) return json(503, { error: 'not-ready' });
   const r = await readCode(b.code); if (!r) return json(400, { error: 'invalid' });
   if (r.status === 'expired') return json(403, { error: 'expired' });
-  const ref = r.licence.ref, max = r.licence.seats;
-  if (await env.LICENCES.get('x:' + ref)) return json(403, { error: 'cancelled' });
+  if (await env.LICENCES.get('x:' + r.licence.ref)) return json(403, { error: 'cancelled' });
+  if (r.licence.email) await linkEmail(env, r.licence.email, r.licence); // so the website can sign in with this code's email
+  return takeSeat(env, key, r.licence.ref, r.licence.seats, b);
+}
+// Puts the install b.install on the licence's list (b.release: the tag of a device to move it from when it is full).
+async function takeSeat(env, key, ref, max, b) {
   const rec = await seats(env, ref), now = Date.now(), day = today(now);
   let list = rec.computers, changed = false;
   const mine = list.find(c => c.id === b.install);
@@ -207,6 +218,133 @@ async function release(request, env) {
   return json(200, { ok: true });
 }
 
+/* ------------------------- emails and licences ------------------------- */
+// e:<email> → { licences: [{ ref, seats, name, comp, expires }] }: which licences an email address can sign in with.
+const cleanEmail = v => { const e = String(v || '').trim().toLowerCase(); return e.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) ? e : ''; };
+async function linkEmail(env, email, lic) {
+  email = cleanEmail(email); if (!email || !env.LICENCES || !lic || !lic.ref) return;
+  const rec = (await env.LICENCES.get('e:' + email, 'json').catch(() => null)) || {};
+  const list = Array.isArray(rec.licences) ? rec.licences : [];
+  if (list.some(l => l.ref === lic.ref)) return;
+  list.push({ ref: lic.ref, seats: lic.seats || 3, name: lic.name || '', comp: !!lic.comp, expires: lic.expires || '' });
+  await env.LICENCES.put('e:' + email, JSON.stringify({ licences: list.slice(-20) }));
+}
+// The licences an email can use now: linked ones that are not cancelled or past their end date. An email with none
+// linked is looked up in Stripe too (an order whose webhook never arrived, say).
+async function licencesFor(env, email) {
+  const rec = await env.LICENCES.get('e:' + email, 'json').catch(() => null);
+  let list = rec && Array.isArray(rec.licences) ? rec.licences : [];
+  if (!list.length && selling(env)) {
+    const found = await stripeGet(env, `checkout/sessions?customer_details[email]=${encodeURIComponent(email)}&payment_link=${encodeURIComponent(env.STRIPE_PAYMENT_LINK)}&limit=10`);
+    for (const sess of (found && found.data) || []) {
+      const r = await licenceForSession(sess, env); if (r.error || cleanEmail(r.email) !== email) continue;
+      const v = await readCode(r.code); if (v) { await linkEmail(env, email, v.licence); list = [...list, { ref: v.licence.ref, seats: v.licence.seats, name: v.licence.name, comp: false, expires: '' }]; }
+    }
+  }
+  const out = [];
+  for (const l of list) {
+    if (l.expires && Date.now() >= Date.parse(l.expires + 'T00:00:00Z') + DAY) continue;
+    if (await env.LICENCES.get('x:' + l.ref)) continue;
+    out.push(l);
+  }
+  return out.sort((a, b) => (a.expires ? 1 : 0) - (b.expires ? 1 : 0) || (b.seats || 0) - (a.seats || 0)); // lasting licences first
+}
+const shownLicence = (l, email) => ({ email, name: l.name || '', ref: l.ref, seats: l.seats || 3, comp: !!l.comp, expires: l.expires || '' });
+
+/* ---------------------------- website sign-in ---------------------------- */
+// The website (and the Google Play app, which is the website) asks for a licence after its trial. Someone signs in
+// with the email address their licence belongs to: a 6-digit code goes to that address (only if it has a licence, so
+// nobody else is emailed), works for 15 minutes and for 5 tries, and becomes a token the page keeps.
+const CODE_TTL = 15 * 60e3, CODE_TRIES = 5, CODES_PER_HOUR = 5;
+async function webReady(env) { return env.WEB_SIGN_IN === 'on' && !!env.LICENCES && !!env.RESEND_API_KEY && !!(await shopKey(env)); }
+async function webToken(env, token) {
+  const v = await codes.readNote('web', token, { keys: KEYS, signers: [SHOP_KID] });
+  return v && cleanEmail(v.email) && /^\d{1,3}:\d{1,10}$/.test(String(v.ref)) ? v : null;
+}
+async function webStart(request, env) {
+  if (!(await webReady(env))) return json(503, { error: 'not-ready' });
+  const b = await readJson(request); if (!b) return json(400, { error: 'invalid' });
+  let email = cleanEmail(b.email), fromCode = false;
+  if (b.code) { // a licence code instead of an email: sign in with the email inside it
+    const r = await readCode(b.code); if (!r || r.status !== 'valid') return json(400, { error: 'invalid-code' });
+    email = cleanEmail(r.licence.email); if (!email) return json(400, { error: 'no-email' });
+    if (!(await env.LICENCES.get('x:' + r.licence.ref))) await linkEmail(env, email, r.licence);
+    fromCode = true;
+  }
+  if (!email) return json(400, { error: 'invalid-email' });
+  if ((await licencesFor(env, email)).length) {
+    const key = 'w:' + email, now = Date.now();
+    const rec = (await env.LICENCES.get(key, 'json').catch(() => null)) || {};
+    const sent = (Array.isArray(rec.sent) ? rec.sent : []).filter(t => now - t < 3600e3);
+    if (sent.length < CODES_PER_HOUR) {
+      const code = String(100000 + (crypto.getRandomValues(new Uint32Array(1))[0] % 900000));
+      const salt = codes.b64u.enc(crypto.getRandomValues(new Uint8Array(12)));
+      await env.LICENCES.put(key, JSON.stringify({ h: hex(await sha256(`${salt}|${email}|${code}`)), salt, exp: now + CODE_TTL, tries: 0, sent: [...sent, now] }), { expirationTtl: 7200 });
+      if (!(await sendSignIn(env, email, code))) return json(502, { error: 'email-failed' });
+    }
+  }
+  // The same answer whether or not the email has a licence. With a code, the email it holds (whoever has the code can
+  // read it anyway).
+  return json(200, { ok: true, ...(fromCode ? { email } : {}) });
+}
+async function webVerify(request, env) {
+  if (!(await webReady(env))) return json(503, { error: 'not-ready' });
+  const b = await readJson(request), email = cleanEmail(b && b.email), code = String((b && b.code) || '').replace(/\D/g, '');
+  if (!email || code.length !== 6) return json(400, { error: 'invalid' });
+  const key = 'w:' + email, rec = await env.LICENCES.get(key, 'json').catch(() => null);
+  if (!rec || !rec.h || Date.now() > rec.exp) return json(400, { error: 'expired' });
+  if (rec.tries >= CODE_TRIES) return json(429, { error: 'too-many' });
+  if (hex(await sha256(`${rec.salt}|${email}|${code}`)) !== rec.h) {
+    rec.tries = (rec.tries || 0) + 1; await env.LICENCES.put(key, JSON.stringify(rec), { expirationTtl: 7200 });
+    return json(400, { error: 'wrong-code', triesLeft: Math.max(0, CODE_TRIES - rec.tries) });
+  }
+  await env.LICENCES.put(key, JSON.stringify({ sent: rec.sent || [] }), { expirationTtl: 7200 }); // each code works once
+  const list = await licencesFor(env, email); if (!list.length) return json(403, { error: 'no-licence' });
+  const token = await codes.signNote('web', await shopKey(env), SHOP_KID, { email, ref: list[0].ref, iat: Date.now() });
+  return json(200, { ok: true, token, licence: shownLicence(list[0], email) });
+}
+// About once a day: is the signed-in licence still good? Answers with a new token when it moved to another licence.
+async function webCheck(request, env) {
+  const b = await readJson(request), v = b && (await webToken(env, b.token));
+  if (!v) return json(401, { error: 'signed-out' });
+  if (!env.LICENCES) return json(503, { error: 'not-ready' });
+  const list = await licencesFor(env, v.email), l = list.find(x => x.ref === v.ref) || list[0];
+  if (!l) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : 'signed-out' });
+  const fresh = l.ref === v.ref ? null : await codes.signNote('web', await shopKey(env), SHOP_KID, { email: v.email, ref: l.ref, iat: Date.now() });
+  return json(200, { ok: true, licence: shownLicence(l, v.email), ...(fresh ? { token: fresh } : {}) });
+}
+// The Google Play app takes one of the licence's places, like a computer.
+async function webActivate(request, env) {
+  const b = await readJson(request), v = b && (await webToken(env, b.token));
+  if (!v) return json(401, { error: 'signed-out' });
+  if (!b.install || !validInstall(b.install)) return json(400, { error: 'invalid' });
+  if (!env.LICENCES) return json(503, { error: 'not-ready' });
+  const key = await shopKey(env); if (!key) return json(503, { error: 'not-ready' });
+  const l = (await licencesFor(env, v.email)).find(x => x.ref === v.ref);
+  if (!l) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : 'signed-out' });
+  return takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os: 'Android', release: b.release });
+}
+async function webRelease(request, env) {
+  const b = await readJson(request), v = b && (await webToken(env, b.token));
+  if (!v || !b.install || !validInstall(b.install)) return json(400, { error: 'invalid' });
+  if (!env.LICENCES) return json(503, { error: 'not-ready' });
+  const rec = await seats(env, v.ref);
+  if (!rec.computers.some(c => c.id === b.install)) return json(404, { error: 'not-listed' });
+  await env.LICENCES.put('c:' + v.ref, JSON.stringify({ computers: rec.computers.filter(c => c.id !== b.install), swaps: rec.swaps }));
+  return json(200, { ok: true });
+}
+async function sendSignIn(env, email, code) {
+  const text = `Your code to sign in to Vdex is ${code}\n\nIt works for 15 minutes. If you did not ask to sign in, ignore this email: nobody can sign in without this code.\n`;
+  const html = `<p>Your code to sign in to Vdex is</p><p style="font:28px/1.2 ui-monospace,Menlo,Consolas,monospace;letter-spacing:4px;font-weight:700">${code}</p><p>It works for 15 minutes. If you did not ask to sign in, ignore this email: nobody can sign in without this code.</p>`;
+  const res = await fetch('https://api.resend.com/emails', {
+    method: 'POST', headers: { Authorization: `Bearer ${env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from: env.MAIL_FROM || 'Vdex <licences@vdex.crowmade.app>', to: [email], ...(env.REPLY_TO ? { reply_to: env.REPLY_TO } : {}), subject: `${code} is your Vdex sign-in code`, text, html }),
+  }).catch(() => null);
+  if (res && res.ok) return true;
+  console.error('Resend answered ' + (res ? res.status : 'nothing') + ' for a sign-in code');
+  return false;
+}
+
 /* ------------------------------ the owner ------------------------------- */
 // Requests from the generator page, signed with the owner's key (1, or the spare 9) and good for 10 minutes.
 async function admin(request, env) {
@@ -220,7 +358,11 @@ async function admin(request, env) {
   if (v.op === 'clear') await env.LICENCES.delete('c:' + ref);
   else if (v.op === 'cancel') await env.LICENCES.put('x:' + ref, JSON.stringify({ why: 'owner', at: Date.now() }));
   else if (v.op === 'restore') await env.LICENCES.delete('x:' + ref);
-  else if (v.op !== 'look') return json(400, { error: 'bad-op' }, CORS);
+  else if (v.op === 'link') { // a free code's email, so its owner can sign in on the website
+    const r = await readCode(v.code);
+    if (!r || r.licence.ref !== ref || !cleanEmail(r.licence.email)) return json(400, { error: 'bad-code' }, CORS);
+    await linkEmail(env, r.licence.email, r.licence);
+  } else if (v.op !== 'look') return json(400, { error: 'bad-op' }, CORS);
   const rec = await seats(env, ref), x = await env.LICENCES.get('x:' + ref, 'json').catch(() => null);
   return json(200, { ok: true, ref, computers: await shown(rec.computers), swaps: rec.swaps.length, cancelled: x || null }, CORS);
 }
@@ -232,12 +374,18 @@ export default {
       if (p === '/buy') {
         const to = String(env.BUY_URL || '');
         if (m === 'GET' && /^https:\/\/[^/\s]+\/\S*$/.test(to)) return new Response(null, { status: 302, headers: { Location: to, 'Cache-Control': 'no-store' } });
-        return page(200, 'Vdex for desktop', '<h1>The desktop licence is not on sale yet</h1><p>Vdex for Windows, Mac and Linux will cost 20 USD once, for up to 3 of your own computers. Until then, <a href="/index.html">use Vdex in your web browser</a>.</p>');
+        return page(200, 'Vdex licence', '<h1>The Vdex licence is not on sale yet</h1><p>A licence will cost 20 USD once, for up to 3 of your own devices. Until then, <a href="/index.html">use Vdex in your web browser</a>.</p>');
       }
       if (p === '/licence/thanks' && m === 'GET') return await thanks(url, env);
       if (p === '/licence/stripe-webhook' && m === 'POST') return await webhook(request, env);
       if (p === '/licence/activate' && m === 'POST') return await activate(request, env);
       if (p === '/licence/release' && m === 'POST') return await release(request, env);
+      if (p === '/licence/web/status' && m === 'GET') return json(200, { on: await webReady(env) }, { 'Cache-Control': 'public, max-age=300' });
+      if (p === '/licence/web/start' && m === 'POST') return await webStart(request, env);
+      if (p === '/licence/web/verify' && m === 'POST') return await webVerify(request, env);
+      if (p === '/licence/web/check' && m === 'POST') return await webCheck(request, env);
+      if (p === '/licence/web/activate' && m === 'POST') return await webActivate(request, env);
+      if (p === '/licence/web/release' && m === 'POST') return await webRelease(request, env);
       if (p === '/licence/admin') return m === 'OPTIONS' ? new Response(null, { status: 204, headers: CORS }) : m === 'POST' ? await admin(request, env) : json(405, { error: 'method' }, CORS);
       if (p.startsWith('/licence/')) return json(404, { error: 'not-found' });
     } catch (e) {
@@ -247,4 +395,4 @@ export default {
     return env.ASSETS.fetch(request);
   },
 };
-export { licenceForSession, refForSession, tagOf };
+export { licenceForSession, refForSession, tagOf, cleanEmail };

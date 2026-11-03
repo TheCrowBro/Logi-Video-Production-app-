@@ -14,6 +14,8 @@ export function scratchCopy(repoRoot) {
 export function serve(root, port = 0) {
   const server = createServer((req, res) => {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname); if (p.endsWith('/')) p += 'index.html';
+    // The live site's Worker answers this; here licences are switched off, as before the owner switches them on.
+    if (p === '/licence/web/status') { res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end('{"on":false}'); }
     const file = resolve(root, '.' + p); if (!file.startsWith(resolve(root))) { res.writeHead(403); return res.end(); }
     try { statSync(file); } catch { res.writeHead(404); return res.end('not found'); }
     res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });

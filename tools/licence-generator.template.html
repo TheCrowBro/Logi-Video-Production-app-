@@ -66,12 +66,13 @@
 
 <section id="manage" hidden>
   <h2>3. Look up, clear or cancel a code</h2>
-  <p class="muted">Paste a code, or its ref from the ledger (like 2:3735928559; codes bought in the shop start with 2:, codes you made with 1:).</p>
+  <p class="muted">Paste a code, or its ref from the ledger (like 2:3735928559; codes bought in the shop start with 2:, codes you made with 1:). "Link for website sign-in" needs the whole code: it lets the person sign in on the website and in the Android app with the email address in it (codes you make here are linked by themselves when you are online).</p>
   <label for="which">Code or ref</label><input id="which" type="text" autocomplete="off">
   <button id="look" class="ghost">Look up</button>
   <button id="clear" class="ghost" title="Takes every computer off the code, so it can be activated afresh (a lost or broken computer)">Clear its computers</button>
   <button id="cancel" class="ghost" title="Stops the code working: Vdex becomes read-only on its computers within about a week">Cancel the code</button>
   <button id="restore" class="ghost">Restore a cancelled code</button>
+  <button id="link" class="ghost" title="Lets the person sign in on the website and in the Android app with the email address in the code">Link for website sign-in</button>
   <div id="lookout" class="muted"></div>
 </section>
 
@@ -134,10 +135,11 @@ const SITE = 'https://vdex.crowmade.app';
       const row = { issued: f.issued, ref: lic.ref, type: f.comp ? 'free' : 'paid', name: lic.name, email: lic.email, expires: f.expires, seats: String(lic.seats), note: $('note').value.trim(), code };
       ledger.push(row); unsaved++; draw();
       $('code').value = code; $('for').textContent = row.name || row.email; $('result').hidden = false;
-      const body = `Hi${row.name ? ' ' + row.name.split(' ')[0] : ''},\n\nHere is your Vdex licence code${f.comp ? ', with my compliments' : ''}. It works on up to ${lic.seats} of your own computers${row.expires ? ', until ' + row.expires : ''}.\n\n${code}\n\nTo use it: download Vdex from ${SITE}/download.html, open it, go to Settings → About → Enter licence code, paste the whole code and press Activate.\n\nThanks!`;
+      const body = `Hi${row.name ? ' ' + row.name.split(' ')[0] : ''},\n\nHere is your Vdex licence${f.comp ? ', with my compliments' : ''}. It works on up to ${lic.seats} of your own devices${row.expires ? ', until ' + row.expires : ''}.\n\n${code}\n\nOn the website (${SITE}) or in the Android app: press Sign in and use ${row.email || 'your email address'}; Vdex emails you a 6-digit code to type in.\n\nIn the desktop app: download Vdex from ${SITE}/download.html, open it, go to Settings → About → Enter licence code, paste the whole code and press Activate.\n\nThanks!`;
       $('mail').href = `mailto:${encodeURIComponent(row.email)}?subject=${encodeURIComponent('Your Vdex licence code')}&body=${encodeURIComponent(body)}`;
-      $('which').value = row.ref;
+      $('which').value = code;
       say('Code made. Save the ledger before you close this page.');
+      if (row.email && [1, 9].includes(key.kid)) ask('link', { quiet: true }); // so they can sign in on the website with that email
     } catch (e) { say(e.message, true); }
   };
   $('copy').onclick = async () => { try { await navigator.clipboard.writeText($('code').value); say('Copied.'); } catch { $('code').select(); say('Press Ctrl+C (Cmd+C on a Mac) to copy.'); } };
@@ -157,25 +159,30 @@ const SITE = 'https://vdex.crowmade.app';
     if (/^\d{1,3}:\d{1,10}$/.test(t)) return t;
     const b = Codes.extract(t), p = Codes.unpackPayload(b.subarray(0, b.length - 64)); return Codes.refOf(p.kid, p.serial);
   }
-  async function ask(op) {
+  async function ask(op, { quiet = false } = {}) {
     try {
-      const ref = await refOf($('which').value);
+      const text = $('which').value, ref = await refOf(text);
+      if (op === 'link' && !/VDEX-/i.test(text)) throw new Error('Paste the whole code to link it for website sign-in (a ref is not enough).');
       if (op === 'cancel' && !confirm(`Cancel ${ref}? Vdex becomes read-only on its computers within about a week.`)) return;
       let at = Date.now();
       for (let tries = 0; tries < 2; tries++) {
-        const note = await Codes.signNote('admin', key.privateKey, key.kid, { op, ref, at });
+        const note = await Codes.signNote('admin', key.privateKey, key.kid, { op, ref, at, ...(op === 'link' ? { code: Codes.cleanCode(text) } : {}) });
         const r = await fetch(SITE + '/licence/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(note) });
         const b = await r.json().catch(() => ({}));
         if (b.error === 'stale' && b.now && !tries) { at = b.now; continue; } // this computer's clock is off: use the server's
-        if (!r.ok) throw new Error(b.error === 'not-signed' ? 'The shop did not accept your key. Is this the key built into Vdex?' : b.error === 'not-ready' ? 'The shop is not set up yet (see docs/selling-desktop.md).' : 'The shop answered ' + r.status);
+        if (!r.ok) throw new Error(b.error === 'not-signed' ? 'The shop did not accept your key. Is this the key built into Vdex?' : b.error === 'not-ready' ? 'The shop is not set up yet (see docs/selling-desktop.md).' : b.error === 'bad-code' ? 'That code has no email address in it, or is not valid.' : 'The shop answered ' + r.status);
         const list = (b.computers || []).map(c => `${c.os} (added ${c.added}, last used ${c.seen})`).join('; ');
         $('lookout').textContent = `${b.ref}: ${b.cancelled ? `CANCELLED (${b.cancelled.why}). ` : ''}${b.computers.length ? `on ${b.computers.length} computer${b.computers.length === 1 ? '' : 's'}: ${list}.` : 'not on any computer.'} Moved ${b.swaps} time${b.swaps === 1 ? '' : 's'} in the last 30 days.`;
-        say({ look: 'Looked up.', clear: 'Its computers are cleared: it can be activated afresh.', cancel: 'Cancelled.', restore: 'Restored.' }[op]);
+        say({ look: 'Looked up.', clear: 'Its devices are cleared: it can be activated afresh.', cancel: 'Cancelled.', restore: 'Restored.', link: quiet ? 'Code made, and linked to its email for website sign-in. Save the ledger before you close this page.' : 'Linked: its email address can now sign in on the website and in the Android app.' }[op]);
         return;
       }
-    } catch (e) { say(e.message === 'Failed to fetch' ? 'Could not reach vdex.crowmade.app. Check the internet connection.' : e.message, true); }
+    } catch (e) {
+      const offline = e.message === 'Failed to fetch';
+      if (quiet) say('Code made. Not yet linked for website sign-in (no connection): when you are online, press "Link for website sign-in". Save the ledger before you close this page.', true);
+      else say(offline ? 'Could not reach vdex.crowmade.app. Check the internet connection.' : e.message, true);
+    }
   }
-  for (const op of ['look', 'clear', 'cancel', 'restore']) $(op).onclick = () => ask(op);
+  for (const op of ['look', 'clear', 'cancel', 'restore', 'link']) $(op).onclick = () => ask(op);
 
   $('makekey').onclick = async () => {
     try {

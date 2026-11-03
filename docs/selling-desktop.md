@@ -1,6 +1,6 @@
-# Selling the Vdex desktop app
+# Selling Vdex
 
-The desktop app for Windows, Mac and Linux is ready to sell: a **30-day free trial**, then **20 US dollars once** for up to **3 computers**, bought through Stripe, plus **free codes you make yourself**. This guide is everything only the owner can do. Do the parts in order; each says roughly how long it takes.
+Vdex is ready to sell: a **30-day free trial**, then **20 US dollars once** for up to **3 devices**, bought through Stripe, plus **free codes you make yourself**. The licence covers the desktop app for Windows, Mac and Linux (each computer takes one of the 3 places), the Android app from Google Play (each phone takes a place too), and the website, where people sign in with the email address they bought with. This guide is everything only the owner can do. Do the parts in order; each says roughly how long it takes.
 
 ## What happens until you finish
 
@@ -13,7 +13,8 @@ Nothing changes for anyone yet. The app checks codes with licence keys that are 
 - **3 computers:** the first time a code is used on a computer, the app activates it at vdex.crowmade.app, which keeps a list of the computers on each code (a random number for that install and "Mac", "Windows" or "Linux"; nothing about the person or the hardware). A fourth computer is offered to move the code from one of the others, up to 3 times a month. The app checks about once a week, and needs the internet at least once every 90 days.
 - **Refunds:** refund in Stripe as usual. The code is cancelled automatically, and the app becomes read-only on its computers within about a week.
 - **Free codes:** you make them on your own computer with the licence generator page, and email them yourself.
-- **After the trial, without a code:** the app is read-only. Everything opens, prints and exports; nothing can be changed. The website stays free.
+- **After the trial, without a code:** the app is read-only. Everything opens, prints and exports; nothing can be changed.
+- **The website and the Android app** (once you switch them on in part 9): a 30-day trial in each browser, then read-only until the person presses **Sign in** and types the 6-digit code Vdex emails to their licence's address.
 
 ## What it costs
 
@@ -124,11 +125,27 @@ Even signed, a new Windows app shows a milder "not commonly downloaded" prompt n
 
 **A free licence for someone.** Open the generator page → unlock `vdex-licence-key-1.json` with your passphrase → open your ledger (`ledger.csv`, after the first time) → fill in their name and email (leave **Free licence** ticked; set an end date if it is for a limited time) → **Make code** → **Write the email** opens your email program with the code and the steps → **Save ledger**. Keep the ledger with your key files: it is the only list of the free codes you have made.
 
-**Someone lost a computer, or their code is full.** In the app they can move it themselves 3 times a month. Beyond that: generator page → **Look up, clear or cancel a code** → paste their code (or the ref from your ledger; the email they bought with is in Stripe) → **Look up** shows its computers → **Clear its computers** lets them activate afresh.
+**Someone lost a computer or phone, or their licence is full.** In the app they can move it themselves 3 times a month. Beyond that: generator page → **Look up, clear or cancel a code** → paste their code (or the ref from your ledger; the email they bought with is in Stripe) → **Look up** shows its devices → **Clear its computers** lets them activate afresh.
+
+**Someone can't sign in on the website.** They must use the email address their licence belongs to (for a purchase, the one they paid with). If you made them a free code before part 9, paste it in the generator page and press **Link for website sign-in**.
 
 **A code posted online, or a chargeback.** Chargebacks and refunds cancel the code automatically. To cancel any other code: generator page → paste it → **Cancel the code**. **Restore a cancelled code** undoes it.
 
 **Your key is lost.** Unlock the spare (`vdex-licence-key-9-spare.json`) and carry on; tell me, and I make you a new key in the next version. Codes already made keep working. If a key file and its passphrase leaked, tell me straight away.
+
+## Part 9. The website and the Android app (5 minutes, when you are ready)
+
+Until you do this, the website stays free for everyone. Once you do it, every browser (including people who already use the website) gets a 30-day trial from their next visit, and is then read-only until they sign in with a licence. The Android app works the same way, and each phone also takes one of the licence's 3 places.
+
+1. Make sure part 4 (Resend) is done: signing in works by emailing a code.
+2. In Cloudflare (as in part 2), add a **Text** variable (or a Secret) named `WEB_SIGN_IN` with the value `on`. Within about 6 hours every open copy of Vdex picks it up. To switch it off again, delete it.
+3. Try it: in a private browser window open https://vdex.crowmade.app, Settings → About → **Sign in**, and use the email address you bought your test licence with.
+
+Who can sign in: anyone who bought through the shop (with the email they paid with, found in Stripe if needed), anyone you made a free code for with an email address (the generator page links it when you make the code, or press **Link for website sign-in** later), and anyone who has entered their code in the desktop app. Someone with a code can also use **Have a licence code? Use it instead**: the sign-in code then goes to the email address inside it.
+
+The Android app on Google Play should be a **free** download (docs/google-play.md): people pay for the licence on the website. Google Play does not allow a Play app to link to another way to pay, so inside the Android app Vdex shows no price and no Buy button, only **Sign in**.
+
+Cloudflare's free plan allows 1,000 changes a day to the licence storage; each sign-in uses about two, so it is enough for a few hundred sign-ins a day. Beyond that, Cloudflare's Workers Paid plan (5 USD a month) raises it to a million.
 
 **Don't** stop the vdex Worker or delete the `vdex-licences` storage in Cloudflare: buyers' apps need it to activate and to keep working. If Vdex ever stops being sold, tell me first, and I publish a version that no longer needs it, as the terms promise.
 
@@ -144,5 +161,6 @@ Even signed, a new Windows app shows a milder "not commonly downloaded" prompt n
 | `RESEND_API_KEY` | Resend, part 4 | emails |
 | `REPLY_TO` | your support email, part 4 | emails |
 | `MAIL_FROM` (optional) | | emails |
+| `WEB_SIGN_IN` | `on`, part 9 | the website and the Android app asking for a licence |
 
-The list of computers for each code and the cancelled codes are kept in the KV namespace `vdex-licences`, which Cloudflare made by itself the first time the new version was published.
+The list of devices for each licence, which email addresses belong to which licences, and the cancelled codes are kept in the KV namespace `vdex-licences`, which Cloudflare made by itself the first time the new version was published.

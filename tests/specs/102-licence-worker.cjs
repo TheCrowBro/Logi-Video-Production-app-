@@ -38,12 +38,16 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
         if (request.headers.get('authorization') !== 'Bearer rk_test_key') return new Response('{"error":{}}', { status: 401 });
         const m = u.pathname.match(/^\/v1\/checkout\/sessions\/(cs_[A-Za-z0-9_]+)$/);
         if (m) return sessions.has(m[1]) ? Response.json(sessions.get(m[1])) : new Response('{"error":{}}', { status: 404 });
-        if (u.pathname === '/v1/checkout/sessions') return Response.json({ data: [...sessions.values()].filter(s => s.payment_intent === u.searchParams.get('payment_intent')) });
+        if (u.pathname === '/v1/checkout/sessions') {
+          const byEmail = u.searchParams.get('customer_details[email]');
+          if (byEmail) return Response.json({ data: [...sessions.values()].filter(s => String(s.customer_details.email).toLowerCase() === byEmail && s.payment_link === u.searchParams.get('payment_link')) });
+          return Response.json({ data: [...sessions.values()].filter(s => s.payment_intent === u.searchParams.get('payment_intent')) });
+        }
       }
       if (u.hostname === 'api.resend.com') return new Response(JSON.stringify({ id: 'email_1' }), { status: resendStatus });
       return new Response('unexpected', { status: 599 });
     };
-    const env = { LICENCE_SHOP_KEY: codes.b64u.enc(shop.pkcs8), STRIPE_SECRET_KEY: 'rk_test_key', STRIPE_WEBHOOK_SECRET: 'whsec_testsecret', STRIPE_PAYMENT_LINK: 'plink_vdex', BUY_URL: 'https://buy.stripe.com/test_vdex', RESEND_API_KEY: 're_test', REPLY_TO: 'help@crowmade.app' };
+    const env = { LICENCE_SHOP_KEY: codes.b64u.enc(shop.pkcs8), STRIPE_SECRET_KEY: 'rk_test_key', STRIPE_WEBHOOK_SECRET: 'whsec_testsecret', STRIPE_PAYMENT_LINK: 'plink_vdex', BUY_URL: 'https://buy.stripe.com/test_vdex', RESEND_API_KEY: 're_test', REPLY_TO: 'help@crowmade.app', WEB_SIGN_IN: 'on' };
     const opts = bindings => convertV4MiniflareOptions({ modules: true, script, compatibilityDate: '2026-10-01', kvNamespaces: ['LICENCES'], bindings, outboundService: outbound,
       serviceBindings: { ASSETS: req => new Response('static file ' + new URL(req.url).pathname) } });
     mf = new Miniflare(opts(env));
@@ -138,8 +142,67 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('and releases it', (await lic.release()).mode === 'trial');
     fs.rmSync(dir, { recursive: true, force: true });
 
+    /* --------------------------- website sign-in --------------------------- */
+    const mails = () => calls.filter(c => c.url === 'https://api.resend.com/emails').map(c => JSON.parse(c.body));
+    const lastCode = to => { const m = mails().filter(x => x.to[0] === to).at(-1); return m && (m.subject.match(/^(\d{6}) is your Vdex sign-in code$/) || [])[1]; };
+    const web = (path, body, m = mf) => post('/licence/web/' + path, body, m).then(async r => ({ status: r.status, ...(await r.json()) }));
+    ok('the website is told sign-in is on once the owner switches it on', (await (await get('/licence/web/status')).json()).on === true);
+    calls.length = 0;
+    const stranger1 = await web('start', { email: 'nobody@example.com' });
+    ok('an email with no licence gets the same answer, and no email is sent to it', stranger1.status === 200 && stranger1.ok && !stranger1.email && mails().length === 0);
+    const st = await web('start', { email: '  PAT@example.com ' });
+    const pc = lastCode('pat@example.com'), sent = mails().at(-1);
+    ok('the buyer\'s email (any case) gets a 6-digit code, which the email says works for 15 minutes', st.status === 200 && /^\d{6}$/.test(pc || '') && /15 minutes/.test(sent.text) && !sent.text.includes(code));
+    const wrong = await web('verify', { email: 'pat@example.com', code: pc === '000000' ? '111111' : '000000' });
+    ok('a wrong code is refused and counts down the tries', wrong.status === 400 && wrong.error === 'wrong-code' && wrong.triesLeft === 4);
+    const good = await web('verify', { email: 'pat@example.com', code: pc });
+    const tok = good.token && (await codes.readNote('web', good.token, { keys: KEYS, signers: [2] }));
+    ok('the right code signs in: a token signed by the shop for that email and licence', good.status === 200 && tok && tok.email === 'pat@example.com' && tok.ref === v.licence.ref && good.licence.seats === 3 && good.licence.email === 'pat@example.com');
+    ok('each code works once', (await web('verify', { email: 'pat@example.com', code: pc })).error === 'expired');
+    ok('a signed-in browser checks back and is confirmed', (await web('check', { token: good.token })).ok === true);
+    ok('a made-up or edited token is refused', (await web('check', { token: { ...good.token, data: good.token.data.replace('pat@', 'pam@') } })).status === 401 && (await web('check', { token: await codes.signNote('web', ownerKey, 1, { email: 'x@example.com', ref: '1:1', iat: 1 }) })).status === 401);
+    await adm('cancel', v.licence.ref);
+    ok('once its licence is cancelled (a refund), the next check signs it out', (await web('check', { token: good.token })).error === 'cancelled');
+    await adm('restore', v.licence.ref);
+    // Five tries, and five codes an hour.
+    await web('start', { email: 'pat@example.com' });
+    for (let i = 0; i < 5; i++) await web('verify', { email: 'pat@example.com', code: '999999' === lastCode('pat@example.com') ? '888888' : '999999' });
+    ok('after 5 wrong tries even the right code is refused until a new one is sent', (await web('verify', { email: 'pat@example.com', code: lastCode('pat@example.com') })).error === 'too-many');
+    const before = mails().filter(x => x.to[0] === 'pat@example.com').length;
+    for (let i = 0; i < 6; i++) await web('start', { email: 'pat@example.com' });
+    ok('no more than 5 codes an hour go to one address', mails().filter(x => x.to[0] === 'pat@example.com').length - before <= 3, `${mails().filter(x => x.to[0] === 'pat@example.com').length - before} more`);
+    // A free code: linked by the generator, or used instead of an email.
+    const freeCode = await codes.signCode(ownerKey, 1, { name: 'Robin Free', email: 'robin@example.com', comp: true, issued: '2026-11-02' });
+    const viaCode = await web('start', { code: freeCode });
+    ok('a licence code can be used instead of an email: the code goes to the email inside it', viaCode.ok && viaCode.email === 'robin@example.com' && /^\d{6}$/.test(lastCode('robin@example.com') || ''));
+    const rb = await web('verify', { email: 'robin@example.com', code: lastCode('robin@example.com') });
+    ok('and signs in with that free licence', rb.status === 200 && rb.licence.comp === true && rb.licence.ref.startsWith('1:'));
+    const freeCode2 = await codes.signCode(ownerKey, 1, { name: 'Sam Linked', email: 'sam@example.com', comp: true, issued: '2026-11-02' });
+    const lnk = await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'link', ref: (await codes.verifyCode(freeCode2, { keys: KEYS })).licence.ref, code: freeCode2, at: Date.now() }));
+    await web('start', { email: 'sam@example.com' });
+    ok('the generator links a free code\'s email, which can then sign in with just the email', lnk.status === 200 && /^\d{6}$/.test(lastCode('sam@example.com') || ''));
+    const dsk = await codes.signCode(ownerKey, 1, { name: 'Desk Top', email: 'desk@example.com', comp: true, issued: '2026-11-02' });
+    await post('/licence/activate', { code: dsk, install: 'install-desk-0000000001', os: 'Windows' });
+    await web('start', { email: 'desk@example.com' });
+    ok('a code activated in the desktop app links its email too', /^\d{6}$/.test(lastCode('desk@example.com') || ''));
+    // A buyer whose webhook never arrived is found in Stripe.
+    const lsid = 'cs_test_lateWebhook0000000001'; sessions.set(lsid, session(lsid, { customer_details: { name: 'Late Buyer', email: 'late@example.com' } }));
+    calls.length = 0;
+    await web('start', { email: 'late@example.com' });
+    ok('a buyer with no webhook yet is looked up in Stripe and gets a code', calls.some(c => /customer_details%5Bemail%5D=late%40example\.com|customer_details\[email\]=late%40example\.com/.test(c.url)) && /^\d{6}$/.test(lastCode('late@example.com') || ''));
+    // The Google Play app takes one of the licence's places.
+    const robinTok = rb.token;
+    const p1 = await web('activate', { token: robinTok, install: 'install-play-000000000001' });
+    ok('the Play app takes a place on the licence, listed as Android', p1.status === 200 && (await adm('look', rb.licence.ref)).computers.some(c => c.os === 'Android'));
+    await web('activate', { token: robinTok, install: 'install-play-000000000002' }); await web('activate', { token: robinTok, install: 'install-play-000000000003' });
+    const p4 = await web('activate', { token: robinTok, install: 'install-play-000000000004' });
+    ok('a fourth device is told the licence is full, as on a computer', p4.status === 409 && p4.error === 'full' && p4.computers.length === 3);
+    ok('signing out in the Play app gives its place back', (await web('release', { token: robinTok, install: 'install-play-000000000001' })).ok === true && (await adm('look', rb.licence.ref)).computers.length === 2);
+    ok('a place cannot be taken without a real sign-in', (await web('activate', { token: { kid: 2, data: '{}', sig: 'x' }, install: 'install-play-000000000009' })).status === 401);
+
     /* ----------------------------- not set up ----------------------------- */
     mf2 = new Miniflare(opts({}));
+    ok('before the owner switches it on, the website is told sign-in is off', (await (await mf2.dispatchFetch(SITE + '/licence/web/status')).json()).on === false && (await post('/licence/web/start', { email: 'pat@example.com' }, mf2)).status === 503);
     ok('before the shop is set up, /buy says it is not on sale yet and activation says "not ready"', (await mf2.dispatchFetch(SITE + '/buy', { redirect: 'manual' })).status === 200 && (await post('/licence/activate', { code, install: id(1) }, mf2)).status === 503 && (await mf2.dispatchFetch(SITE + '/licence/thanks?session_id=' + sid)).status === 503);
     await mf2.dispose();
     mf2 = new Miniflare(opts({ ...env, LICENCE_SHOP_KEY: codes.b64u.enc(stranger.pkcs8) }));

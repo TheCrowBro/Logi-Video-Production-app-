@@ -57,9 +57,9 @@ If the passphrase is ever lost, say so: a new key can be made, and Google has a 
 ## Step 3. Create the app in the Play Console
 
 1. In the Play Console press **Create app**.
-2. App name: `Vdex`. Default language: English. App or game: **App**. Free or paid: **Paid**.
+2. App name: `Vdex`. Default language: English. App or game: **App**. Free or paid: **Free**.
 
-   > **Choose Paid, never Free.** Vdex is sold on Google Play, and Google never lets an app that has been offered for free become a paid one. Pick **Paid** here, before anything is uploaded to any testing track. Before a paid app can go out you also need a payments profile with your bank and tax details (Play Console → **Settings** → **Payments profile**).
+   > **Free, because the licence is the payment.** The Android app has the same 30-day trial as the website, then asks people to sign in with the licence they bought on vdex.crowmade.app (one licence covers 3 devices, and the phone takes one of them). Charging on Google Play too would make people pay twice. Google never lets an app offered for free become a paid one, so this choice is for good: if you would rather sell the Android app on Google Play instead, say so before creating the app.
 
 3. Tick the declarations (developer programme policies and US export laws) and press **Create app**.
 
@@ -76,7 +76,7 @@ Left menu → **Grow users** → **Store presence** → **Main store listing** (
 
 Then **Store settings**: app category **Productivity**; contact email: the address you want shown; website: `https://vdex.crowmade.app/`.
 
-Then **Monetize with Play** → **Products** → **App pricing**: set the price to **US$9.99** and let Google fill in the local prices for the other countries.
+Then **Monetize with Play** → **Products** → **App pricing**: leave the app **Free**. The Android app has the same 30-day trial as the website, then people sign in with the email address of the licence they bought on vdex.crowmade.app (20 USD, for up to 3 devices; the phone takes one of the 3 places). Charging on Google Play as well would make them pay twice. Inside the Android app Vdex never shows a price or a link to buy, because Google Play only allows buying through Google Play inside a Play app; people buy on the website.
 
 ## Step 5. The questionnaires
 
@@ -86,7 +86,7 @@ Left menu → **Monitor and manage** → **Policy and programmes** → **App con
 |---|---|
 | Privacy policy | The privacy policy address from the table above. |
 | Ads | **No, my app does not contain ads.** |
-| App access | **All functionality is available without special access.** If asked for notes: "No account is needed. The PIN lock is optional and only set by the user." |
+| App access | **All functionality is available without special access.** If asked for notes: "Everything works for 30 days from the first time the app is opened, with no account. After that, Vdex asks the user to sign in with the email address of their Vdex licence. The PIN lock is optional and only set by the user." |
 | Content rating | Start the questionnaire, enter your email, choose **Utility, Productivity, Communication, or Other**, and answer **No** to every question (no violence, no sexual content, no bad language, no drugs, no gambling, no user-to-user interaction, no location sharing with other users, no purchases). The rating comes out as "Everyone". |
 | Target audience and content | Age group: **18 and over** only. Designed for children: **No**. |
 | News apps | **No.** |
@@ -144,7 +144,7 @@ Shoots, crew, kit, call sheets, timecode notes and invoices, all on your phone.
 **Full description:**
 
 ```
-Vdex is the videographer's deck: everything about your shoots in one place, on your phone and your computer, with no account to make, no subscription and no ads.
+Vdex is the videographer's deck: everything about your shoots in one place, on your phone and your computer, with no subscription and no ads. Free to try for 30 days, then sign in with your Vdex licence.
 
 BOOKINGS
 A calendar of your shoots. Each one holds the client, the contacts, the address, the crew and the kit you're taking, a pipeline from enquiry to paid, and the hours you worked.

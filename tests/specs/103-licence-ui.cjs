@@ -55,7 +55,8 @@ const bridge = start => `(() => {
     // The website: nothing about licences.
     let { ctx, page, loaded } = await open(null, { desktop: false });
     await about(page);
-    ok('the website never loads the licence code or shows a licence', !loaded.some(u => /js\/licence\.js/.test(u)) && (await page.locator('.licence-panel').count()) === 0 && (await page.locator('.licence-bar').count()) === 0);
+    await sleep(1800);
+    ok('the website shows no licence until the owner switches it on (spec 104), and never loads the desktop bridge\'s side', !loaded.some(u => /desktop\//.test(u)) && (await page.locator('.licence-panel:not([hidden])').count()) === 0 && (await page.locator('.licence-bar').count()) === 0);
     await ctx.close();
 
     // Desktop, before selling starts: nothing either.
@@ -82,11 +83,11 @@ const bridge = start => `(() => {
     const sh = page.locator('.sheet');
     await sh.locator('textarea').fill('Here it is: VDEX-AAAAA-BBBBB thanks');
     await sh.getByRole('button', { name: 'Activate' }).click(); await sleep(200);
-    ok('a full code lists its computers (type, added, last used) with a choice to move it', (await sh.locator('.lic-computers li').count()) === 3 && /Windows · added .* · last used/.test(await sh.innerText()) && /move the code 2 more times this month/.test(await sh.innerText()));
+    ok('a full code lists its computers (type, added, last used) with a choice to move it', (await sh.locator('.lic-computers li').count()) === 3 && /Windows · added .* · last used/.test(await sh.innerText()) && /move it 2 more times this month/.test(await sh.innerText()));
     await page.screenshot({ path: OUT + '/licence-full.png' });
     await sh.locator('.lic-computers li').nth(1).getByRole('button', { name: 'Move it here' }).click(); await sleep(300);
     const enters = await page.evaluate(() => window.__lic.calls.filter(c => c[0] === 'enter'));
-    ok('moving it sends that computer\'s tag, and the licence is shown', enters.at(-1)[2].release === 'tagWinBBBBBB' && (await page.locator('.sheet').count()) === 0 && /Licensed to Jane Smith \(jane@example.com\) · up to 3 computers/.test(await panel.innerText()));
+    ok('moving it sends that computer\'s tag, and the licence is shown', enters.at(-1)[2].release === 'tagWinBBBBBB' && (await page.locator('.sheet').count()) === 0 && /Licensed to Jane Smith \(jane@example.com\) · up to 3 devices/.test(await panel.innerText()));
     ok('the bar goes once licensed', (await page.locator('.licence-bar').count()) === 0);
 
     // Releasing.
@@ -135,8 +136,8 @@ const bridge = start => `(() => {
     for (const [state, button, text] of [
       [{ enabled: true, mode: 'pending', canEdit: false, daysLeft: 0, trialLeft: 0, seats: 3, licence: { name: 'Jane McDonald', email: 'jane@example.com', seats: 3 } }, 'Try again', /Read-only until your licence is activated on this computer/],
       [{ enabled: true, mode: 'offline', canEdit: false, seats: 3, licence: { name: 'Jane', seats: 3 } }, 'Try again', /Read-only until Vdex can check your licence online/],
-      [{ enabled: true, mode: 'released', canEdit: false, trialLeft: 0, seats: 3, licence: { name: 'Jane', seats: 3 } }, 'Activate here again', /no longer on your licence/],
-      [{ enabled: true, mode: 'cancelled', canEdit: false, trialLeft: 0, seats: 3, licence: { name: 'Jane', seats: 3 } }, 'Buy · 20 USD', /code has been cancelled/],
+      [{ enabled: true, mode: 'released', canEdit: false, trialLeft: 0, seats: 3, licence: { name: 'Jane', seats: 3 } }, 'Activate here again', /this computer is not on your licence/],
+      [{ enabled: true, mode: 'cancelled', canEdit: false, trialLeft: 0, seats: 3, licence: { name: 'Jane', seats: 3 } }, 'Buy · 20 USD', /licence has been cancelled/],
     ]) {
       ({ ctx, page } = await open(state, { width: 360 }));
       const bar = page.locator('.licence-bar'), btxt = await bar.innerText(), h = await bar.evaluate(b => b.getBoundingClientRect().height);
