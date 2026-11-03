@@ -43,8 +43,12 @@ const DAY = 86400e3;
     const ctx = await browser.newContext({ viewport: { width, height: 860 }, serviceWorkers: 'block' });
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
     await ctx.route(u => new globalThis.URL(u).pathname.startsWith('/licence/'), async r => {
-      const q = r.request(), res = await mf.dispatchFetch('https://vdex.crowmade.app' + new globalThis.URL(q.url()).pathname, { method: q.method(), headers: { 'Content-Type': 'application/json' }, body: q.method() === 'POST' ? q.postData() : undefined });
-      await r.fulfill({ status: res.status, contentType: 'application/json', body: await res.text() });
+      const q = r.request();
+      // The test swaps the fake licence server now and then; a request caught in between gets "unavailable", as it would
+      // from a real server that is restarting, instead of crashing the test.
+      let res; try { res = await mf.dispatchFetch('https://vdex.crowmade.app' + new globalThis.URL(q.url()).pathname, { method: q.method(), headers: { 'Content-Type': 'application/json' }, body: q.method() === 'POST' ? q.postData() : undefined }); } catch { res = null; }
+      if (!res) return r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"not-ready"}' }).catch(() => {});
+      await r.fulfill({ status: res.status, contentType: 'application/json', body: await res.text() }).catch(() => {});
     });
     await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
     await ctx.addInitScript(acceptTerms());
