@@ -30,6 +30,8 @@ export function reveal(title) {
   const d = [...document.querySelectorAll('#page details.settings-section, #page details.settings-group')].find(x => x.querySelector(':scope > summary .ss-title')?.textContent === title);
   if (!d) return false;
   for (let p = d; p; p = p.parentElement && p.parentElement.closest('details')) p.open = true;
+  const nav = document.getElementById('rolodex'); // sticky at the top: the section lands under it, not behind it
+  d.style.scrollMarginTop = `${(nav ? nav.getBoundingClientRect().height : 0) + 8}px`;
   d.scrollIntoView({ block: 'start' });
   d.querySelector(':scope > summary')?.focus({ preventScroll: true });
   return true;
@@ -75,7 +77,12 @@ export const settings = {
       const el = h('details', { class: cls, 'data-s': title, open: OPEN.has(title) || (open && !OPEN.has('!' + title)) },
         h('summary', null, h('span', { class: 'ss-title' }, title), status && h('span', { class: 'ss-status muted small' }, status)),
         h('div', { class: cls === 'settings-group' ? 'sg-body' : 'ss-body' }, body));
+      // The browser also fires toggle for a details drawn open: that one is not a change of mind, so a group someone
+      // folded up stays folded across the redraws a saved setting or a sync causes.
+      let known = el.open;
       el.addEventListener('toggle', () => {
+        if (el.open === known) return;
+        known = el.open;
         if (el.open) { OPEN.add(title); OPEN.delete('!' + title); for (let p = el.parentElement && el.parentElement.closest('details'); p; p = p.parentElement && p.parentElement.closest('details')) p.open = true; }
         else { OPEN.delete(title); OPEN.add('!' + title); }
       });
@@ -85,7 +92,7 @@ export const settings = {
     const group = (title, status, sections, open = false) => fold('settings-group', title, status, sections, open);
     const c = store.cloud, cs = db.calSync || {}, l = loc();
     const calStatus = cs.provider ? `${cs.provider === 'google' ? 'Google' : 'Microsoft'} · ${calState.status}` : cs.feed ? 'live feed on' : 'not linked';
-    const storageStatus = () => [c.adapter ? `${c.adapter.label} · ${c.paused ? 'paused' : c.status}` : 'this device only', !store.isPaid() ? 'backups with a licence' : backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · ');
+    const storageStatus = () => [`${db.bookings.length} bookings · ${db.gear.length} items`, c.adapter ? `${c.adapter.label} · ${c.paused ? 'paused' : c.status}` : 'this device only', !store.isPaid() ? 'backups with a licence' : backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · ');
     const rate = billing().dayRate, nTemplates = projectTemplates().length;
     root.append(
       h('div', { class: 'page-head' }, h('h1', null, 'Settings')),

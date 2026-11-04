@@ -1,4 +1,4 @@
-// The privacy policy page, its link from Settings → About, and the Android package's agreement with the site.
+// The privacy policy page, its link from Settings → General → About & Licence, and the Android package's agreement with the site.
 const { chromium } = require('playwright');
 const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
@@ -41,13 +41,13 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => window.logiGo('settings'));
   await openSetting(page, 'About & Licence');
   const link = page.locator('details.settings-section:has(> summary:has-text("About")) a[href="privacy.html"]');
-  ok('Settings → About links the privacy policy', (await link.count()) === 1 && /Privacy policy/.test(await link.innerText()));
+  ok('Settings → General → About & Licence links the privacy policy', (await link.count()) === 1 && /Privacy policy/.test(await link.innerText()));
   const [popup] = await Promise.all([ctx.waitForEvent('page'), link.click()]);
   await popup.waitForLoadState();
   ok('the link opens the policy page', /privacy\.html$/.test(popup.url()), popup.url());
   await popup.close();
   const tlink = page.locator('details.settings-section:has(> summary:has-text("About")) a[href="terms.html"]');
-  ok('Settings → About links the terms of service', (await tlink.count()) === 1 && /Terms of service/.test(await tlink.innerText()));
+  ok('Settings → General → About & Licence links the terms of service', (await tlink.count()) === 1 && /Terms of service/.test(await tlink.innerText()));
   const [tpop] = await Promise.all([ctx.waitForEvent('page'), tlink.click()]);
   await tpop.waitForLoadState();
   ok('the link opens the terms page', /terms\.html$/.test(tpop.url()), tpop.url());

@@ -100,6 +100,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const open = () => page.evaluate(id => import('./js/store.js').then(s => { const t = s.byId('bookings', id).title, c = [...document.querySelectorAll('.card.tap')].find(x => x.textContent.includes(t)); if (c) c.click(); return !!c; }), id);
   if (!(await open())) { await page.getByRole('button', { name: 'Calendar' }).click(); await sleep(300); await open(); }
   await page.waitForSelector('.bk-detail');
+  await page.locator('#bk-work').evaluate(d => { d.open = true; }); await sleep(150);
   await page.locator('.bk-detail .block:has(h3:has-text("Money")) button', { hasText: 'Create' }).first().click(); await page.waitForSelector('.money-page');
   await page.locator('.money-page button', { hasText: 'From the price list' }).click(); await page.waitForSelector('.sheet .price-pick');
   const pk = page.locator('.sheet').last();

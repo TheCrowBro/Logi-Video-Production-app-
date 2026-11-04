@@ -1,8 +1,12 @@
 // Project pipeline: every booking moves through stages, each with a checklist from a template for its job type.
 // Also the smaller post/pre lists that hang off a booking: hires, shot list, media offload log, deliverables, licences.
-import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes } from './util.js';
-import { db, byId, update, upsert, remove, subscribe } from './store.js';
+import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes, parseISO } from './util.js';
+import { db, byId, update, upsert, remove, subscribe, endOf, splitHires } from './store.js';
 import { openForm } from './form.js';
+import { boardPlan } from './board.js';
+
+// The crew roles offered when adding someone, on the Crew page and when hiring someone for a booking.
+export const ROLES = ['Director', 'Producer', 'DOP', 'Camera Operator', '1st AC', '2nd AC', 'Gaffer', 'Grip', 'Sound Recordist', 'Boom Operator', 'Drone Pilot', 'Editor', 'Colourist', 'Motion Designer', 'MUA', 'Stylist', 'Runner', 'Location Manager', 'Other'];
 
 /* --------------------------------- stages --------------------------------- */
 export const STAGES = [
@@ -176,7 +180,23 @@ export function itemsFor(b, stage) {
 }
 export const progress = (b, stage) => { const items = itemsFor(b, stage); return { done: items.filter(x => x.done).length, total: items.length }; };
 export const setCheck = (b, id, done) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (!x) return; x.checks = { ...(x.checks || {}) }; if (done) x.checks[id] = Date.now(); else delete x.checks[id]; x.updatedAt = Date.now(); });
-export const setStage = (b, stage) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { x.status = stage; x.updatedAt = Date.now(); } });
+// A whole stage at once: one change, one redraw, one sync push; each item still gets its own time.
+export const setChecks = (b, ids, done) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (!x) return; x.checks = { ...(x.checks || {}) }; for (const id of ids) { if (done) x.checks[id] = Date.now(); else delete x.checks[id]; } x.updatedAt = Date.now(); });
+// Moving the stage by hand also forgets a "no" to archiving, so the question can come again once everything is done.
+export const setStage = (b, stage) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { x.status = stage; delete x.archiveAsked; x.updatedAt = Date.now(); } });
+// Every stage's checklist complete (stages with items): the project can be archived.
+export const allComplete = b => b.status !== 'Cancelled' && STAGES.some(([s]) => progress(b, s).total > 0) && STAGES.every(([s]) => { const p = progress(b, s); return p.total === 0 || p.done === p.total; });
+// Asked once the tick that completed the last stage is on screen, and only from a tap in the checklist (a quote marked
+// sent or a call sheet sent tick items too, but never ask). "No" is remembered on the booking, so no device asks twice;
+// unticking something later never un-archives a project.
+export function offerArchive(b) {
+  setTimeout(() => {
+    const x = byId('bookings', b.id);
+    if (!x || x.status === 'Archived' || x.archiveAsked || !allComplete(x)) return;
+    if (confirm('Every stage of this project is complete. Mark this project archived?')) { setStage(x, 'Archived'); toast('Project archived'); }
+    else update(d => { const y = d.bookings.find(z => z.id === x.id); if (y) { y.archiveAsked = Date.now(); y.updatedAt = Date.now(); } });
+  }, 60);
+}
 export const addCustomItem = (b, stage, text) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { x.extraChecks = [...(x.extraChecks || []), { id: 'x:' + uid(), stage, text }]; x.updatedAt = Date.now(); } });
 export const removeCustomItem = (b, id) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { x.extraChecks = (x.extraChecks || []).filter(i => i.id !== id); if (x.checks) delete x.checks[id]; x.updatedAt = Date.now(); } });
 
@@ -187,7 +207,6 @@ export function workflowBlock(b, actions = {}) {
   const cur = STAGES.some(s => s[0] === b.status) ? b.status : 'Enquiry';
   const ci = stageIndex(cur);
   const total = STAGES.reduce((t, [s]) => t + progress(b, s).total, 0), done = STAGES.reduce((t, [s]) => t + progress(b, s).done, 0);
-  const showAll = b._showAllStages;
   const strip = h('div', { class: 'stage-strip', role: 'tablist', 'aria-label': 'Stage' }, STAGES.map(([s, k], i) => {
     const pr = progress(b, s);
     return h('button', { class: 'stage' + (i < ci ? ' past' : i === ci ? ' now' : ''), role: 'tab', 'aria-selected': i === ci, onclick: () => setStage(b, s), title: `${s}: ${pr.done}/${pr.total}` }, h('span', { class: 'stage-no' }, i < ci ? '✓' : String(i + 1)), h('span', null, s));
@@ -197,22 +216,35 @@ export function workflowBlock(b, actions = {}) {
     const input = h('input', { type: 'text', placeholder: 'Add an item to this stage…', 'aria-label': 'New checklist item' });
     const add = () => { const t = input.value.trim(); if (t) { addCustomItem(b, stage, t); input.value = ''; } };
     input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+    // One box for the whole stage: ticks or unticks every item; half-done shows as indeterminate.
+    const allDone = items.length > 0 && items.every(i => i.done), someDone = items.some(i => i.done);
+    const allBox = h('input', { type: 'checkbox', checked: allDone, 'aria-label': `${allDone ? 'Untick' : 'Tick'} every item in ${stage}`, onchange: e => { setChecks(b, items.map(i => i.id), e.target.checked); if (e.target.checked) offerArchive(b); } });
+    allBox.indeterminate = someDone && !allDone;
     return h('div', { class: 'checklist' },
       items.map(it => h('div', { class: 'check-item' + (it.done ? ' done' : '') },
-        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: it.done, onchange: e => setCheck(b, it.id, e.target.checked) }), h('span', null, it.t)),
+        h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: it.done, onchange: e => { setCheck(b, it.id, e.target.checked); if (e.target.checked) offerArchive(b); } }), h('span', null, it.t)),
         it.a && actions[it.a] && h('button', { class: 'btn ghost small', onclick: actions[it.a] }, '→'),
         it.custom && h('button', { class: 'icon-btn', 'aria-label': 'Remove item', onclick: () => removeCustomItem(b, it.id) }, '✕'))),
+      items.length > 0 && h('div', { class: 'check-item check-all' }, h('label', { class: 'check' }, allBox, h('span', null, allDone ? 'All done · untick all' : 'Check all'))),
       h('div', { class: 'row-edit' }, input, h('button', { class: 'btn ghost small', onclick: add }, 'Add')));
   };
   const pr = progress(b, cur), complete = pr.total > 0 && pr.done === pr.total, next = STAGES[ci + 1];
+  const allStages = foldAll();
   return h('section', { class: 'block workflow' }, h('h3', null, `Workflow · ${PHASE(cur)}`),
     h('div', { class: 'card' },
       strip,
       h('div', { class: 'progress', role: 'progressbar', 'aria-valuenow': done, 'aria-valuemax': total, 'aria-label': 'Whole project' }, h('i', { style: `width:${total ? (done / total) * 100 : 0}%` })),
-      h('div', { class: 'card-row' }, h('strong', null, `${cur} · ${pr.done}/${pr.total}`), complete && next && h('button', { class: 'btn primary small pop-in', onclick: () => setStage(b, next[0]) }, `Next: ${next[0]} →`)),
+      h('div', { class: 'card-row' }, h('strong', null, `${cur} · ${pr.done}/${pr.total}`), complete && next && h('button', { class: 'btn primary small pop-in', onclick: () => { setStage(b, next[0]); offerArchive(b); } }, `Next: ${next[0]} →`)),
       list(cur),
-      h('details', { class: 'help', open: !!showAll }, h('summary', null, 'All stages'), STAGES.filter(([s]) => s !== cur).map(([s]) => { const p = progress(b, s); return h('details', { class: 'twirl' }, h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, p.done === p.total && p.total ? '✓' : '·'), h('span', null, h('span', { class: 'twirl-name' }, s), h('span', { class: 'twirl-sub' }, `${p.done}/${p.total}`))), h('div', { class: 'twirl-body' }, list(s))); }))));
+      allStages));
+  // "All stages" and the stage inside it that was opened stay open across the redraw every tick causes.
+  function foldAll() {
+    const el = h('details', { class: 'help', open: ALL_OPEN.has(b.id) }, h('summary', null, 'All stages'), STAGES.filter(([s]) => s !== cur).map(([s]) => { const p = progress(b, s); const t = h('details', { class: 'twirl', open: ALL_OPEN.has(b.id + ':' + s) }, h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, p.done === p.total && p.total ? '✓' : '·'), h('span', null, h('span', { class: 'twirl-name' }, s), h('span', { class: 'twirl-sub' }, `${p.done}/${p.total}`))), h('div', { class: 'twirl-body' }, list(s))); t.addEventListener('toggle', () => { if (t.open) ALL_OPEN.add(b.id + ':' + s); else ALL_OPEN.delete(b.id + ':' + s); }); return t; }));
+    el.addEventListener('toggle', () => { if (el.open) ALL_OPEN.add(b.id); else ALL_OPEN.delete(b.id); });
+    return el;
+  }
 }
+const ALL_OPEN = new Set();
 
 /* --------------------------------- pipeline --------------------------------- */
 export function openPipeline(onOpen) {
@@ -235,28 +267,52 @@ export function openPipeline(onOpen) {
 const patch = (b, fn) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { fn(x); x.updatedAt = Date.now(); } });
 const money = () => db.profile.currency || '$';
 
+// Hires are the people hired for the job (freelancers, day players); rented gear lives under rentals. A copy from an
+// older build may still carry gear under hires: these two read both, and the first save sorts them out.
+const legacyGear = x => !!(x && x.item && !x.name);
+export const hiredPeople = b => ((b && b.hires) || []).filter(x => x && !legacyGear(x));
+export const rentalsOf = b => [...((b && b.rentals) || []), ...((b && b.hires) || []).filter(legacyGear)];
+export const shootDaysOf = b => Math.max(1, Math.round((parseISO(endOf(b)) - parseISO(b.date)) / 864e5) + 1);
 export function hiresBlock(b) {
-  const edit = hr => openForm({ title: hr ? 'Edit hire' : 'Add hire', values: hr || { item: '', from: '', cost: '', pickup: b.date, return: '', booked: 'no' },
+  const edit = hr => openForm({ title: hr ? 'Edit hired person' : 'Hire someone for this job', values: hr || { name: '', role: '', rate: '', days: shootDaysOf(b), phone: '', email: '', notes: '' },
+    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' }, { key: 'rate', label: 'Day or hourly rate', placeholder: 'e.g. 450/day or 55/hr', hint: 'Feeds the budget and the suggested quote lines. Never goes to the crew.' }, { key: 'days', label: 'Days', type: 'number', min: 0, step: 'any' }, { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' }, { key: 'notes', label: 'Notes', type: 'textarea', rows: 2 }],
+    onSave: v => patch(b, x => { splitHires(x); x.hires = x.hires || []; const i = x.hires.findIndex(y => y.id === (hr && hr.id)); if (i >= 0) x.hires[i] = { ...v, id: hr.id }; else x.hires.push({ ...v, id: uid() }); }),
+    onDelete: hr ? () => patch(b, x => { splitHires(x); x.hires = (x.hires || []).filter(y => y.id !== hr.id); if (x.crewStatus) delete x.crewStatus[hr.id]; if (x.crewCall) delete x.crewCall[hr.id]; }) : null });
+  const hires = hiredPeople(b);
+  return h('div', { class: 'sub', id: 'bk-hires' }, h('h4', null, `Hires (${hires.length})`),
+    hires.length ? hires.map(hr => crewRow(b, hr, { sub: [hr.rate && String(hr.rate), hr.days && `${hr.days} day${Number(hr.days) === 1 ? '' : 's'}`].filter(Boolean).join(' · '), onEdit: () => edit(hr) })) : h('p', { class: 'muted small' }, 'People hired in for this job: they go on the call sheet and the crew link like your own crew, and their cost goes in the budget.'),
+    h('button', { class: 'btn ghost small', onclick: () => edit(null) }, '+ Hire someone'));
+}
+export function rentalsBlock(b) {
+  const edit = hr => openForm({ title: hr ? 'Edit rented item' : 'Add rented item', values: hr || { item: '', from: '', cost: '', pickup: b.date, return: '', booked: 'no' },
     fields: [{ key: 'item', label: 'Item', required: true }, { key: 'from', label: 'Rental house / owner' }, { key: 'cost', label: 'Cost', type: 'number' }, { key: 'pickup', label: 'Pick up', type: 'date' }, { key: 'return', label: 'Return', type: 'date' }, { key: 'booked', label: 'Booked', type: 'select', options: [['no', 'Not yet'], ['yes', 'Booked'], ['back', 'Returned']] }],
-    onSave: v => patch(b, x => { x.hires = x.hires || []; const i = x.hires.findIndex(y => y.id === (hr && hr.id)); if (i >= 0) x.hires[i] = { ...v, id: hr.id }; else x.hires.push({ ...v, id: uid() }); }),
-    onDelete: hr ? () => patch(b, x => { x.hires = (x.hires || []).filter(y => y.id !== hr.id); }) : null });
-  const hires = b.hires || [];
-  return h('div', { class: 'sub' }, h('h4', null, `Hires (${hires.length})`),
-    hires.map(hr => h('button', { class: 'card tap', type: 'button', onclick: () => edit(hr) }, h('div', { class: 'card-row' }, h('div', null, h('strong', null, hr.item), h('div', { class: 'muted small' }, [hr.from, hr.pickup && `pick up ${fmtShort(hr.pickup)}`, hr.return && `back ${fmtShort(hr.return)}`, hr.cost !== '' && hr.cost != null && money() + hr.cost].filter(Boolean).join(' · '))), h('span', { class: 'pill ' + (hr.booked === 'yes' ? 'st-confirmed' : hr.booked === 'back' ? 'st-delivered' : 'st-enquiry') }, hr.booked === 'yes' ? 'Booked' : hr.booked === 'back' ? 'Returned' : 'Not yet')))),
-    h('button', { class: 'btn ghost small', onclick: () => edit(null) }, '+ Add hire'));
+    onSave: v => patch(b, x => { splitHires(x); x.rentals = x.rentals || []; const i = x.rentals.findIndex(y => y.id === (hr && hr.id)); if (i >= 0) x.rentals[i] = { ...v, id: hr.id }; else x.rentals.push({ ...v, id: uid() }); }),
+    onDelete: hr ? () => patch(b, x => { splitHires(x); x.rentals = (x.rentals || []).filter(y => y.id !== hr.id); }) : null });
+  const rentals = rentalsOf(b);
+  return h('div', { class: 'sub', id: 'bk-rentals' }, h('h4', null, `Rented (${rentals.length})`),
+    rentals.map(hr => h('button', { class: 'card tap', type: 'button', onclick: () => edit(hr) }, h('div', { class: 'card-row' }, h('div', null, h('strong', null, hr.item), h('div', { class: 'muted small' }, [hr.from, hr.pickup && `pick up ${fmtShort(hr.pickup)}`, hr.return && `back ${fmtShort(hr.return)}`, hr.cost !== '' && hr.cost != null && money() + hr.cost].filter(Boolean).join(' · '))), h('span', { class: 'pill ' + (hr.booked === 'yes' ? 'st-confirmed' : hr.booked === 'back' ? 'st-delivered' : 'st-enquiry') }, hr.booked === 'yes' ? 'Booked' : hr.booked === 'back' ? 'Returned' : 'Not yet')))),
+    h('button', { class: 'btn ghost small', onclick: () => edit(null) }, '+ Add rented item'));
 }
 
+// The shot list card: shots grouped under their scene once an import has placed them, with the rest under Unsorted.
+// Lives in the "Stripboard & shot list" section of the booking and under the board on the stripboard page.
 export function shotsBlock(b) {
   const shots = b.shots || [];
   const input = h('input', { type: 'text', placeholder: 'Add a shot…', 'aria-label': 'New shot' });
   const add = () => { const t = input.value.trim(); if (!t) return; patch(b, x => { x.shots = [...(x.shots || []), ...t.split('\n').map(s => s.trim()).filter(Boolean).map(text => ({ id: uid(), text, done: false }))]; }); input.value = ''; };
   input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
   const done = shots.filter(s => s.done).length;
-  return h('section', { class: 'block' }, h('h3', null, `Shot list · ${done}/${shots.length}`),
-    h('div', { class: 'card' },
-      shots.length ? h('div', { class: 'checklist' }, shots.map(s => h('div', { class: 'check-item' + (s.done ? ' done' : '') }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: s.done, onchange: e => patch(b, x => { const y = x.shots.find(z => z.id === s.id); if (y) y.done = e.target.checked; }) }), h('span', null, s.text)), h('button', { class: 'icon-btn', 'aria-label': 'Remove shot', onclick: () => patch(b, x => { x.shots = x.shots.filter(z => z.id !== s.id); }) }, '✕')))) : h('p', { class: 'muted small' }, 'List the shots you need; tick them off on the day.'),
-      h('div', { class: 'row-edit' }, input, h('button', { class: 'btn ghost small', onclick: add }, 'Add')),
-      h('button', { class: 'btn ghost small', onclick: () => { const ta = h('textarea', { rows: 8, placeholder: 'One shot per line' }); const { close } = sheet('Paste a shot list', h('div', { class: 'stack' }, ta, h('button', { class: 'btn primary', onclick: () => { const lines = ta.value.split('\n').map(s => s.trim()).filter(Boolean); if (lines.length) patch(b, x => { x.shots = [...(x.shots || []), ...lines.map(text => ({ id: uid(), text, done: false }))]; }); close(); } }, 'Add shots'))); } }, 'Paste a list…')));
+  const row = s => h('div', { class: 'check-item' + (s.done ? ' done' : '') }, h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!s.done, onchange: e => patch(b, x => { const y = (x.shots || []).find(z => z.id === s.id); if (y) y.done = e.target.checked; }) }), h('span', null, s.text)), h('button', { class: 'icon-btn', 'aria-label': 'Remove shot', onclick: () => patch(b, x => { x.shots = (x.shots || []).filter(z => z.id !== s.id); }) }, '✕'));
+  const scenes = boardPlan(b).scenes, grouped = shots.some(s => s.scene);
+  const label = num => { const sc = scenes.find(x => String(x.scene) === String(num)); return sc ? `Scene ${num}${sc.set ? ' · ' + sc.set : ''}` : `Scene ${num}`; };
+  const order = [...new Set([...scenes.map(x => String(x.scene)), ...shots.map(s => s.scene && String(s.scene))].filter(Boolean))];
+  const groups = grouped ? [...order.map(n => [n, shots.filter(s => String(s.scene || '') === n)]).filter(([, l]) => l.length), ['', shots.filter(s => !s.scene)]].filter(([, l]) => l.length) : [];
+  return h('div', { class: 'card shot-list' },
+    h('div', { class: 'card-row' }, h('strong', null, `Shot list · ${done}/${shots.length}`), h('button', { class: 'btn ghost small', 'data-fk': 'shot-import', onclick: () => import('./stripboard.js').then(m => m.openShotImport(b)).catch(e => toast('Could not open the import: ' + (e.message || e))) }, '⬆ Import shot list…')),
+    shots.length
+      ? (grouped ? groups.map(([n, list]) => h('div', { class: 'shot-group' }, h('h4', null, n ? label(n) : 'Unsorted'), h('div', { class: 'checklist' }, list.map(row)))) : h('div', { class: 'checklist' }, shots.map(row)))
+      : h('p', { class: 'muted small' }, 'List the shots you need and tick them off on the day. Import a shot list to fill the stripboard from it at the same time.'),
+    h('div', { class: 'row-edit' }, input, h('button', { class: 'btn ghost small', onclick: add }, 'Add')));
 }
 
 const MEDIA_STEPS = [['d1', 'Drive 1'], ['d2', 'Drive 2'], ['off', 'Offsite / cloud'], ['ver', 'Verified'], ['clr', 'Card cleared']];
@@ -306,15 +362,15 @@ export function licencesBlock(b) {
 
 /* ------------------------- crew confirmation on a booking ------------------------- */
 export const CREW_STATES = [['', 'Not asked'], ['asked', 'Asked'], ['confirmed', 'Confirmed'], ['declined', 'Declined']];
-export function crewRow(b, c) {
+export function crewRow(b, c, { sub = '', onEdit = null } = {}) {
   const st = (b.crewStatus || {})[c.id] || '', call = (b.crewCall || {})[c.id] || '';
   const sel = h('select', { 'aria-label': `${c.name} status`, onchange: e => patch(b, x => { x.crewStatus = { ...(x.crewStatus || {}), [c.id]: e.target.value }; }) }, CREW_STATES.map(([v, l]) => h('option', { value: v, selected: v === st }, l)));
   const callIn = h('input', { type: 'time', value: call, 'aria-label': `${c.name} call time`, onchange: e => patch(b, x => { x.crewCall = { ...(x.crewCall || {}), [c.id]: e.target.value }; }) });
   const ask = `Hi ${c.name.split(' ')[0]}, are you free for "${b.title}" on ${fmtShort(b.date)}${b.start ? ' from ' + b.start : ''}${b.address ? ' at ' + b.address.split('\n')[0] : ''}? Role: ${c.role || 'crew'}. Let me know and I’ll send the call sheet.`;
   return h('div', { class: 'card crew-line' },
-    h('div', { class: 'card-row' }, h('div', null, h('strong', null, c.name), h('div', { class: 'muted' }, c.role || '')), h('span', { class: 'pill ' + (st === 'confirmed' ? 'st-confirmed' : st === 'declined' ? 'st-cancelled' : st === 'asked' ? 'st-enquiry' : '') }, CREW_STATES.find(x => x[0] === st)[1])),
+    h('div', { class: 'card-row' }, h('div', null, h('strong', null, c.name), h('div', { class: 'muted' }, [c.role, sub].filter(Boolean).join(' · '))), h('span', { class: 'pill ' + (st === 'confirmed' ? 'st-confirmed' : st === 'declined' ? 'st-cancelled' : st === 'asked' ? 'st-enquiry' : '') }, CREW_STATES.find(x => x[0] === st)[1])),
     h('div', { class: 'row-edit' }, sel, h('label', { class: 'small muted' }, 'Call ', callIn)),
-    h('div', { class: 'actions' }, c.phone && h('a', { class: 'btn ghost small', href: 'sms:' + telUrl(c.phone).slice(4) + '?&body=' + encodeURIComponent(ask), onclick: () => patch(b, x => { if (!(x.crewStatus || {})[c.id]) x.crewStatus = { ...(x.crewStatus || {}), [c.id]: 'asked' }; }) }, '💬 Ask by text'), c.email && h('a', { class: 'btn ghost small', href: 'mailto:' + c.email + '?' + new URLSearchParams({ subject: `Availability: ${b.title} ${fmtShort(b.date)}`, body: ask }).toString().replace(/\+/g, '%20'), onclick: () => patch(b, x => { if (!(x.crewStatus || {})[c.id]) x.crewStatus = { ...(x.crewStatus || {}), [c.id]: 'asked' }; }) }, '✉ Ask by email'), c.phone && h('a', { class: 'btn ghost small', href: telUrl(c.phone) }, '📞 Call')));
+    h('div', { class: 'actions' }, c.phone && h('a', { class: 'btn ghost small', href: 'sms:' + telUrl(c.phone).slice(4) + '?&body=' + encodeURIComponent(ask), onclick: () => patch(b, x => { if (!(x.crewStatus || {})[c.id]) x.crewStatus = { ...(x.crewStatus || {}), [c.id]: 'asked' }; }) }, '💬 Ask by text'), c.email && h('a', { class: 'btn ghost small', href: 'mailto:' + c.email + '?' + new URLSearchParams({ subject: `Availability: ${b.title} ${fmtShort(b.date)}`, body: ask }).toString().replace(/\+/g, '%20'), onclick: () => patch(b, x => { if (!(x.crewStatus || {})[c.id]) x.crewStatus = { ...(x.crewStatus || {}), [c.id]: 'asked' }; }) }, '✉ Ask by email'), c.phone && h('a', { class: 'btn ghost small', href: telUrl(c.phone) }, '📞 Call'), onEdit && h('button', { class: 'btn ghost small', onclick: onEdit }, '✎ Edit')));
 }
 
 /* ----------------------------- templates editor ----------------------------- */

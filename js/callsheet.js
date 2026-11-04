@@ -2,10 +2,10 @@
 // weather, emergency contact, instructions, each person's call time), then printed from the app, saved as a PDF or
 // a web page, shared, or emailed to the whole crew. "Call sheets" on the Bookings page lists every shoot and whether
 // its sheet has gone out.
-import { h, toast, nodes, sheet, fmtLong, fmtShort, fmtTime, parseISO, todayISO, mapsUrl, uid } from './util.js';
+import { h, toast, nodes, sheet, fmtLong, fmtShort, fmtTime, parseISO, todayISO, mapsUrl, uid, backBtn } from './util.js';
 import { db, byId, endOf, upsert, activeBookings } from './store.js';
 import { getTimes } from './suncalc.js';
-import { setCheck, itemId } from './workflow.js';
+import { setCheck, itemId, hiredPeople, rentalsOf } from './workflow.js';
 import { saveOrShare } from './backup.js';
 import { forecastLine } from './weather.js';
 import { boardPlan, ieOf, dnOf, fmtEighths, castNumbers } from './board.js';
@@ -35,7 +35,8 @@ const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 /* ----------------------------------- data ----------------------------------- */
 export function callSheetData(b, cs = sheetOf(b), crewCall = b.crewCall || {}) {
   const p = db.profile, v = b.venueId ? byId('venues', b.venueId) : null;
-  const crew = (b.crew || []).map(id => byId('crew', id)).filter(Boolean).map(c => ({ ...c, call: crewCall[c.id] || cs.generalCall || b.start || '' }));
+  // Your own crew and the people hired for this job, in one list: both get a call time and go on the sheet and the crew link.
+  const crew = [...(b.crew || []).map(id => byId('crew', id)).filter(Boolean), ...hiredPeople(b).map(hr => ({ id: hr.id, name: hr.name, role: hr.role, phone: hr.phone, email: hr.email, hired: true }))].map(c => ({ ...c, call: crewCall[c.id] || cs.generalCall || b.start || '' }));
   const gear = (b.gear || []).map(id => byId('gear', id)).filter(Boolean);
   const kit = {}; gear.forEach(g => { const c = g.category || 'Other'; kit[c] = (kit[c] || 0) + Math.max(1, Number((b.gearQty || {})[g.id]) || 1); });
   let loc = null; try { loc = v && v.geo && Number.isFinite(Number(v.geo.lat)) ? { lat: +v.geo.lat, lon: +v.geo.lon } : JSON.parse(localStorage.getItem('logi-loc')); } catch { /* none */ }
@@ -45,7 +46,7 @@ export function callSheetData(b, cs = sheetOf(b), crewCall = b.crewCall || {}) {
   const days = multiDay(b) ? [...new Set([b.date, ...schedule.map(r => r.date).filter(Boolean)])].sort() : [b.date];
   const producer = [p.name, p.business].filter(Boolean).join(' · ') || 'Vdex';
   const producerLine = `${producer}${p.phone ? ' · ' + p.phone : ''}${p.email ? ' · ' + p.email : ''}`;
-  return { b, p, v, cs, crew, kit, hires: b.hires || [], sun, loc, address, schedule, days, producer, producerLine, generalCall: cs.generalCall || b.start || '', wrap: cs.wrap || b.end || '', breaks: [b.breakMinutes && b.breakMinutes + ' min approved', b.breakNote].filter(Boolean).join(' · ') };
+  return { b, p, v, cs, crew, kit, hires: rentalsOf(b), sun, loc, address, schedule, days, producer, producerLine, generalCall: cs.generalCall || b.start || '', wrap: cs.wrap || b.end || '', breaks: [b.breakMinutes && b.breakMinutes + ' min approved', b.breakNote].filter(Boolean).join(' · ') };
 }
 
 /* ----------------------------------- text ----------------------------------- */
@@ -237,7 +238,7 @@ export function callSheetPage(b, go) {
   if (E.id && E.id !== b.id) commitDraft(); // a draft left over from another shoot
   const redraw = () => { const y = window.scrollY; go({}); window.scrollTo(0, y); };
   const cs = sheetOf(b), state = sheetState(b);
-  const crew = (b.crew || []).map(id => byId('crew', id)).filter(Boolean), withEmail = crew.filter(c => c.email);
+  const withEmail = callSheetData(b).crew.filter(c => c.email);
   const text = () => callSheetText(byId('bookings', b.id));
   const share = async () => { if (navigator.share) { try { await navigator.share({ title: 'Call sheet — ' + b.title, text: text() }); markSent(b.id); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const copy = async () => { try { await navigator.clipboard.writeText(text()); toast('Copied'); markSent(b.id); } catch { toast('Select the text and copy it'); } };
@@ -251,7 +252,7 @@ export function callSheetPage(b, go) {
   const emailClick = () => { if (longMail) { const w = navigator.clipboard && navigator.clipboard.writeText(text()); if (w) w.then(() => toast('The call sheet is long, so it was copied: paste it into the email'), () => toast('Use Copy text, then paste it into the email')); else toast('Use Copy text, then paste it into the email'); } markSent(b.id); };
   return h('div', { class: 'cs-page' },
     h('div', { class: 'page-head' },
-      h('button', { class: 'btn ghost small', onclick: () => { commitDraft(); go({ view: 'booking', id: b.id }); } }, '‹ Booking'),
+      backBtn('Booking', () => { commitDraft(); go({ view: 'booking', id: b.id }); }),
       editing
         ? h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => { cancelEdit(); redraw(); } }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => { commitDraft(); redraw(); } }, '✓ Done'))
         : h('button', { class: 'btn primary', onclick: () => { startEdit(b); redraw(); } }, '✏️ Edit sheet')),
@@ -271,7 +272,7 @@ export function callSheetPage(b, go) {
         h('button', { class: 'btn ghost small', onclick: web }, '💾 Web page'),
         h('button', { class: 'btn ghost small', onclick: copy }, 'Copy text')),
     h('div', { class: 'cs-paper' + (editing ? ' editing' : '') }, renderDoc(b, editing ? { cs: E.draft, crewCall: E.crewCall, edit: { touch: () => { E.changed = true; }, redraw } } : {})),
-    !editing && h('p', { class: 'small muted' }, 'The sheet is built from the booking, venue, crew, kit, hires and the sun for the day, plus what you add with Edit sheet. Print uses this device’s print dialog (save as PDF there too); Save PDF makes a file for the share sheet; Web page makes a file that opens on any phone.'));
+    !editing && h('p', { class: 'small muted' }, 'The sheet is built from the booking, venue, crew and hired people, kit, rentals and the sun for the day, plus what you add with Edit sheet. Print uses this device’s print dialog (save as PDF there too); Save PDF makes a file for the share sheet; Web page makes a file that opens on any phone.'));
 }
 
 /* ------------------------------------ list ------------------------------------ */

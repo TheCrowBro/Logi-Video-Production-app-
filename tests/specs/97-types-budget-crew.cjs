@@ -39,7 +39,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
       gr.value = 9876;
       Object.assign(x, { address: '1 Quay Street, Portside', type: 'vertical', date: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10), crew: [c.id], gear: [g.id], venueId: v ? v.id : undefined, notes: 'SECRET BOOKING NOTE', status: 'Confirmed',
         stakeholders: [{ name: 'Client Person', role: 'Client', phone: '+1 555 0999', email: 'client@example.com' }],
-        hires: [{ id: 'h1', item: 'Prism lens', from: 'Camera Co', cost: 150 }], licences: [{ id: 'l1', kind: 'Music', title: 'Track One', cost: 60 }],
+        hires: [{ id: 'h1', item: 'Prism lens', from: 'Camera Co', cost: 150 }], rentals: [], licences: [{ id: 'l1', kind: 'Music', title: 'Track One', cost: 60 }],
         shots: [{ id: 's1', text: 'Wide of the harbour at dawn', done: false }, { id: 's2', text: 'Close-up of the hands', done: true }],
         deliverables: [{ id: 'd1', name: 'Main cut 9:16', duration: '60 s', due: '', status: 'Planned', link: 'https://private.example/review' }],
         quote: { number: 'Q-0099', status: 'Sent', date: new Date().toISOString().slice(0, 10), taxRate: 20, lines: [{ id: 'q1', desc: 'Production', qty: 1, unit: 'item', price: 2500 }] },
@@ -54,6 +54,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   // ---- budget ----
   const money = n => page.evaluate(v => import('./js/money.js').then(m => m.fmtMoney(v)), n);
+  await page.locator('#bk-work').evaluate(d => { d.open = true; }); await sleep(150);
   const budget = page.locator('#bk-budget');
   ok('the booking has a private Budget section', /Only you see it/.test(await budget.innerText()));
   await budget.locator('button:has-text("Fill from booking")').click(); await sleep(400);

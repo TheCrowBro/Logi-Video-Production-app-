@@ -31,6 +31,24 @@ export async function forecast(lat, lon, iso) {
   return v;
 }
 export const summary = w => (w ? `${w.emoji} ${w.text}, ${w.tmin}–${w.tmax}${w.tUnit}${w.rain != null ? `, ${w.rain}% chance of rain` : ''}, wind to ${w.wind} ${w.wUnit}${w.gust > w.wind + 15 ? ` (gusts ${w.gust})` : ''}` : '');
+// The day's weather as a card on the booking: a big symbol, the high and low, rain and wind, with the sun times under
+// it. Without a location there is nothing to show; beyond the forecast's reach only the sun times show.
+export function forecastCard(loc, iso, { sun = '', when = '' } = {}) {
+  if (!loc) return null;
+  const sunEl = sun ? h('div', { class: 'sunline muted small' }, sun) : null;
+  const ico = h('div', { class: 'wx-ico', 'aria-hidden': 'true' }, canForecast(iso) ? '🌤' : '☀');
+  const main = h('div', { class: 'wx-main' }, canForecast(iso) ? h('div', { class: 'wxline muted small' }, 'Checking the forecast…') : h('div', { class: 'muted small' }, `${when ? when + ': ' : ''}the forecast comes within 16 days of the day.`), sunEl);
+  const el = h('div', { class: 'card wx-card box-dark', role: 'group', 'aria-label': 'Weather and sun' }, ico, main);
+  if (canForecast(iso)) forecast(loc.lat, loc.lon, iso).then(w => {
+    if (!w) { main.replaceChildren(...nodes(h('div', { class: 'muted small' }, 'No forecast for this day yet.'), sunEl)); return; }
+    ico.textContent = w.emoji;
+    main.replaceChildren(...nodes(
+      h('div', { class: 'wx-head' }, h('b', { class: 'wx-text' }, w.text), h('span', { class: 'wx-temp' }, `${w.tmin}–${w.tmax}${w.tUnit}`)),
+      h('div', { class: 'wxline small' }, [w.rain != null && `🌧 ${w.rain}% chance of rain`, `💨 wind to ${w.wind} ${w.wUnit}${w.gust > w.wind + 15 ? ` (gusts ${w.gust})` : ''}`].filter(Boolean).join(' · ')),
+      sunEl));
+  }).catch(() => main.replaceChildren(...nodes(h('div', { class: 'muted small' }, 'The forecast could not be fetched.'), sunEl)));
+  return el;
+}
 // A line that fills itself in once the forecast arrives; optionally with a button that hands the text on.
 export function forecastLine(loc, iso, { onUse, label = 'Add to call sheet' } = {}) {
   if (!loc || !canForecast(iso)) return null;

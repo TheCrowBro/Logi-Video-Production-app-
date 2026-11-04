@@ -2,7 +2,8 @@ import { h, telUrl, safeUrl, empty, fmtShort, todayISO } from '../util.js';
 import { db, upsert, remove, crewBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
 
-export const ROLES = ['Director', 'Producer', 'DOP', 'Camera Operator', '1st AC', '2nd AC', 'Gaffer', 'Grip', 'Sound Recordist', 'Boom Operator', 'Drone Pilot', 'Editor', 'Colourist', 'Motion Designer', 'MUA', 'Stylist', 'Runner', 'Location Manager', 'Other'];
+import { ROLES } from '../workflow.js';
+export { ROLES };
 const S = { q: '', role: '' };
 
 function edit(c = {}) {

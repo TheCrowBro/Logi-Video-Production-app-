@@ -1,4 +1,4 @@
-// Storage & sync panel and backup actions, shared by the ☁ sheet and the Settings page.
+// The storage panel (the cloud link and its state) and the backup actions, shared by the ☁ sheet and Settings → Storage, sync & backups.
 import { h, toast } from './util.js';
 import * as store from './store.js';
 import * as providers from './providers.js';

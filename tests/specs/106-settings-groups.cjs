@@ -37,6 +37,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   // The group remembers it was opened across a redraw (a saved setting redraws the page)
   await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, currency: '€' }; }))); await sleep(400);
   ok('a redraw keeps General and About & Licence open', await page.evaluate(() => document.querySelector('details[data-s="General"]').open && document.querySelector('details[data-s="About & Licence"]').open && !document.querySelector('details[data-s="Work & billing"]').open));
+  // Folded up by hand while a section inside is still open: it stays folded across the next redraw too
+  await page.locator('details[data-s="General"] > summary').click(); await sleep(200);
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, bio: 'Folded' }; }))); await sleep(400);
+  ok('a group folded up by hand stays folded across a redraw, even with a section open inside it', await page.evaluate(() => !document.querySelector('details[data-s="General"]').open && document.querySelector('details[data-s="About & Licence"]').open));
+  const rv = await page.evaluate(async () => { const m = await import('./js/pages/settings.js'); const r = m.reveal('Security'); const nav = document.getElementById('rolodex').getBoundingClientRect().bottom; return { r, open: document.querySelector('details[data-s="Security"]').open, focus: document.activeElement === document.querySelector('details[data-s="Security"] > summary'), below: document.querySelector('details[data-s="Security"]').getBoundingClientRect().top >= nav - 1, none: m.reveal('No such section') }; });
+  ok('reveal() opens a section by title, focuses it, lands it below the Rolodex, and says no for an unknown title', rv.r === true && rv.open && rv.focus && rv.below && rv.none === false, JSON.stringify(rv));
 
   // ---- the profile: edited here, shown on Me ----
   await openSetting(page, 'Profile');

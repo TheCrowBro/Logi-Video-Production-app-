@@ -3,10 +3,10 @@
 // hours logged; the user edits them. Printed from the app, saved as PDF, emailed to the client's contacts, and
 // summed up on the Money overview. Rates, the price list, numbering, tax and payment terms live in Settings → Work & billing → Quotes &
 // invoices.
-import { h, sheet, toast, nodes, fmtShort, fmtLong, todayISO, parseISO, ymd, uid } from './util.js';
+import { h, sheet, toast, nodes, fmtShort, fmtLong, todayISO, parseISO, ymd, uid, backBtn } from './util.js';
 import { db, byId, upsert, update, endOf, requirePaid } from './store.js';
 import { openForm } from './form.js';
-import { setCheck, itemId } from './workflow.js';
+import { setCheck, itemId, hiredPeople, rentalsOf } from './workflow.js';
 import { stats, workedMs } from './hours.js';
 import { saveOrShare } from './backup.js';
 import { printElement, htmlDocument } from './callsheet.js';
@@ -78,9 +78,10 @@ export function suggestLines(b, kind, source = 'booking') {
   }
   line(`Shoot day${days === 1 ? '' : 's'} — ${b.title}`, days, 'day', bl.dayRate);
   for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const hourly = perHour(c.rate); line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, hourly ? days * 10 : days, hourly ? 'hour' : 'day', rateOf(c.rate)); } }
+  for (const hr of hiredPeople(b)) { const hourly = perHour(hr.rate), n = Number(hr.days) || days; line(`Crew: ${hr.name}${hr.role ? ' (' + hr.role + ')' : ''}`, hourly ? n * 10 : n, hourly ? 'hour' : 'day', rateOf(hr.rate)); }
   if ((b.gear || []).length || (b.kits || []).length) line('Equipment package', days, 'day', bl.kitRate);
   for (const dl of b.deliverables || []) line(`${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
-  if (kind === 'invoice') for (const hr of b.hires || []) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
+  if (kind === 'invoice') for (const hr of rentalsOf(b)) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
   return lines;
 }
 
@@ -234,7 +235,7 @@ export function moneyPage(b, kind, go) {
   const partPaid = doc && kind === 'invoice' && doc.status !== 'Paid' && t.received > 0;
   return h('div', { class: 'cs-page money-page' },
     h('div', { class: 'page-head' },
-      h('button', { class: 'btn ghost small', onclick: () => go({ view: 'booking', id: b.id }) }, '‹ Booking'),
+      backBtn('Booking', () => go({ view: 'booking', id: b.id })),
       h('div', { class: 'seg', role: 'tablist' }, ...Object.entries(KINDS).map(([k, v]) => h('button', { role: 'tab', class: k === kind ? 'on' : '', 'aria-selected': k === kind, onclick: () => go({ kind: k }) }, v.label + (b[k] ? ' ✓' : ''))))),
     h('h1', null, K.label), h('div', { class: 'muted' }, [b.title, b.client].filter(Boolean).join(' · ')),
     doc ? [
@@ -312,13 +313,14 @@ function editBudgetLine(b, line) {
     onDelete: line ? () => patchBooking(b, bd => { bd.lines = bd.lines.filter(l => l.id !== line.id); if (line.src) bd.skip = [...new Set([...(bd.skip || []), line.src])]; }) : null, // Fill from booking leaves it out from now on
   });
 }
-// Lines from what the booking already knows: crew at their day rates, hires and licences at their cost. Only adds
-// what is not there yet, so it can be tapped again after the booking changes.
+// Lines from what the booking already knows: crew and hired people at their day rates, rented gear and licences at
+// their cost. Only adds what is not there yet, so it can be tapped again after the booking changes.
 export function fillBudget(b) {
   b = current(b);
   const have = new Set([...((b.budget && b.budget.lines) || []).map(l => l.src).filter(Boolean), ...((b.budget && b.budget.skip) || [])]), add = [], days = shootDays(b);
   for (const id of b.crew || []) { const c = byId('crew', id); if (c && !have.has('crew:' + id)) { const hourly = perHour(c.rate); add.push({ cat: 'Crew', desc: c.name + (c.role ? ` (${c.role})` : '') + (hourly ? ' — check the hours' : ''), qty: hourly ? days * 10 : days, unit: hourly ? 'hour' : 'day', rate: rateOf(c.rate), src: 'crew:' + id }); } }
-  for (const hr of b.hires || []) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
+  for (const hr of hiredPeople(b)) if (!have.has('person:' + hr.id)) { const hourly = perHour(hr.rate), n = Number(hr.days) || days; add.push({ cat: 'Crew', desc: hr.name + (hr.role ? ` (${hr.role})` : '') + ' — hired' + (hourly ? ', check the hours' : ''), qty: hourly ? n * 10 : n, unit: hourly ? 'hour' : 'day', rate: rateOf(hr.rate), src: 'person:' + hr.id }); }
+  for (const hr of rentalsOf(b)) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
   for (const lc of b.licences || []) if (!have.has('lic:' + lc.id)) add.push({ cat: 'Music & licences', desc: [lc.kind, lc.title].filter(Boolean).join(': '), qty: 1, unit: 'item', rate: rateOf(lc.cost), src: 'lic:' + lc.id });
   if (add.length) patchBooking(b, bd => { bd.lines.push(...add.map(l => ({ ...l, id: uid(), actual: '', supplier: '' }))); });
   return add.length;

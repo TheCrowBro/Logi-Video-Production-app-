@@ -23,7 +23,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => window.logiGo('settings'));
   await openSetting(page, 'Quotes & invoices');
   const settingsText = await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices"))').innerText();
-  ok('Settings → Quotes & invoices lists the ways to pay', /Getting paid/.test(settingsText) && /PayPal/.test(settingsText) && /Bank transfer/.test(settingsText) && /Zelle/.test(settingsText) && /portsidefilms/.test(settingsText) && /DE89/.test(settingsText));
+  ok('Settings → Work & billing → Quotes & invoices lists the ways to pay', /Getting paid/.test(settingsText) && /PayPal/.test(settingsText) && /Bank transfer/.test(settingsText) && /Zelle/.test(settingsText) && /portsidefilms/.test(settingsText) && /DE89/.test(settingsText));
   await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) button:has-text("Add a way to pay")').click(); await page.waitForSelector('.sheet .list');
   const cat = await page.locator('.sheet').last().innerText();
   ok('the catalogue offers the common systems and a custom one', /Venmo/.test(cat) && /Stripe/.test(cat) && /Square/.test(cat) && /Revolut/.test(cat) && /Monzo/.test(cat) && /Wise/.test(cat) && /UPI/.test(cat) && /Interac/.test(cat) && /Any other payment page/.test(cat) && /Other instructions/.test(cat));

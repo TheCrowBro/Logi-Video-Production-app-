@@ -44,6 +44,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => { const c = [...document.querySelectorAll('#page .card.tap')].find(x => /Harbour/.test(x.textContent)); if (c) c.click(); }); await page.waitForSelector('.bk-detail'); await expect('A booking', 8);
   await page.locator('.bk-tools button').first().click(); await page.waitForSelector('.cs-page'); await expect('Call sheet', 3);
   await page.getByRole('button', { name: '‹ Booking' }).click(); await sleep(300);
+  await page.locator('#bk-work').evaluate(d => { d.open = true; }); await sleep(150);
   await page.locator('#bk-money button').first().click(); await page.waitForSelector('.money-page'); await expect('Money', 2);
   for (const [tab, name, min] of [['crew', 'Crew', 3], ['gear', 'Equipment', 5], ['venues', 'Venues', 3], ['insurance', 'Insurance', 3], ['me', 'Me', 3], ['field', 'Field', 2], ['settings', 'Settings', 10]]) {
     await page.evaluate(t => window.logiGo(t), tab); await sleep(450); await expect(name, min);

@@ -66,7 +66,7 @@ js/providers.js  Google Drive, iCloud, Dropbox, OneDrive, WebDAV and local-file 
 js/storage-ui.js storage panel and backups
 js/form.js       schema-driven edit forms
 js/pages/        one file per Rolodex card (bookings, crew, gear with the service log, venues, insurance, me, field, tcnotes, settings)
-js/workflow.js   stages, checklist templates, project templates, pipeline, hires, shot list, media log, deliverables, licences
+js/workflow.js   stages, checklist templates, project templates, pipeline, hired people, rentals, shot list, media log, deliverables, licences
 js/callsheet.js  call sheets: in-place editor, document, in-app printing, PDF, web page, list     js/pdf.js   small PDF writer (no library)
 js/hours.js      shifts, breaks, statistics, chart     js/clock.js   the shoot-day clock bar     js/notify.js  break notifications
 js/calendar.js   .ics, add-to-calendar links, live feed, two-way sync

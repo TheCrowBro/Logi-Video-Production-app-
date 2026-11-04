@@ -121,3 +121,7 @@ export const safeUrl = u => {
 };
 
 export const empty = (msg, action) => h('div', { class: 'empty' }, h('p', null, msg), action);
+
+// The button that goes back up a level (day → calendar, booking → day, call sheet → booking): a clear return mark in
+// a ring, with a shine when it appears and a pulse under the pointer. The text keeps the ‹ so its name reads as before.
+export const backBtn = (label, onclick) => h('button', { class: 'btn ghost small back-btn', type: 'button', onclick }, h('span', { class: 'back-arrow' }, '‹'), ' ' + label);

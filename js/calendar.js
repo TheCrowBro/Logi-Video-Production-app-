@@ -3,7 +3,7 @@
 //  2. A live .ics feed written into the linked cloud storage, which any calendar app can subscribe to.
 //  3. Two-way sync with Google Calendar or Microsoft 365 / Outlook through their APIs.
 import { h, sheet, toast, parseISO, ymd, fmtLong, fmtShort } from './util.js';
-import { db, byId, update, subscribe, activeBookings, endOf, cloud } from './store.js';
+import { db, byId, update, subscribe, activeBookings, endOf, cloud, editDaysOf } from './store.js';
 import * as store from './store.js';
 import * as providers from './providers.js';
 import { SWITCH_ON, preloadSignIn } from './storage-ui.js';
@@ -54,7 +54,17 @@ export function dueEvents() {
   for (const b of activeBookings()) for (const d of b.deliverables || []) if (d.due && d.status !== 'Delivered') out.push({ id: 'del:' + d.id, uid: `vdex-del-${d.id}@vdex.app`, title: `Deliver: ${d.name} — ${b.title}`, allDay: true, start: d.due, end: nextDay(d.due), location: '', description: `${b.title}${b.client ? ' for ' + b.client : ''}\nDeliverable: ${d.name}${d.duration ? ' (' + d.duration + ')' : ''}\nStatus: ${d.status}\n\nVdex booking ${b.id}`, status: 'CONFIRMED', updatedAt: b.updatedAt });
   return out;
 }
-export const feedIcs = () => icsFor(activeBookings(), dueEvents());
+// Edit days ride along too, one event each, labelled so they are never mistaken for the shoot.
+export function editEvents(bookings = activeBookings()) {
+  const out = [];
+  for (const b of bookings) for (const d of editDaysOf(b)) {
+    const allDay = !d.start, start = allDay ? d.date : localDate(d.date, d.start);
+    let end; if (allDay) end = nextDay(d.date); else { end = localDate(d.date, d.end || d.start); if (end <= start) end = new Date(start.getTime() + 36e5); }
+    out.push({ id: 'edit:' + b.id + ':' + d.date, uid: `vdex-edit-${b.id}-${d.date}@vdex.app`, title: `Edit: ${b.title}${b.client ? ' — ' + b.client : ''}`, allDay, start, end, location: '', description: `Edit day for ${b.title}${b.client ? ' (' + b.client + ')' : ''}\n\nVdex booking ${b.id}`, status: b.status === 'Cancelled' ? 'CANCELLED' : 'CONFIRMED', updatedAt: b.updatedAt });
+  }
+  return out;
+}
+export const feedIcs = () => icsFor(activeBookings(), [...dueEvents(), ...editEvents()]);
 export const FEED_NAME = 'vdex-bookings.ics';
 store.setAuxWriter(() => ({ name: FEED_NAME, text: feedIcs(), type: 'text/calendar' }));
 
@@ -63,7 +73,7 @@ const q = o => new URLSearchParams(Object.fromEntries(Object.entries(o).filter((
 export const googleLink = e => 'https://calendar.google.com/calendar/render?' + q({ action: 'TEMPLATE', text: e.title, dates: e.allDay ? `${dateOnly(e.start)}/${dateOnly(e.end)}` : `${utc(e.start)}/${utc(e.end)}`, details: e.description, location: e.location });
 export const outlookLink = (e, host) => `https://outlook.${host}.com/calendar/0/deeplink/compose?` + q({ path: '/calendar/action/compose', rru: 'addevent', subject: e.title, startdt: e.allDay ? e.start : e.start.toISOString(), enddt: e.allDay ? e.end : e.end.toISOString(), body: e.description, location: e.location, allday: e.allDay ? 'true' : 'false' });
 export const yahooLink = e => 'https://calendar.yahoo.com/?' + q({ v: 60, title: e.title, st: e.allDay ? dateOnly(e.start) : utc(e.start), et: e.allDay ? dateOnly(e.end) : utc(e.end), desc: e.description, in_loc: e.location, dur: e.allDay ? 'allday' : null });
-export const summaryText = b => { const e = eventOf(b); return [e.title, (endOf(b) > b.date ? `${fmtLong(b.date)} → ${fmtLong(endOf(b))}` : fmtLong(b.date)) + (b.start ? ` · ${b.start}${b.end ? '–' + b.end : ''}` : ''), e.location && 'Where: ' + e.location, '', e.description].filter(x => x != null && x !== false).join('\n'); };
+export const summaryText = b => { const e = eventOf(b), ed = editDaysOf(b); return [e.title, (endOf(b) > b.date ? `${fmtLong(b.date)} → ${fmtLong(endOf(b))}` : fmtLong(b.date)) + (b.start ? ` · ${b.start}${b.end ? '–' + b.end : ''}` : ''), ed.length && 'Edit days: ' + ed.map(d => fmtShort(d.date) + (d.start ? ` ${d.start}${d.end ? '–' + d.end : ''}` : '')).join(', '), e.location && 'Where: ' + e.location, '', e.description].filter(x => x != null && x !== false && x !== 0).join('\n'); };
 export const mailtoLink = b => 'mailto:?' + q({ subject: `Booking: ${b.title} — ${fmtShort(b.date)}`, body: summaryText(b) }).replace(/\+/g, '%20');
 const slug = s => String(s).replace(/[^\w]+/g, '_').replace(/^_|_$/g, '') || 'booking';
 async function shareIcs(name, text, title, body) {
@@ -71,7 +81,7 @@ async function shareIcs(name, text, title, body) {
   if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ title, text: body, files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; } }
   const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); a.remove(); toast('Calendar file saved');
 }
-export const shareBooking = b => shareIcs(slug(b.title) + '.ics', icsFor([b], [], b.title), b.title, summaryText(b));
+export const shareBooking = b => shareIcs(slug(b.title) + '.ics', icsFor([b], editEvents([b]), b.title), b.title, summaryText(b));
 export const shareAll = () => shareIcs(FEED_NAME, feedIcs(), CAL_NAME, `${activeBookings().length} bookings from Vdex`);
 
 export function openAddToCalendar(b) {
@@ -115,13 +125,13 @@ export async function syncCalendar({ interactive = false } = {}) {
     const remote = await ad.list(calendarId, interactive);
     const byLogi = new Map(remote.filter(r => r.logiId).map(r => [r.logiId, r]));
     // adopt events another device already created, so they are updated rather than duplicated
-    for (const r of remote) if (r.logiId && !mapping[r.logiId] && (byId('bookings', r.logiId) || r.logiId.startsWith('del:'))) mapping[r.logiId] = { id: r.id, hash: '', at: 0 };
+    for (const r of remote) if (r.logiId && !mapping[r.logiId] && (byId('bookings', r.logiId) || r.logiId.startsWith('del:') || r.logiId.startsWith('edit:'))) mapping[r.logiId] = { id: r.id, hash: '', at: 0 };
     // pull: edits made in the calendar since we last touched the event
     const changes = [];
-    for (const [bid, m] of Object.entries(mapping)) { if (bid.startsWith('del:')) continue; const r = byLogi.get(bid), b = byId('bookings', bid); if (r && b && r.updated > m.at + 2000 && r.updated > (Number(b.updatedAt) || 0)) { const p = patchFromEvent(b, r); if (p) changes.push([bid, p]); } }
+    for (const [bid, m] of Object.entries(mapping)) { if (bid.startsWith('del:') || bid.startsWith('edit:')) continue; const r = byLogi.get(bid), b = byId('bookings', bid); if (r && b && r.updated > m.at + 2000 && r.updated > (Number(b.updatedAt) || 0)) { const p = patchFromEvent(b, r); if (p) changes.push([bid, p]); } }
     if (changes.length) update(d => { for (const [bid, p] of changes) { const b = d.bookings.find(x => x.id === bid); if (b) { Object.assign(b, p); for (const k of ['endDate', 'start', 'end']) if (b[k] === undefined || b[k] === '') delete b[k]; b.updatedAt = Date.now(); } } });
     // push
-    const want = [...activeBookings().map(b => ({ key: b.id, e: eventOf(b) })), ...dueEvents().map(e => ({ key: e.id, e }))], wantIds = new Set(want.map(w => w.key));
+    const want = [...activeBookings().map(b => ({ key: b.id, e: eventOf(b) })), ...dueEvents().map(e => ({ key: e.id, e })), ...editEvents().map(e => ({ key: e.id, e }))], wantIds = new Set(want.map(w => w.key));
     for (const { key, e } of want) {
       const hash = hashOf(e), m = mapping[key];
       if (!m || !byLogi.has(key)) { const id = await ad.create(calendarId, e); mapping[key] = { id, hash, at: Date.now() }; }

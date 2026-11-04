@@ -16,6 +16,7 @@ const closeSheets = async () => { for (let i = 0; i < 4 && document.querySelecto
 const toLogs = async () => { await closeSheets(); if (document.querySelector('.tc-log-head')) clickQ('.tc-log-head .btn.ghost.small'); };
 const openPractice = async () => { await closeSheets(); const m = await import('./pages/tcnotes.js'); m.openPracticeLog(); await wait(300); };
 const openSyncSheet = async () => { await closeSheets(); await wait(100); clickQ('.tc-head .card-row .btn'); };
+const openWork = () => { const d = document.querySelector('#bk-work'); if (d) d.open = true; };
 const openLinkSheet = async () => { await closeSheets(); await wait(100); clickQ('.tc-log-head .actions button:nth-child(1)'); };
 const openExportSheet = async () => { await closeSheets(); await wait(100); clickQ('.tc-log-head .actions button:nth-child(2)'); };
 const backToNotes = async () => { await closeSheets(); tab(1)(); };
@@ -40,25 +41,27 @@ export const TUTORIALS = {
     T('Bookings that day', 'Tap one to open it. Add another with + New or From template.', '.list', '.empty'),
   ] },
   booking: { name: 'A booking', page: 'bookings', steps: [
-    T('The booking', 'Project, client, dates, times and address, with Add to calendar, Share and Email. Edit changes the details.', '.bk-detail .card.hero'),
-    T('Stages', 'Every project moves Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. Tap a stage to move it; the checklist underneath belongs to the current stage.', '.bk-detail .stage-strip'),
-    T('The checklist', 'Tick things off, add your own lines, and tap an arrow to open the tool a line is about. When a stage is complete, Next moves the project on.', '.bk-detail .checklist'),
-    T('Call sheet, stripboard, crew link and templates', 'Call sheet opens this shoot’s sheet. Stripboard breaks the shoot down scene by scene into shooting days. Share with crew makes a read-only page for your cast and crew, with the times, location, who is on and the shot list, and never any prices or budgets. Save as template turns a job that went well into a template; Apply template items adds anything a template still has to offer.', '.bk-detail .bk-tools'),
+    T('The booking', 'Project, client, dates, times and address, with Add to calendar, Share calendar event and Email. Edit changes the details, including the edit days that show on the calendar in their own colour.', '.bk-detail .card.hero'),
+    T('Call sheet, stripboard and crew link', 'Call sheet opens this shoot’s sheet. Stripboard & shot list breaks the shoot down scene by scene into shooting days and keeps the shot list. Share with crew makes a read-only page for your cast and crew, with the times, location, who is on and the shot list, and never any prices or budgets.', '.bk-detail .bk-tools'),
+    T('Hours', 'What the clock bar logged on this job, with overtime, shoot days and editing apart, and a button to start an edit session.', '#bk-hours'),
+    T('Templates', 'Save as template turns a job that went well into a template; Apply template items adds anything a template still has to offer.', '.bk-detail .bk-tools-more'),
+    T('Weather and sun', 'The forecast for the day within two weeks, and sunrise, sunset and golden hour at the venue.', '.bk-detail .wx-card'),
+    T('Workflow, budget, quote and invoice', 'One box for the project’s progress and its money. Closed, the line shows the budget, the quote, the invoice and the stage at a glance; open it for the checklists and the documents.', '#bk-work > summary'),
+    T('Stages', 'Every project moves Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. Tap a stage to move it; the checklist underneath belongs to the current stage.', '.bk-detail .stage-strip', { before: openWork }),
+    T('The checklist', 'Tick things off one by one, or Check all for the whole stage; add your own lines, and tap an arrow to open the tool a line is about. When a stage is complete, Next moves the project on, and once every stage is done Vdex asks whether to archive the project.', '.bk-detail .checklist', { before: openWork }),
+    T('Budget', 'What the job will cost you, line by line, in categories you pick from a list. Fill from booking adds your crew and hired people at their rates, your rentals and your licences. It compares with the quote, and only you see it.', '#bk-budget', { before: openWork }),
+    T('Money', 'The quote and the invoice for this booking.', '#bk-money', { before: openWork }),
     T('Venue', 'The venue’s rules, access, parking and map, with a warning if your kit breaks a rule.', '#bk-venue'),
-    T('Sun and weather', 'Sunrise, sunset and golden hour at the venue, plus the forecast within two weeks.', '.bk-detail .sunline'),
-    T('Crew', 'Who is on the shoot: ask them by text or email, set each person’s call time, and mark them confirmed.', '#bk-crew'),
-    T('Shot list', 'List the shots you need and tick them off on the day.', '#bk-shots'),
-    T('Equipment', 'The kit on this shoot, grouped by category, with a warning when an item is also booked elsewhere. Save the set as a kit for next time.', '#bk-kit'),
-    T('Hires', 'Equipment hired in for the job, with who it comes from.', '#bk-hires'),
+    T('People', 'The client’s contacts, your crew with their call times and confirmations, and anyone hired in for the job. Hired people go on the call sheet and the crew link like crew, and their cost into the budget. Long lists fold after five.', '#bk-people'),
+    T('Stripboard & shot list', 'Where the board stands, and the shot list to tick off on the day. Import a shot list and its scene headings fill the board as well: check what it guessed.', '#bk-shots'),
+    T('Equipment', 'The kit on this shoot, grouped by category, with a warning when an item is also booked elsewhere, and the items rented in with who they come from. Save the set as a kit for next time.', '#bk-kit'),
     T('Media & backups', 'One row per card: tick as it reaches drive 1, drive 2, offsite and verified. A card can only be cleared once it is on two drives.', '#bk-media'),
     T('Deliverables', 'What the client gets, with due dates that appear in your calendar, status and links.', '#bk-deliverables'),
     T('Licences', 'Music and stock licences kept with the project.', '#bk-licences'),
-    T('Money', 'The quote and the invoice for this booking.', '#bk-money'),
-    T('Budget', 'What the job will cost you, line by line, in categories you pick from a list. Fill from booking adds your crew, hires and licences. It compares with the quote, and only you see it.', '#bk-budget'),
-    T('Hours', 'What the clock bar logged on this job, with overtime, and a button to start an edit session.', '#bk-hours'),
   ] },
   strips: { name: 'Stripboard', page: 'bookings', steps: [
     T('The stripboard', 'One strip per scene, in shooting order: the scene number, interior or exterior and the time of day, the set, what happens, the cast numbers and the pages in eighths.', '.sb-page .sb-board'),
+    T('The shot list', 'The same shot list as on the booking, under the board: tick shots off on the day, and import a list to fill the board from its scene headings.', '#sb-shots'),
     T('Scenes from the script', 'Pick a Word, Fountain or text script and each scene heading becomes a strip, with its speaking cast and an estimated page count. ＋ Scene adds one by hand, ＋ Banner a line such as a company move, ＋ Day a shooting day.', '.sb-page .sb-tools'),
     T('Colours', 'As on a paper board: white interior day, yellow exterior day, blue interior night, green exterior night.', '.sb-page .sb-legend'),
     T('Move strips', 'Drag a strip by its ⠿ handle, or focus the handle and use the up and down arrow keys. Tap a strip to edit it or send it to a day.', '.sb-page .sb-handle'),
@@ -198,11 +201,13 @@ export const TUTORIALS = {
   settings: { name: 'Settings', page: 'settings', dynamic: () => {
     const blurbs = { 'General': 'Display and accessibility, your profile, and About & Licence: open it to see the three.', 'Work & billing': 'Project and workflow templates, quotes and invoices, hours and breaks.', 'Storage, sync & backups': 'Link one cloud storage and every device shares one database; below it, export and import backups, restore an automatic cloud backup, load sample data, erase everything.', 'Security': 'A PIN, fingerprint or face unlock, and encrypted data whenever Vdex is locked or in the background.', 'Calendar & email': 'Send bookings to your calendar once, subscribe to a live feed, or keep a two-way sync.', 'Display & accessibility': 'Text size, bigger buttons, contrast, animation and the colour theme, including camera-brand themes.', 'Field tool defaults': 'Your location, units, range-finder camera height and noise-meter calibration.', 'Hours & breaks': 'Standard day, break notifications, default approved break.', 'Quotes & invoices': 'Your rates, price list, tax, numbering, payment terms and bank details.', 'Project templates': 'Your own job types: what a new booking of that kind starts with.', 'Workflow templates': 'The checklists for each job type and each stage.', 'Profile': 'Your name, business and contact details for call sheets, quotes, invoices and the Me page: the one place to change them.', 'Install': 'Add Vdex to your home screen or desktop.', 'About & Licence': 'Version, updates, your licence, the tour and the legal pages.' };
     // Groups first, then the sections inside each (the group is opened so they can be pointed at), then the rest.
-    const openUp = el => () => { for (let p = el.parentElement && el.parentElement.closest('details'); p; p = p.parentElement && p.parentElement.closest('details')) p.open = true; };
+    // Looked up when the step runs, not when the steps were made: a redraw in between replaces every section.
+    const openUp = sel => () => { const live = document.querySelector(sel); for (let p = live && live.parentElement && live.parentElement.closest('details'); p; p = p.parentElement && p.parentElement.closest('details')) p.open = true; };
     return [...document.querySelectorAll('#page details.settings-group, #page details.settings-section')].map(el => {
       const title = el.dataset.s || el.querySelector(':scope > summary .ss-title')?.textContent || 'Section';
       const inGroup = !!(el.parentElement && el.parentElement.closest('details.settings-group'));
-      return { title, text: blurbs[title] || 'Open the section to see its settings.', target: [`[data-s="${title.replace(/"/g, '')}"] > summary`], before: inGroup ? openUp(el) : undefined };
+      const sel = `#page details[data-s="${title.replace(/"/g, '')}"]`;
+      return { title, text: blurbs[title] || 'Open the section to see its settings.', target: [sel + ' > summary'], before: inGroup ? openUp(sel) : undefined };
     });
   } },
 };

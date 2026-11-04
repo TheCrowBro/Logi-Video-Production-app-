@@ -40,7 +40,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
   await openSetting(page, 'About & Licence');
   const about = await page.locator('details.settings-section:has(> summary:has-text("About"))').innerText();
-  ok('Settings → About offers the reload', /new version has been downloaded/i.test(about) && /Reload now/.test(about));
+  ok('Settings → General → About & Licence offers the reload', /new version has been downloaded/i.test(about) && /Reload now/.test(about));
   await page.screenshot({ path: process.env.S + '/update-bar.png' });
   await page.locator('.update-bar button', { hasText: 'Reload' }).click();
   await page.waitForLoadState('domcontentloaded'); await page.waitForSelector('#rolodex .drum-btn');

@@ -3,11 +3,12 @@
 // and page count, arranged into shooting days. Scenes come from the script (.docx, .txt, .fountain or pasted) or are
 // added by hand. Strips are dragged by their handle (or moved with the arrow keys) between days; a day break strip
 // ends each day and shows its total pages, as on a paper board. Loaded on first use.
-import { h, sheet, toast, uid, fmtLong, fmtShort, announce } from './util.js';
+import { h, sheet, toast, uid, fmtLong, fmtShort, announce, backBtn } from './util.js';
 import { byId, update } from './store.js';
 import { openForm } from './form.js';
 import { docxToLines, textToLines, buildScript, SAMPLE_SCRIPT } from './docx.js';
 import { printElement } from './callsheet.js';
+import { shotsBlock } from './workflow.js';
 import { boardOf, boardPlan, ieOf, dnOf, stripClass, fmtEighths, parseEighths, castNumbers, shootDayCount } from './board.js';
 
 /* ------------------------------ script → scenes ------------------------------ */
@@ -15,7 +16,7 @@ import { boardOf, boardPlan, ieOf, dnOf, stripClass, fmtEighths, parseEighths, c
 // Fountain's forced ".FLASHBACK".
 const HEAD = /^(?:([A-Z]?\d+[A-Z]{0,2})[.)]?\s+)?(INT\.?\s*\/\s*EXT|EXT\.?\s*\/\s*INT|I\/E|INT|EXT|EST)[.:\s]\s*(.*)$/i;
 const SCENE_WORD = /^SCENE\s+([A-Z]?\d+[A-Z]?)\b[\s.:—–-]*(.*)$/i;
-const isHeading = t => HEAD.test(t.replace(/^\.(?=[A-Za-z0-9])/, '')) || SCENE_WORD.test(t) || (/^\.(?!\.)[A-Za-z0-9]/.test(t) && t === t.toUpperCase());
+export const isHeading = t => HEAD.test(t.replace(/^\.(?=[A-Za-z0-9])/, '')) || SCENE_WORD.test(t) || (/^\.(?!\.)[A-Za-z0-9]/.test(t) && t === t.toUpperCase());
 // Words that make a part of the heading its time of day.
 const TOD_WORD = /\b(DAY|NIGHT|MORNING|AFTERNOON|EVENING|DAWN|DUSK|SUNRISE|SUNSET|NOON|MIDDAY|MIDNIGHT|TWILIGHT|MAGIC HOUR|GOLDEN HOUR|CONTINUOUS|SAME|LATER)\b/;
 const LIGHT_WORD = /\b(DAY|NIGHT|MORNING|AFTERNOON|EVENING|DAWN|DUSK|SUNRISE|SUNSET|NOON|MIDDAY|MIDNIGHT|TWILIGHT|MAGIC HOUR|GOLDEN HOUR)\b/;
@@ -27,7 +28,7 @@ const NOT_CAST = /^(?:CUT TO|FADE|DISSOLVE|SMASH|MATCH CUT|JUMP CUT|TIME CUT|WIP
 const NOT_CUE = n => /^[>#=~!\[]|[:<]$|\bCONTINUED\b|\s[-–—]\s/.test(n) || /^[A-Z]?\d+[A-Z]?\s.*\s[A-Z]?\d+[A-Z]?$/.test(n);
 const castName = t => t.replace(/\((?:[^)]*)\)/g, ' ').replace(/\s*\^$/, '').replace(/^@/, '').replace(/\s+/g, ' ').trim();
 const castOk = (cue, n) => !/\(\s*V\.?\s*O\.?\s*\)/i.test(cue) && n.length >= 2 && n.length <= 30 && !NOT_CAST.test(n) && !NOT_CUE(n); // a voice-over is not on set
-function splitHeading(text) {
+export function splitHeading(text) {
   let t = text.replace(/^\.(?=[A-Za-z0-9])/, '').trim(), num = '';
   const tag = t.match(/\s*#([\w.-]+)#\s*$/); if (tag) { num = tag[1]; t = t.slice(0, tag.index).trim(); } // Fountain scene number
   let ie = '', rest = t, m;
@@ -262,6 +263,67 @@ function openImport(b) {
     status)));
 }
 
+/* ------------------------------ shot list import ------------------------------ */
+// A shot list as people write them: one shot per line, with the scene it belongs to as a heading above its shots
+// ("INT. KITCHEN - DAY", "Scene 12", "12 EXT. QUAY - DUSK"). List marks and numbering in front of a shot are dropped.
+// Shots before any heading, or in a list with no headings, are unsorted.
+export function parseShotList(text) {
+  const scenes = [], loose = []; let cur = null;
+  for (const raw of cleanScript(text).split('\n')) {
+    const t = raw.trim(); if (!t) continue;
+    if (isHeading(t)) { const s = splitHeading(t); cur = { num: s.num, ie: s.ie, set: s.set, tod: s.tod, shots: [] }; scenes.push(cur); continue; }
+    const shot = t.replace(/^(?:[-*•–—]|\d{1,3}[.)]|\(\d{1,3}\)|[a-z][.)])\s+/i, '').replace(/^(?:shot\s+)?\d{1,3}[a-z]?\s*[:.-]\s+/i, '').trim();
+    if (!shot) continue;
+    (cur ? cur.shots : loose).push(shot);
+  }
+  return { scenes, loose };
+}
+// Puts the shots on the booking and the scene headings on the board: a heading whose number the board already has
+// attaches its shots to that scene; a new one becomes a strip under Not scheduled yet, marked for a check (a shot list
+// says nothing about pages, and often nothing about the time of day).
+export function applyShotImport(b, parsed) {
+  let added = { shots: 0, scenes: 0 };
+  const done = update(d => {
+    const x = d.bookings.find(y => y.id === b.id); if (!x) return;
+    const bd = boardOf(x), have = new Set(bd.list.filter(s => s.type === 'scene').map(s => String(s.scene)));
+    let next = Math.max(0, ...[...have].map(n => parseInt(String(n).replace(/^[A-Z]/i, ''), 10)).filter(Number.isFinite)) + 1;
+    x.shots = [...(x.shots || [])];
+    for (const sc of parsed.scenes) {
+      let num = String(sc.num || '').trim(); if (!num) num = String(next++);
+      if (!have.has(num)) { bd.list.push({ id: uid(), type: 'scene', scene: num, ie: sc.ie || 'INT', set: sc.set || '', tod: sc.tod || 'DAY', dn: '', desc: sc.shots[0] || '', cast: [], eighths: 1, notes: 'From the shot list: check the time of day and the pages.' }); have.add(num); added.scenes++; }
+      for (const text of sc.shots) { x.shots.push({ id: uid(), text, done: false, scene: num }); added.shots++; }
+    }
+    for (const text of parsed.loose) { x.shots.push({ id: uid(), text, done: false }); added.shots++; }
+    if (added.scenes) { x.board = { list: bd.list, cast: bd.cast, updatedAt: Date.now() }; x.shotImportReview = { at: Date.now(), scenes: (x.shotImportReview ? x.shotImportReview.scenes : 0) + added.scenes }; }
+    x.updatedAt = Date.now();
+  });
+  return done === false ? null : added; // false: Vdex is read-only, and has already said so
+}
+export function openShotImport(b) {
+  let close = () => {};
+  const status = h('p', { class: 'small muted', role: 'status' });
+  const use = (name, text) => {
+    const parsed = parseShotList(text), n = parsed.scenes.reduce((t, s) => t + s.shots.length, 0) + parsed.loose.length;
+    if (!n && !parsed.scenes.length) { status.textContent = `Nothing found in ${name}. One shot per line; put each scene's heading (INT. KITCHEN - DAY, or Scene 12) above its shots.`; return; }
+    const added = applyShotImport(b, parsed);
+    if (!added) return;
+    close();
+    toast(added.scenes ? `${added.shots} shot${added.shots === 1 ? '' : 's'} added, and ${added.scenes} scene${added.scenes === 1 ? '' : 's'} put on the stripboard: check them` : `${added.shots} shot${added.shots === 1 ? '' : 's'} added`);
+  };
+  const fail = e => { status.textContent = 'Could not read that file: ' + (e.message || e); };
+  const file = h('input', { type: 'file', accept: '.docx,.txt,.csv,.md,.fountain,.text,text/plain,text/csv', 'aria-label': 'Shot list file', onchange: async e => {
+    const f = e.target.files[0]; if (!f) return; status.textContent = 'Reading…';
+    try { use(f.name, /\.docx$/i.test(f.name) ? (await docxToLines(f)).map(l => l.text).join('\n') : await f.text()); } catch (err) { fail(err); }
+  } });
+  const paste = h('textarea', { rows: 7, placeholder: 'INT. KITCHEN - DAY\nWide: Ana at the stove\nClose-up: hands on the kettle\n\nScene 12\nTracking shot along the quay', 'aria-label': 'Pasted shot list' });
+  ({ close } = sheet('Import a shot list', h('div', { class: 'stack' },
+    h('p', { class: 'small' }, 'One shot per line, from a file (text, CSV, Word) or pasted. Put each scene’s heading above its shots (INT. KITCHEN - DAY, or Scene 12) and Vdex groups the shots by scene and adds any scene the stripboard does not have yet. Shots with no heading above them go under Unsorted.'),
+    h('p', { class: 'warn small' }, '⚠ Scenes made this way need a check afterwards: a shot list has no page counts (they are set to 1/8), and the time of day, interior or exterior are guessed where the heading leaves them out.'),
+    h('label', { class: 'btn primary file-btn' }, '📄 Choose a file', file),
+    paste, h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => { paste.value.trim() ? use('the pasted text', paste.value) : (status.textContent = 'Nothing pasted yet.'); } }, 'Add these shots')),
+    status)));
+}
+
 /* ------------------------------ arranging tools ------------------------------ */
 // Spreads the scenes, in their current order, over the shooting days so each day has about the same number of pages.
 function spread(b) {
@@ -419,8 +481,9 @@ export function stripboardPage(b, go) {
   list.replaceChildren(...items());
   const empty = !plan.scenes.length, missing = shootDayCount(b) - plan.days.length;
   const root = h('div', { class: 'sb-page' },
-    h('div', { class: 'page-head' }, h('button', { class: 'btn ghost small', onclick: () => { UI.focus = null; go({ view: 'booking', id: b.id }); } }, '‹ Booking')),
-    h('h1', null, 'Stripboard'), h('div', { class: 'muted' }, [b.title, b.client].filter(Boolean).join(' · ')),
+    h('div', { class: 'page-head' }, backBtn('Booking', () => { UI.focus = null; go({ view: 'booking', id: b.id }); })),
+    h('h1', null, 'Stripboard & shot list'), h('div', { class: 'muted' }, [b.title, b.client].filter(Boolean).join(' · ')),
+    b.shotImportReview && h('div', { class: 'warn small review-note' }, `⚠ ${b.shotImportReview.scenes} scene${b.shotImportReview.scenes === 1 ? '' : 's'} came from a shot list: check the scene numbers, interior or exterior and time of day (guessed where the heading left them out) and the page counts (set to 1/8, as a shot list has no pages). `, h('button', { class: 'btn ghost small', onclick: () => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { delete x.shotImportReview; x.updatedAt = Date.now(); } }) }, 'Checked')),
     h('p', { class: 'status-line' }, empty ? 'No scenes yet' : `${plan.scenes.length} scene${plan.scenes.length === 1 ? '' : 's'} · ${fmtEighths(plan.eighths)} pages · ${plan.days.length} shooting day${plan.days.length === 1 ? '' : 's'}${plan.unscheduled ? ` · ${plan.unscheduled} not scheduled yet` : ''}`),
     h('div', { class: 'actions sb-tools' },
       h('button', { class: 'btn ' + (empty ? 'primary' : 'ghost'), 'data-fk': 'import', onclick: () => openImport(b) }, '📄 Scenes from a script'),
@@ -437,7 +500,8 @@ export function stripboardPage(b, go) {
     plan.days.length > shootDayCount(b) && h('p', { class: 'small muted' }, `The board has more shooting days than the booking's ${shootDayCount(b)}; days without a date follow on. Change the booking's end date to give them dates.`),
     missing > 0 && plan.days.length > 0 && h('p', { class: 'small muted' }, `The booking has ${shootDayCount(b)} days but the board has ${plan.days.length}. `, h('button', { class: 'btn ghost small', onclick: () => addMissingDays(b, missing) }, `Add the missing day${missing === 1 ? '' : 's'}`)),
     !plan.days.length && h('p', { class: 'warn' }, 'There are no shooting days: ＋ Day adds one.'),
-    list);
+    list,
+    h('section', { class: 'block', id: 'sb-shots' }, h('h3', null, 'Shot list'), shotsBlock(b)));
   // Keep track of the focused control, and give it back after a redraw replaced it.
   root.addEventListener('focusin', e => { const k = e.target.closest && e.target.closest('[data-fk]'); UI.focus = k ? k.dataset.fk : null; });
   // Runs straight after the redraw that put this page on screen, before the next key press arrives.

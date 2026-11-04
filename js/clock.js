@@ -1,7 +1,7 @@
 // The clock bar under the Rolodex: appears on a shoot day, starts/stops the hours on that booking, and tracks breaks
 // against the length approved for the production.
 import { h, toast, announce, todayISO, fmtShort } from './util.js';
-import { db, byId, subscribe, activeBookings, covers } from './store.js';
+import { db, byId, subscribe, activeBookings, onDay, isEditDay, covers } from './store.js';
 import { running, onBreak, workedMs, breakMs, startShift, stopShift, startBreak, endBreak, currentBreak, BREAK_CHOICES, breakLabel, fmtClock, fmtHm, allowanceFor, openHoursSheet } from './hours.js';
 import { sheet } from './util.js';
 import { haptic } from './a11y.js';
@@ -10,7 +10,9 @@ import * as notify from './notify.js';
 const S = { choice: null, warned: null, timesUp: null, timer: null };
 export function initClockBar(root) {
   if (!root) return;
-  const todays = () => activeBookings().filter(b => covers(b, todayISO())).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  // Shoot days and edit days both show the bar; on an edit day the hours are logged as editing.
+  const todays = () => activeBookings().filter(b => onDay(b, todayISO())).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  const editToday = b => !!b && isEditDay(b, todayISO()) && !covers(b, todayISO());
   const draw = () => {
     const live = running(), list = todays();
     const liveBooking = live && byId('bookings', live.bookingId);
@@ -34,11 +36,11 @@ export function initClockBar(root) {
           : h('span', { class: 'clock-title' }, h('span', { class: 'dot', 'aria-hidden': 'true' }), live && live.kind === 'edit' ? '✂ Edit · ' : '', chosen ? chosen.title : 'Deleted booking'),
         h('span', { class: 'clock-sub muted small' }, live
           ? (breaking ? (brLeft != null ? (brLeft > 0 ? `Break · ${fmtClock(brLeft)} left of ${breakLabel(br.planned)}` : `Break over by ${fmtClock(-brLeft)}`) : `On break · ${fmtClock(brElapsed)}`) : `Working · ${fmtClock(workedMs(live, now))}`)
-          : `Shoot day · ${workedToday ? fmtHm(workedToday) + ' logged today' : 'not started'}`)),
+          : `${editToday(chosen) ? '✂ Edit day' : 'Shoot day'} · ${workedToday ? fmtHm(workedToday) + ' logged today' : 'not started'}`)),
       h('div', { class: 'clock-btns' },
         live
           ? h('button', { class: 'btn primary', onclick: () => { const s = stopShift(); if (s) { toast(`Logged ${fmtHm(workedMs(s))} on ${byId('bookings', s.bookingId)?.title || 'the booking'}`); haptic(30); } } }, '■ Stop work')
-          : h('button', { class: 'btn primary', disabled: !chosen, onclick: () => { startShift(chosen.id); haptic(30); announce('Clock started'); } }, '● Start work'),
+          : h('button', { class: 'btn primary', disabled: !chosen, onclick: () => { startShift(chosen.id, editToday(chosen) ? 'edit' : 'shoot'); haptic(30); announce('Clock started'); } }, '● Start work'),
         live && h('button', { class: 'btn ghost' + ((breaking && brLeft != null && brLeft <= 0) || over >= 0 ? ' over' : ''), onclick: () => { if (breaking) { endBreak(); haptic(); } else chooseBreak(chosen, allowance, breaksToday); }, 'aria-pressed': breaking }, breaking ? '▶ Back to work' : '☕ Break'),
         h('button', { class: 'icon-btn', 'aria-label': 'Hours and statistics', onclick: () => openHoursSheet() }, '📊')),
       live && breaking && h('div', { class: 'clock-break small' + (over >= 0 ? ' overrun' : ' muted') }, over >= 0 ? `Over today’s approved ${allowance} min by ${fmtClock(over)}` : `Breaks today ${fmtHm(breaksToday)} · ${fmtClock(-over)} of the approved ${allowance} min left`),

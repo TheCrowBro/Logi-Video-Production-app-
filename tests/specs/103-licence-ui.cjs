@@ -1,5 +1,5 @@
 // The licence as the desktop app's page shows it (js/licence.js), with a stand-in for the desktop bridge
-// (window.vdexDesktop.licence): Settings → About, the trial bar, read-only after the trial, entering a code (including a
+// (window.vdexDesktop.licence): Settings → General → About & Licence, the trial bar, read-only after the trial, entering a code (including a
 // full code moved from another computer), releasing, and that the website itself never loads any of it.
 const { chromium } = require('playwright');
 const { acceptTerms, openSetting } = require('../helpers.cjs');
@@ -69,7 +69,7 @@ const bridge = start => `(() => {
     ({ ctx, page } = await open({ enabled: true, mode: 'trial', canEdit: true, trialLeft: 24, trialEnds: '2026-11-26', seats: 3 }));
     await about(page);
     const panel = page.locator('.licence-panel');
-    ok('Settings → About shows the trial with its end date, and Buy and Enter licence code', /Free trial: 24 days left \(until/.test(await panel.innerText()) && (await panel.getByRole('button', { name: /Buy a licence/ }).count()) === 1 && (await panel.getByRole('button', { name: 'Enter licence code' }).count()) === 1);
+    ok('Settings → General → About & Licence shows the trial with its end date, and Buy and Enter licence code', /Free trial: 24 days left \(until/.test(await panel.innerText()) && (await panel.getByRole('button', { name: /Buy a licence/ }).count()) === 1 && (await panel.getByRole('button', { name: 'Enter licence code' }).count()) === 1);
     ok('no bar with more than a week of trial left', (await page.locator('.licence-bar').count()) === 0);
     await panel.getByRole('button', { name: /Buy a licence/ }).click();
     ok('Buy opens the shop through the desktop app', (await page.evaluate(() => window.__lic.calls.some(c => c[0] === 'buy'))));
