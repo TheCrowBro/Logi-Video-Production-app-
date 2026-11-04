@@ -267,7 +267,34 @@ function openImport(b) {
 // A shot list as people write them: one shot per line, with the scene it belongs to as a heading above its shots
 // ("INT. KITCHEN - DAY", "Scene 12", "12 EXT. QUAY - DUSK"). List marks and numbering in front of a shot are dropped.
 // Shots before any heading, or in a list with no headings, are unsorted.
+// A spreadsheet export (.csv): a header row names the columns and each later row is one shot. The description column
+// (or the longest cell) is the shot; a Scene column groups the shots, by number or by slugline; Size and Move columns
+// go in front of the description. Anything that does not look like that is read line by line below.
+const csvRow = line => { const out = []; let cur = '', q = false; for (let i = 0; i < line.length; i++) { const ch = line[i]; if (ch === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; } else if (ch === ',' && !q) { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out.map(c => c.trim()); };
+const COLUMNS = ['scene', 'sc', 'slugline', 'slug', 'shot', 'description', 'desc', 'action', 'what', 'notes', 'size', 'shot size', 'type', 'angle', 'move', 'movement', 'camera', 'lens', 'take', 'time', 'duration', 'sound', 'location', 'set', 'no', 'number', '#', 'done'];
+function parseShotCsv(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (lines.length < 2) return null;
+  const rows = lines.map(csvRow), n = rows[0].length, head = rows[0].map(c => c.toLowerCase());
+  if (n < 2 || rows.filter(r => r.length === n).length < rows.length * 0.8 || head.some(c => /\d/.test(c) || c.length > 24) || !head.some(c => COLUMNS.includes(c))) return null;
+  const find = names => head.findIndex(c => names.includes(c));
+  const iDesc = find(['description', 'desc', 'action', 'what', 'shot description', 'notes']), iScene = find(['scene', 'sc', 'slugline', 'slug']), iSize = find(['size', 'shot size', 'type', 'shot type']), iMove = find(['move', 'movement', 'camera', 'camera move']);
+  const scenes = [], loose = [], byKey = new Map();
+  for (const r of rows.slice(1)) {
+    const desc = iDesc >= 0 ? r[iDesc] : r.reduce((a, c, i) => (i !== iScene && c.length > a.length ? c : a), '');
+    const front = [iSize >= 0 && r[iSize], iMove >= 0 && r[iMove]].filter(Boolean).join(', ');
+    const shot = [front, desc].filter(Boolean).join(': ');
+    if (!shot) continue;
+    const sc = iScene >= 0 ? r[iScene] : '';
+    if (!sc) { loose.push(shot); continue; }
+    let cur = byKey.get(sc.toLowerCase());
+    if (!cur) { const hd = isHeading(sc) ? splitHeading(sc) : { num: sc.replace(/^(?:scene|sc\.?)\s*/i, ''), ie: '', set: '', tod: '' }; cur = { num: hd.num, ie: hd.ie, set: hd.set, tod: hd.tod, shots: [] }; byKey.set(sc.toLowerCase(), cur); scenes.push(cur); }
+    cur.shots.push(shot);
+  }
+  return { scenes, loose };
+}
 export function parseShotList(text) {
+  const csv = parseShotCsv(text); if (csv) return csv;
   const scenes = [], loose = []; let cur = null;
   for (const raw of cleanScript(text).split('\n')) {
     const t = raw.trim(); if (!t) continue;
