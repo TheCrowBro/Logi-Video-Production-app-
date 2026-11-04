@@ -142,7 +142,7 @@ export const covers = (b, date) => b.date <= date && date <= endOf(b);
 export const overlaps = (a, b) => a.date <= endOf(b) && b.date <= endOf(a);
 
 // Edit days: post-production days a booking also happens on, each with optional times. They are not shoot days, so
-// covers()/overlaps() (kit clashes, the calendar event's span) leave them alone; the day list and the clock bar use onDay().
+// covers()/overlaps() (kit clashes, the calendar event's span) leave them alone; the day list and the clock use onDay().
 export const editDaysOf = b => (Array.isArray(b && b.editDays) ? b.editDays.filter(d => d && /^\d{4}-\d{2}-\d{2}$/.test(d.date)) : []);
 export const isEditDay = (b, date) => editDaysOf(b).some(d => d.date === date);
 export const onDay = (b, date) => covers(b, date) || isEditDay(b, date);

@@ -26,6 +26,7 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   const card = h('div', { class: 'tour-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title' });
   const layer = h('div', { class: 'tour' }, spot, card);
   const wasInert = !!(app && app.inert);
+  window.logiShowNav?.(); // the Rolodex bar may be slid away: the tour points at it
   document.body.append(layer); if (app) app.inert = true;
   let i = from, target = null, dir = 1;
   const seen = new Set(); // steps already shown: they keep their place in the count when going back

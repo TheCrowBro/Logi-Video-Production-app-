@@ -68,7 +68,7 @@ js/form.js       schema-driven edit forms
 js/pages/        one file per Rolodex card (bookings, crew, gear with the service log, venues, insurance, me, field, tcnotes, settings)
 js/workflow.js   stages, checklist templates, project templates, pipeline, hired people, rentals, shot list, media log, deliverables, licences
 js/callsheet.js  call sheets: in-place editor, document, in-app printing, PDF, web page, list     js/pdf.js   small PDF writer (no library)
-js/hours.js      shifts, breaks, statistics, chart     js/clock.js   the shoot-day clock bar     js/notify.js  break notifications
+js/hours.js      shifts, breaks, statistics, chart     js/clock.js   the shoot-day clock (the booking's Hours box and the running strip)     js/notify.js  break notifications
 js/calendar.js   .ics, add-to-calendar links, live feed, two-way sync
 js/timecode.js   SMPTE timecode maths (drop-frame aware)     js/docx.js   .docx reader and script line classification
 js/link.js       phone–laptop link over WebRTC with clock-offset measurement     js/qr.js   QR generate / decode

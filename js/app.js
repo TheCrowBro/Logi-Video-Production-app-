@@ -87,7 +87,25 @@ store.subscribe(reason => {
 
 let start = 0;
 try { start = Math.min(tabs.length - 1, Math.max(0, Number(localStorage.getItem('logi-tab')) || 0)); } catch { /* ignore */ }
-const rolodex = createRolodex(document.getElementById('rolodex'), tabs, { start, onSelect: (i, dir) => show(i, dir) });
+const nav = document.getElementById('rolodex');
+const rolodex = createRolodex(nav, tabs, { start, onSelect: (i, dir) => { showNav(); show(i, dir); } });
+// The Rolodex bar: hidden by a slide while the page scrolls down, back the moment it scrolls up, and always there near
+// the top, when a section changes, when something in it takes the focus, and when a tour starts.
+function showNav() { nav.classList.remove('tucked'); }
+window.logiShowNav = showNav;
+{
+  let lastY = window.scrollY, ticking = false;
+  window.addEventListener('scroll', () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      const y = window.scrollY, dy = y - lastY; lastY = y;
+      if (y <= nav.offsetHeight || dy < -6) showNav();
+      else if (dy > 6 && !document.querySelector('.sheet-back')) nav.classList.add('tucked');
+    });
+  }, { passive: true });
+  nav.addEventListener('focusin', showNav);
+}
 show(start);
 window.logiGo = i => { rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); return showing; }; // lets pages jump between sections; resolves once the section is drawn
 window.logiPage = () => (tabs[current] ? tabs[current].id : null); // which section is open (the page tutorials use it)

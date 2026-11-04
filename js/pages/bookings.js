@@ -5,7 +5,8 @@ import { editKit } from './gear.js';
 import { venueWarnings, openVenue, chips as venueChips } from './venues.js';
 import { mapButtons } from '../map.js';
 import { openCalendarSheet, openAddToCalendar, shareBooking, mailtoLink } from '../calendar.js';
-import { openHoursSheet, editShift, stats, fmtHm, defaultBreak, startShift, running, kindOf } from '../hours.js';
+import { openHoursSheet, editShift, stats, fmtHm, defaultBreak, kindOf } from '../hours.js';
+import { clockCard } from '../clock.js';
 import { STATUSES as WF_STATUSES, STAGES, typeOptions, templateById, applyTemplateDefaults, applyTemplateExtras, saveBookingAsTemplate, pickTemplate, typeLabel, slugStatus, workflowBlock, openPipeline, hiresBlock, rentalsBlock, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, progress } from '../workflow.js';
 import { callSheetPage, openCallSheets, sheetState, commitDraft } from '../callsheet.js';
 import { moneyPage, openMoney, moneyBlock, budgetBlock, budgetTotals, docOf, totals, isOverdue, fmtMoney } from '../money.js';
@@ -68,7 +69,7 @@ function editBooking(b, go) {
       { key: 'crew', label: 'Crew', type: 'checks', options: db.crew.map(c => ({ value: c.id, label: c.name, hint: c.role })), empty: 'Add people on the Crew page first.' },
       ...(db.kits.length ? [{ key: 'kits', label: 'Kits', type: 'checks', hint: 'Ticking a kit adds its equipment below. You can still adjust the list.', options: db.kits.map(k => ({ value: k.id, label: k.name, hint: `${(k.gear || []).length} items`, adds: { gear: k.gear || [] }, addsQty: k.gearQty || {} })) }] : []),
       { key: 'gear', qtyKey: 'gearQty', label: 'Equipment', type: 'checks', hint: db.kits.length ? 'Tick a kit above to load a whole set, then adjust here.' : 'Tip: save kits on the Equipment page to load a whole set in one tap.', options: db.gear.map(g => ({ value: g.id, label: g.name, group: g.category || 'Other', qtyMax: qtyOf(g), hint: qtyOf(g) > 1 ? `(${qtyOf(g)} owned)` : '' })).sort((a, b) => a.group.localeCompare(b.group)), empty: 'Add kit on the Equipment page first.' },
-      { key: 'breakMinutes', label: 'Approved break per day (minutes)', type: 'number', min: 0, placeholder: String(defaultBreak()), hint: `The clock bar counts breaks against this and warns when it’s used up. Blank = your default (${defaultBreak()} min).` },
+      { key: 'breakMinutes', label: 'Approved break per day (minutes)', type: 'number', min: 0, placeholder: String(defaultBreak()), hint: `The clock counts breaks against this and warns when it’s used up. Blank = your default (${defaultBreak()} min).` },
       { key: 'breakNote', label: 'Break terms', placeholder: 'e.g. 30 min lunch + 2 × 15 min' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
@@ -127,14 +128,18 @@ function month(go) {
     h('div', { class: 'page-head' },
       h('h1', null, 'Bookings'),
       h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => pickTemplate(t => editBooking(applyTemplateDefaults(blankBooking(today), t), go)) }, '📐 From template'), h('button', { class: 'btn primary', onclick: () => editBooking(blankBooking(today), go) }, '+ New'))),
-    h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date })) }, '🗂 Pipeline'), h('button', { class: 'btn ghost small', onclick: () => openCallSheets(b => go({ view: 'callsheet', id: b.id, day: b.date })) }, '📋 Call sheets'), h('button', { class: 'btn ghost small', onclick: () => openMoney(b => go({ view: 'money', id: b.id, kind: b.invoice && !b.quote ? 'invoice' : 'quote', day: b.date })) }, '💰 Money'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet() }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: openCalendarSheet }, '📆 Calendar & email')),
-    h('div', { class: 'cal-nav' },
-      h('button', { class: 'icon-btn', 'aria-label': 'Previous month', onclick: () => go({ cursor: new Date(y, m - 1, 1) }) }, '‹'),
-      h('div', { class: 'cal-title' }, new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
-      h('button', { class: 'btn ghost small', onclick: () => go({ cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }) }, 'Today'),
-      h('button', { class: 'icon-btn', 'aria-label': 'Next month', onclick: () => go({ cursor: new Date(y, m + 1, 1) }) }, '›')),
-    h('div', { class: 'cal' },
-      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => h('div', { class: 'wd' }, w)), cells),
+    // The tools for every shoot as a grid of even tiles: three to a row on a phone, all five on a wider screen.
+    h('div', { class: 'subactions bk-tiles' }, ...[['🗂', 'Pipeline', () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date }))], ['📋', 'Call sheets', () => openCallSheets(b => go({ view: 'callsheet', id: b.id, day: b.date }))], ['💰', 'Money', () => openMoney(b => go({ view: 'money', id: b.id, kind: b.invoice && !b.quote ? 'invoice' : 'quote', day: b.date }))], ['📊', 'Hours & statistics', () => openHoursSheet()], ['📆', 'Calendar & email', openCalendarSheet]]
+      .map(([ico, label, onclick]) => h('button', { class: 'btn ghost small tile', onclick }, h('span', { class: 'tile-ico', 'aria-hidden': 'true' }, ico), h('span', { class: 'tile-label' }, label)))),
+    // The calendar in a frame of its own, apart from the list of what is next.
+    h('section', { class: 'cal-panel box-dark', 'aria-label': 'Calendar' },
+      h('div', { class: 'cal-nav' },
+        h('button', { class: 'icon-btn', 'aria-label': 'Previous month', onclick: () => go({ cursor: new Date(y, m - 1, 1) }) }, '‹'),
+        h('div', { class: 'cal-title' }, new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
+        h('button', { class: 'btn ghost small', onclick: () => go({ cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }) }, 'Today'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Next month', onclick: () => go({ cursor: new Date(y, m + 1, 1) }) }, '›')),
+      h('div', { class: 'cal' },
+        ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => h('div', { class: 'wd' }, w)), cells)),
     h('h3', null, 'Next up'),
     upcoming.length
       ? h('div', { class: 'list' }, upcoming.map(b => bookingCard(b, () => go({ view: 'booking', id: b.id, day: b.date }), true)))
@@ -304,13 +309,15 @@ function hoursBlock(b) {
   const shifts = db.shifts.filter(s => s.bookingId === b.id);
   const st = stats(shifts), edit = shifts.filter(s => kindOf(s) === 'edit'), shoot = shifts.filter(s => kindOf(s) !== 'edit');
   const split = edit.length && shoot.length ? ` · ${fmtHm(stats(shoot).worked)} on shoot days, ${fmtHm(stats(edit).worked)} editing` : edit.length ? ' · all editing' : '';
+  // The clock itself (Start work, Stop work, breaks) sits here; while it runs a strip under the Rolodex repeats it on every page.
   return h('section', { class: 'block', id: 'bk-hours' }, h('h3', null, 'Hours'),
     h('div', { class: 'card box-dark' },
+      clockCard(b),
       shifts.length
         ? h('div', { class: 'card-row' }, h('div', null, h('strong', null, fmtHm(st.worked)), h('div', { class: 'muted small' }, `${st.days} day${st.days === 1 ? '' : 's'} · breaks ${fmtHm(st.breaks)}${st.overtime ? ' · overtime ' + fmtHm(st.overtime) : ''}${split}`)))
-        : h('p', { class: 'muted small' }, 'Nothing clocked yet. On the day, the clock bar under the Rolodex starts the hours for this shoot; on an edit day it logs editing.'),
+        : h('p', { class: 'muted small' }, 'Nothing clocked yet. Start work here on the day; on an edit day, or any day that is not a shoot day, the hours count as editing.'),
       h('div', { class: 'muted small' }, `Approved break: ${b.breakMinutes != null && b.breakMinutes !== '' ? b.breakMinutes + ' min' : defaultBreak() + ' min (default)'}${b.breakNote ? ' · ' + b.breakNote : ''}`),
-      h('div', { class: 'actions' }, !running() && h('button', { class: 'btn ghost small', onclick: () => { startShift(b.id, 'edit'); window.scrollTo({ top: 0 }); } }, '✂ Start edit session'), h('button', { class: 'btn ghost small', onclick: () => openHoursSheet(b.id) }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: () => editShift(null, b.id) }, '+ Add hours'))));
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openHoursSheet(b.id) }, '📊 Hours & statistics'), h('button', { class: 'btn ghost small', onclick: () => editShift(null, b.id) }, '+ Add hours'))));
 }
 
 function venueBlock(b, gear) {

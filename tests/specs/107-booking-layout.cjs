@@ -139,13 +139,17 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   await page.evaluate(() => { const d = new Date(); const label = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); [...document.querySelectorAll('.cal .day')].find(x => x.getAttribute('aria-label')?.startsWith(label))?.click(); }); await sleep(300);
   const dayCard = page.locator('#page .card.tap', { hasText: 'Harbour' });
   ok('the day lists the booking as an edit day', (await dayCard.count()) === 1 && (await dayCard.locator('.pill.edit').innerText()) === 'Edit day' && /✂ Edit day/.test(await dayCard.innerText()));
-  const bar = page.locator('#clockbar');
-  ok('the clock bar shows the edit day', await bar.isVisible() && /✂ Edit day/.test(await bar.innerText()), await bar.innerText());
-  await bar.getByRole('button', { name: 'Start work' }).click(); await sleep(300);
+  ok('no strip under the Rolodex while the clock is not running', await page.locator('#clockbar').evaluate(e => e.hidden));
+  await dayCard.click(); await page.waitForSelector('.bk-detail'); await sleep(200);
+  const clock = page.locator('#bk-hours .card-clock');
+  ok('the booking’s Hours box holds the clock and knows it is an edit day', (await clock.count()) === 1 && /✂ Edit day/.test(await clock.innerText()) && (await clock.getByRole('button', { name: 'Start edit session' }).count()) === 1, await clock.innerText());
+  await clock.getByRole('button', { name: 'Start edit session' }).click(); await sleep(400);
   const live = await page.evaluate(() => import('./js/hours.js').then(hh => { const r = hh.running(); return r && { kind: hh.kindOf(r), bookingId: r.bookingId }; }));
   ok('Start work on an edit day logs the hours as editing on that project', live && live.kind === 'edit' && live.bookingId === seed.id, JSON.stringify(live));
-  await bar.getByRole('button', { name: 'Stop work' }).click(); await sleep(300);
-  await dayCard.click(); await page.waitForSelector('.bk-detail'); await sleep(200);
+  const strip = page.locator('#clockbar .clock.strip');
+  ok('while it runs, the strip under the Rolodex shows the booking, the time and Stop work', await strip.isVisible() && /Harbour/.test(await strip.innerText()) && /Working/.test(await strip.innerText()) && (await strip.getByRole('button', { name: 'Stop work' }).count()) === 1 && /Working/.test(await clock.innerText()), await strip.innerText());
+  await strip.getByRole('button', { name: 'Stop work' }).click(); await sleep(400);
+  ok('Stop work from the strip stops it everywhere and the strip goes away', await page.locator('#clockbar').evaluate(e => e.hidden) && (await clock.getByRole('button', { name: 'Start edit session' }).count()) === 1);
   ok('back from the booking goes to the day it was opened from, and the hours say the session was editing', /^‹ /.test((await page.locator('.bk-detail .page-head .back-btn').textContent()).trim()) && /editing/.test(await page.locator('#bk-hours').innerText()), await page.locator('#bk-hours').innerText().then(t => t.replace(/\n/g, ' | ').slice(0, 120)));
 
   // ---- the shot list import fills the stripboard ----
