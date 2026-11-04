@@ -3,7 +3,7 @@
 // be stopped or paused from anywhere. On an edit day the hours are logged as editing. The strip's loop also owns the
 // break countdown's side effects: the notification, the wake lock, the "break's up" and "allowance used" warnings.
 import { h, nodes, toast, announce, todayISO, fmtShort } from './util.js';
-import { db, byId, subscribe, onDay, isEditDay, covers } from './store.js';
+import { db, byId, subscribe, isEditDay, covers } from './store.js';
 import { running, onBreak, workedMs, breakMs, startShift, stopShift, startBreak, endBreak, currentBreak, BREAK_CHOICES, breakLabel, fmtClock, fmtHm, allowanceFor, openHoursSheet, kindOf } from './hours.js';
 import { sheet } from './util.js';
 import { haptic } from './a11y.js';
@@ -12,7 +12,6 @@ import * as notify from './notify.js';
 const S = { warned: null, timesUp: null };
 const cards = new Set(); // the clock cards drawn on booking pages, kept in step with the strip
 const editToday = b => !!b && isEditDay(b, todayISO()) && !covers(b, todayISO());
-export const shootDayToday = b => !!b && onDay(b, todayISO());
 
 // Where the clock stands for one booking right now.
 function stateFor(b) {
@@ -44,20 +43,27 @@ const breakLines = st => [
 // The clock on a booking's page: today's state, Start / Stop / Break, and the day's breaks. Drawn again by the strip's
 // loop every second while the clock runs, and on every change.
 export function clockCard(b) {
+  for (const c of cards) if (!c.isConnected) cards.delete(c); // cards of pages that have gone
   const el = h('div', { class: 'clock card-clock', 'data-id': b.id });
   cards.add(el); paintCard(el);
   return el;
+}
+// Repainting a box that holds the focus (a keyboard user on Stop work while the clock ticks) keeps the focus on the same button.
+function repaint(el, fill) {
+  const had = el.contains(document.activeElement) ? document.activeElement.textContent : null;
+  fill();
+  if (had != null) { const again = [...el.querySelectorAll('button')].find(x => x.textContent === had); if (again) again.focus({ preventScroll: true }); }
 }
 function paintCard(el) {
   const b = byId('bookings', el.dataset.id); if (!b) { el.replaceChildren(); return; }
   const st = stateFor(b);
   el.className = 'clock card-clock' + (st.mine ? (st.breaking ? ' on-break' : ' working') : '');
   const label = st.mine ? (kindOf(st.mine) === 'edit' ? '✂ Editing' : 'Shoot day') : editToday(b) ? '✂ Edit day' : covers(b, todayISO()) ? 'Shoot day' : 'Not a shoot day';
-  el.replaceChildren(...nodes(
+  repaint(el, () => el.replaceChildren(...nodes(
     h('div', { class: 'clock-head' }, h('span', { class: 'clock-title' }, h('span', { class: 'dot', 'aria-hidden': 'true' }), label), h('span', { class: 'clock-sub muted small' }, subLine(st))),
     st.live && !st.mine && h('p', { class: 'small muted' }, `The clock is running on “${byId('bookings', st.live.bookingId)?.title || 'another booking'}”: stop it there, or in the strip at the top, before starting here.`),
     h('div', { class: 'clock-btns' }, ...buttons(b, st), h('button', { class: 'icon-btn', 'aria-label': 'Hours and statistics', onclick: () => openHoursSheet(b.id) }, '📊')),
-    ...breakLines(st)));
+    ...breakLines(st))));
 }
 
 export function initClockBar(root) {
@@ -72,11 +78,11 @@ export function initClockBar(root) {
       notify.scheduleBreak(st.br, st.br ? breakLabel(st.br.planned) : '', () => { S.timesUp = st.br.start; });
       notify.holdScreen(!!st.br);
       if (st.breaking && st.over >= 0 && S.warned !== live.id) { S.warned = live.id; haptic(60); announce('Approved break used up'); toast('Approved break for today used up'); if (document.hidden) notify.notifyAllowanceUsed(); }
-      root.replaceChildren(h('div', { class: 'clock strip' + (st.breaking ? ' on-break' : ' working') },
+      repaint(root, () => root.replaceChildren(h('div', { class: 'clock strip' + (st.breaking ? ' on-break' : ' working') },
         h('div', { class: 'clock-head' },
           h('span', { class: 'clock-title' }, h('span', { class: 'dot', 'aria-hidden': 'true' }), kindOf(live) === 'edit' ? '✂ ' : '', b ? b.title : 'Deleted booking'),
           h('span', { class: 'clock-sub muted small' }, subLine(st))),
-        h('div', { class: 'clock-btns' }, ...buttons(b || { id: live.bookingId }, st), h('button', { class: 'icon-btn', 'aria-label': 'Hours and statistics', onclick: () => openHoursSheet() }, '📊'))));
+        h('div', { class: 'clock-btns' }, ...buttons(b || { id: live.bookingId }, st), h('button', { class: 'icon-btn', 'aria-label': 'Hours and statistics', onclick: () => openHoursSheet() }, '📊')))));
     } else { root.replaceChildren(); notify.scheduleBreak(null, '', null); notify.holdScreen(false); }
     for (const el of cards) { if (!el.isConnected) cards.delete(el); else paintCard(el); }
   };

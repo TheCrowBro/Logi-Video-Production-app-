@@ -272,7 +272,8 @@ export function parseShotList(text) {
   for (const raw of cleanScript(text).split('\n')) {
     const t = raw.trim(); if (!t) continue;
     if (isHeading(t)) { const s = splitHeading(t); cur = { num: s.num, ie: s.ie, set: s.set, tod: s.tod, shots: [] }; scenes.push(cur); continue; }
-    const shot = t.replace(/^(?:[-*•–—]|\d{1,3}[.)]|\(\d{1,3}\)|[a-z][.)])\s+/i, '').replace(/^(?:shot\s+)?\d{1,3}[a-z]?\s*[:.-]\s+/i, '').trim();
+    // List marks and shot numbers go ("3.", "(3)", "b)", "Shot 4a:"), but not a capital initial ("A. Ruiz") or a resolution ("4K - wide").
+    const shot = t.replace(/^(?:[-*•–—]|\d{1,3}[.)]|\(\d{1,3}\)|[a-z][.)])\s+/, '').replace(/^(?:shot\s+)?\d{1,3}(?:(?![kK])[a-z])?\s*[:.-]\s+/i, '').trim();
     if (!shot) continue;
     (cur ? cur.shots : loose).push(shot);
   }
@@ -289,7 +290,9 @@ export function applyShotImport(b, parsed) {
     let next = Math.max(0, ...[...have].map(n => parseInt(String(n).replace(/^[A-Z]/i, ''), 10)).filter(Number.isFinite)) + 1;
     x.shots = [...(x.shots || [])];
     for (const sc of parsed.scenes) {
-      let num = String(sc.num || '').trim(); if (!num) num = String(next++);
+      let num = String(sc.num || '').trim();
+      // A heading with no number is matched to a scene the board already has (same INT/EXT, set and time of day) before it gets a number of its own.
+      if (!num) { const same = bd.list.find(s => s.type === 'scene' && (s.ie || 'INT').toUpperCase() === (sc.ie || 'INT').toUpperCase() && (s.set || '').trim().toLowerCase() === (sc.set || '').trim().toLowerCase() && (!sc.tod || !s.tod || String(s.tod).toUpperCase() === String(sc.tod).toUpperCase())); num = same ? String(same.scene) : String(next++); }
       if (!have.has(num)) { bd.list.push({ id: uid(), type: 'scene', scene: num, ie: sc.ie || 'INT', set: sc.set || '', tod: sc.tod || 'DAY', dn: '', desc: sc.shots[0] || '', cast: [], eighths: 1, notes: 'From the shot list: check the time of day and the pages.' }); have.add(num); added.scenes++; }
       for (const text of sc.shots) { x.shots.push({ id: uid(), text, done: false, scene: num }); added.shots++; }
     }

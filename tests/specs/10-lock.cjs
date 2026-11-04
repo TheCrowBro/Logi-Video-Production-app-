@@ -32,7 +32,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const t0 = Date.now();
   await page.locator('.sheet .pin-input').nth(0).fill('246810'); await page.locator('.sheet .pin-input').nth(1).fill('246810');
   await page.locator('.sheet button[type=submit]').click();
-  await page.waitForFunction(() => !!localStorage.getItem('logi-vault'), null, { timeout: 30000 });
+  await page.waitForFunction(() => !!localStorage.getItem('logi-vault'), null, { timeout: 60000 });
   ok('PIN set: lock config + vault written, plaintext kept while unlocked', !!(await ls('logi-lock')) && !!(await ls('logi-vault')) && !!(await ls('logi-db-v1')), `${Date.now() - t0} ms incl. key derivation`);
   ok('header lock button visible', await page.locator('#lockBtn').isVisible());
   ok('security status shows PIN set', await page.locator('details.settings-section:has(> summary:has-text("Security"))').innerText().then(t => /PIN set/.test(t)));

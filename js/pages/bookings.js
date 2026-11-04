@@ -7,12 +7,12 @@ import { mapButtons } from '../map.js';
 import { openCalendarSheet, openAddToCalendar, shareBooking, mailtoLink } from '../calendar.js';
 import { openHoursSheet, editShift, stats, fmtHm, defaultBreak, kindOf } from '../hours.js';
 import { clockCard } from '../clock.js';
-import { STATUSES as WF_STATUSES, STAGES, typeOptions, templateById, applyTemplateDefaults, applyTemplateExtras, saveBookingAsTemplate, pickTemplate, typeLabel, slugStatus, workflowBlock, openPipeline, hiresBlock, rentalsBlock, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, progress } from '../workflow.js';
+import { STATUSES as WF_STATUSES, STAGES, typeOptions, templateById, applyTemplateDefaults, applyTemplateExtras, saveBookingAsTemplate, pickTemplate, typeLabel, slugStatus, workflowBlock, openPipeline, hiresBlock, rentalsBlock, hiredPeople, shotsBlock, mediaBlock, deliverablesBlock, licencesBlock, crewRow, progress } from '../workflow.js';
 import { callSheetPage, openCallSheets, sheetState, commitDraft } from '../callsheet.js';
 import { moneyPage, openMoney, moneyBlock, budgetBlock, budgetTotals, docOf, totals, isOverdue, fmtMoney } from '../money.js';
 import { forecastCard, forecastLine, locationFor } from '../weather.js';
 import { getTimes } from '../suncalc.js';
-import { boardPlan } from '../board.js';
+import { boardPlan, fmtEighths } from '../board.js';
 
 const STATUSES = WF_STATUSES;
 // The stripboard loads on first use; once loaded it draws straight away, so a redraw after each change does not flicker.
@@ -20,7 +20,7 @@ let stripMod = null;
 const stripsView = (b, go) => {
   if (stripMod) return stripMod.stripboardPage(b, go);
   const host = h('div', { class: 'sb-page' }, h('p', { class: 'muted' }, 'Opening the stripboard…'));
-  import('../stripboard.js').then(m => { stripMod = m; if (host.isConnected) host.replaceWith(m.stripboardPage(byId('bookings', b.id) || b, go)); }).catch(e => host.replaceChildren(h('p', { class: 'warn' }, 'The stripboard could not be loaded. Check the connection and try again. ' + (e.message || ''))));
+  import('../stripboard.js').then(m => { stripMod = m; if (host.isConnected) { const pg = m.stripboardPage(byId('bookings', b.id) || b, go); host.replaceWith(pg); pg.querySelectorAll('.back-btn').forEach(el => el.classList.add('shine')); } }).catch(e => host.replaceChildren(h('p', { class: 'warn' }, 'The stripboard could not be loaded. Check the connection and try again. ' + (e.message || ''))));
   return host;
 };
 const sceneCount = b => (b.board && Array.isArray(b.board.list) ? b.board.list.filter(x => x && x.type === 'scene').length : 0);
@@ -89,7 +89,9 @@ function editBooking(b, go) {
       if (item.breakMinutes === '' || item.breakMinutes == null) delete item.breakMinutes;
       if (!item.endDate || item.endDate <= item.date) delete item.endDate;
       // Edit days: a date each, in order, with the times only when given; none at all leaves the booking as it was.
-      item.editDays = (item.editDays || []).filter(r => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || '')).map(r => ({ date: r.date, ...(r.start ? { start: r.start } : {}), ...(r.end ? { end: r.end } : {}) })).sort((a, b) => a.date.localeCompare(b.date));
+      const rows = (item.editDays || []).filter(r => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || '')).map(r => ({ date: r.date, ...(r.start ? { start: r.start } : {}), ...(r.end ? { end: r.end } : {}) })).sort((a, b) => a.date.localeCompare(b.date));
+      const byDate = new Map(); for (const r of rows) { const have = byDate.get(r.date); if (!have || (!have.start && r.start)) byDate.set(r.date, r); } // one row per date: the calendar keys its events by the date
+      item.editDays = [...byDate.values()];
       if (!item.editDays.length) delete item.editDays;
       if (!item.venueId) delete item.venueId;
       else if (!(item.address || '').trim()) item.address = byId('venues', item.venueId)?.address || '';
@@ -132,8 +134,10 @@ function month(go) {
       list.length > 0 && h('span', { class: 'dots' }, list.slice(0, 4).map(b => h('i', { class: 'st-' + slugStatus(b.status) + (editOn(b, iso) ? ' edit' : '') })))));
   }
 
+  // The next date that matters for a booking: its shoot, or, once the shoot is over, its next edit day.
+  const nextOf = b => (endOf(b) >= today ? b.date : (editDaysOf(b).find(d => d.date >= today) || {}).date || b.date);
   const upcoming = db.bookings.filter(b => (endOf(b) >= today || editDaysOf(b).some(d => d.date >= today)) && b.status !== 'Cancelled')
-    .sort((a, b) => (a.date + (a.start || '')).localeCompare(b.date + (b.start || ''))).slice(0, 4);
+    .sort((a, b) => (nextOf(a) + (a.start || '')).localeCompare(nextOf(b) + (b.start || ''))).slice(0, 4);
 
   return h('div', { class: 'bk-month' },
     h('div', { class: 'page-head' },
@@ -153,7 +157,7 @@ function month(go) {
         ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => h('div', { class: 'wd' }, w)), cells)),
     h('h3', null, 'Next up'),
     upcoming.length
-      ? h('div', { class: 'list' }, upcoming.map(b => bookingCard(b, () => go({ view: 'booking', id: b.id, day: b.date }), true)))
+      ? h('div', { class: 'list' }, upcoming.map(b => bookingCard(b, () => go({ view: 'booking', id: b.id, day: nextOf(b) }), true, endOf(b) >= today ? null : nextOf(b))))
       : empty('Nothing upcoming. Tap a date or “+ New” to add a booking.'));
 }
 
@@ -167,7 +171,7 @@ function bookingCard(b, onclick, showDate, day = null) {
         h('div', { class: 'muted' }, [ed ? `✂ Edit day${ed.start ? ' · ' + ed.start + (ed.end ? '–' + ed.end : '') : ''}` : [(showDate || endOf(b) > b.date) && dateRange(b, fmtShort), b.start && `${b.start}${b.end ? '–' + b.end : ''}`].filter(Boolean).join(' · '), b.client].filter(Boolean).join(' · '))),
       h('span', { class: 'pills' }, ed && h('span', { class: 'pill edit' }, 'Edit day'), pill(b.status))),
     b.address && h('div', { class: 'muted small' }, '📍 ' + b.address.split('\n')[0]),
-    h('div', { class: 'muted small' }, `🎥 ${(b.gear || []).length} items · 👥 ${(b.crew || []).length} crew`));
+    h('div', { class: 'muted small' }, `🎥 ${(b.gear || []).length} items · 👥 ${(b.crew || []).length + hiredPeople(b).length} crew`));
 }
 
 /* -------------------------------- day -------------------------------- */
@@ -292,8 +296,8 @@ function workFold(b, go, actions) {
   const cur = STAGES.some(s => s[0] === b.status) ? b.status : 'Enquiry', pr = progress(b, cur);
   const parts = [
     `Budget ${est ? fmtMoney(est) : 'none yet'}`,
-    q ? `Quote ${fmtMoney(totals(q, 'quote').total)} ${q.status.toLowerCase()}` : 'No quote',
-    inv ? `Invoice ${fmtMoney(totals(inv).total)} ${isOverdue(b) ? 'overdue' : inv.status === 'Sent' ? 'unpaid' : inv.status.toLowerCase()}` : 'No invoice',
+    q ? `Quote ${fmtMoney(totals(q, 'quote').total)} ${(q.status || 'Draft').toLowerCase()}` : 'No quote',
+    inv ? `Invoice ${fmtMoney(totals(inv).total)} ${isOverdue(b) ? 'overdue' : inv.status === 'Sent' ? 'unpaid' : (inv.status || 'Draft').toLowerCase()}` : 'No invoice',
     b.status === 'Cancelled' ? 'Cancelled' : `${cur} ${pr.done}/${pr.total}`,
   ];
   const el = h('details', { class: 'twirl bk-work', id: 'bk-work', open: WORK_OPEN.has(b.id) },
@@ -314,7 +318,7 @@ function shotsSection(b, go) {
         h('button', { class: 'btn ghost small', onclick: () => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { delete x.shotImportReview; x.updatedAt = Date.now(); } }) }, 'Checked'))),
     shotsBlock(b));
 }
-const fmtPages = e => { const w = Math.floor(e / 8), rem = e % 8; return (w && rem ? `${w} ${rem}/8` : w ? String(w) : `${rem}/8`) + ' pages'; };
+const fmtPages = e => (e > 0 ? `${fmtEighths(e)} ${e === 8 ? 'page' : 'pages'}` : '0 pages');
 
 function hoursBlock(b) {
   const shifts = db.shifts.filter(s => s.bookingId === b.id);

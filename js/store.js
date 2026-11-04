@@ -30,10 +30,10 @@ function load() {
 // nothing else on the booking changes, and a copy that already moved them is left as it is.
 export function migrateBooking(b) {
   if (!b || typeof b !== 'object' || !Array.isArray(b.hires)) return b;
-  const gear = b.hires.filter(x => x && typeof x === 'object' && x.item && !x.name);
+  const gear = b.hires.filter(x => x && typeof x === 'object' && !x.name && (x.item != null || x.from != null || x.cost != null)); // gear-shaped, even with a blank item
   if (!gear.length) return b;
-  const have = new Set((Array.isArray(b.rentals) ? b.rentals : []).map(x => x && x.id));
-  return { ...b, hires: b.hires.filter(x => !gear.includes(x)), rentals: [...(Array.isArray(b.rentals) ? b.rentals : []), ...gear.filter(x => !have.has(x.id))] };
+  const have = new Set((Array.isArray(b.rentals) ? b.rentals : []).map(x => x && x.id).filter(Boolean));
+  return { ...b, hires: b.hires.filter(x => !gear.includes(x)), rentals: [...(Array.isArray(b.rentals) ? b.rentals : []), ...gear.filter(x => !(x.id && have.has(x.id)))] };
 }
 
 // The same, in place, for a booking being edited inside update().

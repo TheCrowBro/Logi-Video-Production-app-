@@ -269,7 +269,7 @@ const money = () => db.profile.currency || '$';
 
 // Hires are the people hired for the job (freelancers, day players); rented gear lives under rentals. A copy from an
 // older build may still carry gear under hires: these two read both, and the first save sorts them out.
-const legacyGear = x => !!(x && x.item && !x.name);
+const legacyGear = x => !!(x && !x.name && (x.item != null || x.from != null || x.cost != null)); // an old rented item kept under hires, even with a blank item
 export const hiredPeople = b => ((b && b.hires) || []).filter(x => x && !legacyGear(x));
 export const rentalsOf = b => [...((b && b.rentals) || []), ...((b && b.hires) || []).filter(legacyGear)];
 export const shootDaysOf = b => Math.max(1, Math.round((parseISO(endOf(b)) - parseISO(b.date)) / 864e5) + 1);
@@ -366,7 +366,7 @@ export function crewRow(b, c, { sub = '', onEdit = null } = {}) {
   const st = (b.crewStatus || {})[c.id] || '', call = (b.crewCall || {})[c.id] || '';
   const sel = h('select', { 'aria-label': `${c.name} status`, onchange: e => patch(b, x => { x.crewStatus = { ...(x.crewStatus || {}), [c.id]: e.target.value }; }) }, CREW_STATES.map(([v, l]) => h('option', { value: v, selected: v === st }, l)));
   const callIn = h('input', { type: 'time', value: call, 'aria-label': `${c.name} call time`, onchange: e => patch(b, x => { x.crewCall = { ...(x.crewCall || {}), [c.id]: e.target.value }; }) });
-  const ask = `Hi ${c.name.split(' ')[0]}, are you free for "${b.title}" on ${fmtShort(b.date)}${b.start ? ' from ' + b.start : ''}${b.address ? ' at ' + b.address.split('\n')[0] : ''}? Role: ${c.role || 'crew'}. Let me know and I’ll send the call sheet.`;
+  const ask = `Hi ${String(c.name || '').split(' ')[0]}, are you free for "${b.title}" on ${fmtShort(b.date)}${b.start ? ' from ' + b.start : ''}${b.address ? ' at ' + b.address.split('\n')[0] : ''}? Role: ${c.role || 'crew'}. Let me know and I’ll send the call sheet.`;
   return h('div', { class: 'card crew-line' },
     h('div', { class: 'card-row' }, h('div', null, h('strong', null, c.name), h('div', { class: 'muted' }, [c.role, sub].filter(Boolean).join(' · '))), h('span', { class: 'pill ' + (st === 'confirmed' ? 'st-confirmed' : st === 'declined' ? 'st-cancelled' : st === 'asked' ? 'st-enquiry' : '') }, CREW_STATES.find(x => x[0] === st)[1])),
     h('div', { class: 'row-edit' }, sel, h('label', { class: 'small muted' }, 'Call ', callIn)),

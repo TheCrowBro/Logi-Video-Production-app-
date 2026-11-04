@@ -159,7 +159,7 @@ export const TUTORIALS = {
     T('Deliverables', 'What the client gets, with due dates that appear in your calendar, status and links.', '#bk-deliverables'),
     T('Licences', 'Music and stock licences kept with the project.', '#bk-licences'),
   ] },
-  strips: { name: 'Stripboard', page: 'bookings', steps: [
+  strips: { name: 'Stripboard & shot list', page: 'bookings', steps: [
     T('The stripboard', 'One strip per scene, in shooting order: the scene number, interior or exterior and the time of day, the set, what happens, the cast numbers and the pages in eighths.', '.sb-page .sb-board'),
     T('The shot list', 'The same shot list as on the booking, under the board: tick shots off on the day, and import a list to fill the board from its scene headings.', '#sb-shots'),
     T('Scenes from the script', 'Pick a Word, Fountain or text script and each scene heading becomes a strip, with its speaking cast and an estimated page count. ＋ Scene adds one by hand, ＋ Banner a line such as a company move, ＋ Day a shooting day.', '.sb-page .sb-tools'),
@@ -173,7 +173,7 @@ export const TUTORIALS = {
     T('State', 'Draft, sent, or changed since it was sent, with the version number. Mark as sent when it has gone out another way.', '.cs-page .status-line'),
     T('Send it', 'Print uses this device’s print dialog; Save PDF makes a file for the share sheet; Email crew is addressed to everyone on the shoot; Share, Web page and Copy text cover the rest.', '.cs-page .actions'),
     T('Forecast', 'The weather for the shoot day at the venue. Add to call sheet puts it on the sheet so it prints.', '.cs-page .wxline'),
-    T('The sheet', 'Built from the booking, venue, crew, kit, hires and the sun for the day, plus everything you add in Edit sheet: call times, the schedule, who is on set, dress code, emergency contact and instructions.', '.cs-page .cs-paper'),
+    T('The sheet', 'Built from the booking, venue, crew and hired people, kit and rentals, and the sun for the day, plus everything you add in Edit sheet: call times, the schedule, who is on set, dress code, emergency contact and instructions.', '.cs-page .cs-paper'),
   ] },
   money: { name: 'Quote and invoice', page: 'bookings', steps: [
     T('Quote or invoice', 'Each booking has one of each; switch here. A tick means it exists.', '.money-page .seg'),

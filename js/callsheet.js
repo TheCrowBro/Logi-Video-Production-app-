@@ -74,7 +74,7 @@ export function callSheetText(b) {
     ...(inc.contacts ? (b.stakeholders || []).map(s => [s.name, s.role, s.phone].filter(Boolean).join(' · ')) : []),
     inc.contacts && cs.attendees, inc.contacts && ((b.stakeholders || []).length || cs.attendees) && '',
     inc.kit && Object.keys(d.kit).length && 'KIT', inc.kit && Object.keys(d.kit).length && Object.entries(d.kit).map(([c, n]) => `${c}: ${n}`).join(' · '),
-    inc.kit && d.hires.length && 'Hires: ' + d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '),
+    inc.kit && d.hires.length && 'Rented: ' + d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '),
     inc.kit && Object.keys(d.kit).length && '',
     cs.dress && line('Dress code / bring', cs.dress), cs.emergency && line('Emergency contact', cs.emergency), (cs.dress || cs.emergency) && '',
     (cs.notes || (inc.notes && b.notes)) && 'NOTES', cs.notes, inc.notes && b.notes && b.notes !== cs.notes ? b.notes : null, (cs.notes || (inc.notes && b.notes)) && '',
@@ -127,7 +127,7 @@ export function renderDoc(b, { cs = sheetOf(b), crewCall = b.crewCall || {}, edi
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'On set'), area('attendees', 'Who is coming from the client or talent, when, and who looks after them')) : cs.attendees && h('p', { class: 'cs-pre' }, cs.attendees),
       kv('Producer', d.producerLine),
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'Emergency'), input('emergency', 'text', 'Emergency contact on the day: name · phone')) : kv('Emergency contact', cs.emergency)),
-    include('kit') && sec('Kit', Object.keys(d.kit).length && h('p', null, Object.entries(d.kit).map(([c, n]) => `${c}: ${n}`).join(' · ')), d.hires.length && kv('Hires', d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '))),
+    include('kit') && sec('Kit', Object.keys(d.kit).length && h('p', null, Object.entries(d.kit).map(([c, n]) => `${c}: ${n}`).join(' · ')), d.hires.length && kv('Rented', d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '))),
     sec('Day notes', include('sun') && d.sun && kv('Golden hour', `ends ${fmtTime(d.sun.goldenHourEnd)}, from ${fmtTime(d.sun.goldenHour)}`),
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'Weather'), input('weather', 'text', 'e.g. 14°C, showers from 3pm — bring rain covers')) : kv('Weather', cs.weather),
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'Dress / bring'), input('dress', 'text', 'e.g. All black, sturdy boots, hi-vis for the yard')) : kv('Dress code / bring', cs.dress),
@@ -176,7 +176,7 @@ export async function callSheetPdf(b) {
   if (inc.kit && (Object.keys(d.kit).length || d.hires.length)) {
     blocks.push({ type: 'heading', text: 'Kit' });
     if (Object.keys(d.kit).length) blocks.push({ type: 'text', text: Object.entries(d.kit).map(([c, n]) => `${c}: ${n}`).join('  ·  ') });
-    kv('Hires', d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '));
+    kv('Rented', d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '));
   }
   const notes = [];
   if (inc.sun && d.sun) notes.push({ type: 'kv', k: 'Golden hour', v: `ends ${fmtTime(d.sun.goldenHourEnd)}, from ${fmtTime(d.sun.goldenHour)}` });
@@ -283,7 +283,7 @@ export function openCallSheets(onOpen) {
   const past = all.filter(b => endOf(b) < today).sort((x, y) => y.date.localeCompare(x.date)).slice(0, 12);
   let close = () => {};
   const row = b => { const st = sheetState(b), cs = sheetOf(b); return h('button', { class: 'card tap', type: 'button', onclick: () => { close(); onOpen(b); } },
-    h('div', { class: 'card-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [dateLabel(b, fmtShort), (cs.generalCall || b.start) && 'call ' + (cs.generalCall || b.start), (b.crew || []).length ? `${b.crew.length} crew` : null].filter(Boolean).join(' · '))),
+    h('div', { class: 'card-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [dateLabel(b, fmtShort), (cs.generalCall || b.start) && 'call ' + (cs.generalCall || b.start), ((b.crew || []).length + hiredPeople(b).length) ? `${(b.crew || []).length + hiredPeople(b).length} crew` : null].filter(Boolean).join(' · '))),
       h('span', { class: 'pill ' + (st === 'sent' ? 'st-confirmed' : st === 'changed' ? 'st-cancelled' : st === 'draft' ? 'st-enquiry' : '') }, STATE_LABEL[st]))); };
   const body = h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'One call sheet per shoot, built in the app. Open one to fill in the schedule and details, then print it or send it to the crew. ✅ means it has gone out; ⚠ means it changed since.'),

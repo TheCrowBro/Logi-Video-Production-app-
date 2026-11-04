@@ -79,6 +79,13 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   await page.locator('#bk-work .checklist .check-item.done:not(.check-all) input').first().click(); await sleep(300);
   await page.locator('#bk-work .checklist .check-item:not(.done):not(.check-all) input').first().click(); await sleep(600);
   ok('…so unticking and ticking again does not ask twice', dialogs.length === 2 && (await page.evaluate(id => import('./js/store.js').then(s => s.byId('bookings', id).status), seed.other)) === 'Quoted');
+  await page.evaluate(id => import('./js/workflow.js').then(w => import('./js/store.js').then(s => w.setStage(s.byId('bookings', id), 'Confirmed'))), seed.other); await sleep(300);
+  ok('moving the project to another stage forgets the no, so the question can come again', !(await page.evaluate(id => import('./js/store.js').then(s => !!s.byId('bookings', id).archiveAsked), seed.other)));
+  await openBooking(seed.title); await page.locator('#bk-work').evaluate(d => { d.open = true; }); await sleep(250);
+  await page.locator('#bk-work .checklist .check-item.done:not(.check-all) input').first().click(); await sleep(400);
+  ok('unticking an item on the archived project never un-archives it, and asks nothing', dialogs.length === 2 && (await page.evaluate(id => import('./js/store.js').then(s => s.byId('bookings', id).status), seed.id)) === 'Archived');
+  await page.locator('#bk-work .checklist .check-item:not(.done):not(.check-all) input').first().click(); await sleep(400);
+  ok('…nor does ticking it again ask twice', dialogs.length === 2);
 
   // ---- people: stakeholders, crew, hired people; rentals under Equipment; the legacy copy sorted out ----
   await openBooking(seed.title);
@@ -116,6 +123,8 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   ok('Show all shows them all, with Show fewer, and the Equipment list folds the same way', (await page.locator('#bk-crew .crew-line').count()) === 7 && (await page.locator('#bk-crew .fold-more button').innerText()) === 'Show fewer' && (await page.locator('#bk-kit .gear-line').count()) === 5 && (await page.locator('#bk-kit .fold-more button').innerText()) === 'Show all (6)');
   await page.evaluate(id => import('./js/store.js').then(s => s.update(D => { const b = D.bookings.find(x => x.id === id); b.notes = 'touched'; b.updatedAt = Date.now(); })), seed.id); await sleep(400);
   ok('the choice survives the redraw a change causes', (await page.locator('#bk-crew .crew-line').count()) === 7);
+  await page.locator('#bk-crew .fold-more button').click(); await sleep(300);
+  ok('Show fewer folds the list back to five', (await page.locator('#bk-crew .crew-line').count()) === 5 && (await page.locator('#bk-crew .fold-more button').innerText()) === 'Show all (7)');
 
   // ---- edit days ----
   await page.locator('.bk-detail .page-head button', { hasText: 'Edit' }).click(); await page.waitForSelector('.sheet form');
@@ -133,7 +142,6 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   await page.locator('.bk-detail .page-head .back-btn').click(); await sleep(300);
   await page.getByRole('button', { name: '‹ Calendar' }).click(); await sleep(300);
   await page.evaluate(() => { document.querySelector('.cal-nav .btn')?.click(); }); await sleep(200);
-  const cell = page.locator(`.cal .day[aria-label*="${new Date().getDate()} "]`).first();
   const today = await page.evaluate(() => { const d = new Date(); const label = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); const el = [...document.querySelectorAll('.cal .day')].find(x => x.getAttribute('aria-label')?.startsWith(label)); return el ? { cls: el.className, label: el.getAttribute('aria-label'), dots: [...el.querySelectorAll('.dots i')].map(i => i.className), mini: [...el.querySelectorAll('.mini')].map(m => m.className + ':' + m.textContent) } : null; });
   ok('on the calendar an edit day is marked in the edit colour, and says so', !!today && /edit-day/.test(today.cls) && /edit day/.test(today.label) && (today.dots.some(c => /\bedit\b/.test(c)) || today.mini.some(c => /\bedit\b/.test(c))), JSON.stringify(today));
   await page.evaluate(() => { const d = new Date(); const label = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); [...document.querySelectorAll('.cal .day')].find(x => x.getAttribute('aria-label')?.startsWith(label))?.click(); }); await sleep(300);
@@ -150,7 +158,8 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   ok('while it runs, the strip under the Rolodex shows the booking, the time and Stop work', await strip.isVisible() && /Harbour/.test(await strip.innerText()) && /Working/.test(await strip.innerText()) && (await strip.getByRole('button', { name: 'Stop work' }).count()) === 1 && /Working/.test(await clock.innerText()), await strip.innerText());
   await strip.getByRole('button', { name: 'Stop work' }).click(); await sleep(400);
   ok('Stop work from the strip stops it everywhere and the strip goes away', await page.locator('#clockbar').evaluate(e => e.hidden) && (await clock.getByRole('button', { name: 'Start edit session' }).count()) === 1);
-  ok('back from the booking goes to the day it was opened from, and the hours say the session was editing', /^‹ /.test((await page.locator('.bk-detail .page-head .back-btn').textContent()).trim()) && /editing/.test(await page.locator('#bk-hours').innerText()), await page.locator('#bk-hours').innerText().then(t => t.replace(/\n/g, ' | ').slice(0, 120)));
+  const todayShort = await page.evaluate(() => import('./js/util.js').then(u => u.fmtShort(u.todayISO())));
+  ok('back from the booking goes to the day it was opened from (today), and the hours say the session was editing', (await page.locator('.bk-detail .page-head .back-btn').textContent()).trim() === '‹ ' + todayShort && /all editing/.test(await page.locator('#bk-hours').innerText()), await page.locator('#bk-hours').innerText().then(t => t.replace(/\n/g, ' | ').slice(0, 120)));
 
   // ---- the shot list import fills the stripboard ----
   await page.locator('#bk-shots button', { hasText: 'Import shot list' }).click(); await page.waitForSelector('.sheet textarea[aria-label="Pasted shot list"]');
