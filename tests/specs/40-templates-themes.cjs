@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -39,7 +39,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   // ---- project templates: create one in Settings ----
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-  await page.locator('details.settings-section:has(> summary:has-text("Project templates")) > summary').click();
+  await openSetting(page, 'Project templates');
   await page.getByRole('button', { name: '+ New template' }).click(); await page.waitForSelector('.sheet form');
   const f = page.locator('.sheet').last();
   await f.locator('input[data-key="name"]').fill('Car shoot');
@@ -63,7 +63,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const tpls = await page.evaluate(() => import('./js/store.js').then(s => s.db.projectTemplates));
   ok('template saved with its defaults', tpls.length === 1 && tpls[0].name === 'Car shoot' && tpls[0].base === 'brand' && tpls[0].deliverables.length === 2 && tpls[0].kits.length === 1 && tpls[0].crew.length === 1 && tpls[0].schedule.length === 1, JSON.stringify(tpls[0] && { id: tpls[0].id, n: tpls[0].deliverables.length }));
   ok('Project templates section lists it', /Car shoot/.test(await page.locator('details.settings-section:has(> summary:has-text("Project templates"))').evaluate(el => el.textContent)));
-  await page.locator('details.settings-section:has(> summary:has-text("Workflow templates")) > summary').click();
+  await openSetting(page, 'Workflow templates');
   ok('its checklists can be edited under Workflow templates', /Car shoot \(yours\)/.test(await page.locator('details.settings-section:has(> summary:has-text("Workflow templates"))').evaluate(el => el.textContent)));
 
   // ---- a new booking from the template ----

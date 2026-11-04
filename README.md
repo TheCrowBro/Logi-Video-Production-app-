@@ -56,12 +56,12 @@ Everything can be changed later, and every screen has a back button.
 - **Set a PIN** in Settings → Security. Then Vdex locks when you put the phone down, and you can open it with your fingerprint or face. While it's locked, the information on this device is encrypted.
 - **Connect your cloud storage** (with a licence): tap ☁ at the top, tap **Connect** next to Google Drive or iCloud, and sign in to your own account (Dropbox, OneDrive and more are under *More ways to keep a copy*). Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
 - **Nothing is sent anywhere by itself.** The [privacy policy](https://vdex.crowmade.app/privacy.html) says in plain words what stays on your device and what leaves it, and when. The [terms of service](https://thecrowbro.github.io/Logi-Video-Production-app-/terms.html) cover using Vdex.
-- **Save a backup now and then** (with a licence): Settings → Backups & data → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.
+- **Save a backup now and then** (with a licence): Settings → Storage, sync & backups → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.
 
 ## Need help?
 
 - **Tap ?** at the top of any page, or inside any pop-up panel, for a walkthrough of what you're looking at. Timecode is the trickiest part, so its page also has a **📖 Guide** with a start-to-finish walkthrough on a practice log.
-- **Settings → About → Take the tour** shows you around the whole app again.
+- **Settings → General → About & Licence → Take the tour** shows you around the whole app again.
 - **[The complete guide](docs/full-guide.md)** explains every button, separately for iPhone, Android and computers, with answers to common questions.
 
 ### If something isn't working

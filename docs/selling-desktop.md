@@ -117,7 +117,7 @@ Even signed, a new Windows app shows a milder "not commonly downloaded" prompt n
 ## Part 7. Release and try it (30 minutes)
 
 1. Tell me you are ready (or, in GitHub: **Actions → Build desktop installers → Run workflow**, tick **Publish**, **Run workflow**). When it is green, `https://download.crowmade.app/vdex/latest.yml` shows the new version and https://vdex.crowmade.app/download.html downloads work.
-2. Install Vdex on a computer that has never had it. Settings → About should show the free trial.
+2. Install Vdex on a computer that has never had it. Settings → General → About & Licence should show the free trial.
 3. Buy a licence yourself through **Buy a licence**. Check the thank-you page shows a code, the email arrives, and **Enter licence code** activates it.
 4. Refund yourself in Stripe. Within about a week, Vdex says the code was cancelled. To see it at once: **Release this computer**, then **Enter licence code** with the same code, and Vdex says it has been cancelled. Stripe keeps its fee on a refund.
 5. Make a free code in the generator page (part 8) and try it on a second computer.
@@ -141,7 +141,7 @@ Until you do this, the website stays free for everyone. Once you do it, every br
 1. Make sure part 4 (Resend) is done: signing in works by emailing a code. Resend's free plan sends at most 100 emails a day (3,000 a month), shared with purchase emails, so Vdex sends at most 60 sign-in codes a day in all (and at most 4 a day to any one address) and keeps the rest for purchases; when the 60 are used up, sign-in says to try again tomorrow. Once many people use the website, take a paid Resend plan (from about 20 USD a month for 50,000 emails) and add the Cloudflare setting `SIGN_IN_EMAILS_PER_DAY` with a higher number, such as `1000`.
 2. Update the Google Play Data safety answers (docs/google-play.md) if the Android app is already listed: signing in collects an email address.
 3. In Cloudflare (as in part 2), add a **Text** variable (or a Secret) named `WEB_SIGN_IN` with the value `on`. Within about 6 hours every open copy of Vdex picks it up. To switch it off again, delete it: trials then pause, and carry on where they were if you switch it on again.
-4. Try it: in a private browser window open https://vdex.crowmade.app, Settings → About → **Sign in**, with a licence that is live: for example a free code you made for your own email address in part 7 (the generator links it). A refunded test purchase, or one made in Stripe's test mode, cannot sign in.
+4. Try it: in a private browser window open https://vdex.crowmade.app, Settings → General → About & Licence → **Sign in**, with a licence that is live: for example a free code you made for your own email address in part 7 (the generator links it). A refunded test purchase, or one made in Stripe's test mode, cannot sign in.
 
 Who can sign in: anyone who bought through the shop (with the email they paid with, found in Stripe if needed), anyone you made a free code for with an email address (the generator page links it when you make the code, or press **Link for website sign-in** later), and anyone who has entered their code in the desktop app. Someone with a code can also use **Have a licence code? Use it instead**: the sign-in code then goes to the email address inside it.
 

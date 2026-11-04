@@ -2,7 +2,7 @@
 // (window.vdexDesktop.licence): Settings → About, the trial bar, read-only after the trial, entering a code (including a
 // full code moved from another computer), releasing, and that the website itself never loads any of it.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
 const OUT = process.env.S || '/tmp';
@@ -48,7 +48,7 @@ const bridge = start => `(() => {
   };
   const about = async page => {
     await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-    await page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => /About/.test(x.querySelector('.ss-title').textContent)); d.open = true; d.scrollIntoView(); });
+    await openSetting(page, 'About & Licence');
     await sleep(300);
   };
   try {
@@ -102,7 +102,7 @@ const bridge = start => `(() => {
     const quiet = await page.evaluate(() => import('./js/store.js').then(s => { const before = s.db.profile.currency; const r = s.update(d => { d.profile = { ...d.profile, currency: '€' }; }); return { r, same: s.db.profile.currency === before }; }));
     ok('a change made in the background is refused quietly', quiet.r === false && quiet.same && (await page.locator('.sheet').count()) === 0, JSON.stringify(quiet) + ' sheets ' + (await page.locator('.sheet').count()) + ' ' + (await page.evaluate(() => navigator.userActivation && navigator.userActivation.isActive)));
     await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-    await page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => /Profile/.test(x.querySelector('.ss-title').textContent)); d.open = true; d.scrollIntoView(); });
+    await openSetting(page, 'Profile');
     const cur = page.locator('input[aria-label="Currency symbol"]');
     await cur.fill('£'); await cur.press('Enter'); await sleep(300);
     const stored = await page.evaluate(() => import('./js/store.js').then(s => s.db.profile.currency || '$'));

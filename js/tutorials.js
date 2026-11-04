@@ -77,8 +77,8 @@ export const TUTORIALS = {
     T('State and total', 'Draft, sent, accepted or paid, the total, and overdue when an invoice passes its due date unpaid.', '.money-page .status-line'),
     T('Build it', 'Edit the lines by hand, or add suggested lines: from the booking (shoot days, crew at their day rates, kit, deliverables), from your price list, from the quote, or from the hours logged. Mark as sent, accepted or paid ticks the pipeline.', '.money-page .actions'),
     T('Send it', 'Print, Save PDF, Email client (to the contacts on the booking), Share, Web page, Copy text.', '.money-page .actions ~ .actions'),
-    T('Get paid', 'Link for the client opens the document as a web page with Pay buttons for the balance; record payments as they arrive, and send a reminder when an invoice is overdue. Your PayPal, Venmo, Cash App, payment page, UPI and bank details live under Settings → Quotes & invoices.', '.money-page .pay-actions'),
-    T('The document', 'Your details from the Me page, the client, the lines, tax and totals, the terms, and on an invoice the Pay buttons, bank details and a bank QR code from Settings → Quotes & invoices.', '.money-page .cs-paper'),
+    T('Get paid', 'Link for the client opens the document as a web page with Pay buttons for the balance; record payments as they arrive, and send a reminder when an invoice is overdue. Your PayPal, Venmo, Cash App, payment page, UPI and bank details live under Settings → Work & billing → Quotes & invoices.', '.money-page .pay-actions'),
+    T('The document', 'Your details from Settings → General → Profile, the client, the lines, tax and totals, the terms, and on an invoice the Pay buttons, bank details and a bank QR code from Settings → Work & billing → Quotes & invoices.', '.money-page .cs-paper'),
     T('Start one', 'From the booking suggests the lines at your rates; From the price list adds the lines you tick; an invoice can also start from the quote or from the hours logged; or start blank.', '.money-page .stack .actions'),
   ] },
   crew: { name: 'Crew', page: 'crew', steps: [
@@ -112,7 +112,7 @@ export const TUTORIALS = {
     T('A policy', 'Renewal date, cover, the claims line to call, and the document.', '#page .list .card'),
   ] },
   me: { name: 'Me', page: 'me', steps: [
-    T('Your card', 'Name, business, title and where you are based. Edit fills it in; your details also go on call sheets, quotes and invoices.', '.id-card'),
+    T('Your card', 'Name, business, title and where you are based, as entered under Settings → General → Profile; your details also go on call sheets, quotes and invoices.', '.id-card'),
     T('QR code', 'Contact hands over your card; Website opens your site. Anyone can scan it with their camera.', '#me .seg', '.seg'),
     T('The code', 'Tap Save .vcf to share your contact file instead.', '.qr'),
     T('Contact lines', 'Phone and email, tappable.', '#me .card.kv', '.card.kv'),
@@ -196,8 +196,14 @@ export const TUTORIALS = {
     T('Text or spreadsheet', 'Share as text for anyone, or as a spreadsheet (CSV) with the timecode, the note, the script line and the time it was captured, for the edit suite.', '.sheet-body'),
   ] },
   settings: { name: 'Settings', page: 'settings', dynamic: () => {
-    const blurbs = { 'Storage & sync': 'Link one cloud storage and every device shares one database.', 'Security': 'A PIN, fingerprint or face unlock, and encrypted data whenever Vdex is locked or in the background.', 'Calendar & email': 'Send bookings to your calendar once, subscribe to a live feed, or keep a two-way sync.', 'Display & accessibility': 'Text size, bigger buttons, contrast, animation and the colour theme, including camera-brand themes.', 'Field tool defaults': 'Your location, units, range-finder camera height and noise-meter calibration.', 'Hours & breaks': 'Standard day, break notifications, default approved break.', 'Quotes & invoices': 'Your rates, price list, tax, numbering, payment terms and bank details.', 'Project templates': 'Your own job types: what a new booking of that kind starts with.', 'Workflow templates': 'The checklists for each job type and each stage.', 'Profile': 'Your details for call sheets, quotes and the Me page.', 'Install': 'Add Vdex to your home screen or desktop.', 'Backups & data': 'Export and import backups, restore an automatic cloud backup, load sample data, erase everything.', 'About': 'Version, updates, the tour and the licences.' };
-    return [...document.querySelectorAll('.settings-section')].map((el, i) => { const title = el.querySelector('.ss-title')?.textContent || 'Section'; return { title, text: blurbs[title] || 'Open the section to see its settings.', target: [`.settings-section:nth-of-type(${i + 1}) > summary`] }; });
+    const blurbs = { 'General': 'Display and accessibility, your profile, and About & Licence: open it to see the three.', 'Work & billing': 'Project and workflow templates, quotes and invoices, hours and breaks.', 'Storage, sync & backups': 'Link one cloud storage and every device shares one database; below it, export and import backups, restore an automatic cloud backup, load sample data, erase everything.', 'Security': 'A PIN, fingerprint or face unlock, and encrypted data whenever Vdex is locked or in the background.', 'Calendar & email': 'Send bookings to your calendar once, subscribe to a live feed, or keep a two-way sync.', 'Display & accessibility': 'Text size, bigger buttons, contrast, animation and the colour theme, including camera-brand themes.', 'Field tool defaults': 'Your location, units, range-finder camera height and noise-meter calibration.', 'Hours & breaks': 'Standard day, break notifications, default approved break.', 'Quotes & invoices': 'Your rates, price list, tax, numbering, payment terms and bank details.', 'Project templates': 'Your own job types: what a new booking of that kind starts with.', 'Workflow templates': 'The checklists for each job type and each stage.', 'Profile': 'Your name, business and contact details for call sheets, quotes, invoices and the Me page: the one place to change them.', 'Install': 'Add Vdex to your home screen or desktop.', 'About & Licence': 'Version, updates, your licence, the tour and the legal pages.' };
+    // Groups first, then the sections inside each (the group is opened so they can be pointed at), then the rest.
+    const openUp = el => () => { for (let p = el.parentElement && el.parentElement.closest('details'); p; p = p.parentElement && p.parentElement.closest('details')) p.open = true; };
+    return [...document.querySelectorAll('#page details.settings-group, #page details.settings-section')].map(el => {
+      const title = el.dataset.s || el.querySelector(':scope > summary .ss-title')?.textContent || 'Section';
+      const inGroup = !!(el.parentElement && el.parentElement.closest('details.settings-group'));
+      return { title, text: blurbs[title] || 'Open the section to see its settings.', target: [`[data-s="${title.replace(/"/g, '')}"] > summary`], before: inGroup ? openUp(el) : undefined };
+    });
   } },
 };
 

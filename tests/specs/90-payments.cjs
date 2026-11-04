@@ -1,7 +1,7 @@
 // Getting paid: payment settings, Pay buttons and the bank QR on an invoice, payments and balances, the client's
 // link and the public invoice page, reminders, the overview and the CSV.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -21,7 +21,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); s.update(d => { d.profile.currency = '€'; d.profile.business = 'Portside Films'; d.profile.email = 'me@example.com'; }); }));
   await page.evaluate(() => import('./js/money.js').then(m => m.setBilling({ currencyCode: 'EUR', payMethods: [{ type: 'paypal', value: 'portsidefilms' }, { type: 'cashapp', value: 'portside' }, { type: 'link', value: 'https://pay.example.com/portside?amt={amount}&ref={reference}', label: 'Pay by card' }, { type: 'bank', accountName: 'Portside Films', iban: 'DE89 3704 0044 0532 0130 00', bic: 'COBADEFFXXX' }, { type: 'zelle', value: 'pay@portsidefilms.example' }], payment: 'Reference: the invoice number.' })));
   await page.evaluate(() => window.logiGo('settings'));
-  await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) > summary').click();
+  await openSetting(page, 'Quotes & invoices');
   const settingsText = await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices"))').innerText();
   ok('Settings → Quotes & invoices lists the ways to pay', /Getting paid/.test(settingsText) && /PayPal/.test(settingsText) && /Bank transfer/.test(settingsText) && /Zelle/.test(settingsText) && /portsidefilms/.test(settingsText) && /DE89/.test(settingsText));
   await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) button:has-text("Add a way to pay")').click(); await page.waitForSelector('.sheet .list');

@@ -47,7 +47,7 @@ export function nudgeIfStale() {
   const hl = health(); if (hl.level === 'ok' || hl.level === 'empty') return;
   const last = Number(lsGet('logi-backup-nudge')) || 0; if (Date.now() - last < 3 * 864e5) return;
   lsSet('logi-backup-nudge', String(Date.now()));
-  setTimeout(() => toast(hl.level === 'none' ? 'Your data only exists on this device. Settings → Backups & data.' : `No off-device copy for ${hl.days} days. Settings → Backups & data.`), 1500);
+  setTimeout(() => toast(hl.level === 'none' ? 'Your data only exists on this device. Settings → Storage, sync & backups.' : `No off-device copy for ${hl.days} days. Settings → Storage, sync & backups.`), 1500);
 }
 
 export async function saveOrShare(text, name, type) {

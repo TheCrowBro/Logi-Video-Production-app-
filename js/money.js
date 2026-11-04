@@ -1,7 +1,7 @@
 // Quotes and invoices, one of each per booking. Lines are suggested from the booking (shoot days, crew with their
 // day rates, kit, the deliverables a template put there) or, for the invoice, copied from the quote or built from the
 // hours logged; the user edits them. Printed from the app, saved as PDF, emailed to the client's contacts, and
-// summed up on the Money overview. Rates, the price list, numbering, tax and payment terms live in Settings → Quotes &
+// summed up on the Money overview. Rates, the price list, numbering, tax and payment terms live in Settings → Work & billing → Quotes &
 // invoices.
 import { h, sheet, toast, nodes, fmtShort, fmtLong, todayISO, parseISO, ymd, uid } from './util.js';
 import { db, byId, upsert, update, endOf, requirePaid } from './store.js';
@@ -270,7 +270,7 @@ export function moneyPage(b, kind, go) {
         kind === 'invoice' && h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'hours') }) }, '＋ From hours logged'),
         h('button', { class: 'btn ghost', onclick: fromList }, '＋ From the price list'),
         h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh) }, 'Start blank')),
-      !billing().dayRate && h('p', { class: 'small muted' }, 'Tip: set your day, hour and kit rates under Settings → Quotes & invoices, and each person’s day rate on the Crew page, and the suggested lines come priced.')));
+      !billing().dayRate && h('p', { class: 'small muted' }, 'Tip: set your day, hour and kit rates under Settings → Work & billing → Quotes & invoices, and each person’s day rate on the Crew page, and the suggested lines come priced.')));
 }
 export function moneyBlock(b, go) {
   const row = kind => { const doc = docOf(b, kind), K = KINDS[kind]; return h('div', { class: 'card-row' }, h('div', null, h('strong', null, K.label), h('div', { class: 'muted small' }, doc ? `${doc.number} · ${doc.status}${isOverdue(b) && kind === 'invoice' ? ' · overdue' : ''} · ${fmtMoney(totals(doc).total)}${kind === 'invoice' && doc.status !== 'Paid' && totals(doc).paid > 0 ? ` · ${fmtMoney(totals(doc).balance)} due` : ''}` : 'none yet')), h('button', { class: 'btn ghost small', onclick: () => go({ view: 'money', id: b.id, kind }) }, doc ? 'Open' : 'Create')); };
@@ -417,7 +417,7 @@ export function billingPanel() {
     ? h('textarea', { rows: 2, value: bl[key] ?? '', 'aria-label': label, onchange: e => setBilling({ [key]: e.target.value }) })
     : h('input', { type, value: bl[key] ?? '', 'aria-label': label, inputMode: type === 'number' ? 'decimal' : null, ...extra, onchange: e => setBilling({ [key]: type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value }) }));
   wrap.append(
-    h('p', { class: 'small muted' }, 'Rates feed the suggested lines on quotes and invoices; each crew member’s day rate is on their own card. Your name, business, phone and email come from the Me page.'),
+    h('p', { class: 'small muted' }, 'Rates feed the suggested lines on quotes and invoices; each crew member’s day rate is on their own card. Your name, business, phone and email come from your profile (Settings → General → Profile).'),
     h('div', { class: 'grid2' }, field(`Day rate (${sym()})`, 'dayRate', 'number', { min: 0 }), field(`Hour rate for editing (${sym()})`, 'hourRate', 'number', { min: 0 }), field(`Overtime hour rate (${sym()})`, 'overtimeRate', 'number', { min: 0 }), field(`Equipment package per day (${sym()})`, 'kitRate', 'number', { min: 0 })),
     h('div', { class: 'grid2' }, field('Tax name', 'taxLabel'), field('Tax rate (%)', 'taxRate', 'number', { min: 0 }), field('Quote number prefix', 'quotePrefix'), field('Next quote number', 'nextQuote', 'number', { min: 1 }), field('Invoice number prefix', 'invoicePrefix'), field('Next invoice number', 'nextInvoice', 'number', { min: 1 }), field('Quotes valid for (days)', 'validDays', 'number', { min: 1 }), field('Invoices due in (days)', 'dueDays', 'number', { min: 0 })),
     field('Payment terms (on every invoice)', 'terms', 'textarea'),

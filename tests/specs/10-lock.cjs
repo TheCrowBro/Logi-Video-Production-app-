@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
 const S = process.env.S;
@@ -83,22 +83,22 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   // --- encrypted backup round trip ---
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-  await page.locator('.settings-section > summary', { hasText: 'Backups & data' }).click();
+  await openSetting(page, 'Storage, sync & backups');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Encrypted backup…' }).click().then(async () => { await page.waitForSelector('.sheet .pin-input'); await page.locator('.sheet .pin-input').nth(0).fill('correct horse battery'); await page.locator('.sheet .pin-input').nth(1).fill('correct horse battery'); await page.locator('.sheet button[type=submit]').click(); })]);
   const encPath = S + '/enc-backup.json'; await dl.saveAs(encPath);
   const enc = JSON.parse(fs.readFileSync(encPath, 'utf8'));
   ok('encrypted backup file has no plaintext', enc.vdex === 'encrypted-backup' && !/bookings/.test(fs.readFileSync(encPath, 'utf8').replace('"vdex":"encrypted-backup"', '')), dl.suggestedFilename());
   await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.bookings = []; })));
   ok('bookings cleared before import', (await page.evaluate(() => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.length)) === 0);
-  await page.locator('details.settings-section:has(> summary:has-text("Backups & data"))').locator('input[type=file]').setInputFiles(encPath);
+  await page.locator('details.settings-section:has(> summary:has-text("Storage, sync & backups"))').locator('input[type=file]').setInputFiles(encPath);
   await page.waitForSelector('.sheet .pin-input'); await page.locator('.sheet .pin-input').fill('wrong one'); await page.locator('.sheet button[type=submit]').click();
   await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some(t => /wrong passphrase/.test(t.textContent)), null, { timeout: 15000 }).then(() => ok('wrong passphrase refused', true)).catch(() => ok('wrong passphrase refused', false));
   await sleep(2800);
-  await page.locator('details.settings-section:has(> summary:has-text("Backups & data"))').locator('input[type=file]').setInputFiles(encPath);
+  await page.locator('details.settings-section:has(> summary:has-text("Storage, sync & backups"))').locator('input[type=file]').setInputFiles(encPath);
   await page.waitForSelector('.sheet .pin-input'); await page.locator('.sheet .pin-input').fill('correct horse battery'); await page.locator('.sheet button[type=submit]').click();
   await page.waitForFunction(n => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.length === n, before, { timeout: 15000 });
   ok('encrypted backup imported with the right passphrase', true);
-  ok('backup health line shows a copy today', await page.locator('details.settings-section:has(> summary:has-text("Backups & data"))').innerText().then(t => /copy today/.test(t)));
+  ok('backup health line shows a copy today', await page.locator('details.settings-section:has(> summary:has-text("Storage, sync & backups"))').innerText().then(t => /copy today/.test(t)));
 
   // --- asset register ---
   await page.evaluate(() => window.logiGo('gear')); await sleep(400);

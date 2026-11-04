@@ -171,7 +171,7 @@ export function hoursPanel({ bookingId = null } = {}) {
           h('div', { class: 'card-row' }, h('div', null, h('strong', null, fmtShort(s.date), kindOf(s) === 'edit' && h('span', { class: 'tag' }, ' ✂ edit')), !bookingId && h('div', { class: 'muted small' }, byId('bookings', s.bookingId)?.title || 'Deleted booking')), h('span', { class: 'pill ' + (s.end ? '' : 'st-cancelled rec') }, s.end ? fmtHm(workedMs(s)) : 'running')),
           h('div', { class: 'muted small' }, `${new Date(s.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${s.end ? new Date(s.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '…'} · breaks ${fmtHm(breakMs(s))}${s.note ? ' · ' + s.note : ''}`))))
         : h('p', { class: 'muted small' }, 'No hours in this period. Use the clock bar on a shoot day, or add them by hand.'),
-      h('p', { class: 'muted small' }, `Overtime counts anything beyond a ${standardDay()}-hour day. Change the standard day and the default approved break under Settings → Hours & breaks.`)));
+      h('p', { class: 'muted small' }, `Overtime counts anything beyond a ${standardDay()}-hour day. Change the standard day and the default approved break under Settings → Work & billing → Hours & breaks.`)));
   };
   draw();
   const unsub = subscribe(draw);

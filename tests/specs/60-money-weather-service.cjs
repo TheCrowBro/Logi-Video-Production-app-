@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -36,7 +36,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   // ---- quotes and invoices ----
   await page.evaluate(() => window.logiGo('settings')); await sleep(300);
-  await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) > summary').click();
+  await openSetting(page, 'Quotes & invoices');
   const sec = page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices"))');
   for (const [label, val] of [['Day rate', '600'], ['Hour rate for editing', '55'], ['Equipment package per day', '250'], ['Tax rate (%)', '20'], ['Tax name', 'VAT']]) { await sec.locator(`input[aria-label^="${label}"]`).fill(val); await sec.locator(`input[aria-label^="${label}"]`).press('Tab'); await sleep(150); }
   await sec.locator('textarea[aria-label^="How to pay"]').fill('Bank: 12-34-56 · 12345678'); await sec.locator('textarea[aria-label^="How to pay"]').press('Tab'); await sleep(150);

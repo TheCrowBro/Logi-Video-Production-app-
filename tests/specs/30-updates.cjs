@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
 const ROOT = process.env.VDEX_ROOT;
 const swPath = ROOT + '/sw.js', verPath = ROOT + '/js/version.js';
@@ -38,7 +38,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const keys2 = await page.evaluate(() => caches.keys());
   ok('new cache in place, old one removed', keys2.includes('logi-test1') && !keys2.includes('logi-dev'), keys2.join(','));
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-  await page.locator('details.settings-section:has(> summary:has-text("About")) > summary').click();
+  await openSetting(page, 'About & Licence');
   const about = await page.locator('details.settings-section:has(> summary:has-text("About"))').innerText();
   ok('Settings → About offers the reload', /new version has been downloaded/i.test(about) && /Reload now/.test(about));
   await page.screenshot({ path: process.env.S + '/update-bar.png' });
@@ -48,7 +48,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('after the reload the new files are served', /9\.9\.9/.test(served2));
   ok('no bar after reloading into the new version', (await page.locator('.update-bar').count()) === 0);
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-  await page.locator('details.settings-section:has(> summary:has-text("About")) > summary').click();
+  await openSetting(page, 'About & Licence');
   const about2 = await page.locator('details.settings-section:has(> summary:has-text("About"))').innerText();
   ok('About shows the running version is up to date', /Up to date/.test(about2) && /9\.9\.9/.test(about2));
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));

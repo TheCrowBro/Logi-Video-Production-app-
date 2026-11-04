@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 const ROOT = process.env.VDEX_ROOT || path.resolve(__dirname, '../..');
 const REPO = path.resolve(__dirname, '../..');
@@ -60,7 +60,7 @@ const DAY = 86400e3;
   };
   const about = async page => {
     await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-    await page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => /About/.test(x.querySelector('.ss-title').textContent)); d.open = true; d.scrollIntoView(); });
+    await openSetting(page, 'About & Licence');
     await page.waitForFunction(() => !document.querySelector('.licence-panel')?.hidden || window.__noPanel, null, { timeout: 4000 }).catch(() => {});
     await sleep(300);
   };
@@ -132,7 +132,7 @@ const DAY = 86400e3;
     ({ ctx, page } = await open({ storage: { on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY } }));
     await page.waitForSelector('.licence-bar', { timeout: 5000 });
     await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-    await page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => /Profile/.test(x.querySelector('.ss-title').textContent)); d.open = true; d.scrollIntoView(); });
+    await openSetting(page, 'Profile');
     await page.locator('input[aria-label="Currency symbol"]').fill('£'); await page.locator('input[aria-label="Currency symbol"]').press('Enter'); await sleep(300);
     await page.locator('.sheet.licence-readonly').getByRole('button', { name: 'Sign in' }).click();
     await page.locator('.sheet input[type="email"]').last().fill('jo@example.com'); await page.locator('.sheet').last().getByRole('button', { name: 'Email me a code' }).click();

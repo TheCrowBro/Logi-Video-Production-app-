@@ -108,13 +108,13 @@ const disclaimer = region => `The starting prices are typical freelance rates fo
 // When the list came from a region whose currency is not the person's, until they say the prices are now theirs.
 function currencyNote(onDone) {
   const { list, region, own, checked } = priceList(), cur = curCode(), rc = regionCode(region);
-  if (!region && !own) return h('p', { class: 'warn' }, `There are no typical rates for ${curLabel()} yet, so the prices are blank: type in yours, or start from one of the regions in Settings → Quotes & invoices → Price list and change the prices into ${curLabel()}.`);
+  if (!region && !own) return h('p', { class: 'warn' }, `There are no typical rates for ${curLabel()} yet, so the prices are blank: type in yours, or start from one of the regions in Settings → Work & billing → Quotes & invoices → Price list and change the prices into ${curLabel()}.`);
   if (!region || rc === cur || (cur && checked === cur) || !list.some(i => priceOk(i.price))) return null;
   return h('div', { class: 'warn' }, h('p', { style: 'margin:0 0 6px' }, `This list started from typical rates for ${regionText(region)}, which are in ${rc}, but your currency is ${curLabel()}. Check every price is in ${curLabel()} before you use it.`),
     own && cur && h('button', { class: 'btn ghost small', type: 'button', onclick: () => { update(d => { d.priceList = { ...d.priceList, checked: cur, updatedAt: Date.now() }; }); toast('Noted'); onDone && onDone(); } }, `✓ My prices are in ${cur}`));
 }
 
-// The editor: Settings → Quotes & invoices → Price list.
+// The editor: Settings → Work & billing → Quotes & invoices → Price list.
 export function openPriceList() {
   const body = h('div', { class: 'stack price-list' });
   const edit = item => {
@@ -195,6 +195,6 @@ export function pickFromPriceList(b, onPick) {
   ({ close } = sheet('Add from the price list', h('div', { class: 'stack price-picker' },
     currencyNote(),
     list.length ? [search, status, ...groups, none] : h('p', { class: 'muted' }, 'Your price list is empty.'),
-    h('p', { class: 'small muted' }, `Prices come from your price list${region ? `, which started from typical rates for ${regionText(region)}` : ''}: check them before you send. Change the list in Settings → Quotes & invoices → Price list.`),
+    h('p', { class: 'small muted' }, `Prices come from your price list${region ? `, which started from typical rates for ${regionText(region)}` : ''}: check them before you send. Change the list in Settings → Work & billing → Quotes & invoices → Price list.`),
     h('div', { class: 'form-actions' }, add, h('button', { class: 'btn ghost', type: 'button', onclick: () => { close(); openPriceList(); } }, 'Edit the price list')))));
 }

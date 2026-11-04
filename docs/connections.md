@@ -4,7 +4,7 @@ Vdex keeps everything on your own device. Connecting a cloud storage adds a copy
 
 ## Google Drive or iCloud
 
-1. Tap **☁** at the top of Vdex (or Settings → *Storage & sync*).
+1. Tap **☁** at the top of Vdex (or Settings → *Storage, sync & backups*).
 2. Tap **Connect** next to **Google Drive** or **iCloud**.
 3. Sign in to your own account on Google's or Apple's page. Google asks you to tap **Allow**. Apple may ask for the six-digit code from your iPhone; tick **Keep me signed in**.
 4. You come straight back to Vdex, and the panel says *Connected*.

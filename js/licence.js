@@ -118,7 +118,7 @@ async function retry(btn, after = () => {}) {
   toast(m === 'licensed' ? 'Licence confirmed' : m === 'released' ? 'Your licence is in use on its other devices' : m === 'cancelled' ? 'This licence has been cancelled' : m === was ? 'Still not able to reach the licence server' : 'Licence checked');
 }
 
-/* ------------------------------ Settings → About ------------------------------ */
+/* ------------------------ Settings → General → About & Licence ------------------------ */
 export function licencePanel() {
   const el = h('div', { class: 'stack licence-panel', hidden: true });
   const draw = () => {

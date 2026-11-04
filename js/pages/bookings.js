@@ -49,7 +49,7 @@ function editBooking(b, go) {
     fields: [
       { key: 'title', label: 'Project', required: true, placeholder: 'e.g. Brand film for…' },
       { key: 'client', label: 'Client' },
-      { key: 'type', label: 'Job type', type: 'select', options: typeOptions(), hint: 'Picks the pre- and post-production checklists. Your own templates (Settings → Project templates) are listed first.' },
+      { key: 'type', label: 'Job type', type: 'select', options: typeOptions(), hint: 'Picks the pre- and post-production checklists. Your own templates (Settings → Work & billing → Project templates) are listed first.' },
       { key: 'date', label: 'Start date', type: 'date', required: true },
       { key: 'endDate', label: 'End date (multi-day)', type: 'date', hint: 'Leave blank for a single day.' },
       { key: 'status', label: 'Stage', type: 'select', options: STATUSES },

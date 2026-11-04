@@ -6,3 +6,6 @@ const record = JSON.stringify({ v: TERMS_VERSION, at: '2026-11-01T12:00:00.000Z'
 exports.TERMS_VERSION = TERMS_VERSION;
 exports.TERMS_RECORD = record;
 exports.acceptTerms = () => ({ content: `try { localStorage.setItem('logi-terms', ${JSON.stringify(record)}); } catch (e) {}` });
+// Opens a Settings section by its exact title, together with the group it sits in (General, Work & billing), the way
+// a link into Settings does, and scrolls to it. The page must already be on Settings.
+exports.openSetting = (page, title) => page.evaluate(t => { const d = [...document.querySelectorAll('details.settings-section, details.settings-group')].find(x => x.querySelector(':scope > summary .ss-title')?.textContent === t); if (!d) throw new Error('no Settings section ' + t); for (let p = d; p; p = p.parentElement && p.parentElement.closest('details')) p.open = true; d.scrollIntoView(); }, title);

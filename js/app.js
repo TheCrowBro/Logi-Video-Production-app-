@@ -120,7 +120,7 @@ cloudBtn.addEventListener('click', () => openStorage());
 
 function openStorage() {
   const panel = storagePanel();
-  sheet('Storage & sync', h('div', null, panel.el, h('hr'), backupPanel()), { onClose: panel.destroy });
+  sheet('Storage, sync & backups', h('div', null, panel.el, h('h3', { class: 'ss-sub' }, 'Backups'), backupPanel()), { onClose: panel.destroy });
 }
 
 store.initCloud();

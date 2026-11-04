@@ -43,7 +43,7 @@ Why install it rather than keep it in a Safari tab:
 - **Notifications only work in the installed app.** Safari tabs can't show them. Camera, microphone and location work in the installed app on iOS 16.4 or later.
 - **It opens full-screen and works offline.**
 
-**One thing to know:** the installed app and the Safari tab are two separate copies with separate data. If you entered bookings in Safari before installing, export a backup there (with a licence; Settings → *Backups & data* → **Export backup** (with a licence)) and import it in the installed app, or link the same cloud storage on both and they merge.
+**One thing to know:** the installed app and the Safari tab are two separate copies with separate data. If you entered bookings in Safari before installing, export a backup there (with a licence; Settings → *Storage, sync & backups* → **Export backup** (with a licence)) and import it in the installed app, or link the same cloud storage on both and they merge.
 
 ### Let Vdex use the camera, microphone and location
 
@@ -57,12 +57,12 @@ iPhone asks the first time a tool needs something. Tap **Allow**.
 | Motion & Orientation | Aiming at the sun or Polaris, and the tilt range finder |
 | Notifications | "Break's up" alerts from the shoot-day clock |
 
-If you tapped **Don't Allow** by mistake: the camera and microphone are asked for again next time. For location, open iPhone **Settings → Privacy & Security → Location Services → Safari Websites** (installed web apps usually follow that setting). For notifications, open **Settings → Notifications**, find Vdex and switch it on, then turn the toggle on again inside Vdex (Settings → *Hours & breaks*).
+If you tapped **Don't Allow** by mistake: the camera and microphone are asked for again next time. For location, open iPhone **Settings → Privacy & Security → Location Services → Safari Websites** (installed web apps usually follow that setting). For notifications, open **Settings → Notifications**, find Vdex and switch it on, then turn the toggle on again inside Vdex (Settings → *Work & billing* → *Hours & breaks*).
 
 ### The first time you open it
 
 1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
-2. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
+2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
 3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage and sync) and **🔒** once a PIN is set.
 
 ### What's on the Rolodex
@@ -93,7 +93,7 @@ Vdex warns when the same piece of kit is needed on two overlapping jobs.
 
 ### Your own project templates
 
-If you keep doing the same kind of job, make it a template once: Settings → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
+If you keep doing the same kind of job, make it a template once: Settings → *Work & billing* → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
 
 Then on the Bookings page tap **📐 From template** instead of + New: the booking form arrives filled in, you add the title and date, and on saving the deliverables, shots and call sheet lines are added too. Open any booking that went well and tap **📐 Save as template** to turn it into one; **↻ Apply template items** on a booking adds anything from its template that is still missing. Everything can still be changed on the booking itself.
 
@@ -101,7 +101,7 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 
 - On the day, a **clock bar** appears under the Rolodex with the booking's name. **● Start work** starts the clock; **■ Stop work** logs the hours.
 - **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar keeps a running total against the break length approved for that production and warns when it's used up.
-- **Notifications on an iPhone.** Turn them on under Settings → *Hours & breaks* (installed app only). Vdex counts the break only while it is on screen: the moment you switch to another app or lock the phone, iPhone pauses Vdex, so a "break's up" alert can't go off in the background. It shows the moment you reopen Vdex instead. For a reliable alarm on a long break, leave Vdex open with *Keep the screen on during breaks* switched on, or set a timer in the Clock app as well.
+- **Notifications on an iPhone.** Turn them on under Settings → *Work & billing* → *Hours & breaks* (installed app only). Vdex counts the break only while it is on screen: the moment you switch to another app or lock the phone, iPhone pauses Vdex, so a "break's up" alert can't go off in the background. It shows the moment you reopen Vdex instead. For a reliable alarm on a long break, leave Vdex open with *Keep the screen on during breaks* switched on, or set a timer in the Clock app as well.
 - **📋 Call sheets.** Bookings → **📋 Call sheets** lists every upcoming shoot and whether its sheet has gone out; the booking page has the same button for one shoot. Each sheet is built in the app from what Vdex already knows (venue address, access and parking, nearest hospital, crew with their call times and phones, kit, hires, sunrise and sunset). Tap **✏️ Edit sheet** and change things directly on the document: general call, lunch, wrap, a schedule line by line, each person's call time, who is on set from the client, weather, dress code, the emergency contact, special instructions, and which sections to include; **Done** saves a new version. Then **🖨 Print** uses the iPhone's own print dialog (AirPrint, or save as PDF from there), **📄 Save PDF** makes a PDF file for the share sheet, **✉ Email crew** opens a message addressed to everyone on the shoot, **📤 Share** uses the share sheet, and **💾 Web page** makes a file that opens on any phone. The list shows ✅ once it has gone out and ⚠ if you changed it afterwards.
 - The **shot list** on the booking page is there to tick off as you cover it.
 
@@ -143,7 +143,7 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 - Every booking has a **stage**: Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. The strip on the booking page shows where it is; tap a stage to move it.
 - Each stage has a **checklist** that depends on the job type. Tick things off, add your own items, and when a stage is complete a **Next** button moves the project on. Items with an arrow open the tool they're about (call sheet, kit, media log, hours…).
 - **🗂 Pipeline** on the Bookings page shows every project by stage, with its progress and next deadline.
-- Change the checklists for each job type under Settings → *Workflow templates*.
+- Change the checklists for each job type under Settings → *Work & billing* → *Workflow templates*.
 - **Budget** on the booking page: what the job will cost you, one line at a time, each in a category you pick from a list (crew, cast and talent, equipment hire, locations and permits, travel, accommodation, catering, art and wardrobe, hair and make-up, post-production, music and licences, insurance and more). Put in the estimate, then the actual cost once you know it. **Fill from booking** adds your crew at their day rates, your hires and your licences. If the job has a quote, the budget shows what is left for you after costs. Only you see the budget: it never goes into a quote, an invoice or a crew link. **Export CSV** saves it for a spreadsheet.
 - **👥 Share with crew** on the booking page makes a link to a read-only page for your cast and crew: the dates, call times, schedule, location, who is on, the scenes for each day from the stripboard, the shot list, the kit and the deliverables, whichever you tick. Prices, rates, budgets, quotes, invoices and your booking notes are never included. The whole page is inside the link, so there is no server and nothing is stored online. Crew can add the shoot to their calendar or print it. If plans change, send a new link: an old one keeps showing what it had.
 
@@ -158,9 +158,9 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Where it lives.** Inside the installed app on this phone. Nothing is uploaded unless you link a storage of your own.
 
-**Backups.** Settings → *Backups & data* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
+**Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
 
-**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
+**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
 | On an iPhone you can link | Notes |
 |---|---|
@@ -192,7 +192,7 @@ Set your location first (Field → **Use GPS**, or Settings → *Field tool defa
 
 ### Make it yours
 
-Tap **Aa** (or Settings → *Display & accessibility*):
+Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 - **Colour theme** — the classics (Brass, Noir, Forest, Ocean, Plum, Mono) and a set in the colours of camera brands (Sony, Canon, Nikon, Fujifilm, Lumix, Blackmagic, RED, ARRI, Leica, GoPro, DJI), each in light and dark, or following your iPhone. The brand themes borrow the colours only; Vdex isn't affiliated with any of them.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
@@ -214,8 +214,8 @@ What the lock does: the screen can't be used until the PIN or Face ID opens it, 
 
 A stolen, lost or broken phone should cost you a phone, not your business records. Keep at least one copy somewhere else:
 
-- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
-- **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
+- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Storage, sync & backups* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
+- **Export a backup** now and then (Settings → *Storage, sync & backups*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
 - **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
 - **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
@@ -223,7 +223,7 @@ A stolen, lost or broken phone should cost you a phone, not your business record
 ### iPhone questions and answers
 
 **I installed it and my bookings vanished.**
-They're still in Safari: the installed app and the Safari tab are separate copies. In Safari, Settings → *Backups & data* → **Export backup** (with a licence), then **Import backup** in the installed app.
+They're still in Safari: the installed app and the Safari tab are separate copies. In Safari, Settings → *Storage, sync & backups* → **Export backup** (with a licence), then **Import backup** in the installed app.
 
 **My data disappeared after a few weeks.**
 Safari clears website data it hasn't seen for a while. Use the installed app, link a cloud storage, and export a backup now and then (with a licence).
@@ -256,7 +256,7 @@ Import your last backup. If a cloud storage is linked, the deletion has already 
 Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *About* shows the version and has **Check for updates**.
 
 **Can I start over?**
-Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
+Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
 
 **I forgot my PIN.**
 It can't be recovered. Tap *Forgot PIN?* on the lock screen to erase this phone's Vdex data, then link your storage or import a backup.
@@ -308,7 +308,7 @@ If you tapped **Don't allow** by mistake: long-press the Vdex icon → **App inf
 ### The first time you open it
 
 1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
-2. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
+2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
 3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage and sync) and **🔒** once a PIN is set.
 
 ### What's on the Rolodex
@@ -339,7 +339,7 @@ Vdex warns when the same piece of kit is needed on two overlapping jobs.
 
 ### Your own project templates
 
-If you keep doing the same kind of job, make it a template once: Settings → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
+If you keep doing the same kind of job, make it a template once: Settings → *Work & billing* → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
 
 Then on the Bookings page tap **📐 From template** instead of + New: the booking form arrives filled in, you add the title and date, and on saving the deliverables, shots and call sheet lines are added too. Open any booking that went well and tap **📐 Save as template** to turn it into one; **↻ Apply template items** on a booking adds anything from its template that is still missing. Everything can still be changed on the booking itself.
 
@@ -347,7 +347,7 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 
 - On the day, a **clock bar** appears under the Rolodex with the booking's name. **● Start work** starts the clock; **■ Stop work** logs the hours.
 - **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar keeps a running total against the break length approved for that production and warns when it's used up.
-- **Notifications on Android.** Turn them on under Settings → *Hours & breaks*. When a break is up, Android shows a notification with **▶ Back to work** and **5 more min** buttons, even while you're in another app, plus a two-minute warning. Android keeps Vdex counting in the background for a few minutes and may then pause it to save battery, in which case the alert arrives when you open Vdex again. For long breaks, switch on *Keep the screen on during breaks*, or stop Android pausing Chrome (phone **Settings → Apps → Chrome → Battery → Unrestricted**).
+- **Notifications on Android.** Turn them on under Settings → *Work & billing* → *Hours & breaks*. When a break is up, Android shows a notification with **▶ Back to work** and **5 more min** buttons, even while you're in another app, plus a two-minute warning. Android keeps Vdex counting in the background for a few minutes and may then pause it to save battery, in which case the alert arrives when you open Vdex again. For long breaks, switch on *Keep the screen on during breaks*, or stop Android pausing Chrome (phone **Settings → Apps → Chrome → Battery → Unrestricted**).
 - **📋 Call sheets.** Bookings → **📋 Call sheets** lists every upcoming shoot and whether its sheet has gone out; the booking page has the same button for one shoot. Each sheet is built in the app from what Vdex already knows (venue address, access and parking, nearest hospital, crew with their call times and phones, kit, hires, sunrise and sunset). Tap **✏️ Edit sheet** and change things directly on the document: general call, lunch, wrap, a schedule line by line, each person's call time, who is on set from the client, weather, dress code, the emergency contact, special instructions, and which sections to include; **Done** saves a new version. Then **🖨 Print** uses Android's print dialog (or save as PDF from there), **📄 Save PDF** makes a PDF file for the share sheet, **✉ Email crew** opens a message addressed to everyone on the shoot, **📤 Share** uses the Android share sheet (WhatsApp, Gmail, Messages…), and **💾 Web page** makes a file that opens on any phone. The list shows ✅ once it has gone out and ⚠ if you changed it afterwards.
 - The **shot list** on the booking page is there to tick off as you cover it.
 
@@ -389,7 +389,7 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 - Every booking has a **stage**: Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. The strip on the booking page shows where it is; tap a stage to move it.
 - Each stage has a **checklist** that depends on the job type. Tick things off, add your own items, and when a stage is complete a **Next** button moves the project on. Items with an arrow open the tool they're about (call sheet, kit, media log, hours…).
 - **🗂 Pipeline** on the Bookings page shows every project by stage, with its progress and next deadline.
-- Change the checklists for each job type under Settings → *Workflow templates*.
+- Change the checklists for each job type under Settings → *Work & billing* → *Workflow templates*.
 - **Budget** on the booking page: what the job will cost you, one line at a time, each in a category you pick from a list (crew, cast and talent, equipment hire, locations and permits, travel, accommodation, catering, art and wardrobe, hair and make-up, post-production, music and licences, insurance and more). Put in the estimate, then the actual cost once you know it. **Fill from booking** adds your crew at their day rates, your hires and your licences. If the job has a quote, the budget shows what is left for you after costs. Only you see the budget: it never goes into a quote, an invoice or a crew link. **Export CSV** saves it for a spreadsheet.
 - **👥 Share with crew** on the booking page makes a link to a read-only page for your cast and crew: the dates, call times, schedule, location, who is on, the scenes for each day from the stripboard, the shot list, the kit and the deliverables, whichever you tick. Prices, rates, budgets, quotes, invoices and your booking notes are never included. The whole page is inside the link, so there is no server and nothing is stored online. Crew can add the shoot to their calendar or print it. If plans change, send a new link: an old one keeps showing what it had.
 
@@ -404,9 +404,9 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Where it lives.** In Chrome's storage for the Vdex site, which the installed app shares. Nothing is uploaded unless you link a storage of your own. Clearing Chrome's browsing or site data removes it, so keep a backup.
 
-**Backups.** Settings → *Backups & data* → **Export backup** (with a licence) opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
+**Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
 
-**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
+**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
 | On Android you can link | Notes |
 |---|---|
@@ -438,7 +438,7 @@ Set your location first (Field → **Use GPS**, or Settings → *Field tool defa
 
 ### Make it yours
 
-Tap **Aa** (or Settings → *Display & accessibility*):
+Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 - **Colour theme** — the classics (Brass, Noir, Forest, Ocean, Plum, Mono) and a set in the colours of camera brands (Sony, Canon, Nikon, Fujifilm, Lumix, Blackmagic, RED, ARRI, Leica, GoPro, DJI), each in light and dark, or following your phone. The brand themes borrow the colours only; Vdex isn't affiliated with any of them.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
@@ -460,8 +460,8 @@ What the lock does: the screen can't be used until the PIN or your fingerprint o
 
 A stolen, lost or broken phone should cost you a phone, not your business records. Keep at least one copy somewhere else:
 
-- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
-- **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
+- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Storage, sync & backups* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
+- **Export a backup** now and then (Settings → *Storage, sync & backups*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
 - **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
 - **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
@@ -502,7 +502,7 @@ Import your last backup. If a cloud storage is linked, the deletion has already 
 Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *About* shows the version and has **Check for updates**.
 
 **Can I start over?**
-Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
+Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
 
 **I forgot my PIN.**
 It can't be recovered. Tap *Forgot PIN?* on the lock screen to erase this phone's Vdex data, then link your storage or import a backup.

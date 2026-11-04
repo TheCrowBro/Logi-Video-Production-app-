@@ -1,7 +1,7 @@
 // The price list: typical rates for five regions (every line, in order low ≤ typical ≤ high, and in sensible
 // proportion), the list picked from the currency, the editor in Settings, and the picker on a quote and an invoice.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -59,7 +59,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   // ---- the editor in Settings ----
   await page.evaluate(() => window.logiGo('settings')); await sleep(300);
-  await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) > summary').click(); await sleep(200);
+  await openSetting(page, 'Quotes & invoices'); await sleep(200);
   await page.getByRole('button', { name: /Edit the price list/ }).click(); await page.waitForSelector('.sheet .price-list');
   const ed = page.locator('.sheet').last();
   ok('the editor groups the lines in pull-downs, the first one open', (await ed.locator('details.budget-cat').count()) >= 7 && (await ed.locator('details.budget-cat[open]').count()) === 1);

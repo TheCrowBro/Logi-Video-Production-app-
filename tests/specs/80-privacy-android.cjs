@@ -1,6 +1,6 @@
 // The privacy policy page, its link from Settings → About, and the Android package's agreement with the site.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
 const ROOT = process.env.VDEX_ROOT;
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
@@ -39,7 +39,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   // Reachable from the app, and kept offline with it
   await page.goto(BASE); await page.waitForSelector('#rolodex .drum-btn');
   await page.evaluate(() => window.logiGo('settings'));
-  await page.locator('details.settings-section:has(> summary:has-text("About")) > summary').click();
+  await openSetting(page, 'About & Licence');
   const link = page.locator('details.settings-section:has(> summary:has-text("About")) a[href="privacy.html"]');
   ok('Settings → About links the privacy policy', (await link.count()) === 1 && /Privacy policy/.test(await link.innerText()));
   const [popup] = await Promise.all([ctx.waitForEvent('page'), link.click()]);
