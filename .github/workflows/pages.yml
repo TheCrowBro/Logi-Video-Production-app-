@@ -18,8 +18,12 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: pages
-  cancel-in-progress: false   # runs queue up; the newest pending one replaces older pending ones
+  # One group per branch: the test runs on the working branch queue among themselves (the newest pending one replaces
+  # older pending ones, which it includes), and the publish runs on main among themselves. With a single group the
+  # publish run that a tested push starts on main used to cancel a pending test run of the next push, so that push was
+  # never tested or published.
+  group: pages-${{ github.ref_name }}
+  cancel-in-progress: false
 jobs:
   test:
     # The site only updates when the browser specs pass, so a broken push never reaches people's phones. The run on
