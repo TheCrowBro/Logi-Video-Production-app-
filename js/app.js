@@ -16,6 +16,7 @@ applyPrefs();
 await lock.gate(); // with a PIN set, nothing below runs until the lock screen is passed
 lock.init();
 await termsGate(); // nor until the terms of service and privacy policy are accepted on this device
+await lock.ensurePin(); // and everyone uses Vdex with a PIN: a device without one sets it up here, before anything else
 const lockBtn = document.getElementById('lockBtn');
 const paintLock = () => { if (lockBtn) lockBtn.hidden = !lock.enabled(); };
 paintLock(); lock.onChange(paintLock);
@@ -147,6 +148,6 @@ const idle = window.requestIdleCallback ? fn => requestIdleCallback(fn, { timeou
 idle(() => { import('./pages/gear.js').then(m => m.serviceNudge()); import('./money.js').then(m => m.moneyNudge()); });
 // Google's sign-in window has to open straight from a tap, so have its library ready before anyone taps "Sign in again".
 if (localStorage.getItem('logi-provider') === 'gdrive' || store.db.calSync?.provider === 'google') import('./providers.js').then(p => p.signIn.available('google') && p.loadGIS()).catch(() => {}); // service and overdue-invoice reminders, once the first paint is out of the way
-if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
+if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: the set-up walkthrough (your details, calendar, sample people)
 initUpdates(); // service worker, offline copy, and the "new version" bar
 idle(() => import('./licence.js').then(m => m.initLicence()).catch(() => {})); // the trial and licence (desktop app, website and Play app)

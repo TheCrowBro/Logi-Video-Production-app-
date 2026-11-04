@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.md': 'text/markdown', '.txt': 'text/plain' };
 export function scratchCopy(repoRoot) {
   const dir = mkdtempSync(join(tmpdir(), 'vdex-test-'));
-  for (const n of readdirSync(repoRoot)) if (!['node_modules', 'dist', '.git', 'tests', '.github'].includes(n)) cpSync(join(repoRoot, n), join(dir, n), { recursive: true });
+  // Packages are left out at every level (cloudflare/node_modules alone is 200 MB; nothing the specs serve or bundle needs them).
+  for (const n of readdirSync(repoRoot)) if (!['node_modules', 'dist', '.git', 'tests', '.github'].includes(n)) cpSync(join(repoRoot, n), join(dir, n), { recursive: true, filter: src => !/(^|[\\/])node_modules$/.test(src) });
   return dir;
 }
 export function serve(root, port = 0) {

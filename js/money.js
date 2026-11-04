@@ -205,7 +205,7 @@ export function removePayment(b, id, onDone) {
 }
 // Once a day at start-up: a word about invoices that have passed their due date unpaid.
 export function moneyNudge() {
-  const over = db.bookings.filter(isOverdue); if (!over.length) return;
+  const over = db.bookings.filter(b => !b.practice && isOverdue(b)); if (!over.length) return; // the walkthrough's practice job never nags
   let last = 0; try { last = Number(localStorage.getItem('logi-money-nudge')) || 0; } catch { /* ignore */ }
   if (Date.now() - last < 864e5) return;
   try { localStorage.setItem('logi-money-nudge', String(Date.now())); } catch { /* ignore */ }
@@ -271,7 +271,9 @@ export function moneyPage(b, kind, go) {
         kind === 'invoice' && h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'hours') }) }, '＋ From hours logged'),
         h('button', { class: 'btn ghost', onclick: fromList }, '＋ From the price list'),
         h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh) }, 'Start blank')),
-      !billing().dayRate && h('p', { class: 'small muted' }, 'Tip: set your day, hour and kit rates under Settings → Work & billing → Quotes & invoices, and each person’s day rate on the Crew page, and the suggested lines come priced.')));
+      !billing().dayRate && h('p', { class: 'small muted' }, 'Tip: set your day, hour and kit rates under Settings → Work & billing → Quotes & invoices, and each person’s day rate on the Crew page, and the suggested lines come priced.'),
+      // New to this? A read-through and a walkthrough on a practice job (the tutorials load on first use).
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small walk-btn', type: 'button', onclick: () => import('./tutorials.js').then(m => m.openMoneyGuide()).catch(e => toast('Could not open the guide: ' + (e.message || e))) }, '🎓 New to quoting? Start here'))));
 }
 export function moneyBlock(b, go) {
   const row = kind => { const doc = docOf(b, kind), K = KINDS[kind]; return h('div', { class: 'card-row' }, h('div', null, h('strong', null, K.label), h('div', { class: 'muted small' }, doc ? `${doc.number} · ${doc.status}${isOverdue(b) && kind === 'invoice' ? ' · overdue' : ''} · ${fmtMoney(totals(doc).total)}${kind === 'invoice' && doc.status !== 'Paid' && totals(doc).paid > 0 ? ` · ${fmtMoney(totals(doc).balance)} due` : ''}` : 'none yet')), h('button', { class: 'btn ghost small', onclick: () => go({ view: 'money', id: b.id, kind }) }, doc ? 'Open' : 'Create')); };
@@ -425,7 +427,7 @@ export function billingPanel() {
     field('Payment terms (on every invoice)', 'terms', 'textarea'),
     h('h4', { class: 'pay-head' }, 'Price list'),
     h('p', { class: 'small muted' }, 'The lines you charge for again and again, with your prices, to pick into a quote or an invoice with ＋ From the price list. It starts from typical freelance rates where you work: change any price to yours.'),
-    h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => import('./price-list.js').then(m => m.openPriceList()).catch(e => toast('Could not open the price list: ' + (e.message || e))) }, '🏷 Edit the price list')),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost price-list-btn', onclick: () => import('./price-list.js').then(m => m.openPriceList()).catch(e => toast('Could not open the price list: ' + (e.message || e))) }, '🏷 Edit the price list')),
     h('h4', { class: 'pay-head' }, 'Getting paid'),
     h('p', { class: 'small muted' }, 'Add the ways you like to be paid, as many as you want. Every invoice then carries a Pay button for each one that has a link, with the balance filled in, plain instructions for the ones that do not, bank details with a QR code banking apps can scan, and the invoice number as the reference. The link you send a client opens the invoice with the same buttons.'),
     h('div', { class: 'field' }, h('label', null, 'Currency for payment links'), h('select', { 'aria-label': 'Currency for payment links', onchange: e => setBilling({ currencyCode: e.target.value }) }, ...CURRENCIES.map(([c, sy]) => h('option', { value: c, selected: c === code() ? 'selected' : null }, `${c} ${sy.trim()}`)))),

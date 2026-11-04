@@ -1,8 +1,12 @@
 // Page tutorials: the ? button at the top runs a short walkthrough of whatever is on screen, highlighting each box
 // with a one-line description. Steps whose box is not on screen (an empty list, a hidden tool) are skipped, so the
 // same tutorial fits a fresh install and a full one. "Other pages…" opens any page's tutorial from anywhere.
-import { h, sheet, toast } from './util.js';
-import { runTour, startTour } from './tour.js';
+import { h, sheet, toast, ymd, todayISO, uid } from './util.js';
+import { runTour, startTour, resumeTourAt } from './tour.js';
+import * as store from './store.js';
+import * as lock from './lock.js';
+import * as providers from './providers.js';
+import { connectCalendar } from './calendar.js';
 
 const T = (title, text, ...rest) => { const opts = rest.length && typeof rest[rest.length - 1] === 'object' ? rest.pop() : {}; return { title, text, target: rest, ...opts }; };
 const tab = n => () => { const b = document.querySelector(`.tc-views button:nth-child(${n})`); if (b) b.click(); };
@@ -21,7 +25,103 @@ const openLinkSheet = async () => { await closeSheets(); await wait(100); clickQ
 const openExportSheet = async () => { await closeSheets(); await wait(100); clickQ('.tc-log-head .actions button:nth-child(2)'); };
 const backToNotes = async () => { await closeSheets(); tab(1)(); };
 
+/* ------------------------------- setting up ------------------------------- */
+// The first-run walkthrough does things as well as pointing: cards with a form save on Next, the calendar card
+// connects, and two sample people are added to try the Crew page on. Settings → General → About & Licence runs it again.
+const SAMPLES = [
+  { id: 'sample-talent', name: 'Sample talent', role: 'Talent', phone: '+1 555 0101', email: 'talent@example.com', rate: '$300/day', notes: 'Added by the set-up walkthrough to show how the Crew page works. Remove when you like: ✎ then Delete.', sample: true },
+  { id: 'sample-crew', name: 'Sample crew member', role: 'Camera Operator', phone: '+1 555 0102', email: 'crew@example.com', rate: '$450/day', notes: 'Added by the set-up walkthrough to show how the Crew page works. Remove when you like: ✎ then Delete.', sample: true },
+];
+const addSamples = () => { for (const x of SAMPLES) if (!store.byId('crew', x.id)) store.upsert('crew', x); };
+const removeSamples = () => { for (const x of SAMPLES) if (store.byId('crew', x.id)) store.remove('crew', x.id); };
+const samplesPresent = () => SAMPLES.some(x => store.byId('crew', x.id));
+// A card with fields of the profile: what is typed is saved when the card is left with Next (or Enter).
+const profileStep = (title, text, fields) => {
+  let box = null;
+  const input = ([label, key, type = 'text', extra = {}]) => h('label', { class: 'tour-field' }, h('span', null, label), h('input', { type, value: store.db.profile[key] || '', 'data-key': key, 'aria-label': label, autocomplete: 'off', ...extra }));
+  return { title, text, target: null,
+    body: () => { box = h('div', { class: 'tour-fields' }, ...fields.map(input)); return box; },
+    onNext: () => { if (!box) return; const p = store.db.profile, patch = {}; box.querySelectorAll('input[data-key]').forEach(i => { const v = i.value.trim(); if ((p[i.dataset.key] || '') !== v) patch[i.dataset.key] = v; }); if (Object.keys(patch).length) store.update(d => { d.profile = { ...d.profile, ...patch, updatedAt: Date.now() }; }); } };
+};
+const revealSetting = title => async () => { await closeSheets(); const m = await import('./pages/settings.js'); m.reveal(title); };
+// The calendar card: connect Google or Microsoft from the card itself (a sign-in has to start from a tap), with the
+// licence note for the live feed when this device has no licence. Next skips it; Settings → Calendar & email later.
+const calendarStep = () => {
+  const paid = store.isPaid();
+  const text = `Two-way sync keeps a “Vdex bookings” calendar in your Google or Microsoft account: bookings go there, and changes made there come back. Connect now, or tap Next to skip this and do it later under Settings → Calendar & email. Apple Calendar and other apps take a calendar file (Export once) or follow the live feed${paid ? '.' : ', which keeps a file in your cloud storage. Cloud storage comes with a Vdex licence (20 USD once, for up to 3 of your devices): Buy and Sign in are under Settings → General → About & Licence.'}`;
+  const choice = (ctx, svc, name) => {
+    const on = providers.signIn.available(svc === 'google' ? 'google-calendar' : svc);
+    return h('div', { class: 'card-row' },
+      h('div', { class: 'grow' }, h('strong', null, name), !on && h('div', { class: 'small muted' }, `Not ready yet: sign-in for ${name} is still being set up for this copy of Vdex.`)),
+      h('button', { class: 'btn primary small', type: 'button', disabled: !on, 'aria-label': `Connect ${name}`, onclick: async e => {
+        e.target.disabled = true; e.target.textContent = 'Connecting…';
+        if (svc === 'microsoft') resumeTourAt(ctx.index); // Microsoft signs in on its own page and comes back: carry on here
+        try { await connectCalendar(svc); toast(`${name} connected`); } catch (err) { toast(err.message || 'Could not connect'); }
+        resumeTourAt(null); ctx.refresh();
+      } }, 'Connect'));
+  };
+  return { title: 'Your calendar', text, target: ['#page details[data-s="Calendar & email"]'], go: 'settings', before: revealSetting('Calendar & email'),
+    body: ctx => { const cs = store.db.calSync || {};
+      return cs.provider ? h('p', { class: 'status-line', 'data-state': 'synced' }, `${cs.provider === 'google' ? 'Google Calendar' : 'Outlook / Microsoft 365'} is connected. Sync now and Disconnect are under Settings → Calendar & email.`)
+        : h('div', { class: 'stack tour-cal' }, choice(ctx, 'google', 'Google Calendar'), choice(ctx, 'microsoft', 'Outlook / Microsoft 365')); },
+    footer: !paid ? stop => h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { stop(); const m = await import('./pages/settings.js'); await m.openSettingsSection('About & Licence'); } }, 'Licence…') : null };
+};
+const setupSteps = () => [
+  C('Welcome to Vdex', 'Your whole production in one deck: bookings, crew, kit, venues, insurance, field tools and timecode notes. This set-up takes about three minutes: a look at the deck, your details, your calendar, and two sample people to try things on. Next moves on, and Skip leaves at any point; Settings → General → About & Licence → Take the tour runs it again.'),
+  C('Your PIN', (lock.enabled() ? 'Vdex is locked with the PIN you just set' : 'Vdex locks with a PIN') + ', and everything it stores on this device is encrypted whenever it is locked, in the background or closed. A forgotten PIN cannot be recovered: the way back is to erase the device and restore from your cloud storage or a backup, so keep one of those current. Settings → Security sets when it locks, adds fingerprint or face unlock, and has a switch to erase this device after 10 wrong PINs, which stays off unless you turn it on.'),
+  T('The Rolodex', 'Spin it to move between sections: drag it, tap ▲ ▼, use the arrow keys, or scroll on it. It slides away as a page scrolls down and comes back as you scroll up.', '.binder', '#rolodex', { go: 'bookings' }),
+  C('What is in the deck', 'Bookings holds the calendar and, for each shoot, the call sheet, the stripboard, the crew link, the hours, the quote and the invoice. Crew, Equipment, Venues and Insurance are your lists. Me is your contact card. Field has the sun, Polaris, white balance, noise and range tools. TC Notes stamps notes with the camera’s timecode. Settings has the rest. Tap ? at the top of any page for that page’s own walkthrough.'),
+  profileStep('You', 'Your name and business go on call sheets, quotes and invoices, and on your contact card. Type them here and tap Next.', [['Full name', 'name'], ['Business name', 'business']]),
+  profileStep('How clients reach you', 'Phone and email go on your documents and your contact card, and the crew link shows them to the people on your shoots.', [['Phone', 'phone', 'tel'], ['Email', 'email', 'email']]),
+  profileStep('Your website', 'Your site, showreel or portfolio goes on the contact card with a QR code anyone can scan, and on your documents. A job title, where you are based and a short bio can be added later under Settings → General → Profile.', [['Website', 'website', 'text', { inputMode: 'url', placeholder: 'https://…' }]]),
+  T('Where they live', 'Settings → General → Profile holds everything you just entered, and the Me section shows it as a contact card with a QR code.', '#page details[data-s="Profile"]', { go: 'settings', before: revealSetting('Profile') }),
+  calendarStep(),
+  T('Two sample people', 'Sample talent and Sample crew member were just added to your Crew list, so you can see how it works: a role, a rate, phone and email, and the bookings they are on. A booking picks its crew from this list, and their rates price the quote.', '.crew-card[data-id="sample-talent"]', '.crew-card', { go: 'crew', before: addSamples }),
+  T('Removing someone', 'Tap ✎ on a card to edit the person; Delete at the bottom of the form removes them, and Vdex asks once to be sure.', '.crew-card[data-id="sample-talent"] .icon-btn', '.crew-card .icon-btn'),
+  { title: 'Keep the samples?', text: 'Sample talent and Sample crew member stay on the Crew page until you remove them: ✎ then Delete, or the button here. That is the set-up done. Tap ? at the top of any page for its walkthrough, and Other pages… on its first card for any other.', target: null,
+    body: ctx => h('div', { class: 'actions tour-done' }, samplesPresent()
+      ? h('button', { class: 'btn ghost', type: 'button', onclick: () => { removeSamples(); toast('Samples removed'); ctx.refresh(); } }, '🗑 Remove the samples')
+      : h('span', { class: 'small muted' }, 'The samples have been removed.')) },
+];
+
+/* ------------------------------ quotes and invoices, start to finish ------------------------------ */
+// A beginner's course on a practice job Vdex makes, so nothing touches the real numbering (its documents are
+// numbered Q-PRACTICE and INV-PRACTICE, which the numbering ignores). The hooks make the quote, send and accept it,
+// make the invoice from it and record a payment, so each card shows the real thing at that point.
+const PRACTICE = 'practice-booking';
+const practiceJob = () => store.byId('bookings', PRACTICE) || store.db.bookings.find(b => b.practice) || null;
+const plus = n => { const d = new Date(); return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
+function makePracticeJob() {
+  if (!practiceJob()) store.upsert('bookings', { id: PRACTICE, practice: true, title: 'Practice job (delete when done)', client: 'Sample client', type: 'corporate', date: plus(7), start: '09:00', end: '17:00', status: 'Enquiry', address: '1 Example Street', stakeholders: [{ id: 'sample-client', name: 'Sam Client', role: 'Producer', phone: '', email: 'client@example.com' }], crew: [], gear: [], deliverables: [{ id: 'sample-deliverable', name: 'Main film, 16:9', duration: '90 s', due: plus(30), status: 'Planned', link: '' }], notes: 'Made by the quotes and invoices walkthrough. Delete this booking when you are done: Edit, then Delete at the bottom.' });
+  return practiceJob();
+}
+const toPracticeJob = async (patch = {}) => { await closeSheets(); if (!makePracticeJob()) return; await window.logiGo?.('bookings'); await wait(200); const m = await import('./pages/bookings.js'); m.openBooking(PRACTICE, patch); await wait(400); };
+const patchPractice = fn => store.update(d => { const x = d.bookings.find(y => y.id === PRACTICE) || d.bookings.find(y => y.practice); if (x) { fn(x); x.updatedAt = Date.now(); } });
+async function ensurePracticeQuote() {
+  const m = await import('./money.js'), b = practiceJob(); if (!b || b.quote) return;
+  const bl = m.billing();
+  // Suggested from the booking, as the button does; prices the rates leave blank get example figures.
+  const lines = m.suggestLines(b, 'quote', 'booking').map(l => ({ ...l, price: l.price === '' || l.price == null ? (/shoot day/i.test(l.desc) ? 600 : 120) : l.price }));
+  patchPractice(x => { x.quote = { number: 'Q-PRACTICE', date: todayISO(), until: plus(30), lines, taxRate: Number(bl.taxRate) || 0, taxLabel: bl.taxLabel || 'Tax', notes: 'Example quote from the walkthrough. Includes one shoot day and the edit of the main film.', status: 'Draft', deposit: '' }; });
+}
+async function ensurePracticeInvoice() {
+  const m = await import('./money.js'), b = practiceJob(); if (!b || !b.quote) return;
+  if (!b.invoice) patchPractice(x => { x.invoice = { number: 'INV-PRACTICE', date: todayISO(), due: plus(14), lines: (x.quote.lines || []).map(l => ({ ...l, id: uid() })), taxRate: x.quote.taxRate, taxLabel: x.quote.taxLabel, notes: m.billing().terms || '', status: 'Draft', deposit: '', payments: [] }; });
+  if ((practiceJob().invoice || {}).status === 'Draft') m.setDocStatus(PRACTICE, 'invoice', 'Sent');
+}
+const quoteState = async status => { const m = await import('./money.js'), b = practiceJob(); if (b && b.quote && b.quote.status !== status) m.setDocStatus(PRACTICE, 'quote', status); };
+async function recordHalf() {
+  const m = await import('./money.js'), b = practiceJob(); if (!b || !b.invoice || (b.invoice.payments || []).length) return;
+  const t = m.totals(b.invoice);
+  patchPractice(x => { x.invoice.payments = [{ id: uid(), date: todayISO(), amount: Math.round(t.total * 50) / 100, method: '', note: 'Practice payment' }]; });
+}
+const moneyView = kind => async () => { await closeSheets(); await window.logiGo?.('bookings'); await wait(150); const m = await import('./pages/bookings.js'); m.openBooking(PRACTICE, { view: 'money', kind }); await wait(400); };
+const practiceRemover = ctx => h('div', { class: 'actions tour-done' }, practiceJob()
+  ? h('button', { class: 'btn ghost', type: 'button', onclick: async () => { store.remove('bookings', PRACTICE); toast('Practice job removed'); (await import('./pages/bookings.js')).showMonth(); ctx.refresh(); } }, '🗑 Remove the practice job')
+  : h('span', { class: 'small muted' }, 'The practice job has been removed.'));
+
 export const TUTORIALS = {
+  setup: { name: 'Set up Vdex', page: null, hidden: true, dynamic: setupSteps },
   around: { name: 'Getting around', page: null, steps: [
     T('The Rolodex', 'Spin it to move between sections: drag or swipe it, tap ▲ ▼, or use the arrow keys on a keyboard.', '.binder', '#rolodex'),
     T('The top bar', 'Aa sets text size, theme and accessibility. ☁ links your cloud storage and shows the sync state. 🔒 appears once a PIN is set and locks Vdex at once. ⤓ installs the app.', '.top-actions'),
@@ -83,6 +183,29 @@ export const TUTORIALS = {
     T('Get paid', 'Link for the client opens the document as a web page with Pay buttons for the balance; record payments as they arrive, and send a reminder when an invoice is overdue. Your PayPal, Venmo, Cash App, payment page, UPI and bank details live under Settings → Work & billing → Quotes & invoices.', '.money-page .pay-actions'),
     T('The document', 'Your details from Settings → General → Profile, the client, the lines, tax and totals, the terms, and on an invoice the Pay buttons, bank details and a bank QR code from Settings → Work & billing → Quotes & invoices.', '.money-page .cs-paper'),
     T('Start one', 'From the booking suggests the lines at your rates; From the price list adds the lines you tick; an invoice can also start from the quote or from the hours logged; or start blank.', '.money-page .stack .actions'),
+  ] },
+  moneycourse: { name: 'Quotes & invoices, start to finish', page: 'bookings', course: true, steps: [
+    C('Quotes and invoices, start to finish', 'About five minutes, on a practice job that Vdex makes for you, so nothing touches your real numbering. Next moves on, Back re-reads, Skip leaves at any point, and the last card removes the practice job.'),
+    C('How it works', 'Every booking has one quote and one invoice. A quote goes Draft → Sent → Accepted (or Declined); an invoice Draft → Sent → Paid. Marking the quote sent ticks the Quoted stage of the project’s checklist; marking the invoice sent and then paid ticks the Delivered stage. Numbers run on from the prefixes you set.'),
+    T('Your rates, once', 'Day rate, hour rate for editing, overtime, and the equipment package per day. They price the lines Vdex suggests; each crew member’s own rate is on their card on the Crew page.', '#page details[data-s="Quotes & invoices"] .grid2', { go: 'settings', before: revealSetting('Quotes & invoices') }),
+    T('Tax, numbering and terms', 'The tax name and rate, the number prefixes and where numbering starts, how long quotes stay valid, when invoices fall due, and the payment terms printed on every invoice.', '#page details[data-s="Quotes & invoices"] .grid2 ~ .grid2'),
+    T('Your price list', 'The things you charge for again and again, with your prices, to tick into a quote or an invoice: a filming day, a drone day, colour grading, rush delivery. It starts from typical rates where you work; change any price to yours.', '#page details[data-s="Quotes & invoices"] .price-list-btn'),
+    T('Getting paid', 'Add the ways you like to be paid. Every invoice then carries a Pay button for each one with a link, your bank details with a QR code, and your own instructions.', '#page details[data-s="Quotes & invoices"] .pay-methods'),
+    T('The practice job', 'A booking Vdex just made for this walkthrough: next week, for a sample client. Its workflow, budget, quote and invoice live in this one box; closed, the line shows them at a glance.', '#bk-work > summary', { before: () => toPracticeJob() }),
+    T('Quote and invoice rows', 'One row each at the bottom of the box: the number, the state and the total, with Open, or Create when there is none yet.', '#bk-money', { before: openWork }),
+    T('The quote', 'Made from the booking, as ＋ From the booking does: a line per shoot day at your day rate, each crew member at theirs, the kit, and the deliverables. On the practice job the prices are examples. Quote or Invoice switches here; a tick means it exists.', '.money-page .seg', { before: async () => { await ensurePracticeQuote(); await moneyView('quote')(); } }),
+    T('State and total', 'Draft for now, with the total. It becomes Sent, Accepted or Declined as you mark it.', '.money-page .status-line'),
+    T('Change it', 'Edit opens every line, the tax rate, the status and the notes. The ＋ buttons add lines: from the booking, from your price list, or from the hours logged.', '.money-page .actions'),
+    T('Send it', 'Print, Save PDF, Email client (to the contacts on the booking), Share, Web page or Copy text. Then Mark as sent, and the Quoted stage ticks itself.', '.money-page .actions ~ .actions'),
+    T('Sent, then accepted', 'Marked sent, the quote waits in the Money overview as quoted and awaiting. When the client says yes, ✅ Accepted records it.', '.money-page .status-line', { before: () => quoteState('Sent') }),
+    T('The client’s link', 'Link for the client opens the document as a web page, with Pay buttons on an invoice. Copy it, share it or email it; the link holds the document itself, so there is no server in between.', '.money-page .pay-actions'),
+    T('Now the invoice', 'The Invoice tab. With the quote accepted, start the invoice From the quote; From hours logged bills the days and hours the clock recorded; From the booking suggests again.', '.money-page .stack .actions', { before: async () => { await quoteState('Accepted'); await moneyView('invoice')(); } }),
+    T('The invoice', 'Made from the quote: the same lines, due in 14 days (Settings sets the days), and already marked sent. It counts as invoiced and unpaid until the money arrives; past its due date it shows overdue, and Send a reminder emails the client with the link.', '.money-page .status-line', { before: ensurePracticeInvoice }),
+    T('Record a payment', 'As money arrives, Record a payment: the date, the amount and how it came. A part payment shows the balance; the last one marks the invoice Paid, and the Delivered stage ticks itself.', '.money-page .pay-actions'),
+    T('Payments received', 'Half of the practice invoice was just recorded as paid: the list shows each payment, and the status line the balance still due.', '.money-page .pay-list', { before: recordHalf }),
+    T('The document', 'Your details from Settings → General → Profile, the client from the booking, the lines, tax and totals, the terms, and on an invoice the Pay buttons and bank details.', '.money-page .cs-paper'),
+    T('The Money overview', 'Bookings → Money: what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, with every booking that has a quote or an invoice, and a spreadsheet of the invoices for the accountant.', '.sheet .stats', { before: async () => { await closeSheets(); const m = await import('./money.js'); m.openMoney(() => {}); await wait(300); } }),
+    { title: 'Tidy up', text: 'That is the whole loop: rates once, the quote from the booking, send and accept, the invoice from the quote, payments and reminders. The practice job can go now, with the button here, or later from its page: Edit, then Delete. Your own numbering was not touched.', target: null, before: closeSheets, body: practiceRemover },
   ] },
   crew: { name: 'Crew', page: 'crew', steps: [
     T('Your crew', 'The freelancers you work with. + Add creates a person with their role, phone, email, day rate and a link to their work.', '#crew .page-head', '.page-head'),
@@ -223,13 +346,18 @@ export function currentContext() {
   if (page === 'tcnotes') return q('.tc-log-head') ? 'tclog' : 'tcnotes';
   return TUTORIALS[page] ? page : 'around';
 }
-const stepsFor = key => { const t = TUTORIALS[key]; return t.dynamic ? t.dynamic() : t.steps; };
+export const stepsFor = key => { const t = TUTORIALS[key]; return t.dynamic ? t.dynamic() : t.steps; };
+// The set-up walkthrough (the first-run tour, and Take the tour again): remembered as seen when it ends.
+export function openSetup(from = 0) {
+  const steps = stepsFor('setup');
+  return runTour(steps, { remember: true, from, footer: (n, stop) => (steps[n] && steps[n].footer ? steps[n].footer(stop) : null) });
+}
 
 export function openTutorial(key = currentContext()) {
   const t = TUTORIALS[key]; if (!t) return;
   const steps = stepsFor(key);
   if (!steps.length) return toast('Nothing to show here yet');
-  runTour(steps, { root: t.sheet ? topSheet : null, footer: (n, stop) => n === 0 && !t.sheet && [h('button', { class: 'btn ghost small', onclick: () => { stop(); openChooser(); } }, 'Other pages…'), key.startsWith('tc') && h('button', { class: 'btn ghost small', onclick: () => { stop(); openTcGuide(); } }, '📖 Guide')] });
+  runTour(steps, { root: t.sheet ? topSheet : null, footer: (n, stop) => n === 0 && !t.sheet && [h('button', { class: 'btn ghost small', onclick: () => { stop(); openChooser(); } }, 'Other pages…'), key.startsWith('tc') && h('button', { class: 'btn ghost small', onclick: () => { stop(); openTcGuide(); } }, '📖 Guide'), (key === 'money' || key === 'moneycourse') && h('button', { class: 'btn ghost small', onclick: () => { stop(); openMoneyGuide(); } }, '📖 Guide')] });
 }
 
 // Reaches a page (and, for a booking, a call sheet or money, the first booking) before running its tutorial.
@@ -255,8 +383,8 @@ export function openChooser() {
   let close = () => {};
   const body = h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'A short walkthrough of any page. Each one highlights the boxes on that page with a line about what they do.'),
-    h('div', { class: 'list' }, ...Object.entries(TUTORIALS).filter(([, t]) => !t.sheet).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: async () => { close(); if (await reach(key)) openTutorial(key); } }, h('strong', null, t.name)))),
-    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { close(); openTcGuide(); } }, '📖 Timecode guide'), h('button', { class: 'btn ghost small', onclick: () => { close(); startTour(); } }, '🧭 The welcome tour again')));
+    h('div', { class: 'list' }, ...Object.entries(TUTORIALS).filter(([, t]) => !t.sheet && !t.hidden).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: async () => { close(); if (await reach(key)) openTutorial(key); } }, h('strong', null, t.name)))),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { close(); openTcGuide(); } }, '📖 Timecode guide'), h('button', { class: 'btn ghost small', onclick: () => { close(); openMoneyGuide(); } }, '📖 Quotes & invoices guide'), h('button', { class: 'btn ghost small', onclick: () => { close(); startTour(); } }, '🧭 The set-up walkthrough again')));
   ({ close } = sheet('Tutorials', body));
 }
 
@@ -282,4 +410,27 @@ export function openTcGuide() {
       h('button', { class: 'btn primary', onclick: async () => { close(); if (await reach('tccourse')) openTutorial('tccourse'); } }, '🎓 Walk me through it'),
       h('button', { class: 'btn ghost', onclick: async () => { close(); const m = await import('./pages/tcnotes.js'); m.openPracticeLog(); } }, '🧪 Open the practice log')));
   ({ close } = sheet('Timecode guide', body));
+}
+
+/* ------------------------------ the quotes and invoices guide ------------------------------ */
+// The same read-through for money: opened from the Money page, the tutorials chooser and the money walkthroughs.
+const MONEY_GUIDE = [
+  ['How quotes and invoices work', ['Every booking has one quote and one invoice, under Money in the box that also holds its workflow and budget. A quote goes Draft → Sent → Accepted or Declined; an invoice Draft → Sent → Paid, or Void. The numbers run on from the prefixes and starting numbers under Settings → Work & billing → Quotes & invoices, and nothing is sent anywhere until you send it.', 'Marking a quote sent ticks the Quoted stage of the project checklist; marking the invoice sent, and then paid, ticks the Delivered stage. So the money and the workflow keep each other honest.']],
+  ['Before the first quote', ['Set your rates once: the day rate, the hour rate for editing, overtime, and the equipment package per day. They price the lines Vdex suggests. Each crew member’s own rate lives on their card on the Crew page, and prices the crew lines.', 'Then the tax name and rate, how long quotes stay valid, when invoices fall due, and the payment terms printed on every invoice. Add the ways you like to be paid, so invoices carry Pay buttons, bank details and a QR code.', 'The price list is for the things you charge for again and again: a filming day, a drone day, colour grading, a music licence, rush delivery. It starts from typical freelance rates where you work; change any price to yours, and add your own lines.']],
+  ['Making the quote', ['Open the booking, open the Workflow, budget, quote & invoice box, and tap Create next to Quote. ＋ From the booking suggests the lines: a line per shoot day at your day rate, each crew member and hired person at theirs, the equipment package, and the deliverables. ＋ From the price list adds the lines you tick. Edit anything: descriptions, quantities, units, prices, the tax rate, the notes.', 'Save it as a draft. The total, the tax and the validity date are worked out for you.']],
+  ['Sending it, and what happens next', ['Print it, Save PDF, or Email client, which addresses the contacts on the booking. Share, Web page and Copy text cover everything else. Link for the client opens the quote as a web page; the link holds the document itself, so there is no server in between.', 'Then Mark as sent. The quote now counts as quoted and awaiting in the Money overview. When the client agrees, ✅ Accepted records it; if not, Edit lets you mark it Declined.']],
+  ['From quote to invoice', ['Switch to the Invoice tab on the same page. ＋ From the quote copies the accepted lines; ＋ From hours logged bills the shoot days, editing hours and overtime the clock recorded, at your rates; ＋ From the booking suggests again. A deposit already paid goes in the Already paid field.', 'Mark as sent when it has gone out. The due date comes from your Invoices due in setting; past it, unpaid, the invoice shows overdue everywhere.']],
+  ['Getting paid', ['Every invoice carries a Pay button for each way to pay that has a link (PayPal, Venmo, Cash App, a payment page, UPI), with the balance and the invoice number filled in, plus bank details with a QR code and your own instructions. The client’s link shows the same buttons on the web page.', 'As money arrives, tap Record a payment: the date, the amount and how it came. Part payments show the balance still due; the last one marks the invoice Paid, or tap ✅ Paid in full.']],
+  ['Late payers', ['An invoice past its due date shows overdue on the booking, in the overview and in a reminder at start-up. Send a reminder opens an email to the client with the link and the balance. Change the due date with Edit if you agreed more time.']],
+  ['The overview, and the accountant', ['Bookings → 💰 Money shows what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, and lists every booking that has a quote or an invoice. Invoices (CSV) exports them as a spreadsheet for the accountant, with a licence.']],
+];
+export function openMoneyGuide() {
+  let close = () => {};
+  const body = h('div', { class: 'stack tc-guide-body money-guide-body' },
+    h('p', { class: 'small muted' }, 'Quotes and invoices in one read, in the order of a job: from setting your rates to the accountant’s spreadsheet. Five minutes.'),
+    ...MONEY_GUIDE.map(([head, paras]) => h('section', null, h('h3', null, head), ...paras.map(t => h('p', null, t)))),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', onclick: async () => { close(); if (await reach('moneycourse')) openTutorial('moneycourse'); } }, '🎓 Walk me through it'),
+      h('button', { class: 'btn ghost', onclick: async () => { close(); await toPracticeJob(); } }, '📐 Open the practice job')));
+  ({ close } = sheet('Quotes & invoices guide', body));
 }

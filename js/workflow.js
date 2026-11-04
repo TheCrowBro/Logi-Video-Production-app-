@@ -6,7 +6,7 @@ import { openForm } from './form.js';
 import { boardPlan } from './board.js';
 
 // The crew roles offered when adding someone, on the Crew page and when hiring someone for a booking.
-export const ROLES = ['Director', 'Producer', 'DOP', 'Camera Operator', '1st AC', '2nd AC', 'Gaffer', 'Grip', 'Sound Recordist', 'Boom Operator', 'Drone Pilot', 'Editor', 'Colourist', 'Motion Designer', 'MUA', 'Stylist', 'Runner', 'Location Manager', 'Other'];
+export const ROLES = ['Director', 'Producer', 'DOP', 'Camera Operator', '1st AC', '2nd AC', 'Gaffer', 'Grip', 'Sound Recordist', 'Boom Operator', 'Drone Pilot', 'Editor', 'Colourist', 'Motion Designer', 'MUA', 'Stylist', 'Runner', 'Location Manager', 'Talent', 'Presenter', 'Other'];
 
 /* --------------------------------- stages --------------------------------- */
 export const STAGES = [

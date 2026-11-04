@@ -11,7 +11,7 @@ const win = await app.firstWindow({ timeout: 60000 });
 const bad = []; win.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) bad.push(m.text()); }); win.on('pageerror', e => bad.push('pageerror: ' + e.message));
 await win.waitForLoadState('domcontentloaded');
 const { TERMS_RECORD } = createRequire(import.meta.url)('./helpers.cjs');
-await win.evaluate(t => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); }, TERMS_RECORD);
+await win.evaluate(t => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); localStorage.setItem('logi-lock-setup', 'skip'); }, TERMS_RECORD); // no tour, terms agreed, no PIN set-up (a PIN left in the profile still asks below)
 await win.reload();
 if (await win.locator('.lock').count()) await win.keyboard.type('2468');
 await win.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });

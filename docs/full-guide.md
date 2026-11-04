@@ -61,7 +61,7 @@ If you tapped **Don't Allow** by mistake: the camera and microphone are asked fo
 
 ### The first time you open it
 
-1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
+1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
 3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage, sync and backups) and **🔒** once a PIN is set.
 
@@ -115,7 +115,7 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 5. **Adding the script on an iPhone.** Tap **Script → Word document** and pick a `.docx` from the Files app (iCloud Drive, Google Drive and Dropbox all show up in Files). For a Google Doc, open it in the Docs app, tap ⋮ → *Share & export → Send a copy → Word* and save it to Files first, or select all, copy, and paste the text into Vdex. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
 6. **Export** shares the notes as text or a spreadsheet, to Mail, AirDrop, Files or anywhere else in the share sheet.
 
-**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job, from choosing the frame rate to exporting for the editor, with a **Walk me through it** button that runs *Timecode, start to finish*: about 25 steps on a practice log Vdex makes for you (synced, with notes and a sample script, so there is nothing to set up and no camera needed; delete it from ⚙ when you are done). The **?** at the top gives the short tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps.
+**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job, from choosing the frame rate to exporting for the editor, with a **Walk me through it** button that runs *Timecode, start to finish*: about 25 steps on a practice log Vdex makes for you (synced, with notes and a sample script, so there is nothing to set up and no camera needed; delete it from ⚙ when you are done). The **?** at the top gives the short tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps. Quotes and invoices have the same: **🎓 New to quoting? Start here** on a booking's Money page (or the **📖 Quotes & invoices guide** under ? → Other pages…) is a read-through of the whole job, with a **Walk me through it** that runs *Quotes & invoices, start to finish* on a practice job Vdex makes: it sets the rates, quotes the job, sends and accepts the quote, invoices it from the quote and records a payment, with its own Q-PRACTICE and INV-PRACTICE numbers so your numbering is untouched. The last card removes the practice job.
 
 **iPhone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
@@ -203,7 +203,7 @@ Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 ### Lock it: PIN, Face ID and Touch ID
 
-1. Settings → **Security** → **Set a PIN…** (4 to 8 digits; 6 is a good length).
+1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
 2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On an iPhone that is Face ID or Touch ID, and it works in Safari and in the installed app on iOS 16.4 or later. If the switch doesn't appear, your iPhone or browser doesn't offer it to web apps, and the PIN is the way in.
 3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
 
@@ -257,7 +257,7 @@ Import your last backup. If a cloud storage is linked, the deletion has already 
 Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *General* → *About & Licence* shows the version and has **Check for updates**.
 
 **Can I start over?**
-Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
+Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN (Vdex asks for a new one at the next start), and leaves the cloud copy alone.
 
 **I forgot my PIN.**
 It can't be recovered. Tap *Forgot PIN?* on the lock screen to erase this phone's Vdex data, then link your storage or import a backup.
@@ -308,7 +308,7 @@ If you tapped **Don't allow** by mistake: long-press the Vdex icon → **App inf
 
 ### The first time you open it
 
-1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
+1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
 3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage, sync and backups) and **🔒** once a PIN is set.
 
@@ -362,7 +362,7 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 5. **Adding the script on Android.** Share it straight into Vdex: in the Google Docs app tap ⋮ → *Share & export → Send a copy → Word*, then choose **Vdex** in the share sheet. Any `.docx` can be shared to Vdex the same way, or picked with **Script → Word document**. You can also paste the text. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
 6. **Export** shares the notes as text or a spreadsheet, to Gmail, Drive or anywhere else in the share sheet.
 
-**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job and a **Walk me through it** button that runs *Timecode, start to finish* on a practice log (no camera needed; delete it from ⚙ when done). The **?** at the top gives the short tour, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps.
+**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job and a **Walk me through it** button that runs *Timecode, start to finish* on a practice log (no camera needed; delete it from ⚙ when done). The **?** at the top gives the short tour, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps. Quotes and invoices have the same: **🎓 New to quoting? Start here** on a booking's Money page (or the **📖 Quotes & invoices guide** under ? → Other pages…) is a read-through of the whole job, with a **Walk me through it** that runs *Quotes & invoices, start to finish* on a practice job Vdex makes: it sets the rates, quotes the job, sends and accepts the quote, invoices it from the quote and records a payment, with its own Q-PRACTICE and INV-PRACTICE numbers so your numbering is untouched. The last card removes the practice job.
 
 **Phone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
@@ -450,7 +450,7 @@ Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 ### Lock it: PIN, fingerprint and face
 
-1. Settings → **Security** → **Set a PIN…** (4 to 8 digits; 6 is a good length).
+1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
 2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On Android that is the fingerprint, face or screen-lock check Chrome already uses. If the switch doesn't appear, your phone or browser doesn't offer it to web apps, and the PIN is the way in.
 3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
 
@@ -504,7 +504,7 @@ Import your last backup. If a cloud storage is linked, the deletion has already 
 Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *General* → *About & Licence* shows the version and has **Check for updates**.
 
 **Can I start over?**
-Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
+Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN (Vdex asks for a new one at the next start), and leaves the cloud copy alone.
 
 **I forgot my PIN.**
 It can't be recovered. Tap *Forgot PIN?* on the lock screen to erase this phone's Vdex data, then link your storage or import a backup.
@@ -536,7 +536,7 @@ The installed app opens in its own window, works offline, and keeps its data on 
 - There is no GPS in a computer, so set your location by hand: Field → **Enter**, or Settings → *Field tool defaults*. The sun, Polaris and call-sheet times then work as usual.
 - Break notifications pop up like any other app's. They have no buttons; clicking one brings Vdex to the front.
 - Backups, call sheets and exports save through a normal Save dialog instead of a share sheet.
-- The PIN lock works the same way (Settings → *Security*), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
+- The PIN lock works the same way (every computer has a PIN too; Settings → *Security* changes it), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
 - **Updates:** the desktop app checks download.crowmade.app for a new version when it starts and every few hours. Windows, Linux and a signed Mac download it in the background and install it on the next restart (Settings → *General* → *About & Licence* shows progress and has **Restart to update**). An unsigned Mac shows a notice with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
 - To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 - Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.

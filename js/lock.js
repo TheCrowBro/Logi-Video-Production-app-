@@ -6,7 +6,7 @@ import * as store from './store.js';
 import * as C from './crypto.js';
 import { haptic } from './a11y.js';
 
-const CFG = 'logi-lock', VAULT = 'logi-vault', DB = 'logi-db-v1';
+const CFG = 'logi-lock', VAULT = 'logi-vault', DB = 'logi-db-v1', SETUP = 'logi-lock-setup';
 const SEALED = ['logi-dbx-token', 'logi-ms-token', 'logi-google-tokens', 'logi-webdav', 'logi-loc', 'logi-wx', 'logi-cloud-who', 'logi-google-email', 'logi-icloud-session']; // secrets and private settings that live outside the database
 export const AUTO_LOCK = [[0, 'Straight away'], [1, 'After 1 minute'], [5, 'After 5 minutes'], [15, 'After 15 minutes'], [-1, 'Only when Vdex is closed']];
 const WAITS = [[12, 900], [9, 300], [7, 60], [5, 30]]; // wrong attempts → seconds before the next try
@@ -283,6 +283,58 @@ export async function gate() {
   await unseal(true);
 }
 
+// Everyone uses Vdex with a PIN. Runs once the terms are agreed and before anything is drawn: a device with no PIN yet
+// (a first start, or an existing user's next one) sets it up on a full screen that nothing else can be used around.
+// The automated tests boot with 'logi-lock-setup' = 'skip', which skips only this set-up: a PIN that exists always
+// locks, because gate() above never looks at the flag.
+export function ensurePin() {
+  if (S.cfg || readCfg() || lsGet(SETUP) === 'skip') return Promise.resolve();
+  let firstRun = false; try { firstRun = !localStorage.getItem('logi-tour'); } catch { /* ignore */ }
+  const app = document.getElementById('app');
+  if (app) { app.inert = true; app.setAttribute('aria-hidden', 'true'); }
+  const input = label => h('input', { type: 'password', inputMode: 'numeric', pattern: '[0-9]*', maxLength: 8, autocomplete: 'off', 'aria-label': label, placeholder: label, class: 'pin-input' });
+  const a = input('New PIN'), b = input('Repeat the PIN');
+  const err = h('div', { class: 'lock-msg', role: 'alert' });
+  const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save the PIN and continue');
+  const card = h('form', { class: 'lock-card stack', noValidate: true });
+  const screen = h('div', { class: 'lock lock-setup', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pin-setup-title' }, card);
+  return new Promise(resolve => {
+    const done = () => { screen.remove(); if (app) { app.inert = false; app.removeAttribute('aria-hidden'); } announce('PIN set'); resolve(); };
+    // The second card: fingerprint, face or Windows Hello, where the device offers it to web apps.
+    const offerBio = () => {
+      const turnOn = h('button', { class: 'btn primary', type: 'button' }, 'Turn it on');
+      turnOn.onclick = async () => { turnOn.disabled = true; try { const mode = await enrolBio(); toast(mode === 'prf' ? 'Biometric unlock on' : 'Biometric unlock on (key kept on this device)'); } catch (e) { toast(e.name === 'NotAllowedError' ? 'Cancelled: the PIN opens Vdex' : 'Could not set up: ' + (e.message || e)); } done(); };
+      card.replaceChildren(
+        h('div', { class: 'brand' }, h('span', { class: 'dot' }), 'VDEX'),
+        h('h1', { id: 'pin-setup-title' }, 'Unlock with fingerprint, face or Windows Hello?'),
+        h('p', { class: 'small' }, 'Whatever this device already uses to unlock can open Vdex as well. The PIN always works too, and this can be changed later under Settings → Security.'),
+        h('div', { class: 'actions' }, turnOn, h('button', { class: 'btn ghost', type: 'button', onclick: done }, 'Not now')));
+      turnOn.focus();
+    };
+    card.addEventListener('submit', async e => {
+      e.preventDefault();
+      const problem = pinProblem(a.value, b.value);
+      if (problem) { err.textContent = problem; announce(problem); (problem.startsWith('The two') ? b : a).focus(); return; }
+      save.disabled = true; save.textContent = 'Setting up…'; err.textContent = '';
+      try { await setPin(a.value); } catch (e2) { save.disabled = false; save.textContent = 'Save the PIN and continue'; err.textContent = 'Could not set the PIN: ' + (e2.message || e2); return; }
+      if (await bioAvailable()) offerBio(); else done();
+    });
+    card.append(
+      h('div', { class: 'brand' }, h('span', { class: 'dot' }), 'VDEX'),
+      h('h1', { id: 'pin-setup-title' }, firstRun ? 'First, set a PIN' : 'Set a PIN to keep using Vdex'),
+      h('p', { class: 'small' }, firstRun
+        ? 'Vdex keeps your bookings, contacts, kit serials and insurance details on this device, so it locks with a PIN. The PIN opens it, and everything it stores is encrypted whenever it is locked, in the background or closed.'
+        : 'Vdex now locks with a PIN on every device. The PIN opens it, and everything it stores here is encrypted whenever it is locked, in the background or closed. Your data stays exactly where it is.'),
+      h('p', { class: 'small muted' }, '4 to 8 digits; 6 or more is a good length. Avoid your birthday or phone number.'),
+      a, b, err,
+      h('p', { class: 'warn small' }, 'A forgotten PIN cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current.'),
+      h('p', { class: 'small muted' }, `Settings → Security sets when Vdex locks, adds fingerprint or face unlock, and has a switch to erase this device after ${WIPE_AT} wrong PINs: it stays off unless you turn it on.`),
+      save);
+    document.body.append(screen);
+    setTimeout(() => a.focus(), 60);
+  });
+}
+
 export function init() {
   store.subscribe(() => { if (S.key && !store.isSealed()) scheduleVault(); });
   addEventListener('vdex-secrets', () => { if (S.key && !store.isSealed()) scheduleVault(); }); // a sign-in changed on its own
@@ -306,6 +358,8 @@ export function init() {
 }
 
 /* ------------------------------------ settings ------------------------------------ */
+// The rules a PIN must meet, the same on the set-up screen, in Settings and for Change PIN: the problem, or ''.
+export const pinProblem = (v, again = null, confirm = true) => (!/^\d{4,8}$/.test(v) ? 'Use 4 to 8 digits.' : confirm && /^(\d)\1+$/.test(v) ? 'Not all the same digit, please.' : again != null && again !== v ? 'The two PINs differ.' : '');
 // A small sheet asking for a PIN or a passphrase, optionally typed twice. Resolves with the value or null.
 export function askSecret({ title, confirm = false, numeric = true, intro = '', minLength = 4 } = {}) {
   return new Promise(resolve => {
@@ -317,9 +371,8 @@ export function askSecret({ title, confirm = false, numeric = true, intro = '', 
     const submit = e => {
       e.preventDefault();
       const v = a.value;
-      if (numeric ? !/^\d{4,8}$/.test(v) : v.length < minLength) { err.textContent = numeric ? 'Use 4 to 8 digits.' : `Use at least ${minLength} characters.`; return; }
-      if (confirm && numeric && /^(\d)\1+$/.test(v)) { err.textContent = 'Not all the same digit, please.'; return; }
-      if (b && b.value !== v) { err.textContent = numeric ? 'The two PINs differ.' : 'The two passphrases differ.'; return; }
+      const problem = numeric ? pinProblem(v, b ? b.value : null, confirm) : v.length < minLength ? `Use at least ${minLength} characters.` : b && b.value !== v ? 'The two passphrases differ.' : '';
+      if (problem) { err.textContent = problem; return; }
       done = true; close(); resolve(v);
     };
     const form = h('form', { class: 'stack', onsubmit: submit },
@@ -340,7 +393,6 @@ export function securityPanel() {
   const createPin = async () => { const pin = await askSecret({ title: 'Set a PIN', confirm: true }); if (!pin) return; await busyToast(setPin(pin), () => { toast('PIN set. Vdex now locks and encrypts its data.'); draw(); }); };
   const current = async () => { const pin = await askSecret({ title: 'Current PIN' }); if (!pin) return false; if (!(await checkPin(pin))) { toast('Wrong PIN'); return false; } return true; };
   const changePin = async () => { if (!(await current())) return; const pin = await askSecret({ title: 'New PIN', confirm: true }); if (!pin) return; await busyToast(setPin(pin), () => toast('PIN changed')); };
-  const dropPin = async () => { if (!(await current())) return; if (!confirm('Remove the PIN? Vdex will no longer lock or encrypt its data on this device.')) return; await busyToast(removePin(), () => toast('PIN removed')); };
   const toggleBio = async input => {
     if (input.checked) { input.disabled = true; try { const mode = await enrolBio(); toast(mode === 'prf' ? 'Biometric unlock on' : 'Biometric unlock on (key kept on this device)'); } catch (e) { input.checked = false; toast(e.name === 'NotAllowedError' ? 'Cancelled' : 'Could not set up: ' + (e.message || e)); } input.disabled = false; }
     else await forgetBio();
@@ -351,10 +403,10 @@ export function securityPanel() {
     const lockWhen = c && (AUTO_LOCK.find(([v]) => v === (c.autoLock == null ? 1 : c.autoLock)) || AUTO_LOCK[1])[1].toLowerCase();
     el.replaceChildren(...nodes(
       c ? h('p', { class: 'status-line', 'data-state': 'synced' }, `🔒 PIN set${c.bio ? ' · fingerprint / face on' : ''} · locks ${lockWhen}`)
-        : h('p', { class: 'warn small' }, '🔓 No PIN. Anyone who picks up this device with Vdex open can read your bookings, contacts, kit serials and insurance details.'),
-      h('p', { class: 'small muted' }, 'With a PIN, Vdex locks its screen and keeps everything it stores encrypted (AES-256) whenever it is locked, in the background or closed. Only your PIN, or your fingerprint or face, opens it.'),
+        : h('p', { class: 'warn small' }, '🔓 No PIN. Anyone who picks up this device with Vdex open can read your bookings, contacts, kit serials and insurance details. Vdex asks for a PIN the next time it starts.'),
+      h('p', { class: 'small muted' }, 'Vdex locks its screen with your PIN and keeps everything it stores encrypted (AES-256) whenever it is locked, in the background or closed. Only your PIN, or your fingerprint or face, opens it. Every device that runs Vdex has a PIN; Change PIN… sets a new one.'),
       h('div', { class: 'actions' },
-        c ? [h('button', { class: 'btn primary', onclick: () => lockNow() }, '🔒 Lock now'), h('button', { class: 'btn ghost', onclick: changePin }, 'Change PIN…'), h('button', { class: 'btn ghost', onclick: dropPin }, 'Remove PIN…')]
+        c ? [h('button', { class: 'btn primary', onclick: () => lockNow() }, '🔒 Lock now'), h('button', { class: 'btn ghost', onclick: changePin }, 'Change PIN…')]
           : h('button', { class: 'btn primary', onclick: createPin }, '🔒 Set a PIN…')),
       c && bioOk && h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.bio, onchange: e => toggleBio(e.target) }), h('span', null, 'Unlock with fingerprint, face or Windows Hello', h('em', null, c.bio ? (c.bio.mode === 'prf' ? ' — the key is bound to your biometric' : ' — your biometric unlocks a key kept on this device') : ' — whatever your device already uses'))),
       c && bioOk === false && h('p', { class: 'small muted' }, 'This device or browser does not offer fingerprint or face unlock to web apps, so the PIN is the way in.'),

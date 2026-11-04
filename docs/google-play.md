@@ -159,7 +159,7 @@ ON SET
 Sunrise and sunset, a white balance reader, a sound level meter and a range finder. Timecode notes stamped with the camera's clock, synced from the audio feed, exported for the editor.
 
 YOURS, PRIVATELY
-Vdex keeps everything on your device. Set a PIN and it locks with your fingerprint or face. With a licence, link your own Google Drive or iCloud (or Dropbox or OneDrive) to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
+Vdex keeps everything on your device, behind a PIN, and opens with your fingerprint or face. With a licence, link your own Google Drive or iCloud (or Dropbox or OneDrive) to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
 
 Works offline. Tap ? on any page for a walkthrough.
 ```

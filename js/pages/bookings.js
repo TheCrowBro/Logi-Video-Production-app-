@@ -25,6 +25,16 @@ const stripsView = (b, go) => {
 };
 const sceneCount = b => (b.board && Array.isArray(b.board.list) ? b.board.list.filter(x => x && x.type === 'scene').length : 0);
 const S = { view: 'month', cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1), day: todayISO(), id: null };
+let GO = null; // the current render's navigation, so a walkthrough can open a booking by id
+// Opens a booking's page (or, with a patch such as { view: 'money', kind: 'quote' }, one of its tools). The Bookings
+// section must be the one on screen: window.logiGo('bookings') first.
+export function openBooking(id, patch = {}) {
+  const b = byId('bookings', id); if (!b || !GO) return false;
+  const d = parseISO(b.date);
+  GO({ view: 'booking', id, day: b.date, cursor: new Date(d.getFullYear(), d.getMonth(), 1), kind: 'quote', ...patch });
+  return true;
+}
+export function showMonth() { if (GO) GO({ view: 'month', cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }); }
 
 const dateRange = (b, f) => endOf(b) > b.date ? `${f(b.date)} → ${f(endOf(b))}` : f(b.date);
 const pill = s => h('span', { class: 'pill st-' + slugStatus(s) }, s);
@@ -34,6 +44,7 @@ export const bookings = {
   id: 'bookings', label: 'Bookings', icon: '📅',
   render(root) {
     const go = patch => { if (patch.view && patch.view !== 'callsheet') commitDraft(); Object.assign(S, patch); draw(); window.scrollTo({ top: 0 }); };
+    GO = go;
     const draw = () => {
       if ((S.view === 'booking' || S.view === 'callsheet' || S.view === 'money' || S.view === 'strips') && !byId('bookings', S.id)) S.view = 'day';
       root.replaceChildren(S.view === 'month' ? month(go) : S.view === 'day' ? day(go) : S.view === 'callsheet' ? callSheetPage(byId('bookings', S.id), go) : S.view === 'money' ? moneyPage(byId('bookings', S.id), S.kind || 'quote', go) : S.view === 'strips' ? stripsView(byId('bookings', S.id), go) : detail(go));

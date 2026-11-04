@@ -106,13 +106,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const csvPath = S + '/assets.csv'; await dl2.saveAs(csvPath); const csv = fs.readFileSync(csvPath, 'utf8');
   ok('asset register CSV has serials and a total', /Serial number/.test(csv) && /"Total"/.test(csv), csv.split('\n').length + ' lines');
 
-  // --- remove the PIN ---
+  // --- no way to remove the PIN from Settings (everyone uses Vdex with one); removePin() stays for the tests ---
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
   await page.locator('.settings-section > summary', { hasText: 'Security' }).click();
-  await page.getByRole('button', { name: 'Remove PIN…' }).click();
-  await page.waitForSelector('.sheet .pin-input'); await page.locator('.sheet .pin-input').fill('246810'); await page.locator('.sheet button[type=submit]').click();
+  const secBtns = await page.locator('details.settings-section:has(> summary:has-text("Security")) button').allInnerTexts();
+  ok('Settings → Security has Lock now and Change PIN…, and no Remove PIN', secBtns.some(t => /Lock now/.test(t)) && secBtns.some(t => /Change PIN/.test(t)) && !secBtns.some(t => /Remove PIN/.test(t)), secBtns.join(' | '));
+  await page.evaluate(async () => { await (await import('./js/lock.js')).removePin(); });
   await page.waitForFunction(() => !localStorage.getItem('logi-lock'), null, { timeout: 15000 });
-  ok('PIN removed: no lock config, no vault, plaintext present, lock button hidden', (await ls('logi-vault')) === null && (await ls('logi-db-v1')) !== null && !(await page.locator('#lockBtn').isVisible()));
+  ok('removePin() clears the lock config and the vault, plaintext present, lock button hidden', (await ls('logi-vault')) === null && (await ls('logi-db-v1')) !== null && !(await page.locator('#lockBtn').isVisible()));
 
   // --- CSP: no CSP violations so far ---
   ok('no CSP violations during the run', csp.length === 0, csp.slice(0, 3).join(' | '));

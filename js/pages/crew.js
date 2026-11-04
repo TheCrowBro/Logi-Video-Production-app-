@@ -51,7 +51,7 @@ export const crew = {
 function card(c) {
   const link = safeUrl(c.link);
   const next = crewBookings(c.id).filter(b => endOf(b) >= todayISO()).slice(0, 2);
-  return h('div', { class: 'card crew-card' },
+  return h('div', { class: 'card crew-card', 'data-id': c.id },
     h('div', { class: 'card-row' },
       h('div', { class: 'avatar', 'aria-hidden': 'true' }, (c.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()),
       h('div', { class: 'grow' }, h('strong', null, c.name), h('div', { class: 'muted' }, [c.role, c.rate].filter(Boolean).join(' · '))),

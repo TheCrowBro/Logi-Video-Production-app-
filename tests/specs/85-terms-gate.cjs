@@ -35,13 +35,16 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     await page.locator('#terms-ok').focus(); await page.keyboard.press('Space'); // by keyboard
     ok('ticking the box turns Agree on', !(await agree.isDisabled()));
     await agree.click();
-    await page.waitForSelector('#rolodex .drum-btn', { timeout: 15000 });
+    await page.waitForSelector('.lock-setup', { timeout: 15000 }); await sleep(200);
     const rec = await page.evaluate(() => JSON.parse(localStorage.getItem('logi-terms')));
-    ok('agreeing starts the app, and the first-run tour follows', (await page.locator('.terms-gate').count()) === 0 && !!(await page.waitForSelector('.tour-card', { timeout: 5000 }).catch(() => null)));
+    ok('agreeing moves on to setting a PIN (everyone uses Vdex with one), still before the app and the tour', (await page.locator('.terms-gate').count()) === 0 && (await page.locator('#rolodex .drum-btn').count()) === 0 && (await page.locator('.tour-card').count()) === 0 && /First, set a PIN/.test(await page.locator('.lock-setup h1').innerText()));
+    await page.locator('.lock-setup .pin-input').nth(0).fill('246810'); await page.locator('.lock-setup .pin-input').nth(1).fill('246810'); await page.locator('.lock-setup button[type=submit]').click();
+    await page.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
+    ok('the PIN set, the app starts and the set-up walkthrough follows', (await page.locator('.lock-setup').count()) === 0 && !!(await page.waitForSelector('.tour-card', { timeout: 5000 }).catch(() => null)));
     ok('the acceptance is remembered with its version and time', rec && rec.v === TERMS_VERSION && !isNaN(Date.parse(rec.at)), JSON.stringify(rec));
     await page.keyboard.press('Escape');
-    await page.reload(); await page.waitForSelector('#rolodex .drum-btn');
-    ok('the next visit goes straight in', (await page.locator('.terms-gate').count()) === 0);
+    await page.reload(); await page.waitForSelector('.lock'); await page.keyboard.type('246810'); await page.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
+    ok('the next visit asks only for the PIN: no terms, no set-up', (await page.locator('.terms-gate').count()) === 0 && (await page.locator('.lock-setup').count()) === 0);
     await ctx.close(); }
 
   // --- someone who accepted an earlier version ---
@@ -51,7 +54,10 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     ok('when the terms change, everyone is asked again, and told why', /The terms have changed/.test(await page.locator('.terms-gate h1').innerText()) && /stays where it is/.test(await page.locator('.terms-gate').innerText()));
     await page.locator('.terms-gate label.terms-check input').check();
     await page.locator('.terms-gate button:has-text("Agree and continue")').click();
-    await page.waitForSelector('#rolodex .drum-btn', { timeout: 15000 });
+    await page.waitForSelector('.lock-setup', { timeout: 15000 });
+    ok('…and, having no PIN yet, is asked to set one once', /Set a PIN to keep using Vdex/.test(await page.locator('.lock-setup h1').innerText()) && (await page.locator('#rolodex .drum-btn').count()) === 0);
+    await page.locator('.lock-setup .pin-input').nth(0).fill('246810'); await page.locator('.lock-setup .pin-input').nth(1).fill('246810'); await page.locator('.lock-setup button[type=submit]').click();
+    await page.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
     ok('…and carries on with the new version accepted', (await page.evaluate(() => JSON.parse(localStorage.getItem('logi-terms')).v)) === TERMS_VERSION);
     await ctx.close(); }
 
