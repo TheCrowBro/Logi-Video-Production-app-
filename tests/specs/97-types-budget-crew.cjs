@@ -120,7 +120,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const snap = await page.evaluate(u => import('./js/link-pack.js').then(m => m.unpack(new URL(u).hash)), url);
   const raw = JSON.stringify({ ...snap, made: 0, ref: '' }); // the timestamp and the random id could contain any digits
   const keys = new Set(); (function walk(o) { if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) { if (!Array.isArray(o)) keys.add(k); walk(v); } })(snap);
-  const FORBIDDEN = ['rate', 'price', 'cost', 'value', 'actual', 'budget', 'quote', 'invoice', 'payments', 'pay', 'link', 'notesOnBooking'];
+  const FORBIDDEN = ['rate', 'rateUnit', 'price', 'cost', 'value', 'actual', 'budget', 'quote', 'invoice', 'payments', 'pay', 'link', 'notesOnBooking'];
   ok('the link carries no money: no rates, prices, costs, values, budgets, quotes or invoices', !FORBIDDEN.some(k => keys.has(k)) && !/450|9876|2500|Q-0099|Van|SECRET BOOKING NOTE|private\.example/.test(raw), [...keys].join(','));
   ok('…and carries what the crew needs', snap.title === seed.title && snap.call.general === '07:30' && snap.schedule.some(r => r.item === 'First set-up on the quay') && snap.crew.some(c => c.name === seed.crewName && c.call === '07:30' && c.phone) && snap.shots.length === 2 && snap.kit.length === 1 && snap.notes === 'Bring a head torch' && snap.type === 'Vertical video (9:16)');
   ok('the link carries a stable reference so a newer link updates the crew’s calendar event', snap.ref === seed.id);

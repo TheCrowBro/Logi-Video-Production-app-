@@ -125,3 +125,29 @@ export const empty = (msg, action) => h('div', { class: 'empty' }, h('p', null, 
 // The button that goes back up a level (day → calendar, booking → day, call sheet → booking): a clear return mark in
 // a ring, with a shine when it appears and a pulse under the pointer. The text keeps the ‹ so its name reads as before.
 export const backBtn = (label, onclick) => h('button', { class: 'btn ghost small back-btn', type: 'button', onclick }, h('span', { class: 'back-arrow' }, '‹'), ' ' + label);
+
+/* ----------------------------------- rates ----------------------------------- */
+// A rate typed freely: "450", "$450/day", "£55 an hour", "$500/day, OT $60/hr", "1.200,50 €". The amount that counts
+// is the one per day (or with no unit); an hourly amount is used only when there is nothing else. A weekly rate, or
+// nothing readable, gives '' so the line is left for the person to fill in.
+const toNumber = t => { const m = t.match(/^(.*?)(?:[.,](\d{1,2}))?$/), whole = m[1].replace(/[.,\s]/g, ''); return Number(whole + (m[2] ? '.' + m[2] : '')); };
+const RATE_UNIT = /^\s*(?:(?:\/|per\b|an?\b|each\b)\s*(hours?|hrs?|h|days?|d|weeks?|wk)|(hourly|daily|weekly))\b/i;
+const COUNT = /^\s*(hours?|hrs?|h|days?|d|weeks?|wk|people|persons?|crew)\b/i; // "2 days at 450", "10hr day": a count, not a price
+export function parseRate(r) {
+  const s = String(r ?? ''), found = [], re = /\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?(?!\d)|\d+(?:[.,]\d{1,2})?(?!\d)/g;
+  for (let m; (m = re.exec(s));) {
+    let rest = s.slice(m.index + m[0].length), n = toNumber(m[0]);
+    if (/^k\b/i.test(rest)) { n *= 1000; rest = rest.slice(1); } // "$1k/day"
+    const um = rest.match(RATE_UNIT), u = ((um && (um[1] || um[2])) || '').toLowerCase();
+    if (!um && COUNT.test(rest)) continue;
+    found.push({ n, unit: u[0] === 'h' ? 'hour' : u[0] === 'w' ? 'week' : u[0] === 'd' ? 'day' : '' });
+  }
+  const pick = found.find(f => f.unit === 'day') || found.find(f => f.unit === '') || found.find(f => f.unit === 'hour');
+  return pick && Number.isFinite(pick.n) ? { amount: pick.n, hourly: pick.unit === 'hour' } : { amount: '', hourly: false };
+}
+// A person's rate (crew, or someone hired for a job): the amount and whether it is per hour. New records carry the
+// amount as a number with rateUnit 'day' or 'hour'; older ones hold whatever was typed, read as above.
+export const hasUnit = c => !!(c && typeof c === 'object' && (c.rateUnit === 'day' || c.rateUnit === 'hour') && c.rate !== '' && c.rate != null && Number.isFinite(Number(c.rate)));
+export const personRate = c => (hasUnit(c) ? { amount: Number(c.rate), hourly: c.rateUnit === 'hour' } : parseRate(c && typeof c === 'object' ? c.rate : c));
+// The rate as shown on a card: "$450/day", "$55/hour"; an older typed rate is shown as it was typed.
+export const rateText = (c, sym = '$') => { if (!hasUnit(c)) return String((c && typeof c === 'object' ? c.rate : c) ?? '').trim(); const n = Number(c.rate); return `${sym}${Number.isInteger(n) ? n : n.toFixed(2)}/${c.rateUnit}`; };

@@ -1,6 +1,6 @@
 // Project pipeline: every booking moves through stages, each with a checklist from a template for its job type.
 // Also the smaller post/pre lists that hang off a booking: hires, shot list, media offload log, deliverables, licences.
-import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes, parseISO } from './util.js';
+import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes, parseISO, personRate, rateText } from './util.js';
 import { db, byId, update, upsert, remove, subscribe, endOf, splitHires } from './store.js';
 import { openForm } from './form.js';
 import { boardPlan } from './board.js';
@@ -274,13 +274,15 @@ export const hiredPeople = b => ((b && b.hires) || []).filter(x => x && !legacyG
 export const rentalsOf = b => [...((b && b.rentals) || []), ...((b && b.hires) || []).filter(legacyGear)];
 export const shootDaysOf = b => Math.max(1, Math.round((parseISO(endOf(b)) - parseISO(b.date)) / 864e5) + 1);
 export function hiresBlock(b) {
-  const edit = hr => openForm({ title: hr ? 'Edit hired person' : 'Hire someone for this job', values: hr || { name: '', role: '', rate: '', days: shootDaysOf(b), phone: '', email: '', notes: '' },
-    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' }, { key: 'rate', label: 'Day or hourly rate', placeholder: 'e.g. 450/day or 55/hr', hint: 'Feeds the budget and the suggested quote lines. Never goes to the crew.' }, { key: 'days', label: 'Days', type: 'number', min: 0, step: 'any' }, { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' }, { key: 'notes', label: 'Notes', type: 'textarea', rows: 2 }],
+  // An older entry holds the rate as typed: the form shows the amount it reads and the unit, and saves a number and a unit.
+  const rateValues = hr => { const r = personRate(hr); return { ...hr, rate: r.amount === '' ? (hr.rate ?? '') : r.amount, rateUnit: hr.rateUnit || (r.hourly ? 'hour' : 'day') }; };
+  const edit = hr => openForm({ title: hr ? 'Edit hired person' : 'Hire someone for this job', values: hr ? rateValues(hr) : { name: '', role: '', rate: '', rateUnit: 'day', days: shootDaysOf(b), phone: '', email: '', notes: '' },
+    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' }, { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: 'Feeds the budget and the suggested quote lines: a day rate per day, or an hourly rate for a standard day’s hours. Never goes to the crew.' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] }, { key: 'days', label: 'Days', type: 'number', min: 0, step: 'any' }, { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' }, { key: 'notes', label: 'Notes', type: 'textarea', rows: 2 }],
     onSave: v => patch(b, x => { splitHires(x); x.hires = x.hires || []; const i = x.hires.findIndex(y => y.id === (hr && hr.id)); if (i >= 0) x.hires[i] = { ...v, id: hr.id }; else x.hires.push({ ...v, id: uid() }); }),
     onDelete: hr ? () => patch(b, x => { splitHires(x); x.hires = (x.hires || []).filter(y => y.id !== hr.id); if (x.crewStatus) delete x.crewStatus[hr.id]; if (x.crewCall) delete x.crewCall[hr.id]; }) : null });
   const hires = hiredPeople(b);
   return h('div', { class: 'sub', id: 'bk-hires' }, h('h4', null, `Hires (${hires.length})`),
-    hires.length ? hires.map(hr => crewRow(b, hr, { sub: [hr.rate && String(hr.rate), hr.days && `${hr.days} day${Number(hr.days) === 1 ? '' : 's'}`].filter(Boolean).join(' · '), onEdit: () => edit(hr) })) : h('p', { class: 'muted small' }, 'People hired in for this job: they go on the call sheet and the crew link like your own crew, and their cost goes in the budget.'),
+    hires.length ? hires.map(hr => crewRow(b, hr, { sub: [rateText(hr, db.profile.currency || '$'), hr.days && `${hr.days} day${Number(hr.days) === 1 ? '' : 's'}`].filter(Boolean).join(' · '), onEdit: () => edit(hr) })) : h('p', { class: 'muted small' }, 'People hired in for this job: they go on the call sheet and the crew link like your own crew, and their cost goes in the budget.'),
     h('button', { class: 'btn ghost small', onclick: () => edit(null) }, '+ Hire someone'));
 }
 export function rentalsBlock(b) {

@@ -208,10 +208,10 @@ export function loadSample() {
   ];
   ['Flight case 1', 'Flight case 1', 'Flight case 1', 'Van', 'Van', 'Audio bag', 'Audio bag', 'Van', 'Studio', 'Flight case 1'].forEach((place, i) => { if (gear[i]) gear[i].location = place; });
   const crew = [
-    { id: uid(), name: 'Sam Rivera', role: 'Sound Recordist', phone: '+1 555 0101', email: 'sam@example.com', link: 'https://example.com/sam', rate: '$450/day', notes: '' },
-    { id: uid(), name: 'Jo Chen', role: '1st AC', phone: '+1 555 0102', email: 'jo@example.com', link: 'https://example.com/jo', rate: '$400/day', notes: '' },
-    { id: uid(), name: 'Mika Dahl', role: 'Gaffer', phone: '+1 555 0103', email: '', link: 'https://example.com/mika', rate: '$425/day', notes: '' },
-    { id: uid(), name: 'Priya Nair', role: 'Editor', phone: '', email: 'priya@example.com', link: 'https://example.com/priya', rate: '$55/hr', notes: '' },
+    { id: uid(), name: 'Sam Rivera', role: 'Sound Recordist', phone: '+1 555 0101', email: 'sam@example.com', link: 'https://example.com/sam', rate: 450, rateUnit: 'day', notes: '' },
+    { id: uid(), name: 'Jo Chen', role: '1st AC', phone: '+1 555 0102', email: 'jo@example.com', link: 'https://example.com/jo', rate: 400, rateUnit: 'day', notes: '' },
+    { id: uid(), name: 'Mika Dahl', role: 'Gaffer', phone: '+1 555 0103', email: '', link: 'https://example.com/mika', rate: 425, rateUnit: 'day', notes: '' },
+    { id: uid(), name: 'Priya Nair', role: 'Editor', phone: '', email: 'priya@example.com', link: 'https://example.com/priya', rate: 55, rateUnit: 'hour', notes: '' },
   ];
   db = normalise({
     ...db,
