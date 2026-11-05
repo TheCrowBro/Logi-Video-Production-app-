@@ -50,7 +50,7 @@ try {
   // ---- the version and the identity ----
   const marketing = all(pbx, /MARKETING_VERSION = ([^;]+);/g);
   ok(`the iPhone app carries the app version ${version}: apple/package.json and both MARKETING_VERSION lines`, pkg.version === version && marketing.length === 2 && marketing.every(v => v === version), `${pkg.version}; ${marketing.join(', ')}`);
-  ok('the build number (CURRENT_PROJECT_VERSION, raised by hand for every upload) is a whole number', all(pbx, /CURRENT_PROJECT_VERSION = ([^;]+);/g).every(v => /^\d+$/.test(v)));
+  ok('the build number (CURRENT_PROJECT_VERSION, raised by hand for every upload) is a whole number in both configurations', all(pbx, /CURRENT_PROJECT_VERSION = ([^;]+);/g).length === 2 && all(pbx, /CURRENT_PROJECT_VERSION = ([^;]+);/g).every(v => /^\d+$/.test(v)));
   const sync = execFileSync(process.execPath, ['desktop/sync-version.js'], { cwd: ROOT, encoding: 'utf8' });
   ok('desktop/sync-version.js finds nothing to change: every copy of the version already agrees', sync.trim() === '', sync.trim());
   const bundleIds = all(pbx, /PRODUCT_BUNDLE_IDENTIFIER = ([^;]+);/g);
@@ -60,7 +60,12 @@ try {
   // ---- the address, the bound domain and the scheme ----
   const host = new URL(cfg.server.url).host, bound = plistArray(plist, 'WKAppBoundDomains');
   ok('the app opens vdex.crowmade.app, may navigate only there, and is bound to that domain', host === 'vdex.crowmade.app' && cfg.server.allowNavigation.includes(host) && bound.includes(host) && cfg.ios.limitsNavigationsToAppBoundDomains === true, `${host}; allowNavigation ${cfg.server.allowNavigation.join(', ')}; bound ${bound.join(', ')}`);
-  ok('the vdex:// scheme is registered for sign-ins coming back, and files handed to the app are copied, not opened in place', plistArray(plist, 'CFBundleURLSchemes').includes('vdex') && cfg.ios.scheme === 'vdex' && /<key>LSSupportsOpeningDocumentsInPlace<\/key>\s*<false\/>/.test(plist));
+  const nativeJs = read('js/native.js');
+  ok('sign-ins come back on vdex://, which the phone’s sign-in window catches itself: the scheme is not registered with the system, so no link or other app can open Vdex with it', /scheme: 'vdex'/.test(nativeJs) && !/CFBundleURLTypes/.test(plist) && /callbackURLScheme: scheme/.test(read('apple/ios/App/App/WebAuthPlugin.swift')));
+  ok('the Capacitor config leaves ios.scheme alone: it names the Xcode scheme (App) that cap run and cap build use', !(cfg.ios && 'scheme' in cfg.ios));
+  ok('files handed to the app are copied, not opened in place', /<key>LSSupportsOpeningDocumentsInPlace<\/key>\s*<false\/>/.test(plist));
+  ok('localhost is app-bound too, as Capacitor needs for its own page (the offline error page)', bound.includes('localhost') && cfg.server.errorPath === 'index.html');
+  ok('every permission the app or its plugins can ask for has a purpose string: camera, microphone, location, motion, calendars, reminders, local network', ['NSCameraUsageDescription', 'NSMicrophoneUsageDescription', 'NSLocationWhenInUseUsageDescription', 'NSMotionUsageDescription', 'NSCalendarsFullAccessUsageDescription', 'NSCalendarsUsageDescription', 'NSRemindersUsageDescription', 'NSRemindersFullAccessUsageDescription', 'NSLocalNetworkUsageDescription'].every(k => new RegExp(`<key>${k}</key>\\s*<string>[^<]{10,}</string>`).test(plist)));
 
   // ---- the purchase ----
   const PRODUCT = 'app.crowmade.vdex.licence';
@@ -98,7 +103,7 @@ try {
   ok('the store kit has the 1024 icon (the very file built into the app) and says which screenshots go beside it', exists('store/apple/icon-1024.png') && same('store/apple/icon-1024.png', iconFile) && /6\.7-inch/.test(read('store/apple/README.md')) && /6\.1-inch/.test(read('store/apple/README.md')));
 
   // ---- the owner's steps ----
-  ok('the owner\'s steps cover the build number, iPhone-only screenshots, the privacy answers, a published support page and the Mac build check', /CURRENT_PROJECT_VERSION/.test(doc) && /iPhone screenshots only/.test(doc) && /\n## App Privacy answers\n/.test(doc) && /\*\*Support URL\*\*: https:\/\/vdex\.crowmade\.app\/privacy\.html/.test(doc) && !/full-guide\.md/.test(doc) && /ios\.yml/.test(doc));
+  ok('the owner\'s steps cover the build number, iPhone-only screenshots, the privacy answers, a published support page and the Mac build check', /CURRENT_PROJECT_VERSION/.test(doc) && /iPhone screenshots only/.test(doc) && /\n## App Privacy answers\n/.test(doc) && /\*\*Support URL\*\*: a published page where people can reach you directly/.test(doc) && !/full-guide\.md/.test(doc) && /ios\.yml/.test(doc));
 
   // ---- the Mac build check ----
   const yml = fs.readFileSync(path.join(REPO, '.github/workflows/ios.yml'), 'utf8'), job = yml.split('\njobs:\n')[1] || '';

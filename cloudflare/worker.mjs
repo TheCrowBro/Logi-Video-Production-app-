@@ -12,6 +12,7 @@
 //   /licence/apple/notify      App Store Server Notifications: a refund or a revocation cancels that licence
 //   /licence/apple/status      whether App Store purchases are switched on (APPLE_BUNDLE_ID set)
 //   /licence/apple/email, …/email/verify   an App Store buyer adds an email address (a 6-digit code to it), for the website, Android and the desktop code
+//   /licence/apple/code        the desktop code of an App Store licence, for the person's computer
 //                              (status, start, verify, check), and a place on the licence for the Google Play app
 //                              (activate, release)
 //
@@ -414,32 +415,52 @@ async function appleClaim(request, env) {
   const v = await readCode(code); if (!v) return json(500, { error: 'server' });
   const akey = 'a:' + aid, rec = (await env.LICENCES.get(akey, 'json')) || {};
   const list = Array.isArray(rec.licences) ? rec.licences : [];
-  if (!list.some(l => l.ref === ref)) { list.push({ ref, seats: v.licence.seats || 3, name: v.licence.name || '', comp: false, expires: '' }); await env.LICENCES.put(akey, JSON.stringify({ licences: list.slice(-20), purchased: p.purchased })); }
+  // A sandbox purchase (TestFlight, the owner's testers, App Review) licenses the phone for 30 days and nothing else: no desktop code, no email.
+  if (!list.some(l => l.ref === ref)) { list.push({ ref, seats: v.licence.seats || 3, name: v.licence.name || '', comp: false, expires: p.sandbox ? today(Date.now() + 30 * DAY) : '' }); await env.LICENCES.put(akey, JSON.stringify({ licences: list.slice(-20), purchased: p.purchased })); }
   const l = list.find(x => x.ref === ref);
+  if (l.expires && Date.now() >= Date.parse(l.expires + 'T00:00:00Z') + DAY) return json(403, { error: 'expired' });
   const res = await takeSeat(env, key, ref, l.seats || 3, { install: b.install, os: OS.has(b.os) ? b.os : 'iPhone', release: b.release });
   // The desktop code too (with the email once one is added): the same licence on a computer, under Enter licence code.
-  const desktopCode = await codes.signCode(key, SHOP_KID, { serial, name: l.name || 'App Store customer', email: l.email || '', issued: today(p.purchased) });
-  return json(res.status, { ...(await res.json()), token: await codes.signNote('web', key, SHOP_KID, { apple: aid, ref, iat: Date.now() }), licence: shownLicence(l, l.email || ''), code: desktopCode });
+  const desktopCode = p.sandbox ? undefined : await codes.signCode(key, SHOP_KID, { serial, name: l.name || 'App Store customer', email: l.email || '', issued: today(p.purchased) });
+  return json(res.status, { ...(await res.json()), token: await codes.signNote('web', key, SHOP_KID, { apple: aid, ref, iat: Date.now() }), licence: shownLicence(l, l.email || ''), ...(desktopCode ? { code: desktopCode } : {}) });
+}
+// The desktop code of an App Store licence, on demand (the app keeps none): for Enter licence code on a computer.
+async function appleCode(request, env) {
+  if (!(await appleReady(env))) return json(503, { error: 'not-ready' });
+  const b = await readJson(request), v = b && (await webToken(env, b.token));
+  if (!v || !v.apple) return json(401, { error: 'signed-out' });
+  if (v.apple.startsWith('s:')) return json(403, { error: 'sandbox' });
+  const rec = (await env.LICENCES.get('a:' + v.apple, 'json')) || {}, l = (Array.isArray(rec.licences) ? rec.licences : []).find(x => x.ref === v.ref);
+  if (!l) return json(403, { error: 'signed-out' });
+  if (await env.LICENCES.get('x:' + v.ref)) return json(403, { error: 'cancelled' });
+  const { serial } = await refForApple(v.apple, false);
+  return json(200, { ok: true, code: await codes.signCode(await shopKey(env), SHOP_KID, { serial, name: l.name || 'App Store customer', email: l.email || '', issued: today(rec.purchased || Date.now()) }) });
 }
 // An App Store buyer adds an email address: a 6-digit code goes to it (as a sign-in does) and, typed in, the address
 // is linked to the licence, so the same person signs in on the website and in the Android app with it, and the
 // desktop code carries it. Only the purchase's own sign-in (the app's token) can add one.
+const EMAILS_PER_PURCHASE = 3; // codes one purchase may send a day (to any addresses): the day's emails are everyone's
 async function appleEmailStart(request, env) {
   if (!(await appleReady(env)) || !(await webReady(env))) return json(503, { error: 'not-ready' });
   const b = await readJson(request), v = b && (await webToken(env, b.token));
   if (!v || !v.apple) return json(401, { error: 'signed-out' });
+  if (v.apple.startsWith('s:')) return json(403, { error: 'sandbox' });
   const email = cleanEmail(b.email); if (!email) return json(400, { error: 'invalid-email' });
   if (!(await licencesForKey(env, identityKey(v))).some(l => l.ref === v.ref)) return json(403, { error: 'cancelled' });
   const dayKey = 'm:' + today(), usedToday = Number(await env.LICENCES.get(dayKey)) || 0;
   if (usedToday >= emailsPerDay(env)) return json(503, { error: 'busy' });
+  const mine = 'ae:' + v.apple + ':' + today(), sentByMe = Number(await env.LICENCES.get(mine)) || 0;
+  if (sentByMe >= EMAILS_PER_PURCHASE) return json(503, { error: 'busy' });
   const sent = await sendCodeTo(env, email, usedToday);
   if (sent === 'email-failed') return json(502, { error: 'email-failed' });
+  if (sent === 'ok') await env.LICENCES.put(mine, String(sentByMe + 1), { expirationTtl: 2 * 86400 }).catch(() => {});
   return json(200, { ok: true });
 }
 async function appleEmailVerify(request, env) {
   if (!(await appleReady(env))) return json(503, { error: 'not-ready' });
   const b = await readJson(request), v = b && (await webToken(env, b.token));
   if (!v || !v.apple) return json(401, { error: 'signed-out' });
+  if (v.apple.startsWith('s:')) return json(403, { error: 'sandbox' });
   const email = cleanEmail(b.email), code = String((b && b.code) || '').replace(/\D/g, '');
   if (!email || code.length !== 6) return json(400, { error: 'invalid' });
   if (!(await checkCode(env, email, code))) return json(400, { error: 'wrong-code' });
@@ -534,6 +555,7 @@ export default {
       if (p === '/licence/apple/notify' && m === 'POST') return await appleNotify(request, env);
       if (p === '/licence/apple/email' && m === 'POST') return await appleEmailStart(request, env);
       if (p === '/licence/apple/email/verify' && m === 'POST') return await appleEmailVerify(request, env);
+      if (p === '/licence/apple/code' && m === 'POST') return await appleCode(request, env);
       if (p === '/licence/admin') return m === 'OPTIONS' ? new Response(null, { status: 204, headers: CORS }) : m === 'POST' ? await admin(request, env) : json(405, { error: 'method' }, CORS);
       if (p.startsWith('/licence/')) return json(404, { error: 'not-found' });
     } catch (e) {

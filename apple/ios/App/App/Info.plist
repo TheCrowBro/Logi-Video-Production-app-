@@ -71,34 +71,28 @@
 	<key>WKAppBoundDomains</key>
 	<array>
 		<string>vdex.crowmade.app</string>
+		<string>localhost</string>
 	</array>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Vdex keeps a “Vdex bookings” calendar on this phone with your shoots and edit days, and brings back changes you make there.</string>
 	<key>NSCalendarsWriteOnlyAccessUsageDescription</key>
 	<string>Vdex keeps a “Vdex bookings” calendar on this phone with your shoots and edit days.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Vdex finds your other device on the same Wi‑Fi when you link them to share your data.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Vdex does not use Reminders. It keeps only its own “Vdex bookings” calendar.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Vdex does not use Reminders. It keeps only its own “Vdex bookings” calendar.</string>
 	<key>NSCalendarsUsageDescription</key>
 	<string>Vdex keeps a “Vdex bookings” calendar on this phone with your shoots and edit days, and brings back changes you make there.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>The camera reads a timecode display and scans codes to link another device.</string>
+	<string>The camera reads a timecode display, measures white balance and distance, scans a printed script, and scans the code that links another device.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>The noise meter measures the sound level on set.</string>
+	<string>The noise meter and timecode sync listen live. Nothing is recorded or kept.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Your location gives the sun times, the weather for a shoot day and the field tools.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>The sun pointer and the range finder use the phone’s motion sensors.</string>
-	<key>CFBundleURLTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleURLName</key>
-			<string>app.crowmade.vdex</string>
-			<key>CFBundleURLSchemes</key>
-			<array>
-				<string>vdex</string>
-			</array>
-		</dict>
-	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>

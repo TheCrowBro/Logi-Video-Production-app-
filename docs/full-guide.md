@@ -161,7 +161,7 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Where it lives.** Inside the installed app on this phone. Nothing is uploaded unless you link a storage of your own.
 
-**Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones. In the App Store app, Export and Import open the Files app itself (iCloud Drive, On My iPhone, Dropbox and so on), and Vdex's own folder shows in Files under *On My iPhone → Vdex*.
+**Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones. In the App Store app, Export and Import open the Files app itself (iCloud Drive, On My iPhone, Dropbox and so on).
 
 **Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. (In the App Store app, the sign-in opens in the phone's own sign-in window and comes back to Vdex by itself.) Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 

@@ -27,14 +27,23 @@ public class DocumentPickerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPicker
     // { saved: false } when the picker is dismissed.
     @objc func save(_ call: CAPPluginCall) {
         guard let name = call.getString("name"), let b64 = call.getString("data"), let bytes = Data(base64Encoded: b64) else { return call.reject("A name and the file's bytes are needed") }
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        let safe = (name as NSString).lastPathComponent // a name, never a path
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(safe.isEmpty ? "Vdex file" : safe)
         do { try bytes.write(to: url, options: .atomic) } catch { return call.reject("Could not write the file: \(error.localizedDescription)") }
-        pending = call; mode = "save"; tempURL = url
         DispatchQueue.main.async {
+            guard self.ready(call) else { try? FileManager.default.removeItem(at: url); return }
+            self.pending = call; self.mode = "save"; self.tempURL = url
             let picker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
             picker.delegate = self
             self.bridge?.viewController?.present(picker, animated: true)
         }
+    }
+
+    // One sheet at a time: a call made while another picker, the print sheet or a sign-in is up is refused at once
+    // rather than left waiting for a sheet that can never appear.
+    private func ready(_ call: CAPPluginCall) -> Bool {
+        if pending != nil || bridge?.viewController?.presentedViewController != nil { call.reject("Another window is open. Close it and try again."); return false }
+        return true
     }
 
     // open({ types: ['docx', 'txt', …] (extensions, optional) }) → { name, data (base64), type } for the chosen file, or
@@ -43,8 +52,9 @@ public class DocumentPickerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPicker
         let exts = call.getArray("types", String.self) ?? []
         var types: [UTType] = exts.compactMap { UTType(filenameExtension: $0) }
         if types.isEmpty { types = [.data] }
-        pending = call; mode = "open"
         DispatchQueue.main.async {
+            guard self.ready(call) else { return }
+            self.pending = call; self.mode = "open"
             let picker = UIDocumentPickerViewController(forOpeningContentTypes: types, asCopy: true)
             picker.allowsMultipleSelection = false
             picker.delegate = self
@@ -57,6 +67,7 @@ public class DocumentPickerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPicker
     @objc func print(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             guard let webView = self.bridge?.webView else { return call.reject("No page to print") }
+            guard self.ready(call) else { return }
             let controller = UIPrintInteractionController.shared
             let info = UIPrintInfo(dictionary: nil)
             info.outputType = .general
@@ -80,8 +91,11 @@ public class DocumentPickerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPicker
         pending = nil
         if mode == "save" { cleanTemp(); call.resolve(["saved": true]); return }
         guard let url = urls.first else { return call.resolve(["name": NSNull()]) }
-        guard let file = Inbox.read(url) else { return call.reject("Could not read the file") }
-        call.resolve(file)
+        DispatchQueue.global(qos: .userInitiated).async { // a large file is read and encoded off the main thread
+            let file = Inbox.read(url)
+            try? FileManager.default.removeItem(at: url) // the picker's copy, once read
+            if let file = file { call.resolve(file) } else { call.reject("Could not read the file") }
+        }
     }
 
     public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
@@ -100,12 +114,17 @@ enum Inbox {
     private static var queue: [[String: Any]] = []
 
     static func take(_ contexts: Set<UIOpenURLContext>) {
-        for c in contexts where c.url.isFileURL {
-            guard let file = read(c.url) else { continue }
-            queue.append(file)
-            if c.url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: c.url) } // "Copy to Vdex" leaves its copy in Documents/Inbox: taken, then removed; a file opened in place is never touched
+        let urls = contexts.map { $0.url }.filter { $0.isFileURL }
+        if urls.isEmpty { return }
+        DispatchQueue.global(qos: .userInitiated).async { // read and encode off the main thread, so a large file never stalls the start
+            var files: [[String: Any]] = []
+            for url in urls {
+                guard let file = Inbox.read(url) else { continue }
+                files.append(file)
+                if url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: url) } // "Copy to Vdex" leaves its copy in Documents/Inbox: taken, then removed
+            }
+            DispatchQueue.main.async { Inbox.queue.append(contentsOf: files); Inbox.flush() }
         }
-        flush()
     }
     static func read(_ url: URL) -> [String: Any]? {
         let secured = url.startAccessingSecurityScopedResource()

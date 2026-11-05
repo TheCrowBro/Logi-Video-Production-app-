@@ -243,13 +243,18 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     // The iPhone app's purchase: a certificate chain of our own stands in for Apple's (the Worker is told its root).
     const { execSync } = require('child_process');
     const wd = fs.mkdtempSync(path.join(os.tmpdir(), 'vdex-apple-')), run = cmd => execSync(cmd, { cwd: wd, stdio: ['ignore', 'pipe', 'pipe'] });
-    fs.writeFileSync(path.join(wd, 'inter.ext'), 'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n');
+    fs.writeFileSync(path.join(wd, 'inter.ext'), 'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n1.2.840.113635.100.6.2.1=DER:05:00\n');
+    fs.writeFileSync(path.join(wd, 'plain-ca.ext'), 'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n');
     fs.writeFileSync(path.join(wd, 'leaf.ext'), 'basicConstraints=CA:FALSE\n1.2.840.113635.100.6.11.1=DER:05:00\n');
     fs.writeFileSync(path.join(wd, 'other.ext'), 'basicConstraints=CA:FALSE\n');
     run('openssl ecparam -name secp384r1 -genkey -noout -out root.key && openssl req -new -x509 -key root.key -sha384 -days 3650 -subj "/CN=Test Root CA/O=Vdex tests" -out root.pem && openssl x509 -in root.pem -outform der -out root.der');
     run('openssl ecparam -name prime256v1 -genkey -noout -out inter.key && openssl req -new -key inter.key -subj "/CN=Test WWDR/O=Vdex tests" -out inter.csr && openssl x509 -req -in inter.csr -CA root.pem -CAkey root.key -CAcreateserial -sha384 -days 3650 -extfile inter.ext -out inter.pem');
     run('openssl ecparam -name prime256v1 -genkey -noout -out leaf.key && openssl req -new -key leaf.key -subj "/CN=Test App Store/O=Vdex tests" -out leaf.csr && openssl x509 -req -in leaf.csr -CA inter.pem -CAkey inter.key -CAcreateserial -sha256 -days 3650 -extfile leaf.ext -out leaf.pem');
     run('openssl ecparam -name prime256v1 -genkey -noout -out other.key && openssl req -new -key other.key -subj "/CN=Not the App Store/O=Vdex tests" -out other.csr && openssl x509 -req -in other.csr -CA inter.pem -CAkey inter.key -CAcreateserial -sha256 -days 3650 -extfile other.ext -out other.pem');
+    // a forged App Store leaf issued by that end-entity certificate (as a developer's own Apple certificate could try), and an intermediate without Apple's marker
+    run('openssl ecparam -name prime256v1 -genkey -noout -out forged.key && openssl req -new -key forged.key -subj "/CN=Forged App Store/O=Vdex tests" -out forged.csr && openssl x509 -req -in forged.csr -CA other.pem -CAkey other.key -CAcreateserial -sha256 -days 3650 -extfile leaf.ext -out forged.pem');
+    run('openssl ecparam -name prime256v1 -genkey -noout -out plain-ca.key && openssl req -new -key plain-ca.key -subj "/CN=Some CA/O=Vdex tests" -out plain-ca.csr && openssl x509 -req -in plain-ca.csr -CA root.pem -CAkey root.key -CAcreateserial -sha384 -days 3650 -extfile plain-ca.ext -out plain-ca.pem');
+    run('openssl ecparam -name prime256v1 -genkey -noout -out under-plain.key && openssl req -new -key under-plain.key -subj "/CN=App Store under some CA/O=Vdex tests" -out under-plain.csr && openssl x509 -req -in under-plain.csr -CA plain-ca.pem -CAkey plain-ca.key -CAcreateserial -sha256 -days 3650 -extfile leaf.ext -out under-plain.pem');
     const der = f => Buffer.from(fs.readFileSync(path.join(wd, f), 'utf8').replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64');
     const bu = buf => Buffer.from(buf).toString('base64url');
     const jws = (payload, { leaf = 'leaf', chain = ['leaf.pem', 'inter.pem', 'root.pem'] } = {}) => {
@@ -281,6 +286,10 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
       ['another product', jws(txn({ productId: 'app.crowmade.vdex.tips' }))],
       ['a sandbox purchase, unless allowed', jws(txn({ environment: 'Sandbox' }))],
       ['a revoked purchase', jws(txn({ revocationDate: Date.now(), revocationReason: 0 }))],
+      ['a forged App Store leaf issued by a certificate that is not an authority', jws(txn(), { leaf: 'forged', chain: ['forged.pem', 'other.pem', 'inter.pem', 'root.pem'] })],
+      ['…even with the end-entity passed off as the intermediate', jws(txn(), { leaf: 'forged', chain: ['forged.pem', 'other.pem', 'root.pem'] })],
+      ['a chain whose intermediate is not Apple’s', jws(txn(), { leaf: 'under-plain', chain: ['under-plain.pem', 'plain-ca.pem', 'root.pem'] })],
+      ['a chain with a stranger’s root in the root’s place', jws(txn(), { chain: ['leaf.pem', 'inter.pem', 'plain-ca.pem'] })],
     ];
     for (const [what, bad] of refusals) { const r = await apost('/licence/apple/claim', { jws: bad, install: id(23), os: 'iPhone' }); ok(`refused: ${what}`, r.status === 400 || r.status === 403, String(r.status) + ' ' + JSON.stringify(r.body).slice(0, 100)); }
     const noRoot = await apost('/licence/apple/claim', { jws: jws(txn({ originalTransactionId: '2000000999' }), { chain: ['leaf.pem', 'inter.pem'] }), install: id(24), os: 'iPhone' });
@@ -301,17 +310,31 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('…and a website sign-in, which is not the purchase’s own, cannot add addresses to it', (await apost('/licence/apple/email', { token: wv.body.token, email: 'other@example.com' })).status === 401 && !lastCode('other@example.com'));
     const desk = await apost('/licence/activate', { code: linked.body.code, install: id(26), os: 'Windows' });
     ok('…and the desktop app activates with the code on the same licence, taking its third place', desk.status === 200 && desk.body.ok && desk.body.used === 3, JSON.stringify(desk.body).slice(0, 120));
+    const again = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });
+    ok('claiming again after the link (a reinstall) shows the email, and its code carries it', again.status === 200 && again.body.licence.email === 'app@example.com' && (await codes.verifyCode(again.body.code, { keys: KEYS })).licence.email === 'app@example.com', JSON.stringify(again.body).slice(0, 140));
+    const onDemand = await apost('/licence/apple/code', { token: cb.token });
+    ok('the desktop code comes on demand for the purchase’s sign-in, and for nobody else', onDemand.status === 200 && onDemand.body.code === again.body.code && (await apost('/licence/apple/code', { token: wv.body.token })).status === 401 && (await apost('/licence/apple/code', { token: 'x.y.z' })).status === 401);
+    const sends = []; for (let i = 0; i < 2; i++) sends.push((await apost('/licence/apple/email', { token: cb.token, email: `more${i}@example.com` })).status);
+    ok('one purchase may send three codes a day (app@example.com was the first), and no more: the fourth is refused without an email', sends.every(s => s === 200) && (await apost('/licence/apple/email', { token: cb.token, email: 'more3@example.com' })).status === 503 && !lastCode('more3@example.com'), sends.join());
+    ok('a code of the wrong length is refused outright', (await apost('/licence/apple/email/verify', { token: cb.token, email: 'app@example.com', code: '12345' })).status === 400);
     // a refund through Apple cancels it; a reversed refund restores it
     const notice = (type, over = {}) => jws({ notificationType: type, subtype: '', notificationUUID: 'n-' + type, version: '2.0', signedDate: Date.now(), data: { bundleId: 'app.crowmade.vdex', environment: 'Production', signedTransactionInfo: jws(txn(over)) } });
     ok('an unsigned notice is refused', (await apost('/licence/apple/notify', { signedPayload: 'x.y.z' })).status === 400);
     const refunded = await apost('/licence/apple/notify', { signedPayload: notice('REFUND') });
     const after = await apost('/licence/web/check', { token: cb.token });
     ok('a refund notice from Apple cancels the licence: the phone’s next check says so, and the purchase cannot be claimed again', refunded.body.cancelled === 1 && after.body.error === 'cancelled' && (await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' })).status === 403, JSON.stringify([refunded, after]).slice(0, 200));
+    ok('…nor can an email be added to it, nor its code fetched', (await apost('/licence/apple/email', { token: cb.token, email: 'late@example.com' })).status === 403 && (await apost('/licence/apple/code', { token: cb.token })).status === 403);
     const reversed = await apost('/licence/apple/notify', { signedPayload: notice('REFUND_REVERSED') });
     ok('a refund that Apple reverses brings it back', reversed.body.restored === 1 && (await apost('/licence/web/check', { token: cb.token })).body.ok === true);
     ok('other notices are acknowledged and ignored', (await apost('/licence/apple/notify', { signedPayload: notice('DID_RENEW') })).body.ignored === 'DID_RENEW');
     await mf2.dispose(); mf2 = new Miniflare(opts({ ...aenv, APPLE_ALLOW_SANDBOX: 'on' }));
-    ok('a sandbox purchase is taken when the owner allows it (for testing)', (await apost('/licence/apple/claim', { jws: jws(txn({ environment: 'Sandbox', originalTransactionId: '1000000555' })), install: id(25), os: 'iPhone' })).status === 200);
+    const real = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });
+    const sand = await apost('/licence/apple/claim', { jws: jws(txn({ environment: 'Sandbox' })), install: id(25), os: 'iPhone' });
+    ok('a sandbox purchase is taken when the owner allows it (for testing): a licence of its own, apart from the real purchase with the same number', sand.status === 200 && sand.body.ok && real.status === 200 && sand.body.licence.ref !== real.body.licence.ref && sand.body.used === 1, JSON.stringify([sand.body.licence, real.body.licence]).slice(0, 160));
+    ok('…for 30 days, with no desktop code and no email', /^\d{4}-\d\d-\d\d$/.test(sand.body.licence.expires) && !sand.body.code && (await apost('/licence/apple/email', { token: sand.body.token, email: 'sand@example.com' })).status === 403 && (await apost('/licence/apple/code', { token: sand.body.token })).status === 403);
+    ok('…and its daily check and its place work like any other', (await apost('/licence/web/check', { token: sand.body.token })).body.ok === true && (await apost('/licence/web/activate', { token: sand.body.token, install: id(25), os: 'iPhone' })).body.ok === true);
+    const sandRefund = await apost('/licence/apple/notify', { signedPayload: notice('REFUND', { environment: 'Sandbox' }) });
+    ok('a sandbox refund cancels the sandbox licence and leaves the real one alone', sandRefund.body.cancelled === 1 && (await apost('/licence/web/check', { token: sand.body.token })).body.error === 'cancelled' && (await apost('/licence/web/check', { token: real.body.token })).body.ok === true);
     fs.rmSync(wd, { recursive: true, force: true });
 
     /* ------------------------------ the config ------------------------------ */

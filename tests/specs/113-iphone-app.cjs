@@ -18,7 +18,12 @@ const bridge = () => {
   const P = (name, methods) => {
     const o = {};
     for (const [m, fn] of Object.entries(methods)) o[m] = async (args = {}) => { cap.calls.push({ plugin: name, method: m, args }); return fn(args); };
-    o.addListener = async (ev, cb) => { (cap.listeners[name + '.' + ev] = cap.listeners[name + '.' + ev] || []).push(cb); return { remove() {} }; };
+    o.addListener = async (ev, cb) => {
+      (cap.listeners[name + '.' + ev] = cap.listeners[name + '.' + ev] || []).push(cb);
+      const held = sessionStorage.getItem('cap-held-action'); // a notification's button pressed while the app was closed
+      if (held && name === 'LocalNotifications' && ev === 'localNotificationActionPerformed') { sessionStorage.removeItem('cap-held-action'); setTimeout(() => cb({ actionId: held, notification: { extra: { tag: 'logi-break' } } }), 0); }
+      return { remove() {} };
+    };
     return o;
   };
   window.Capacitor = { isNativePlatform: () => true, getPlatform: () => 'ios', Plugins: {
@@ -71,7 +76,8 @@ const bridge = () => {
       }
       if (p === '/licence/apple/email') return ans(body.token === 'tok-apple' && /@/.test(body.email) ? 200 : 401, body.token === 'tok-apple' ? { ok: true } : { error: 'signed-out' });
       if (p === '/licence/apple/email/verify') return body.code === '123456' ? ans(200, { ok: true, licence: { ...lic, email: body.email }, code: 'VDEX-FAKE-CODE-2' }) : ans(400, { error: 'wrong-code' });
-      if (p === '/licence/web/check') return body.token === 'tok-apple' ? ans(200, { ok: true, licence: lic }) : ans(401, { error: 'signed-out' });
+      if (p === '/licence/apple/code') return ans(body.token === 'tok-apple' ? 200 : 401, body.token === 'tok-apple' ? { ok: true, code: 'VDEX-FAKE-CODE-3' } : { error: 'signed-out' });
+      if (p === '/licence/web/check') return body.token === 'tok-apple' ? ans(200, { ok: true, licence: lic }) : body.token === 'tok-email' ? ans(200, { ok: true, licence: { ...lic, ref: '1:1', email: 'jo@example.com' } }) : ans(401, { error: 'signed-out' });
       if (p === '/licence/web/activate') return ans(200, { ok: true, used: body.release ? 3 : 1 });
       if (p === '/licence/web/release') return ans(200, { ok: true });
       return ans(404, { error: 'not-found' });
@@ -100,7 +106,7 @@ const bridge = () => {
   const toastText = page => page.evaluate(() => [...document.querySelectorAll('.toast')].map(t => t.textContent).join(' | '));
   try {
     const now = Date.now();
-    const { page } = await open({ storage: { on: true, statusAt: now, first: now - 3 * DAY, seen: now } });
+    const { ctx: ctx1, page } = await open({ storage: { on: true, statusAt: now, first: now - 3 * DAY, seen: now } });
     await page.evaluate(() => import('./js/store.js').then(s => s.loadSample()));
     await sleep(600);
 
@@ -140,16 +146,23 @@ const bridge = () => {
     ok('a purchase confirmed by the licence server licenses the phone at once: a sign-in token, the licence, this phone on it', s1.token === 'tok-apple' && s1.seat === 'ok' && s1.licence && s1.licence.ref === '2:7' && /Licensed through the App Store/.test(await panel(page)) && /Thank you! Vdex is licensed on this phone/.test(await toastText(page)), JSON.stringify(s1).slice(0, 160));
     await page.screenshot({ path: OUT + '/iphone-licence-licensed.png' });
     // the buyer adds an email address, so the same licence signs in elsewhere; the desktop code is there to copy
-    ok('an App Store licence offers to add an email, and the code for the desktop app', (await btn(page, 'Add your email').count()) === 1 && (await btn(page, 'Copy the code for the desktop app').count()) === 1 && (await stored(page)).code === 'VDEX-FAKE-CODE-1');
+    ok('an App Store licence offers to add an email, and the code for the desktop app, which is kept nowhere on the phone', (await btn(page, 'Add your email').count()) === 1 && (await btn(page, 'Copy the code for the desktop app').count()) === 1 && !(await stored(page)).code);
+    await ctx1.grantPermissions(['clipboard-read', 'clipboard-write']);
+    await btn(page, 'Copy the code for the desktop app').click(); await page.waitForFunction(() => /Licence code copied|could not/i.test([...document.querySelectorAll('.toast')].map(t => t.textContent).join(' ')), null, { timeout: 5000 }).catch(() => {});
+    ok('Copy the code fetches it from the licence server with the phone’s sign-in and copies it', (() => { const c = lastHit('/licence/apple/code'); return c && c.body.token === 'tok-apple'; })() && (await page.evaluate(() => navigator.clipboard.readText().catch(() => ''))) === 'VDEX-FAKE-CODE-3' && /Licence code copied/.test(await toastText(page)), await toastText(page));
     await btn(page, 'Add your email').click(); await page.waitForSelector('.sheet input[type="email"]');
     await page.locator('.sheet input[type="email"]').fill('jo@example.com'); await page.locator('.sheet').getByRole('button', { name: 'Email me a code' }).click(); await sleep(400);
     ok('the address gets a 6-digit code (the licence server asked with the phone’s sign-in)', (() => { const e = lastHit('/licence/apple/email'); return e && e.body.email === 'jo@example.com' && e.body.token === 'tok-apple'; })() && /on its way to jo@example.com/.test(await page.locator('.sheet').innerText()));
     await page.locator('.sheet input[aria-label="6-digit code"]').fill('111111'); await page.locator('.sheet').getByRole('button', { name: 'Add the address' }).click(); await sleep(400);
     ok('a wrong code is said so', /not right/.test(await page.locator('.sheet').innerText()));
     await page.locator('.sheet input[aria-label="6-digit code"]').fill('123456'); await page.locator('.sheet').getByRole('button', { name: 'Add the address' }).click(); await sleep(500);
-    ok('the right code puts the address on the licence: the panel shows it, the desktop code carries it, and the Add button is gone', /Licensed through the App Store · jo@example.com · up to 3 devices/.test(await panel(page)) && (await stored(page)).code === 'VDEX-FAKE-CODE-2' && (await btn(page, 'Add your email').count()) === 0 && (await page.locator('.sheet').count()) === 0, (await panel(page)).slice(0, 120));
+    ok('the right code puts the address on the licence: the panel shows it and the Add button is gone', /Licensed through the App Store · jo@example.com · up to 3 devices/.test(await panel(page)) && (await btn(page, 'Add your email').count()) === 0 && (await page.locator('.sheet').count()) === 0, (await panel(page)).slice(0, 120));
     // restore purchases after signing out (a reinstall, a second iPhone)
     await btn(page, 'Sign out').click(); await page.waitForSelector('.sheet'); await page.locator('.sheet').getByRole('button', { name: 'Sign out', exact: true }).click(); await sleep(500);
+    await page.evaluate(() => { window.__cap.owned = [{ state: 'owned', jws: 'good.jws', productId: 'app.crowmade.vdex.licence', originalTransactionId: '2000000123456789' }]; });
+    await page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(true))); await sleep(400);
+    ok('a sign-out holds: the hourly check does not quietly take the purchase back', /Free trial/.test(await panel(page)) && (await stored(page)).signedOut === true && !(await stored(page)).token);
+    await page.evaluate(() => { window.__cap.owned = []; });
     await btn(page, 'Restore purchases').click(); await sleep(500);
     ok('Restore purchases with nothing owned says so, and stays on trial', /No Vdex purchase was found for this Apple ID/.test(await toastText(page)) && /Free trial/.test(await panel(page)), await toastText(page));
     await page.evaluate(() => { window.__cap.owned = [{ state: 'owned', jws: 'good.jws', productId: 'app.crowmade.vdex.licence', originalTransactionId: '2000000123456789' }]; });
@@ -176,6 +189,11 @@ const bridge = () => {
     const over = await page.evaluate(() => import('./js/hours.js').then(hrs => !hrs.onBreak(hrs.running())));
     const cancels = await calls(page, 'LocalNotifications', 'cancel');
     ok('“Back to work” on it ends the break and cancels the phone’s pending alerts', over && cancels.some(c => c.notifications.map(n => n.id).join() === '1,2') && /Back to work/.test(await toastText(page)));
+    await page.evaluate(id => import('./js/hours.js').then(hrs => { hrs.startBreak(30); }), bid); await sleep(300);
+    await page.evaluate(() => sessionStorage.setItem('cap-held-action', 'back'));
+    await page.reload(); await page.waitForSelector('#rolodex .drum-btn');
+    await page.waitForFunction(() => import('./js/hours.js').then(hrs => !hrs.onBreak(hrs.running())), null, { timeout: 5000 }).catch(() => {});
+    ok('Back to work pressed on the notification while Vdex was closed ends the break once the app opens', await page.evaluate(() => import('./js/hours.js').then(hrs => !!hrs.running() && !hrs.onBreak(hrs.running()))));
     await page.evaluate(() => import('./js/hours.js').then(hrs => hrs.stopShift())); await sleep(300);
     await page.evaluate(() => window.logiGo('settings')); await sleep(300);
     await page.evaluate(() => document.querySelectorAll('details').forEach(d => { d.open = true; })); await sleep(200);
@@ -185,7 +203,8 @@ const bridge = () => {
     await page.evaluate(() => window.logiGo('bookings')); await sleep(300);
     await page.evaluate(() => import('./js/calendar.js').then(m => m.openCalendarSheet())); await page.waitForSelector('.sheet .card[data-svc="apple"]');
     ok('Calendar & email offers this phone’s calendar as a link of its own beside the account ones, with no sign-in', (await page.locator('.sheet .card[data-svc="apple"]').count()) === 1 && /with no sign-in/.test(await page.locator('.sheet .card[data-svc="apple"]').innerText()) && (await page.locator('.sheet .cloud-choices .cloud-choice').count()) === 2);
-    await page.locator('.sheet button[aria-label="Connect This phone’s calendar"]').click(); await sleep(1200);
+    await page.locator('.sheet button[aria-label="Connect This phone’s calendar"]').click();
+    await page.waitForFunction(() => { const pl = JSON.parse(localStorage.getItem('logi-cal-phone') || 'null'); return pl && pl.calendarId && Object.keys(pl.events || {}).length > 0; }, null, { timeout: 10000 }).catch(() => {}); await sleep(200);
     const cal = await page.evaluate(() => window.__cap.cal);
     const want = await page.evaluate(() => import('./js/calendar.js').then(m => import('./js/store.js').then(s => s.activeBookings().length + m.dueEvents().length + m.editEvents().length)));
     const cs = await page.evaluate(() => import('./js/store.js').then(s => s.db.calSync || {})), pl = await page.evaluate(() => JSON.parse(localStorage.getItem('logi-cal-phone') || 'null'));
@@ -201,7 +220,8 @@ const bridge = () => {
     await page.evaluate(() => import('./js/calendar.js').then(m => m.syncCalendar({ interactive: true }))); await sleep(400);
     ok('a title changed in the Calendar app comes back into the booking', (await page.evaluate(id => import('./js/store.js').then(s => s.byId('bookings', id).title), first.id)) === 'Moved by the calendar');
     // a change in Vdex goes out by itself
-    await page.evaluate(id => import('./js/store.js').then(s => s.update(d => { const b = d.bookings.find(x => x.id === id); b.title = 'Renamed in Vdex'; b.updatedAt = Date.now(); })), first.id); await sleep(2500);
+    await page.evaluate(id => import('./js/store.js').then(s => s.update(d => { const b = d.bookings.find(x => x.id === id); b.title = 'Renamed in Vdex'; b.updatedAt = Date.now(); })), first.id);
+    await page.waitForFunction(id => (window.__cap.cal.events.find(x => x.id === id) || {}).title?.startsWith('Renamed in Vdex'), ev.id, { timeout: 10000 }).catch(() => {});
     ok('a booking renamed in Vdex is renamed on the phone’s calendar by itself', (await page.evaluate(id => window.__cap.cal.events.find(x => x.id === id).title, ev.id)).startsWith('Renamed in Vdex'));
     await page.evaluate(() => import('./js/calendar.js').then(m => m.disconnectCalendar('phone')));
     ok('disconnecting forgets the link on this phone', (await page.evaluate(() => localStorage.getItem('logi-cal-phone'))) === null);
@@ -320,6 +340,50 @@ const bridge = () => {
     await p2.screenshot({ path: OUT + '/iphone-readonly.png' });
     await p2.locator('.licence-bar').getByRole('button', { name: 'Buy · £19.99' }).click(); await sleep(600);
     ok('…and buying from the bar licenses the phone', (await p2.evaluate(() => JSON.parse(localStorage.getItem('vdex-licence')).seat)) === 'ok' && (await p2.locator('.licence-bar').count()) === 0);
+
+    /* ------------------------------ moving between licences ------------------------------ */
+    // A phone on an email licence that restores an App Store purchase gives the email licence's place back first.
+    const { ctx: c5, page: p5 } = await open({ storage: { on: true, statusAt: now, first: now - 40 * DAY, seen: now, ios: true, via: 'email', token: 'tok-email', licence: { ...lic, ref: '1:1', email: 'jo@example.com' }, seat: 'ok', checked: now, tried: now, seatChecked: now, seatTried: now, install: 'inst-abcdef1234567890' } });
+    await p5.evaluate(() => { window.__cap.owned = [{ state: 'owned', jws: 'good.jws', productId: 'app.crowmade.vdex.licence' }]; });
+    const relBefore = hits.filter(x => x.p === '/licence/web/release').length;
+    const moved = await p5.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().restore()));
+    const rel5 = hits.filter(x => x.p === '/licence/web/release').slice(relBefore);
+    ok('restoring an App Store purchase on a phone that holds a place on an email licence gives that place back first', rel5.length === 1 && rel5[0].body.token === 'tok-email' && rel5[0].body.install === 'inst-abcdef1234567890' && moved.mode === 'licensed' && (await p5.evaluate(() => JSON.parse(localStorage.getItem('vdex-licence')).token)) === 'tok-apple', JSON.stringify(rel5).slice(0, 160));
+    await c5.close();
+    // A phone signed in with an App Store purchase before the app knew how it was licensed still shows it so.
+    const { ctx: c6, page: p6 } = await open({ storage: { on: true, statusAt: now, first: now - 40 * DAY, seen: now, ios: true, token: 'tok-apple', licence: lic, seat: 'ok', checked: now, tried: now, seatChecked: now, seatTried: now, install: 'inst-abcdef1234567890' } });
+    await about(p6);
+    ok('an older App Store sign-in (from before the app recorded how) reads as one, with Add your email and the desktop code', /Licensed through the App Store/.test(await panel(p6)) && (await btn(p6, 'Add your email').count()) === 1 && (await btn(p6, 'Copy the code for the desktop app').count()) === 1);
+    await c6.close();
+
+    /* ------------------------------ Vdex's Google sign-in page ------------------------------ */
+    const c7 = await browser.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' });
+    await c7.route('https://accounts.google.com/gsi/client', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.google = { accounts: { oauth2: { initTokenClient: cfg => ({ requestAccessToken: o => { window.__greq = { cfg: { client_id: cfg.client_id, scope: cfg.scope }, o }; setTimeout(() => cfg.callback({ access_token: "gtok-page", expires_in: 3599, scope: cfg.scope }), 0); } }) } } };' }));
+    await c7.addInitScript(() => { window.__vdexSignin = u => { window.__bounced = u; }; });
+    const p7 = await c7.newPage(); const err7 = []; p7.on('pageerror', e => err7.push(e.message)); p7.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) err7.push(m.text()); });
+    await p7.goto(URL + 'signin-google.html'); await sleep(300);
+    ok('the Google sign-in page on its own says what it is for and offers nothing to press', /The Vdex app opens this page/.test(await p7.locator('#t').innerText()) && await p7.locator('#go').isHidden());
+    await p7.goto(URL + 'signin-google.html?client=123-test.apps.googleusercontent.com&scope=' + encodeURIComponent('https://www.googleapis.com/auth/drive.appdata') + '#hint=' + encodeURIComponent('jo@example.com')); await sleep(300);
+    const hashGone = await p7.evaluate(() => location.hash === '');
+    await p7.locator('#go').click(); await p7.waitForFunction(() => !!window.__bounced, null, { timeout: 5000 }).catch(() => {});
+    const bounced = new globalThis.URL(await p7.evaluate(() => window.__bounced || 'about:blank'));
+    const greq = await p7.evaluate(() => window.__greq);
+    ok('with the app’s client and permission it asks Google, naming the account it was given after the #, and hands the token to the app', bounced.protocol === 'vdex:' && bounced.searchParams.get('access_token') === 'gtok-page' && bounced.searchParams.get('google') === '1' && greq && greq.cfg.client_id === '123-test.apps.googleusercontent.com' && greq.o.login_hint === 'jo@example.com' && hashGone, bounced.href + ' ' + JSON.stringify(greq));
+    ok('…with no errors and nothing its security policy refuses', err7.length === 0, err7.join(' | '));
+    await c7.close();
+
+    /* ------------------------------ the Android share sheet ------------------------------ */
+    // On Android a file shared to Vdex is parked by the service worker and picked up at ?share=1: it goes to the same chooser.
+    const c8 = await browser.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' });
+    await c8.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+    await c8.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
+    await c8.addInitScript(acceptTerms());
+    const p8 = await c8.newPage();
+    await p8.goto(URL); await p8.waitForSelector('#rolodex .drum-btn');
+    await p8.evaluate(() => caches.open('logi-share').then(c => c.put('shared-file', new Response('INT. KITCHEN - DAY\nWide: Ana at the stove\n', { headers: { 'X-Name': 'shots.txt', 'Content-Type': 'text/plain' } }))));
+    await p8.goto(URL + 'index.html?share=1'); await p8.waitForSelector('.sheet', { timeout: 8000 }).catch(() => {});
+    ok('a file shared on Android opens the same chooser: a script for TC Notes, or a shot list for a booking', /A file for Vdex/.test(await p8.locator('.sheet').innerText().catch(() => '')) && /shots\.txt/.test(await p8.locator('.sheet').innerText().catch(() => '')) && (await p8.evaluate(() => location.search)) === '');
+    await c8.close();
 
     ok('no page errors', errors.length === 0, errors.join(' | ').slice(0, 300));
   } finally { await browser.close(); }

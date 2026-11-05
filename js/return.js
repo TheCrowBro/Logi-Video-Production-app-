@@ -5,7 +5,7 @@
 (function () {
   if (window.Capacitor && typeof window.Capacitor.isNativePlatform === 'function' && window.Capacitor.isNativePlatform()) return; // inside the app itself: the answer has arrived, let the page take it
   var q = location.search;
-  var ours = /[?&]state=vdex(ms)?-[^&]*(~|%7E)app(&|$)/i.test(q) || (/[?&]app=icloud(&|$)/.test(q) && /[?&](ckWebAuthToken|ckSession)=/.test(q));
+  var ours = /[?&]state=vdex(ms)?-[^&#]*(~|%7E)app([&#]|$)/i.test(q) || (/[?&]app=icloud([&?#]|$)/.test(q) && /[?&](ckWebAuthToken|ckSession)=/.test(q));
   if (!ours) return;
   window.stop();
   (window.__vdexSignin || function (u) { location.replace(u); })('vdex://signin' + q);

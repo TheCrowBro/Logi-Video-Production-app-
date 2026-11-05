@@ -22,7 +22,7 @@ const play = () => web() && !!P.play;  // the Google Play app: no prices and no 
 const ios = () => web() && !!P.ios;    // the iPhone app: buys through the App Store, never links to the shop (Apple's rule)
 const app = () => web() && !!P.app;    // either store app: takes one of the licence's places
 const here = () => (app() ? 'phone' : 'computer');
-const price = () => (ios() && P.price && P.price()) || '19.99 USD'; // the App Store's price in the person's currency, once known
+const price = () => (ios() && P.price && P.price()) || ''; // the App Store's price in the person's currency, once the App Store has said it; nothing before (Apple's rule: only its price)
 
 // The states in which this device counts as having a licence (or licences are not switched on): cloud storage and
 // saving data files work only in these (store.setPaid).
@@ -79,7 +79,7 @@ async function start() {
 function describe(s) {
   const l = s.licence, seats = (l && l.seats) || s.seats || 3;
   const offer = play() ? 'sign in with the email address of your Vdex licence'
-    : ios() ? `buy a licence (${price()} once, for up to ${seats} of your devices), or sign in with the email address of a licence you already have`
+    : ios() ? `buy a licence (${price() ? price() + ' once, ' : 'once, '}for up to ${seats} of your devices), or sign in with the email address of a licence you already have`
       : web() ? `sign in with the email address you bought a licence with (20 USD once, for up to ${seats} of your devices)`
         : `add a licence: 20 USD once, for up to ${seats} of your devices`;
   const shop = !play(), restore = ios();
@@ -88,7 +88,7 @@ function describe(s) {
     case 'trial': return { line: `Free trial: ${plural(s.trialLeft, 'day')} left${s.trialEnds ? ` (until ${day(s.trialEnds)})` : ''}. After that Vdex is read-only here until you ${offer}.`, buy: shop, enter: true, restore };
     case 'ended': return { line: `Your free trial has ended, so Vdex is read-only here: you can open, search and print everything, but not change it. To change things again, ${offer}.`, tone: 'warn', buy: shop, enter: true, restore };
     case 'licensed': return web()
-      ? { line: `${s.via === 'apple' ? 'Licensed through the App Store' + (l.email ? ' · ' + l.email : '') : `Signed in as ${l.email}`}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${app() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true, addEmail: s.via === 'apple' && !l.email, copy: s.via === 'apple' && !!s.code }
+      ? { line: `${s.via === 'apple' ? 'Licensed through the App Store' + (l.email ? ' · ' + l.email : '') : `Signed in as ${l.email}`}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${app() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true, addEmail: s.via === 'apple' && !l.email, copy: s.via === 'apple' }
       : { line: `Licensed to ${who(l)}${l && l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}.`, tone: 'ok', copy: true, release: true };
     case 'pending': return web()
       ? { line: `Signed in as ${l.email}, but this phone is not on your licence yet: Vdex needs the internet once to add it.`, tone: s.canEdit ? '' : 'warn', retry: true, release: true }
@@ -102,13 +102,13 @@ function describe(s) {
 }
 function actions(s, d, after = () => {}) {
   const l = L(), b = [];
-  if (d.buy) b.push(h('button', { class: 'btn primary', onclick: e => (ios() ? buyInApp(e.target, after) : l.buy()) }, ios() ? `Buy a licence · ${price()}` : 'Buy a licence · 20 USD'));
+  if (d.buy) b.push(h('button', { class: 'btn primary', onclick: e => (ios() ? buyInApp(e.target, after) : l.buy()) }, ios() ? `Buy a licence${price() ? ' · ' + price() : ''}` : 'Buy a licence · 20 USD'));
   if (d.enter) b.push(h('button', { class: 'btn ghost', onclick: () => (web() ? signIn() : enterCode()) }, web() ? 'Sign in' : 'Enter licence code'));
   if (d.restore) b.push(h('button', { class: 'btn ghost', onclick: e => restoreInApp(e.target, after) }, 'Restore purchases'));
   if (d.again) b.push(h('button', { class: 'btn primary', onclick: async () => (web() ? addPhone() : enterCode(await l.code())) }, web() ? 'Add this phone' : 'Activate here again'));
   if (d.retry) b.push(h('button', { class: 'btn primary', onclick: e => retry(e.target, after) }, 'Try again'));
   if (d.addEmail) b.push(h('button', { class: 'btn ghost', onclick: () => addEmailSheet(after) }, 'Add your email'));
-  if (d.copy) b.push(h('button', { class: 'btn ghost', onclick: async () => { try { await navigator.clipboard.writeText(await l.code()); toast(web() ? 'Licence code copied: paste it in the desktop app under Enter licence code' : 'Licence code copied'); } catch { toast('Could not copy'); } } }, web() ? 'Copy the code for the desktop app' : 'Copy the code'));
+  if (d.copy) b.push(h('button', { class: 'btn ghost', onclick: async e => { const btn = e.target, was = btn.textContent; btn.disabled = true; btn.textContent = 'Fetching…'; let code = ''; try { code = await l.code(); } catch (err) { toast(err.message || 'The code could not be fetched'); } btn.disabled = false; btn.textContent = was; if (!code) return; try { await navigator.clipboard.writeText(code); toast(web() ? 'Licence code copied: paste it in the desktop app under Enter licence code' : 'Licence code copied'); } catch { toast('Could not copy'); } } }, web() ? 'Copy the code for the desktop app' : 'Copy the code'));
   if (d.release) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet() }, web() ? 'Sign out' : 'Release this computer'));
   if (d.remove) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet(true) }, 'Remove the code'));
   return b;
@@ -187,7 +187,7 @@ function paintBar() {
   // Each state's own next step: someone who has paid is never asked to buy again.
   const buttons = d.retry ? [small('Try again', e => retry(e.target), true), small('Details', () => detailsSheet())]
     : d.again ? [small(web() ? 'Add this phone' : 'Activate here again', async () => (web() ? addPhone() : enterCode(await L().code())), true), small('Details', () => detailsSheet())]
-    : d.buy ? [small(ios() ? `Buy · ${price()}` : 'Buy · 20 USD', e => (ios() ? buyInApp(e.target) : L().buy()), true), small(web() ? 'Sign in' : 'Enter code', enter)]
+    : d.buy ? [small(ios() ? `Buy${price() ? ' · ' + price() : ' a licence'}` : 'Buy · 20 USD', e => (ios() ? buyInApp(e.target) : L().buy()), true), small(web() ? 'Sign in' : 'Enter code', enter)]
     : d.enter ? [small('Sign in', enter, true)]
     : [small('Details', () => detailsSheet(), true)];
   const bar = h('div', { class: 'update-bar licence-bar' + (urgent ? ' urgent' : ''), role: 'status' },
@@ -357,7 +357,7 @@ function addEmailSheet(after = () => {}) {
     whereTo.textContent = `A 6-digit code is on its way to ${to}. It works for 15 minutes. Nothing after a few minutes? Check your spam folder.`;
     digits.focus();
   } },
-  h('p', { class: 'small muted' }, 'Your licence works on up to 3 of your devices. With an email address on it, you can sign in with that address on the website and in the Android app, and the code for the desktop app carries it too. We email you a 6-digit code to type in here.'),
+  h('p', { class: 'small muted' }, 'Your licence works on up to 3 of your devices. With an email address on it, you can sign in with that address on the website and on your other devices, and the code for the desktop app carries it too. We email you a 6-digit code to type in here.'),
   email, h('div', { class: 'actions' }, send));
   const whereTo = h('p', { class: 'small muted', role: 'status' });
   const digits = h('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 7, pattern: '[0-9 ]*', 'aria-label': '6-digit code', placeholder: '123456', class: 'licence-digits' });
@@ -370,7 +370,7 @@ function addEmailSheet(after = () => {}) {
     link.disabled = false; link.textContent = 'Add the address';
     if (!r || r.error) { msg.textContent = (r && r.error) || 'Something went wrong. Try again.'; msg.className = 'small licence-warn'; return; }
     set(r); sh.close(); after();
-    toast(`${to} is on your licence: sign in with it on the website and in the Android app.`);
+    toast(`${to} is on your licence: sign in with it on the website and on your other devices.`);
   } }, whereTo, digits, h('div', { class: 'actions' }, link, again));
   const sh = sheet('Add your email', h('div', { class: 'stack' }, step1, step2, msg));
   setTimeout(() => email.focus(), 50);

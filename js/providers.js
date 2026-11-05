@@ -236,8 +236,8 @@ export async function googleToken(scope, interactive) {
   // The iPhone app: Google's sign-in on Vdex's own page (signin-google.html) in the phone's sign-in window, which
   // Google accepts; the answer comes back on the vdex:// address.
   if (native.auth.available()) {
-    const q = new URLSearchParams({ client: id, scope: wanted.join(' '), ...(hint ? { hint } : {}) });
-    const back = await native.auth.start(`${location.origin}${location.pathname.replace(/[^/]*$/, '')}signin-google.html?${q}`);
+    const q = new URLSearchParams({ client: id, scope: wanted.join(' ') });
+    const back = await native.auth.start(`${location.origin}${location.pathname.replace(/[^/]*$/, '')}signin-google.html?${q}${hint ? '#hint=' + encodeURIComponent(hint) : ''}`); // the account's address after the #, so it never reaches a server log
     if (!back) throw CLOSED();
     const r = Object.fromEntries(new URL(back).searchParams);
     return new Promise((res, rej) => take(r, res, rej));

@@ -49,7 +49,8 @@ export function webLicence() {
   const emit = st => { const sig = JSON.stringify(st); if (sig !== last) { last = sig; listeners.forEach(f => { try { f(st); } catch { /* ignore */ } }); } };
 
   function describe(s, t) {
-    const base = { kind: 'web', play: !!s.play, ios: !!s.ios, app: inApp(s), enabled: !!s.on, seats: (s.licence && s.licence.seats) || SEATS, os: s.play ? 'Android' : s.ios ? native.device() : 'Web', price: s.price || '', via: s.via || '', code: s.code || '' };
+    const via = s.via || (s.token && s.licence && s.ios && !s.licence.email ? 'apple' : s.token ? 'email' : ''); // older sign-ins carry no via
+    const base = { kind: 'web', play: !!s.play, ios: !!s.ios, app: inApp(s), enabled: !!s.on, seats: (s.licence && s.licence.seats) || SEATS, os: s.play ? 'Android' : s.ios ? native.device() : 'Web', price: s.price || '', via };
     if (!s.on) return { ...base, mode: 'off', canEdit: true };
     const left = Math.max(0, TRIAL_DAYS - Math.floor(((s.seen || t) - (s.first || t)) / DAY));
     const trial = { trialLeft: left, trialEnds: new Date((s.first || t) + TRIAL_DAYS * DAY).toISOString().slice(0, 10) };
@@ -119,13 +120,14 @@ export function webLicence() {
     if (!read().install) update(x => { x.install = x.install || rand(); });
     let r; try { r = await call('/licence/apple/claim', { jws, install: read().install, os: native.device() }); } catch { update(x => { delete x.autoAt; }); return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; }
     const b = r.body, t = now();
-    if (b.token && b.licence) { await giveBack(b.licence); update(x => { x.token = b.token; x.licence = b.licence; x.via = 'apple'; if (b.code) x.code = b.code; x.checked = x.tried = t; delete x.cancelled; delete x.expired; }); }
+    if (b.token && b.licence) { await giveBack(b.licence); update(x => { x.token = b.token; x.licence = b.licence; x.via = 'apple'; delete x.signedOut; x.checked = x.tried = t; delete x.cancelled; delete x.expired; }); }
     if (r.status === 200 && b.ok) { update(x => { x.seat = 'ok'; x.seatChecked = x.seatTried = t; }); return state(); }
     if (b.error === 'full' && b.token) { update(x => { x.seat = 'full'; x.seatTried = t; }); return { ...state(), full: { computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft } }; }
     if (!r.answered) { update(x => { delete x.autoAt; }); return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; } // looked for again at the next check
     return { error: { cancelled: 'This purchase was refunded, so it no longer licenses Vdex. Buy again, or sign in with the email address of a licence.', revoked: 'Apple has revoked this purchase.', sandbox: 'That is a test purchase, which does not license Vdex.', 'not-ready': 'Buying in the app is not switched on yet. Try again later, or sign in with the email address of a licence.', swaps: 'This licence has been moved between devices 3 times in the last 30 days, so it cannot move again yet.' }[b.error] || 'Vdex could not confirm the purchase with Apple. Use Restore purchases in a moment.' };
   }
   async function buyInApp() {
+    update(x => { delete x.signedOut; });
     let r; try { r = await native.purchases.buy(PRODUCT); } catch (e) { return { error: e.message || 'The App Store could not complete the purchase.' }; }
     if (!r || r.state === 'cancelled') return { cancelled: true };
     if (r.state === 'pending') { update(x => { delete x.autoAt; }); return { pending: true }; } // Ask to Buy: the entitlement arrives later, and recheck() picks it up
@@ -134,7 +136,7 @@ export function webLicence() {
   }
   // Restore purchases: what this Apple ID owns (also after a reinstall, or on a second iPhone). quiet: no App Store round trip.
   async function restoreInApp(quiet = false) {
-    if (!quiet) { try { await native.purchases.restore(); } catch { /* what the phone already knows may do */ } }
+    if (!quiet) { update(x => { delete x.signedOut; }); try { await native.purchases.restore(); } catch { /* what the phone already knows may do */ } }
     let list = []; try { list = await native.purchases.owned(); } catch (e) { return { error: e.message || 'Could not ask the App Store.' }; }
     const mine = list.filter(x => x.productId === PRODUCT && x.jws && x.state !== 'revoked');
     if (!mine.length) return { error: 'No Vdex purchase was found for this Apple ID. If you bought with an email address, sign in with it.', none: true };
@@ -142,7 +144,11 @@ export function webLicence() {
     for (const x of mine) { const r = await claim(x.jws); if (r && !r.error) return r; last = r; }
     return last;
   }
-  if (read().ios && native.purchases.available()) native.purchases.product(PRODUCT).then(p => { if (p && p.price) update(x => { x.price = p.price; }); }).catch(() => {});
+  const askPrice = () => native.purchases.product(PRODUCT).then(p => { if (p && p.price) update(x => { x.price = p.price; }); }).catch(() => {});
+  if (read().ios && native.purchases.available()) {
+    askPrice();
+    native.purchases.onTransaction(tx => { if (tx && tx.productId === PRODUCT && tx.jws && tx.state !== 'revoked') claim(tx.jws).catch(() => {}); });
+  }
   // The buyer adds an email address to an App Store licence (then the website and the Android app sign in with it, and
   // the desktop code carries it). Step 1 sends a 6-digit code to it; step 2 links it.
   const EMAIL_ERR = { 'invalid-email': 'That email address does not look right.', 'email-failed': 'The email could not be sent just now. Try again in a minute.', busy: 'Vdex has sent as many emails as it can today. Please try again tomorrow.', 'not-ready': 'Adding an email is not available yet.', 'signed-out': 'Sign in again (Restore purchases), then add the address.', cancelled: 'This licence has been cancelled.', 'wrong-code': 'That code is not right, or has run out (a code works for 15 minutes and 5 tries). Check it, or send a new one.' };
@@ -153,8 +159,14 @@ export function webLicence() {
   async function verifyEmail(email, code) {
     let r; try { r = await call('/licence/apple/email/verify', { token: read().token, email, code }); } catch { return { error: 'Vdex could not reach the licence server. Check the internet connection and try again.' }; }
     if (r.status !== 200 || !r.body.ok) return { error: EMAIL_ERR[r.body.error] || 'Something went wrong. Try again.' };
-    update(x => { x.licence = r.body.licence || x.licence; if (r.body.code) x.code = r.body.code; });
+    update(x => { x.licence = r.body.licence || x.licence; });
     return state();
+  }
+  // The desktop code of an App Store licence, fetched when asked for and kept nowhere on the phone.
+  async function desktopCode() {
+    let r; try { r = await call('/licence/apple/code', { token: read().token }); } catch { throw new Error('Vdex could not reach the licence server. Check the internet connection and try again.'); }
+    if (r.status === 200 && r.body.code) return r.body.code;
+    throw new Error({ sandbox: 'A test purchase has no code for the desktop app.', cancelled: 'This licence has been cancelled.', 'signed-out': 'Sign in again (Restore purchases) to get the code.' }[r.body.error] || 'The code could not be fetched just now. Try again in a minute.');
   }
 
   return {
@@ -169,7 +181,7 @@ export function webLicence() {
     buy: async () => { const s = read(); if (s.ios) return buyInApp(); if (!s.play) window.open('/buy', '_blank', 'noopener'); return true; },
     restore: async () => restoreInApp(false),
     addEmail, verifyEmail,
-    code: async () => read().code || '', // an App Store licence's desktop code, once bought here
+    code: async () => (read().via === 'apple' || (read().ios && read().licence && !read().licence.email) ? desktopCode() : ''), // an App Store licence's desktop code, fetched when asked for
     // Step 1: email (or a licence code with an email inside). The Worker answers the same either way.
     start: async ({ email, code }) => {
       let r; try { r = await call('start', code ? { code } : { email }); } catch { return { error: 'Vdex could not reach the sign-in server. Check the internet connection and try again.' }; }
@@ -183,7 +195,7 @@ export function webLicence() {
       const b = r.body;
       if (r.status !== 200 || !b.token) return { error: { 'wrong-code': 'That code is not right, or has run out (a code works for 15 minutes and 5 tries). Check it, or send a new one.', 'no-licence': `No licence is linked to this email address. Use the one your licence belongs to${read().play ? '' : ', or buy a licence'}.` }[b.error] || 'Something went wrong. Try again.' };
       await giveBack(b.licence);
-      update(x => { x.token = b.token; x.licence = b.licence; x.via = 'email'; delete x.code; x.checked = x.tried = now(); delete x.cancelled; delete x.expired; delete x.seat; });
+      update(x => { x.token = b.token; x.licence = b.licence; x.via = 'email'; delete x.signedOut; x.checked = x.tried = now(); delete x.cancelled; delete x.expired; delete x.seat; });
       if (inApp(read())) { const sr = await seat(); if (sr.full) return { ...state(), full: sr }; }
       return state();
     },
@@ -193,8 +205,10 @@ export function webLicence() {
     recheck: async (force = false) => {
       await status(force);
       let s = read(); const t = now();
-      // The iPhone app, signed out: a purchase this Apple ID already owns (a reinstall, a second iPhone) licenses it by itself.
-      if (s.on && !s.token && s.ios && native.purchases.available() && (force || !s.autoAt || t - s.autoAt > DAY || t < s.autoAt)) { update(x => { x.autoAt = t; }); await restoreInApp(true).catch(() => null); s = read(); }
+      if (s.ios && !s.price && native.purchases.available()) await askPrice(); // the App Store's price, until it has said it once
+      // The iPhone app, signed out: a purchase this Apple ID already owns (a reinstall, a second iPhone) licenses it by itself,
+      // unless the person signed out on purpose (Sign out): then only Restore purchases or a new purchase signs in again.
+      if (s.on && !s.token && s.ios && !s.signedOut && native.purchases.available() && (force || !s.autoAt || t - s.autoAt > DAY || t < s.autoAt)) { update(x => { x.autoAt = t; }); await restoreInApp(true).catch(() => null); s = read(); }
       if (!s.on || !s.token) return state();
       if (force || t - (s.checked || 0) > CHECK_EVERY || t < (s.checked || 0)) {
         try {
@@ -219,7 +233,7 @@ export function webLicence() {
         let r; try { r = await call('release', { token: s.token, install: s.install }); } catch { r = null; }
         if (!r || (r.status !== 200 && r.status !== 404 && r.status !== 400)) return { error: 'Vdex could not reach the licence server. Connect to the internet and try again, so this phone\'s place can go to another device.' };
       }
-      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.cancelled; delete x.expired; delete x.via; delete x.code; });
+      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.cancelled; delete x.expired; delete x.via; if (x.ios) x.signedOut = true; });
       return state();
     },
   };

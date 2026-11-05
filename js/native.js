@@ -131,6 +131,8 @@ export const purchases = {
   // What this Apple ID owns: [{ state: 'owned' | 'revoked', jws, productId, … }]
   async owned() { const p = plugin('Purchases'); if (!p) return []; return (await p.current()).entitlements || []; },
   async restore() { const p = plugin('Purchases'); if (!p) return; await p.restore(); },
+  // Purchases that finish outside buy() (an Ask to Buy approval, an interrupted purchase, another device): cb(transaction).
+  onTransaction(cb) { const p = plugin('Purchases'); if (p) p.addListener('transaction', t => { try { cb(t); } catch { /* ignore */ } }); },
 };
 
 /* ------------------------------- sign-ins ------------------------------- */

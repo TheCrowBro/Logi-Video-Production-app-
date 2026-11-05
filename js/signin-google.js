@@ -4,13 +4,15 @@
 // the sign-in window ends. If Google's window cannot open here, the other way sends the page to Google and back, with
 // the answer after the # (that way needs this page's address registered with Google: docs/turn-on-sign-in.md).
 (function () {
-  var q = new URLSearchParams(location.search), client = q.get('client') || '', scope = q.get('scope') || '', hint = q.get('hint') || '';
+  var q = new URLSearchParams(location.search), client = q.get('client') || '', scope = q.get('scope') || '';
+  var h0 = new URLSearchParams(location.hash.slice(1)), hint = h0.has('state') ? '' : h0.get('hint') || ''; // the account's address comes after the #
+  if (hint) history.replaceState(null, '', location.pathname + location.search);
   var t = document.getElementById('t'), go = document.getElementById('go'), alt = document.getElementById('alt'), other = document.getElementById('other');
-  var back = function (r) { location.replace('vdex://signin?' + new URLSearchParams(Object.assign({ google: '1' }, r))); };
+  var back = function (r) { (window.__vdexSignin || function (u) { location.replace(u); })('vdex://signin?' + new URLSearchParams(Object.assign({ google: '1' }, r))); };
   var rand = function () { var a = new Uint8Array(16); crypto.getRandomValues(a); return Array.prototype.map.call(a, function (b) { return b.toString(16).padStart(2, '0'); }).join(''); };
   // Back from Google the other way: the answer is after the #, for the sign-in this page started.
-  if (location.hash.length > 1) {
-    var h = new URLSearchParams(location.hash.slice(1)), want = sessionStorage.getItem('vdex-google-state');
+  if (location.hash.length > 1 && h0.has('state')) {
+    var h = h0, want = sessionStorage.getItem('vdex-google-state');
     sessionStorage.removeItem('vdex-google-state');
     history.replaceState(null, '', location.pathname + location.search);
     if (want && h.get('state') === want) { back(h.get('access_token') ? { access_token: h.get('access_token'), expires_in: h.get('expires_in') || '3600', scope: h.get('scope') || scope } : { error: h.get('error') || 'failed' }); return; }

@@ -58,8 +58,7 @@ export function scheduleBreak(br, label, onEnd) {
     // The phone keeps the times, app open or not; the page's own countdown still says it in the foreground.
     const list = [{ id: IDS['logi-break'], title: endWords[0], body: endWords[1], at: Math.max(end, now + 1000), actions: true, extra: { tag: 'logi-break' } }];
     if (prefs.early && br.planned >= 10 && end - 2 * 6e4 > now) list.push({ id: IDS['logi-break-early'], title: '2 minutes left', body: `Your ${label} break ends soon.`, at: end - 2 * 6e4, extra: { tag: 'logi-break-early' } });
-    native.notifications.schedule(list).catch(() => {});
-    const t = setTimeout(() => { if (!scheduled.fired.has('end')) { scheduled.fired.add('end'); onEnd && onEnd(); } }, Math.max(0, end - now)); scheduled.timers.push(t);
+    native.notifications.schedule(list).catch(() => {}); // in the foreground the phone stays quiet and the clock's own countdown toasts and buzzes
     return;
   }
   const at = (when, id, fn) => { if (scheduled.fired.has(id)) return; const t = setTimeout(() => { scheduled.fired.add(id); fn(); }, Math.max(0, when - now)); scheduled.timers.push(t); };
@@ -76,9 +75,18 @@ export const notifyAllowanceUsed = () => show('Approved break used up', 'Todayâ€
 
 // The buttons on a notification: cb('break-end' | 'break-extend'). The service worker's come through js/clock.js; the
 // phone's come through here.
+// A button pressed before the clock listens (the app opened by it, still at the lock screen) is kept and handed over
+// when it does.
 const actionSubs = new Set();
-export const onAction = cb => { actionSubs.add(cb); return () => actionSubs.delete(cb); };
-if (phoneApp) native.notifications.onAction((id, extra) => { if (extra && extra.tag && extra.tag !== 'logi-break') return; const type = id === 'back' ? 'break-end' : id === 'later' ? 'break-extend' : null; if (type) actionSubs.forEach(f => f(type)); });
+let heldActions = [];
+export const onAction = cb => { actionSubs.add(cb); const held = heldActions; heldActions = []; held.forEach(t => { try { cb(t); } catch { /* ignore */ } }); return () => actionSubs.delete(cb); };
+if (phoneApp) native.notifications.onAction((id, extra) => {
+  if (extra && extra.tag && extra.tag !== 'logi-break') return;
+  const type = id === 'back' ? 'break-end' : id === 'later' ? 'break-extend' : null;
+  if (!type) return;
+  if (!actionSubs.size) { heldActions.push(type); return; }
+  actionSubs.forEach(f => { try { f(type); } catch { /* ignore */ } });
+});
 
 // Keep the screen on while a timed break runs (phones suspend background pages; a lit screen keeps the timer alive).
 let lock = null;

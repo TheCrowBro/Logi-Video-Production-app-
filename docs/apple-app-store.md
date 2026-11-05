@@ -50,7 +50,7 @@ The app never links to the website's Buy page, and the website's Buy page is nev
 1. In the app's page → **Monetization → In-App Purchases** → **+**.
 2. Type **Non-Consumable**, reference name `Vdex Licence`, product ID **`app.crowmade.vdex.licence`** (the app asks for exactly this id; it can never change).
 3. Price: pick the tier closest to **19.99 USD** (Apple sets the other currencies).
-4. Localization: display name **Vdex Licence**, description **One licence for up to 3 of your devices: cloud storage, backups and spreadsheets, for good.**
+4. Localization: display name **Vdex Licence**, description **One licence, up to 3 devices, for good.** (App Store Connect allows 30 characters for the name and 45 for the description.)
 5. Review screenshot: any screenshot of the licence panel in Settings → General → About & Licence (Apple needs one).
 6. Save. It says "Ready to Submit" and is submitted together with the app's first version.
 
@@ -63,21 +63,23 @@ A refund or a chargeback through Apple should cancel the licence, as a Stripe re
 
 Then give the website Apple's app identifiers so it can check receipts: in Cloudflare → Workers → the `vdex` worker → Settings → Variables, add `APPLE_BUNDLE_ID` = `app.crowmade.vdex`. Nothing secret is needed: Apple signs every receipt, and the website checks that signature against Apple's own root certificate, which is built in.
 
-Add a second variable there, `APPLE_ALLOW_SANDBOX` = `on`. TestFlight, your own sandbox tester (Step 7) and Apple's reviewers all buy in Apple's **Sandbox** environment, where nothing is charged, so the licence server has to accept sandbox purchases while you test and while the app is under review; without it, such a purchase is refused with "That is a test purchase, which does not license Vdex". A sandbox purchase gets a licence of its own, which never touches a real one: it can neither unlock nor cancel anything bought for real. The variable can stay on for good, because a sandbox purchase needs a sandbox tester account that only you can create in App Store Connect; or delete it between reviews and add it back before the next one.
+The website's sign-in must be switched on too (`WEB_SIGN_IN` = `on`, with its email settings: docs/selling-desktop.md, part 9). Without it, nothing about licences shows in the app at all, neither the trial nor the purchase, and Apple's reviewer would find no in-app purchase to test.
+
+Add a second variable there, `APPLE_ALLOW_SANDBOX` = `on`. TestFlight, your own sandbox tester (Step 7) and Apple's reviewers all buy in Apple's **Sandbox** environment, where nothing is charged, so the licence server has to accept sandbox purchases while you test and while the app is under review; without it, such a purchase is refused with "That is a test purchase, which does not license Vdex". A sandbox purchase gets a licence of its own, which never touches a real one: it can neither unlock nor cancel anything bought for real. It licenses that phone for 30 days and nothing else: it has no code for the desktop app and cannot have an email address added. The variable can stay on for good, because a sandbox purchase needs a sandbox tester account that only you or Apple's reviewers have; or delete it between reviews and add it back before the next one.
 
 ## Step 6. The store listing
 
 Most of it is the Google Play text, which lives in [google-play.md](google-play.md) under "Texts to paste"; the differences:
 
-- **Subtitle** (30 characters): `Bookings, crew, kit, call sheets`
+- **Subtitle** (at most 30 characters): `Shoots, crew, kit, call sheets`
 - **Promotional text**: `Your whole production in one deck, on your phone and your computer.`
 - **Keywords**: `videographer,film,production,call sheet,crew,equipment,stripboard,timecode,invoice,booking`
-- **Support URL**: https://vdex.crowmade.app/privacy.html (it has to be a published page, and that one ends with how to reach you; the `docs/` folder is never published, so a `.md` address would not open) · **Marketing URL**: https://vdex.crowmade.app · **Privacy policy URL**: https://vdex.crowmade.app/privacy.html
+- **Support URL**: a published page where people can reach you directly. Apple checks that it has a way to contact you (an email address or a form), and today no Vdex page has one: privacy.html only points to crowmade.app. Either use your contact page on crowmade.app, or tell me the support address you want shown and I will put it on the website. (The `docs/` folder is never published, so a `.md` address would not open.) · **Marketing URL**: https://vdex.crowmade.app · **Privacy policy URL**: https://vdex.crowmade.app/privacy.html
 - **Category**: Productivity (secondary: Business).
 - **Age rating**: answer No to everything → 4+.
-- **Screenshots**: the app is offered for iPhone only (an iPad runs it in compatibility mode, as a scaled-up iPhone app), so App Store Connect asks for iPhone screenshots only, at the 6.7-inch and 6.1-inch sizes. The Android ones under `store/android/screenshots` are the wrong shape: take iPhone ones on the phone (press the side button and volume up together) of the Bookings calendar, a booking, the call sheet, the stripboard and the quote, and keep them under `store/apple/screenshots`, next to the 1024 × 1024 icon (`store/apple/icon-1024.png`, the same picture that is built into the app, which App Store Connect takes from the uploaded build).
+- **Screenshots**: the app is offered for iPhone only (an iPad runs it in compatibility mode, as a scaled-up iPhone app), so App Store Connect asks for iPhone screenshots only. Its upload page lists the sizes it needs (at the moment the 6.9-inch size, which also takes 6.7-inch pictures); take them on your phone and App Store Connect scales them for the smaller sizes. The Android ones under `store/android/screenshots` are the wrong shape: take iPhone ones on the phone (press the side button and volume up together) of the Bookings calendar, a booking, the call sheet, the stripboard and the quote, and keep them under `store/apple/screenshots`, next to the 1024 × 1024 icon (`store/apple/icon-1024.png`, the same picture that is built into the app, which App Store Connect takes from the uploaded build).
 - **App Privacy** (the nutrition label): press **Get Started** and answer as in "App Privacy answers" below: four data types, none of them used for tracking.
-- **Sign-in information for the review**: the reviewer needs to try the app. Under App Review Information write: "No account is needed; the app has a 30-day free trial. To test the licence sign-in, use the code we attached" and attach a free licence code made with the licence generator (docs/selling-desktop.md).
+- **Sign-in information for the review**: the reviewer needs to try the app, and the iPhone app takes no licence codes (Apple's rule), only an email sign-in or the purchase. Make a mailbox for the reviewer (a new address and password at any free email service), give it a free licence with the licence generator (docs/selling-desktop.md; the email inside the code links it by itself), and under App Review Information write: "No account is needed; the app has a 30-day free trial and the licence can be bought in the app (In-App Purchase). To test signing in with a licence bought on our website: Settings → General → About & Licence → Sign in, with the email address below; the 6-digit code arrives in that mailbox." Then give the mailbox's address and password in the sign-in fields.
 - **Notes for the reviewer**: "Vdex is a web app for freelance videographers that runs in this app with native notifications, calendar, Files and the App Store purchase. The licence can be bought in the app (In-App Purchase) or, for people who already bought on our website, by signing in with their email. The app never shows the website's purchase."
 
 ## Step 7. Test on your phone, then with TestFlight
@@ -96,7 +98,7 @@ Before the upload in point 3, go through this list on the phone. Each item is so
 - **Files.** Export a backup (Settings → Storage, sync & backups): the Files picker opens and the file saves; Import opens the picker and reads it back.
 - **Printing.** Print on a call sheet, a quote or an invoice opens the phone's print sheet.
 - **The purchase.** With `APPLE_ALLOW_SANDBOX` = `on` (Step 5) and the sandbox tester signed in (point 2), Buy a licence under About & Licence goes through, and the page says "Licensed".
-- **Cloud sign-ins.** Connecting Google Drive, iCloud, Dropbox or OneDrive opens the sign-in and comes back to the app with the storage connected (the sign-in window closes by itself).
+- **Cloud sign-ins.** Connecting Google Drive, iCloud, Dropbox or OneDrive opens the sign-in and comes back to the app with the storage connected (the sign-in window closes by itself). iCloud is the one to watch: its return relies on Apple sending the sign-in back to the page that asked for it. If iCloud's window stays open on Vdex's page instead of closing, tell me: the fix is a second iCloud API token for the app, set up in the CloudKit console.
 - **The look.** The icon on the home screen is the Vdex camera on its dark background, and the picture shown while the app starts is the same logo on the same dark background, never a white screen.
 
 ## Step 8. Submit
@@ -112,7 +114,7 @@ Before the upload in point 3, go through this list on the phone. Each item is so
 - Break alerts come as the phone's own notifications, with Back to work and 5 more minutes.
 - Scripts and shot lists: in any app's share sheet, choose Vdex (under the apps row, or "Copy to Vdex") for .docx, .txt, .md, .csv and .fountain files; Vdex asks whether they are a script for TC Notes or a shot list for a booking.
 - Calendar: Settings → Calendar & email offers **This phone's calendar** beside Google and Outlook. It makes a "Vdex bookings" calendar in the Calendar app and keeps it in step both ways.
-- Backups: export and import go through the Files picker (iCloud Drive, On My iPhone, Dropbox and so on). The app's own folder also shows in the Files app under On My iPhone → Vdex. Spreadsheets, calendar files and the asset register go the same way, and Share buttons open the phone's share sheet.
+- Backups: export and import go through the Files picker (iCloud Drive, On My iPhone, Dropbox and so on). Spreadsheets, calendar files and the asset register go the same way, and Share buttons open the phone's share sheet.
 - Printing: Print on a call sheet, quote or invoice opens the phone's print sheet (AirPrint, or Save to Files for a PDF).
 - The purchase: Buy a licence in Settings → General → About & Licence shows Apple's sheet at the App Store's price; a licence bought on the website is used with Sign in. After a reinstall, or on a second iPhone or iPad with the same Apple ID, the app finds the purchase by itself within a day, and Restore purchases does it at once. The same licence works on the person's other devices too: **Add your email** puts an email address on it (a 6-digit code to that address), after which the website and the Android app sign in with it, and **Copy the code for the desktop app** gives the code to paste into the desktop app. No code is ever typed into the iPhone app (Apple's rule 3.1.1); the Sign in sheet there takes an email only.
 - Cloud storage and calendar accounts: Google Drive, iCloud, Dropbox, OneDrive, Google Calendar and Outlook sign in through the phone's own sign-in window (the one Safari and other apps use), because none of those services sign in inside an app's web view. The answer comes back to the app by itself. Nothing needs registering for it beyond what the website already has (docs/turn-on-sign-in.md), except one optional Google address for a fallback, described there.
@@ -123,7 +125,7 @@ Apple asks what the app does with people's information, as Google does (the "Dat
 
 | Data type | Why it is collected | Linked to the user's identity? | Used for tracking? | Purpose |
 |---|---|---|---|---|
-| **Contact Info → Email Address** | Optional: only when the person signs in with a licence bought by email on the website; the server keeps which addresses belong to which licences. | Yes | No | App Functionality |
+| **Contact Info → Email Address** | Optional: only when the person signs in with a licence's email address, or adds an email address to an App Store licence; the server keeps which addresses belong to which licences. | Yes | No | App Functionality |
 | **Identifiers → Device ID** | A random number made for the installation, so the licence's devices can be counted (never the phone's own identifier). | Yes | No | App Functionality |
 | **Location → Precise Location** and **Coarse Location** | Optional: for the weather and the sun times, sent to Open-Meteo, which uses the coordinates once and does not keep them. | No | No | App Functionality |
 | **Purchases → Purchase History** | The App Store purchase's transaction number, kept by our licence server so the purchase can be found again (Restore purchases) and a refund cancels it. | Yes | No | App Functionality |
@@ -135,7 +137,7 @@ Why "not collected" for the rest (name, photos, files, contacts, usage, crash da
 - **"Signing requires a development team"**: Step 2, point 5.
 - **The purchase sheet never appears**: the Paid Apps agreement (Step 1, point 4) is not accepted, or the product id differs from `app.crowmade.vdex.licence`, or the product was created less than an hour ago.
 - **"Vdex could not confirm the purchase"** after paying: the website could not check the receipt; the purchase is kept by Apple, and **Restore purchases** under About & Licence tries again (also after a reinstall or on a second iPhone with the same Apple ID).
-- **Apple asks for a demo account**: Vdex has none; point to the free trial and the attached licence code.
+- **Apple asks for a demo account**: Vdex has none; point to the free trial, the in-app purchase, and the reviewer's mailbox from Step 6.
 - **The app shows a blank page the first time**: the phone has no connection; the app needs one once, then works offline.
 - **"That is a test purchase, which does not license Vdex"**: the purchase was made in Apple's Sandbox (TestFlight, your sandbox tester, App Review) while `APPLE_ALLOW_SANDBOX` is not `on` on the Worker: Step 5.
 - **The upload is refused because a build with this number already exists**: raise the Build number (Step 7, point 3) and Archive again.

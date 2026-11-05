@@ -15,6 +15,22 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "current", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "restore", returnType: CAPPluginReturnPromise),
     ]
+    private var updates: Task<Void, Never>?
+
+    // Purchases that finish outside buy(): an Ask to Buy approval, a purchase interrupted to accept new terms, one made
+    // on another device. Apple asks every app to listen from launch; each one goes to the web app as a 'transaction'
+    // event, kept until the page listens, so the licence server can confirm it.
+    public override func load() {
+        updates = Task.detached { [weak self] in
+            for await result in Transaction.updates {
+                guard case .verified(let tx) = result else { continue }
+                await tx.finish()
+                let data = PurchasesPlugin.describe(tx, jws: result.jwsRepresentation, state: tx.revocationDate == nil ? "owned" : "revoked")
+                DispatchQueue.main.async { self?.notifyListeners("transaction", data: data, retainUntilConsumed: true) }
+            }
+        }
+    }
+    deinit { updates?.cancel() }
 
     // The products by their ids (set up in App Store Connect), with the price in the person's own currency.
     @objc func products(_ call: CAPPluginCall) {
@@ -44,7 +60,7 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
                         call.reject("The purchase could not be verified: \(err.localizedDescription)")
                     }
                 case .userCancelled: call.resolve(["state": "cancelled"])
-                case .pending: call.resolve(["state": "pending"]) // waiting for approval (Ask to Buy): the entitlement arrives later
+                case .pending: call.resolve(["state": "pending"]) // waiting for approval (Ask to Buy): it arrives later as a 'transaction' event
                 @unknown default: call.resolve(["state": "unknown"])
                 }
             } catch { call.reject(error.localizedDescription) }
@@ -56,7 +72,10 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
         Task {
             var list: [[String: Any]] = []
             for await result in Transaction.currentEntitlements {
-                if case .verified(let tx) = result { list.append(Self.describe(tx, jws: result.jwsRepresentation, state: tx.revocationDate == nil ? "owned" : "revoked")) }
+                if case .verified(let tx) = result {
+                    await tx.finish() // one left unfinished by an interrupted purchase is finished here
+                    list.append(Self.describe(tx, jws: result.jwsRepresentation, state: tx.revocationDate == nil ? "owned" : "revoked"))
+                }
             }
             call.resolve(["entitlements": list])
         }
@@ -69,7 +88,7 @@ public class PurchasesPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    private static func describe(_ tx: Transaction, jws: String, state: String) -> [String: Any] {
+    static func describe(_ tx: Transaction, jws: String, state: String) -> [String: Any] {
         var out: [String: Any] = ["state": state, "jws": jws, "productId": tx.productID, "transactionId": String(tx.id), "originalTransactionId": String(tx.originalID), "purchased": Int(tx.purchaseDate.timeIntervalSince1970 * 1000)]
         if #available(iOS 16.0, *) { out["environment"] = tx.environment.rawValue }
         if let revoked = tx.revocationDate { out["revoked"] = Int(revoked.timeIntervalSince1970 * 1000) }

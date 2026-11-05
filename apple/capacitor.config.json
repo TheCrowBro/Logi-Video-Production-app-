@@ -11,8 +11,7 @@
   },
   "ios": {
     "contentInset": "automatic",
-    "limitsNavigationsToAppBoundDomains": true,
-    "scheme": "vdex"
+    "limitsNavigationsToAppBoundDomains": true
   },
   "plugins": {
     "LocalNotifications": {

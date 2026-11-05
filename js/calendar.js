@@ -130,10 +130,17 @@ function patchFromEvent(b, r) {
   else { const s = new Date(r.start), e = new Date(r.end); if (ymd(s) !== b.date) patch.date = ymd(s); const endDate = ymd(e) > ymd(s) ? ymd(e) : undefined; if ((b.endDate || undefined) !== endDate) patch.endDate = endDate; if (hm(s) !== (b.start || '')) patch.start = hm(s); if (hm(e) !== (b.end || '')) patch.end = hm(e); }
   const title = b.client && r.title.endsWith(' — ' + b.client) ? r.title.slice(0, -(' — ' + b.client).length) : r.title;
   if (title && title !== b.title) patch.title = title;
-  if ((r.location || '') !== (b.address || '').replace(/\n/g, ', ')) patch.address = r.location || '';
+  if ((r.location || '') !== eventOf(b).location) patch.address = r.location || ''; // eventOf: the booking's address, or its venue's
   return Object.keys(patch).length ? patch : null;
 }
 
+// The dates a sync covers: every event it wants, and every event it made before (the mapping keeps each one's day), so
+// an adapter that can only list a window of dates (the phone's calendar) lists all of them.
+const dayOf = e => (e.allDay ? e.start : ymd(e.start));
+function spanOf(events, mapping) {
+  const days = [...events.map(dayOf), ...Object.values(mapping).map(m => m && m.day).filter(Boolean)].sort();
+  return days.length ? { from: parseISO(days[0]).getTime() - 2 * 864e5, to: parseISO(days[days.length - 1]).getTime() + 3 * 864e5 } : null;
+}
 async function runSync(link, interactive) {
   const cs = link.get(); const ad = link.adapter();
   if (!ad || link.busy) return;
@@ -141,7 +148,8 @@ async function runSync(link, interactive) {
   const mapping = { ...(cs.events || {}) }; let calendarId = cs.calendarId;
   try {
     calendarId = await ad.ensureCalendar(calendarId, interactive);
-    const remote = await ad.list(calendarId, interactive);
+    const wanted = () => [...activeBookings().map(b => ({ key: b.id, e: eventOf(b) })), ...dueEvents().map(e => ({ key: e.id, e })), ...editEvents().map(e => ({ key: e.id, e }))];
+    const remote = await ad.list(calendarId, interactive, spanOf(wanted().map(w => w.e), mapping));
     const byLogi = new Map(remote.filter(r => r.logiId).map(r => [r.logiId, r]));
     // adopt events another device already created, so they are updated rather than duplicated
     for (const r of remote) if (r.logiId && !mapping[r.logiId] && (byId('bookings', r.logiId) || r.logiId.startsWith('del:') || r.logiId.startsWith('edit:'))) mapping[r.logiId] = { id: r.id, hash: '', at: 0 };
@@ -149,12 +157,13 @@ async function runSync(link, interactive) {
     const changes = [];
     for (const [bid, m] of Object.entries(mapping)) { if (bid.startsWith('del:') || bid.startsWith('edit:')) continue; const r = byLogi.get(bid), b = byId('bookings', bid); if (r && b && r.updated > m.at + 2000 && r.updated > (Number(b.updatedAt) || 0)) { const p = patchFromEvent(b, r); if (p) changes.push([bid, p]); } }
     if (changes.length) update(d => { for (const [bid, p] of changes) { const b = d.bookings.find(x => x.id === bid); if (b) { Object.assign(b, p); for (const k of ['endDate', 'start', 'end']) if (b[k] === undefined || b[k] === '') delete b[k]; b.updatedAt = Date.now(); } } });
-    // push
-    const want = [...activeBookings().map(b => ({ key: b.id, e: eventOf(b) })), ...dueEvents().map(e => ({ key: e.id, e })), ...editEvents().map(e => ({ key: e.id, e }))], wantIds = new Set(want.map(w => w.key));
+    // push: what the bookings are now, after the pull
+    const want = wanted(), wantIds = new Set(want.map(w => w.key));
     for (const { key, e } of want) {
-      const hash = hashOf(e), m = mapping[key];
-      if (!m || !byLogi.has(key)) { const id = await ad.create(calendarId, e); mapping[key] = { id, hash, at: Date.now() }; }
-      else if (m.hash !== hash) { await ad.update(calendarId, m.id, e); mapping[key] = { id: m.id, hash, at: Date.now() }; }
+      const hash = hashOf(e), m = mapping[key], day = dayOf(e);
+      if (!m || !byLogi.has(key)) { const id = await ad.create(calendarId, e); mapping[key] = { id, hash, at: Date.now(), day }; }
+      else if (m.hash !== hash) { await ad.update(calendarId, m.id, e); mapping[key] = { id: m.id, hash, at: Date.now(), day }; }
+      else if (m.day !== day) mapping[key] = { ...m, day };
     }
     for (const [bid, m] of Object.entries(mapping)) if (!wantIds.has(bid)) { if (byLogi.has(bid)) await ad.remove(calendarId, m.id); delete mapping[bid]; }
     setState(link.state, 'ok'); if (link === LINKS.account) pausedSaid = false;
@@ -164,7 +173,7 @@ async function runSync(link, interactive) {
     if (status === 'needs-auth' && !interactive && !pausedSaid && link === LINKS.account) { pausedSaid = true; toast(`${link.name()} is paused until you sign in again: Bookings → Calendar & email → Sync now.`); }
   } finally {
     link.busy = false;
-    if (link.get()) link.save(calendarId, mapping); // unless it was disconnected meanwhile
+    if (link.adapter()) link.save(calendarId, mapping); // unless it was disconnected meanwhile
   }
 }
 // Keeps the calendars in step now: both links, or one of them (which: 'account' | 'phone').
@@ -285,12 +294,16 @@ const apple = {
   async ensureCalendar(id) {
     const list = await native.calendar.calendars();
     if (id && list.some(c => c.id === id)) return id;
-    const found = list.find(c => c.title === CAL_NAME && c.allowsContentModifications !== false);
+    const ours = c => c.title === CAL_NAME && c.allowsContentModifications !== false && c.source && (c.source.type === 0 || /icloud/i.test(c.source.title || '')); // on this phone, or iCloud: a Google or Outlook account's calendar of the same name belongs to the account link
+    const found = list.find(ours);
     return found ? found.id : native.calendar.createCalendar(CAL_NAME);
   },
-  async list(id) {
-    const from = Date.now() - 400 * 864e5, to = Date.now() + 3 * 366 * 864e5;
-    return (await native.calendar.events(from, to)).filter(ev => ev.calendarId === id && logiIdOf(ev.url)).map(ev => {
+  async list(id, interactive, span) {
+    const WINDOW = 3 * 365 * 864e5; // the phone lists at most four years at a time
+    const from = span ? span.from : Date.now() - 400 * 864e5, to = span ? span.to : Date.now() + 3 * 366 * 864e5;
+    const all = new Map();
+    for (let a = from; a < to; a += WINDOW) for (const ev of await native.calendar.events(a, Math.min(to, a + WINDOW))) all.set(ev.id, ev);
+    return [...all.values()].filter(ev => ev.calendarId === id && logiIdOf(ev.url)).map(ev => {
       const allDay = !!ev.isAllDay, s = new Date(ev.startDate), e = new Date(ev.endDate + 1000);
       const start = allDay ? ymd(s) : s.toISOString();
       let end = allDay ? ymd(e) : new Date(ev.endDate).toISOString();
@@ -347,6 +360,7 @@ export function calendarPanel() {
               calChoice('microsoft', 'Outlook / Microsoft 365', 'Personal accounts work straight away; work accounts may need IT approval. About once a day, tap Sync now here.'))]),
       native.calendar.available() && h('div', { class: 'card', 'data-svc': 'apple' }, h('strong', null, 'This phone’s calendar'),
         h('p', { class: 'small muted' }, 'A “Vdex bookings” calendar in the Calendar app, kept in step both ways on this phone, with no sign-in. It can run beside an account above.'),
+        pl && cs.provider && cs.provider !== 'apple' && h('p', { class: 'small warn' }, `If your ${NAMES[cs.provider]} account is also in this phone’s Calendar app, you will see each booking twice there: once from each link. Keep the one you prefer.`),
         pl
           ? [h('p', { class: 'status-line', 'data-state': phoneState.status === 'ok' ? 'synced' : phoneState.status === 'error' ? 'error' : '' }, `${NAMES.apple} — ${CAL_WORDS[phoneState.status] ?? phoneState.status}${phoneState.at && phoneState.status === 'ok' ? ' · ' + new Date(phoneState.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}${phoneState.error && phoneState.status === 'error' ? ' (' + phoneState.error + ')' : ''}`),
             h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => syncCalendar({ interactive: true, which: 'phone' }) }, 'Sync now'), h('button', { class: 'btn ghost', onclick: () => { disconnectCalendar('phone'); draw(); } }, 'Disconnect'))]
