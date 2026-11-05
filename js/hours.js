@@ -4,7 +4,7 @@ import { db, byId, update, remove, subscribe, activeBookings, requirePaid } from
 import { openForm } from './form.js';
 
 const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } } };
-export const standardDay = () => Number(LS.get('logi-stdday')) || 10;          // hours before overtime
+export const standardDay = () => { const n = Number(LS.get('logi-stdday')); return n >= 1 && n <= 24 ? n : 10; }; // hours before overtime, and what an hourly crew rate is quoted for per shoot day
 export const defaultBreak = () => Number(LS.get('logi-breakdefault')) || 30;   // approved break minutes when a booking sets none
 export const allowanceFor = b => (b && b.breakMinutes !== '' && b.breakMinutes != null ? Number(b.breakMinutes) : defaultBreak());
 

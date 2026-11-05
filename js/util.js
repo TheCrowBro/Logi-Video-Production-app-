@@ -148,6 +148,8 @@ export function parseRate(r) {
 // A person's rate (crew, or someone hired for a job): the amount and whether it is per hour. New records carry the
 // amount as a number with rateUnit 'day' or 'hour'; older ones hold whatever was typed, read as above.
 export const hasUnit = c => !!(c && typeof c === 'object' && (c.rateUnit === 'day' || c.rateUnit === 'hour') && c.rate !== '' && c.rate != null && Number.isFinite(Number(c.rate)));
-export const personRate = c => (hasUnit(c) ? { amount: Number(c.rate), hourly: c.rateUnit === 'hour' } : parseRate(c && typeof c === 'object' ? c.rate : c));
+export const personRate = c => (hasUnit(c) ? { amount: Number(c.rate), hourly: c.rateUnit === 'hour' }
+  : c && typeof c === 'object' && (c.rate === '' || c.rate == null) && (c.rateUnit === 'day' || c.rateUnit === 'hour') ? { amount: '', hourly: c.rateUnit === 'hour' } // a unit chosen, no amount yet: the line is still an hours line
+  : parseRate(c && typeof c === 'object' ? c.rate : c));
 // The rate as shown on a card: "$450/day", "$55/hour"; an older typed rate is shown as it was typed.
 export const rateText = (c, sym = '$') => { if (!hasUnit(c)) return String((c && typeof c === 'object' ? c.rate : c) ?? '').trim(); const n = Number(c.rate); return `${sym}${Number.isInteger(n) ? n : n.toFixed(2)}/${c.rateUnit}`; };

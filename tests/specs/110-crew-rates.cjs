@@ -46,8 +46,22 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const old = await store(() => import('./js/store.js').then(s => s.byId('crew', 'old-1')));
   ok('saving converts it to a number and a unit', old.rate === 60 && old.rateUnit === 'hour' && /Boom Operator · \$60\/hour/.test(await card('Old Hand').innerText()));
   await card('Old Note').locator('button[aria-label="Edit Old Note"]').click(); await page.waitForSelector('.sheet form');
-  ok('a rate that reads as no amount opens with the box empty, per day', (await page.locator('.sheet form input[data-key="rate"]').inputValue()) === '' && (await page.locator('.sheet form select').inputValue()) === 'day');
+  ok('a rate that reads as no amount opens with the box empty, per day, and says what was typed', (await page.locator('.sheet form input[data-key="rate"]').inputValue()) === '' && (await page.locator('.sheet form select').inputValue()) === 'day' && /Typed before: “TBC”/.test(await page.locator('.sheet form').innerText()));
+  await page.locator('.sheet form textarea[data-key="notes"]').fill('Owes me a coffee'); await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
+  const note = await store(() => import('./js/store.js').then(s => s.byId('crew', 'old-2')));
+  ok('editing another field keeps the typed rate as it was', note.rate === 'TBC' && note.rateUnit === undefined && note.notes === 'Owes me a coffee' && /Runner · TBC/.test(await card('Old Note').innerText()), JSON.stringify({ rate: note.rate, unit: note.rateUnit }));
+  await card('Old Note').locator('button[aria-label="Edit Old Note"]').click(); await page.waitForSelector('.sheet form');
+  await page.locator('.sheet form input[data-key="rate"]').fill('200'); await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
+  ok('an amount replaces it', (await store(() => import('./js/store.js').then(s => { const c = s.byId('crew', 'old-2'); return c.rate === 200 && c.rateUnit === 'day'; }))) && /Runner · \$200\/day/.test(await card('Old Note').innerText()));
+  // a unit left behind by an older copy never beats the unit written in a typed rate
+  await store(() => import('./js/store.js').then(s => s.upsert('crew', { id: 'old-3', name: 'Old Mix', role: 'Grip', rate: '55/hr', rateUnit: 'day', phone: '', email: '', link: '', notes: '' }))); await sleep(400);
+  await card('Old Mix').locator('button[aria-label="Edit Old Mix"]').click(); await page.waitForSelector('.sheet form');
+  ok('the unit read from a typed rate wins over a stale stored one', (await page.locator('.sheet form input[data-key="rate"]').inputValue()) === '55' && (await page.locator('.sheet form select').inputValue()) === 'hour');
   await page.keyboard.press('Escape'); await sleep(200);
+  // the cards use the profile's currency symbol
+  await store(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, currency: '€', updatedAt: Date.now() }; }))); await sleep(400);
+  ok('the cards use the currency symbol from the profile', /Grip · €380\/day/.test(await card('Dee Day').innerText()) && /Colourist · €62\.50\/hour/.test(await card('Lee Hour').innerText()));
+  await store(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, currency: '$', updatedAt: Date.now() }; }))); await sleep(300);
 
   // ---- quotes and budgets price the rate per day, or per hour for a standard day's hours ----
   ok('the standard day is 10 hours unless changed', (await store(() => import('./js/hours.js').then(hh => hh.standardDay()))) === 10);
@@ -78,7 +92,16 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('an older hire with a typed rate is still priced per day', lines.some(l => l[0] === 'Crew: Robin Old (Gaffer)' && l[1] === 1 && l[2] === 'day' && l[3] === 400) && /Gaffer · \$400\/day · 1 day/.test(await page.locator('#bk-hires').innerText()));
   await page.locator('#bk-hires .crew-line', { hasText: 'Robin Old' }).locator('button', { hasText: 'Edit' }).click(); await page.waitForSelector('.sheet form');
   ok('its form shows 400 per day', (await page.locator('.sheet form input[data-key="rate"]').inputValue()) === '400' && (await page.locator('.sheet form select').inputValue()) === 'day');
-  await page.keyboard.press('Escape'); await sleep(200);
+  await page.locator('.sheet form button[type=submit]').click(); await sleep(500);
+  const robin = await store(() => import('./js/store.js').then(s => (s.db.bookings.find(x => /Harbour/.test(x.title)).hires || []).find(x => x.name === 'Robin Old')));
+  ok('saving converts the hire to a number and a unit', robin && robin.rate === 400 && robin.rateUnit === 'day' && /Gaffer · \$400\/day · 1 day/.test(await page.locator('#bk-hires').innerText()), JSON.stringify(robin && { rate: robin.rate, unit: robin.rateUnit }));
+  // a hired person with an hourly unit and no amount yet still gets an hours line, left for the price
+  await store(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings.find(y => /Harbour/.test(y.title)); x.hires.push({ id: 'hire-blank', name: 'Blank Hour', role: 'Runner', rate: '', rateUnit: 'hour', days: 1, phone: '', email: '', notes: '' }); }))); await sleep(300);
+  lines = await quote(seed);
+  ok('an hourly person with no amount yet gets an hours line with the price left blank', lines.some(l => l[0] === 'Crew: Blank Hour (Runner)' && l[1] === 8 && l[2] === 'hour' && l[3] === ''), JSON.stringify(lines));
+  // the standard day is kept between 1 and 24 hours whatever was typed
+  await page.evaluate(() => { localStorage.setItem('logi-stdday', '-5'); });
+  ok('a nonsense standard day falls back to 10 hours', (await store(() => import('./js/hours.js').then(hh => hh.standardDay()))) === 10);
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

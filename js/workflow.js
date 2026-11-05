@@ -1,6 +1,6 @@
 // Project pipeline: every booking moves through stages, each with a checklist from a template for its job type.
 // Also the smaller post/pre lists that hang off a booking: hires, shot list, media offload log, deliverables, licences.
-import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes, parseISO, personRate, rateText } from './util.js';
+import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes, parseISO, personRate, rateText, hasUnit } from './util.js';
 import { db, byId, update, upsert, remove, subscribe, endOf, splitHires } from './store.js';
 import { openForm } from './form.js';
 import { boardPlan } from './board.js';
@@ -274,11 +274,14 @@ export const hiredPeople = b => ((b && b.hires) || []).filter(x => x && !legacyG
 export const rentalsOf = b => [...((b && b.rentals) || []), ...((b && b.hires) || []).filter(legacyGear)];
 export const shootDaysOf = b => Math.max(1, Math.round((parseISO(endOf(b)) - parseISO(b.date)) / 864e5) + 1);
 export function hiresBlock(b) {
-  // An older entry holds the rate as typed: the form shows the amount it reads and the unit, and saves a number and a unit.
-  const rateValues = hr => { const r = personRate(hr); return { ...hr, rate: r.amount === '' ? (hr.rate ?? '') : r.amount, rateUnit: hr.rateUnit || (r.hourly ? 'hour' : 'day') }; };
+  // An older entry holds the rate as typed: the form shows the amount and the unit it reads and saves a number and a
+  // unit; typed text it cannot read is shown under the box and kept until an amount replaces it.
+  const typedRate = hr => (hr && typeof hr.rate === 'string' && hr.rate.trim() && personRate(hr).amount === '' ? hr.rate.trim() : '');
+  const rateValues = hr => { const r = personRate(hr); return { ...hr, rate: r.amount === '' ? '' : r.amount, rateUnit: hasUnit(hr) ? hr.rateUnit : r.hourly ? 'hour' : 'day' }; };
+  const keepTyped = (hr, v) => (v.rate === '' && typedRate(hr) ? { ...v, rate: typedRate(hr), rateUnit: undefined } : v);
   const edit = hr => openForm({ title: hr ? 'Edit hired person' : 'Hire someone for this job', values: hr ? rateValues(hr) : { name: '', role: '', rate: '', rateUnit: 'day', days: shootDaysOf(b), phone: '', email: '', notes: '' },
-    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' }, { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: 'Feeds the budget and the suggested quote lines: a day rate per day, or an hourly rate for a standard day’s hours. Never goes to the crew.' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] }, { key: 'days', label: 'Days', type: 'number', min: 0, step: 'any' }, { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' }, { key: 'notes', label: 'Notes', type: 'textarea', rows: 2 }],
-    onSave: v => patch(b, x => { splitHires(x); x.hires = x.hires || []; const i = x.hires.findIndex(y => y.id === (hr && hr.id)); if (i >= 0) x.hires[i] = { ...v, id: hr.id }; else x.hires.push({ ...v, id: uid() }); }),
+    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' }, { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: (typedRate(hr) ? `Typed before: “${typedRate(hr)}”, kept until an amount replaces it. ` : '') + 'Feeds the budget and the suggested quote lines: a day rate per day, or an hourly rate for a standard day’s hours (Settings → Work & billing → Hours & breaks). Never goes to the crew.' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] }, { key: 'days', label: 'Days', type: 'number', min: 0, step: 'any' }, { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' }, { key: 'notes', label: 'Notes', type: 'textarea', rows: 2 }],
+    onSave: v => patch(b, x => { splitHires(x); x.hires = x.hires || []; const kept = keepTyped(hr, v); const i = x.hires.findIndex(y => y.id === (hr && hr.id)); if (i >= 0) x.hires[i] = { ...kept, id: hr.id }; else x.hires.push({ ...kept, id: uid() }); }),
     onDelete: hr ? () => patch(b, x => { splitHires(x); x.hires = (x.hires || []).filter(y => y.id !== hr.id); if (x.crewStatus) delete x.crewStatus[hr.id]; if (x.crewCall) delete x.crewCall[hr.id]; }) : null });
   const hires = hiredPeople(b);
   return h('div', { class: 'sub', id: 'bk-hires' }, h('h4', null, `Hires (${hires.length})`),
