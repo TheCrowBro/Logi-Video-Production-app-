@@ -4,6 +4,7 @@ import { h, sheet, toast, nodes, todayISO } from './util.js';
 import * as store from './store.js';
 import * as C from './crypto.js';
 import { askSecret } from './lock.js';
+import * as native from './native.js';
 
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } };
@@ -50,7 +51,9 @@ export function nudgeIfStale() {
   setTimeout(() => toast(hl.level === 'none' ? 'Your data only exists on this device. Settings → Storage, sync & backups.' : `No off-device copy for ${hl.days} days. Settings → Storage, sync & backups.`), 1500);
 }
 
+// Saves a file: the Files app in the iPhone app, the share sheet where there is one with files, else a download.
 export async function saveOrShare(text, name, type) {
+  if (native.isApp) { try { return await native.files.save(name, text, type); } catch (e) { toast('Could not save: ' + (e.message || e)); return false; } }
   const file = new File([text], name, { type });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
     try { await navigator.share({ files: [file], title: name }); return true; } catch (e) { if (e.name === 'AbortError') return false; }
@@ -76,6 +79,14 @@ export async function exportFile({ encrypted = false } = {}) {
 export async function importFile(e) {
   const f = e.target.files[0]; if (!f) return;
   e.target.value = '';
+  return importData(f);
+}
+// The iPhone app: pick the backup in the Files app.
+export async function importFromPicker() {
+  let f = null; try { f = await native.files.open(['json']); } catch (e) { toast('Could not open: ' + (e.message || e)); return; }
+  if (f) return importData(f);
+}
+export async function importData(f) {
   try {
     let data = JSON.parse(await f.text());
     if (data && data.vdex === 'encrypted-backup') {

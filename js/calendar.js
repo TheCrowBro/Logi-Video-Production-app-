@@ -7,6 +7,7 @@ import { db, byId, update, subscribe, activeBookings, endOf, cloud, editDaysOf }
 import * as store from './store.js';
 import * as providers from './providers.js';
 import { SWITCH_ON, preloadSignIn } from './storage-ui.js';
+import * as native from './native.js';
 
 const pad = n => String(n).padStart(2, '0');
 const utc = d => `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}T${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}Z`;
@@ -16,6 +17,7 @@ const localDate = (iso, hm) => { const [y, m, d] = iso.split('-').map(Number); c
 const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
 export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const CAL_NAME = 'Vdex bookings';
+const NAMES = { google: 'Google Calendar', microsoft: 'Microsoft 365 / Outlook', apple: 'This phone’s calendar' };
 
 /* ------------------------------ one event ------------------------------ */
 export function eventOf(b) {
@@ -77,6 +79,7 @@ export const summaryText = b => { const e = eventOf(b), ed = editDaysOf(b); retu
 export const mailtoLink = b => 'mailto:?' + q({ subject: `Booking: ${b.title} — ${fmtShort(b.date)}`, body: summaryText(b) }).replace(/\+/g, '%20');
 const slug = s => String(s).replace(/[^\w]+/g, '_').replace(/^_|_$/g, '') || 'booking';
 async function shareIcs(name, text, title, body) {
+  if (native.canShareFiles()) { try { await native.files.share(name, text, 'text/calendar', { title, text: body }); } catch (e) { toast('Could not share: ' + (e.message || e)); } return; }
   const file = new File([text], name, { type: 'text/calendar' });
   if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ title, text: body, files: [file] }); return; } catch (e) { if (e.name === 'AbortError') return; } }
   const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); a.remove(); toast('Calendar file saved');
@@ -87,8 +90,10 @@ export const shareAll = () => shareIcs(FEED_NAME, feedIcs(), CAL_NAME, `${active
 export function openAddToCalendar(b) {
   const e = eventOf(b);
   const link = (label, href) => h('a', { class: 'btn ghost', href, target: '_blank', rel: 'noopener noreferrer' }, label);
+  const phone = native.calendar.available() && h('button', { class: 'btn primary', onclick: async () => { try { if (await native.calendar.prompt({ title: e.title, location: e.location, description: e.description, isAllDay: e.allDay, startDate: ms(e, 'start'), endDate: e.allDay ? ms(e, 'end') - 1000 : ms(e, 'end') })) toast('Added to the calendar'); } catch (err) { toast('Could not add it: ' + (err.message || err)); } } }, '📱 This phone’s calendar');
   sheet('Add to calendar', h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, `${e.title} · ${fmtLong(b.date)}${b.start ? ' · ' + b.start : ''}`),
+    phone,
     link('Google Calendar', googleLink(e)), link('Outlook.com', outlookLink(e, 'live')), link('Microsoft 365 / Office', outlookLink(e, 'office')), link('Yahoo Calendar', yahooLink(e)),
     h('button', { class: 'btn ghost', onclick: () => shareBooking(b) }, 'Apple Calendar / other (.ics file)'),
     h('a', { class: 'btn ghost', href: mailtoLink(b) }, '✉ Email the details'),
@@ -142,7 +147,7 @@ export async function syncCalendar({ interactive = false } = {}) {
   } catch (e) {
     const status = e.name === 'NotAllowedError' || /auth|sign|token|consent|expired|401/i.test(e.message || '') ? 'needs-auth' : 'error';
     setState(status, e.message || String(e));
-    if (status === 'needs-auth' && !interactive && !pausedSaid) { pausedSaid = true; toast(`${cs.provider === 'google' ? 'Google Calendar' : 'Outlook'} is paused until you sign in again: Bookings → Calendar & email → Sync now.`); }
+    if (status === 'needs-auth' && !interactive && !pausedSaid) { pausedSaid = true; toast(`${NAMES[cs.provider] || cs.provider} is paused until you sign in again: Bookings → Calendar & email → Sync now.`); }
   } finally {
     busy = false;
     update(d => { d.calSync = { ...d.calSync, calendarId, events: mapping, updatedAt: Date.now() }; });
@@ -240,7 +245,38 @@ const microsoft = {
   signIn: () => providers.microsoftToken([providers.MS_CAL], true, 'calendar'),
   signOut() { providers.microsoftSignOut({ keepToken: localStorage.getItem('logi-provider') === 'onedrive', keepWho: true }); }, // OneDrive storage shares the sign-in, and the account line is the storage's
 };
-export const ADAPTERS = { google, microsoft };
+
+// The phone's calendar, in the iPhone app (EventKit, through js/native.js). The booking's id rides in each event's
+// URL, which is how Vdex's own events are told from the rest; the phone keeps a modification time for the pull.
+const EVENT_URL = 'https://vdex.crowmade.app/?event=';
+const logiIdOf = url => { const m = /[?&]event=([^&#]+)/.exec(url || ''); return m ? decodeURIComponent(m[1]) : undefined; };
+const ms = (e, k) => (e.allDay ? localDate(e[k]).getTime() : e[k].getTime());
+// An all-day event ends at 23:59:59 of its last day on the phone; Vdex's exclusive end is the day after.
+const abody = (calendarId, e) => ({ calendarId, title: e.title, location: e.location, description: e.description, isAllDay: e.allDay, startDate: ms(e, 'start'), endDate: e.allDay ? ms(e, 'end') - 1000 : ms(e, 'end'), url: EVENT_URL + encodeURIComponent(e.id) });
+const apple = {
+  async signIn() { const r = await native.calendar.access(); if (r !== 'granted') throw new Error('Vdex needs access to the calendar. Allow it under Settings → Vdex → Calendars, then try again.'); },
+  async ensureCalendar(id) {
+    const list = await native.calendar.calendars();
+    if (id && list.some(c => c.id === id)) return id;
+    const found = list.find(c => c.title === CAL_NAME && c.allowsContentModifications !== false);
+    return found ? found.id : native.calendar.createCalendar(CAL_NAME);
+  },
+  async list(id) {
+    const from = Date.now() - 400 * 864e5, to = Date.now() + 3 * 366 * 864e5;
+    return (await native.calendar.events(from, to)).filter(ev => ev.calendarId === id && logiIdOf(ev.url)).map(ev => {
+      const allDay = !!ev.isAllDay, s = new Date(ev.startDate), e = new Date(ev.endDate + 1000);
+      const start = allDay ? ymd(s) : s.toISOString();
+      let end = allDay ? ymd(e) : new Date(ev.endDate).toISOString();
+      if (allDay && end <= start) end = nextDay(start);
+      return { id: ev.id, logiId: logiIdOf(ev.url), title: ev.title || '', allDay, start, end, location: ev.location || '', updated: Number(ev.lastModifiedDate) || 0 };
+    });
+  },
+  create: (id, e) => native.calendar.create(abody(id, e)),
+  async update(id, eid, e) { await native.calendar.update({ id: eid, ...abody(id, e) }); },
+  async remove(id, eid) { await native.calendar.remove(eid); },
+  signOut() {},
+};
+export const ADAPTERS = { google, microsoft, ...(native.calendar.available() ? { apple } : {}) };
 
 /* --------------------------------- sheet --------------------------------- */
 export function calendarPanel() {
@@ -248,8 +284,8 @@ export function calendarPanel() {
   preloadSignIn();
   const help = text => h('details', { class: 'help' }, h('summary', null, 'Setup'), h('div', { class: 'small muted' }, text));
   // One tap: sign in and allow. Greyed out with a pointer to the switch-on guide until this copy of Vdex has its apps registered.
-  const calChoice = (svc, name, sub) => { const on = providers.signIn.available(svc === 'google' ? 'google-calendar' : svc);
-    return h('div', { class: 'card cloud-choice' + (on ? '' : ' off'), 'data-svc': svc }, h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, svc === 'google' ? '📅' : '📆'),
+  const calChoice = (svc, name, sub) => { const on = svc === 'apple' || providers.signIn.available(svc === 'google' ? 'google-calendar' : svc);
+    return h('div', { class: 'card cloud-choice' + (on ? '' : ' off'), 'data-svc': svc }, h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, svc === 'google' ? '📅' : svc === 'apple' ? '📱' : '📆'),
       h('div', { class: 'grow' }, h('strong', null, name), h('div', { class: 'small muted' }, on ? sub : `Not ready yet: sign-in for ${name} is still being set up for Vdex.`, !on && [' ', h('a', { href: SWITCH_ON, target: '_blank', rel: 'noopener', class: 'publisher-link' }, 'For the Vdex publisher: how to switch it on')])),
       h('button', { class: 'btn primary', disabled: !on, 'aria-label': `Connect ${name}`, onclick: () => connectCalendar(svc).then(draw).catch(e => toast(e.message)) }, 'Connect')); };
   const copy = url => async () => { try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { toast('Select the link and copy it'); } };
@@ -276,10 +312,12 @@ export function calendarPanel() {
       h('div', { class: 'card' }, h('strong', null, 'Two-way sync'),
         h('p', { class: 'small muted' }, 'Keeps a “Vdex bookings” calendar in your account: bookings go to it, and date, time, title or location edits made there come back into Vdex.'),
         cs.provider
-          ? [h('p', { class: 'status-line', 'data-state': calState.status === 'ok' ? 'synced' : calState.status === 'error' ? 'error' : '' }, `${cs.provider === 'google' ? 'Google Calendar' : 'Microsoft 365 / Outlook'} — ${CAL_WORDS[calState.status] ?? calState.status}${calState.at && calState.status === 'ok' ? ' · ' + new Date(calState.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}${calState.error && calState.status === 'error' ? ' (' + calState.error + ')' : ''}`),
-            h('div', { class: 'actions' }, h('button', { class: 'btn primary', onclick: () => syncCalendar({ interactive: true }) }, 'Sync now'), h('button', { class: 'btn ghost', onclick: () => { disconnectCalendar(); draw(); } }, 'Disconnect'))]
-          : [h('p', { class: 'small muted' }, 'Sign in to your calendar account and tap Allow. Vdex only touches the “Vdex bookings” calendar it makes.'),
+          ? [h('p', { class: 'status-line', 'data-state': calState.status === 'ok' ? 'synced' : calState.status === 'error' ? 'error' : '' }, ADAPTERS[cs.provider] ? `${NAMES[cs.provider] || cs.provider} — ${CAL_WORDS[calState.status] ?? calState.status}${calState.at && calState.status === 'ok' ? ' · ' + new Date(calState.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}${calState.error && calState.status === 'error' ? ' (' + calState.error + ')' : ''}`
+              : `${NAMES[cs.provider] || cs.provider} — connected on your iPhone, where it updates.`),
+            h('div', { class: 'actions' }, ADAPTERS[cs.provider] && h('button', { class: 'btn primary', onclick: () => syncCalendar({ interactive: true }) }, 'Sync now'), h('button', { class: 'btn ghost', onclick: () => { disconnectCalendar(); draw(); } }, 'Disconnect'))]
+          : [h('p', { class: 'small muted' }, native.calendar.available() ? 'The phone’s own calendar needs no sign-in. For an account, sign in and tap Allow. Vdex only touches the “Vdex bookings” calendar it makes.' : 'Sign in to your calendar account and tap Allow. Vdex only touches the “Vdex bookings” calendar it makes.'),
             h('div', { class: 'stack cloud-choices' },
+              native.calendar.available() && calChoice('apple', 'This phone’s calendar', 'A “Vdex bookings” calendar in the Calendar app, kept in step both ways, on this phone.'),
               calChoice('google', 'Google Calendar', 'About once an hour Google asks again: tap Sync now here.'),
               calChoice('microsoft', 'Outlook / Microsoft 365', 'Personal accounts work straight away; work accounts may need IT approval. About once a day, tap Sync now here.'))]));
   };

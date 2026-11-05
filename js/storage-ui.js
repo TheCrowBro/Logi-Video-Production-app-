@@ -4,6 +4,7 @@ import * as store from './store.js';
 import * as providers from './providers.js';
 import * as backup from './backup.js';
 import { REPO } from './version.js';
+import { isApp as phoneApp } from './native.js';
 
 export const SWITCH_ON = REPO + '/blob/main/docs/turn-on-sign-in.md';
 // Load Google's sign-in library ahead of the tap, so its window opens straight from the tap (browsers block late ones).
@@ -131,7 +132,8 @@ export function backupPanel() {
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary', onclick: () => backup.exportFile() }, 'Export backup'),
       h('button', { class: 'btn ghost', onclick: () => backup.exportFile({ encrypted: true }) }, '🔐 Encrypted backup…'),
-      h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: backup.importFile }))),
+      phoneApp ? h('button', { class: 'btn ghost', onclick: () => backup.importFromPicker() }, 'Import backup…')
+        : h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: backup.importFile }))),
     a && a.readExtra && h('button', { class: 'btn ghost', onclick: () => backup.restoreFromCloud() }, '☁ Restore an automatic cloud backup…'),
     h('p', { class: 'small muted' }, 'With a cloud storage linked (Google Drive, iCloud, Dropbox, OneDrive or WebDAV), Vdex also writes a dated backup next to its database once a day after a change: one per weekday and one per month. Backup files are plain unless you choose the encrypted one, so keep them somewhere private.'),
     h('button', { class: 'btn ghost', onclick: () => { if (confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),

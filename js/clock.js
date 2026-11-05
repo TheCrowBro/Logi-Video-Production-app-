@@ -86,12 +86,14 @@ export function initClockBar(root) {
     } else { root.replaceChildren(); notify.scheduleBreak(null, '', null); notify.holdScreen(false); }
     for (const el of cards) { if (!el.isConnected) cards.delete(el); else paintCard(el); }
   };
-  // The notification's "Back to work" button and "5 more min" arrive here from the service worker.
-  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => {
-    const d = e.data || {};
-    if (d.type === 'break-end') { if (running() && onBreak(running())) { endBreak(); toast('Back to work'); } }
-    else if (d.type === 'break-extend') { const s = running(), br = s && currentBreak(s); if (br) { notify.cancelBreak(); const planned = (br.planned || 0) + 5; import('./store.js').then(st => st.update(d2 => { const x = d2.shifts.find(y => y.id === s.id); const b2 = (x.breaks || []).find(y => !y.end); if (b2) b2.planned = planned; })); toast('5 more minutes'); } }
-  });
+  // The notification's "Back to work" button and "5 more min" arrive here from the service worker, or from the phone
+  // itself in the iPhone app.
+  const breakAction = type => {
+    if (type === 'break-end') { if (running() && onBreak(running())) { endBreak(); toast('Back to work'); } }
+    else if (type === 'break-extend') { const s = running(), br = s && currentBreak(s); if (br) { notify.cancelBreak(); const planned = (br.planned || 0) + 5; import('./store.js').then(st => st.update(d2 => { const x = d2.shifts.find(y => y.id === s.id); const b2 = (x.breaks || []).find(y => !y.end); if (b2) b2.planned = planned; })); toast('5 more minutes'); } }
+  };
+  if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => breakAction((e.data || {}).type));
+  notify.onAction(breakAction);
   draw();
   subscribe(draw);
   // tick once a second while something is running and the tab is visible

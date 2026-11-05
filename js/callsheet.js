@@ -7,6 +7,7 @@ import { db, byId, endOf, upsert, activeBookings } from './store.js';
 import { getTimes } from './suncalc.js';
 import { setCheck, itemId, hiredPeople, rentalsOf } from './workflow.js';
 import { saveOrShare } from './backup.js';
+import * as native from './native.js';
 import { forecastLine } from './weather.js';
 import { boardPlan, ieOf, dnOf, fmtEighths, castNumbers } from './board.js';
 
@@ -203,7 +204,8 @@ export function printElement(el) {
   let done = false;
   const finish = () => { if (done) return; done = true; root.remove(); document.body.classList.remove('print-cs'); window.removeEventListener('afterprint', finish); };
   window.addEventListener('afterprint', finish);
-  setTimeout(() => { try { window.print(); } catch { finish(); toast('Printing is not available here; use Save PDF'); } }, 60);
+  if (native.isApp) { setTimeout(() => native.files.print().catch(() => toast('Printing is not available here; use Save PDF')).finally(finish), 60); }
+  else setTimeout(() => { try { window.print(); } catch { finish(); toast('Printing is not available here; use Save PDF'); } }, 60);
   setTimeout(finish, 90000);
 }
 

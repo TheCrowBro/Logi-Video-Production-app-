@@ -19,7 +19,10 @@ const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const who = l => (l ? [l.name, l.email && l.name ? `(${l.email})` : l.email].filter(Boolean).join(' ') : '');
 const web = () => !!P && P.kind === 'web';
 const play = () => web() && !!P.play;  // the Google Play app: no prices and no link to the shop (Google Play's rule)
-const here = () => (play() ? 'phone' : 'computer');
+const ios = () => web() && !!P.ios;    // the iPhone app: buys through the App Store, never links to the shop (Apple's rule)
+const app = () => web() && !!P.app;    // either store app: takes one of the licence's places
+const here = () => (app() ? 'phone' : 'computer');
+const price = () => (ios() && P.price && P.price()) || '19.99 USD'; // the App Store's price in the person's currency, once known
 
 // The states in which this device counts as having a licence (or licences are not switched on): cloud storage and
 // saving data files work only in these (store.setPaid).
@@ -76,36 +79,66 @@ async function start() {
 function describe(s) {
   const l = s.licence, seats = (l && l.seats) || s.seats || 3;
   const offer = play() ? 'sign in with the email address of your Vdex licence'
-    : web() ? `sign in with the email address you bought a licence with (20 USD once, for up to ${seats} of your devices)`
-      : `add a licence: 20 USD once, for up to ${seats} of your devices`;
-  const shop = !play();
+    : ios() ? `buy a licence (${price()} once, for up to ${seats} of your devices), or sign in with the email address of a licence you already have`
+      : web() ? `sign in with the email address you bought a licence with (20 USD once, for up to ${seats} of your devices)`
+        : `add a licence: 20 USD once, for up to ${seats} of your devices`;
+  const shop = !play(), restore = ios();
   switch (s.mode) {
     case 'founder': return { line: 'Free licence: thank you for using Vdex from the start.', tone: 'ok' };
-    case 'trial': return { line: `Free trial: ${plural(s.trialLeft, 'day')} left${s.trialEnds ? ` (until ${day(s.trialEnds)})` : ''}. After that Vdex is read-only here until you ${offer}.`, buy: shop, enter: true };
-    case 'ended': return { line: `Your free trial has ended, so Vdex is read-only here: you can open, search and print everything, but not change it. To change things again, ${offer}.`, tone: 'warn', buy: shop, enter: true };
+    case 'trial': return { line: `Free trial: ${plural(s.trialLeft, 'day')} left${s.trialEnds ? ` (until ${day(s.trialEnds)})` : ''}. After that Vdex is read-only here until you ${offer}.`, buy: shop, enter: true, restore };
+    case 'ended': return { line: `Your free trial has ended, so Vdex is read-only here: you can open, search and print everything, but not change it. To change things again, ${offer}.`, tone: 'warn', buy: shop, enter: true, restore };
     case 'licensed': return web()
-      ? { line: `Signed in as ${l.email}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${play() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true }
+      ? { line: `${l.email ? `Signed in as ${l.email}` : 'Licensed through the App Store'}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${app() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true }
       : { line: `Licensed to ${who(l)}${l && l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}.`, tone: 'ok', copy: true, release: true };
     case 'pending': return web()
       ? { line: `Signed in as ${l.email}, but this phone is not on your licence yet: Vdex needs the internet once to add it.`, tone: s.canEdit ? '' : 'warn', retry: true, release: true }
       : { line: `Licensed to ${who(l)}, but not activated on this computer yet: Vdex needs the internet once to do that${s.daysLeft > 0 ? ` (${plural(s.daysLeft, 'day')} left)` : ''}.`, tone: s.daysLeft > 0 ? '' : 'warn', retry: true, remove: true };
     case 'released': return { line: `This ${here()} is not on your licence: it is in use on ${plural(seats, 'other device')}, its limit. ${web() ? 'Add this phone' : 'Activate it here again'} to choose which device to take off.`, tone: 'warn', again: true, [web() ? 'release' : 'remove']: true };
-    case 'cancelled': return { line: `This licence has been cancelled, for example after a refund. If you think that is a mistake, reply to the email your licence came in.`, tone: 'warn', buy: shop, enter: true, remove: !web() };
-    case 'expired': return { line: `Your licence ended on ${day(l && l.expires)}.`, tone: 'warn', buy: shop, enter: true, [web() ? 'release' : 'remove']: true };
+    case 'cancelled': return { line: `This licence has been cancelled, for example after a refund. If you think that is a mistake, reply to the email your licence came in${ios() ? ', or to Apple for an App Store purchase' : ''}.`, tone: 'warn', buy: shop, enter: true, restore, remove: !web() };
+    case 'expired': return { line: `Your licence ended on ${day(l && l.expires)}.`, tone: 'warn', buy: shop, enter: true, restore, [web() ? 'release' : 'remove']: true };
     case 'offline': return { line: `Vdex has not been able to check your ${web() ? 'sign-in' : 'licence'} for 90 days. Connect to the internet and press Try again.`, tone: 'warn', retry: true };
     default: return null;
   }
 }
 function actions(s, d, after = () => {}) {
   const l = L(), b = [];
-  if (d.buy) b.push(h('button', { class: 'btn primary', onclick: () => l.buy() }, 'Buy a licence · 20 USD'));
+  if (d.buy) b.push(h('button', { class: 'btn primary', onclick: e => (ios() ? buyInApp(e.target, after) : l.buy()) }, ios() ? `Buy a licence · ${price()}` : 'Buy a licence · 20 USD'));
   if (d.enter) b.push(h('button', { class: 'btn ghost', onclick: () => (web() ? signIn() : enterCode()) }, web() ? 'Sign in' : 'Enter licence code'));
+  if (d.restore) b.push(h('button', { class: 'btn ghost', onclick: e => restoreInApp(e.target, after) }, 'Restore purchases'));
   if (d.again) b.push(h('button', { class: 'btn primary', onclick: async () => (web() ? addPhone() : enterCode(await l.code())) }, web() ? 'Add this phone' : 'Activate here again'));
   if (d.retry) b.push(h('button', { class: 'btn primary', onclick: e => retry(e.target, after) }, 'Try again'));
   if (d.copy) b.push(h('button', { class: 'btn ghost', onclick: async () => { try { await navigator.clipboard.writeText(await l.code()); toast('Licence code copied'); } catch { toast('Could not copy'); } } }, 'Copy the code'));
   if (d.release) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet() }, web() ? 'Sign out' : 'Release this computer'));
   if (d.remove) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet(true) }, 'Remove the code'));
   return b;
+}
+
+// The App Store purchase (the iPhone app): Apple's sheet, then the licence server confirms it and this phone takes a place.
+async function buyInApp(btn, after = () => {}, restore = false) {
+  const label = btn && btn.textContent;
+  if (btn) { btn.disabled = true; btn.textContent = restore ? 'Checking…' : 'Buying…'; }
+  const r = await (restore ? L().restore() : L().buy()).catch(e => ({ error: e.message }));
+  if (btn) { btn.disabled = false; btn.textContent = label; }
+  if (!r || r === true || r.cancelled) return;
+  if (r.pending) { toast('Waiting for the purchase to be approved. Vdex is licensed here as soon as it is.'); return; }
+  if (r.error) { toast(r.error); return; }
+  set(r);
+  if (r.full) return fullSheet(r.full);
+  after();
+  toast(r.mode === 'licensed' ? (restore ? 'Your purchase is back: Vdex is licensed on this phone.' : 'Thank you! Vdex is licensed on this phone.') : 'Your purchase is confirmed.');
+}
+const restoreInApp = (btn, after) => buyInApp(btn, after, true);
+// The purchase is confirmed, but the licence's devices are all taken: choose one to take off.
+function fullSheet(full) {
+  const l = L(), msg = h('p', { class: 'small', role: 'status' });
+  const sh = sheet('Add this phone', h('div', { class: 'stack' }, msg));
+  const go = async tag => {
+    const r = await l.seat(tag);
+    if (r && r.error === 'full') return chooser(msg, r, go, 'phone');
+    if (!r || r.error || r.offline) { msg.textContent = (r && typeof r.error === 'string' && r.error) || 'Vdex could not reach the licence server. Try again when you are online.'; msg.className = 'small licence-warn'; return; }
+    set(r); sh.close(); toast('This phone is on your licence');
+  };
+  chooser(msg, full, go, 'phone');
 }
 
 // Checks the licence online now. The message says what the server answered, not just whether it is licensed.
@@ -153,7 +186,7 @@ function paintBar() {
   // Each state's own next step: someone who has paid is never asked to buy again.
   const buttons = d.retry ? [small('Try again', e => retry(e.target), true), small('Details', () => detailsSheet())]
     : d.again ? [small(web() ? 'Add this phone' : 'Activate here again', async () => (web() ? addPhone() : enterCode(await L().code())), true), small('Details', () => detailsSheet())]
-    : d.buy ? [small('Buy · 20 USD', () => L().buy(), true), small(web() ? 'Sign in' : 'Enter code', enter)]
+    : d.buy ? [small(ios() ? `Buy · ${price()}` : 'Buy · 20 USD', e => (ios() ? buyInApp(e.target) : L().buy()), true), small(web() ? 'Sign in' : 'Enter code', enter)]
     : d.enter ? [small('Sign in', enter, true)]
     : [small('Details', () => detailsSheet(), true)];
   const bar = h('div', { class: 'update-bar licence-bar' + (urgent ? ' urgent' : ''), role: 'status' },
@@ -204,7 +237,7 @@ function needsLicence(what) {
   const sh = sheet('Comes with a licence', h('div', { class: 'stack' },
     h('p', null, `${thing} comes with a Vdex licence.`),
     h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
-    h('div', { class: 'actions' }, ...actions(s, { buy: !play(), enter: true }, () => sh.close()))));
+    h('div', { class: 'actions' }, ...actions(s, { buy: !play(), enter: true, restore: ios() }, () => sh.close()))));
   sh.el.classList.add('licence-needed');
   S.needClose = sh.close;
   sh.el.tabIndex = -1; setTimeout(() => sh.el.focus(), 50); // not a button: someone still typing must not press Buy by accident
@@ -218,7 +251,7 @@ const shortDay = iso => day(iso) || 'unknown';
 // When a licence already has 3 devices: the list, with "Move it here" for each (3 times a month).
 function chooser(msg, r, pick, what) {
   const list = h('ul', { class: 'lic-computers' }, ...(r.computers || []).map(c => h('li', null,
-    h('span', null, h('b', null, c.os === 'Android' ? 'Android app' : c.os || 'Computer'), ` · added ${shortDay(c.added)} · last used ${shortDay(c.seen)}`),
+    h('span', null, h('b', null, c.os === 'Android' ? 'Android app' : /^iP/.test(c.os || '') ? `${c.os} app` : c.os || 'Computer'), ` · added ${shortDay(c.added)} · last used ${shortDay(c.seen)}`),
     h('button', { class: 'btn ghost small', disabled: !r.swapsLeft, onclick: () => pick(c.tag) }, 'Move it here'))));
   msg.className = 'small'; msg.replaceChildren(
     h('span', null, `Your licence is already in use on ${plural((r.computers || []).length, 'device')}, its limit. To use it on this ${what}, choose one to take it off. `),
@@ -272,7 +305,7 @@ export function signIn() {
     whereTo.textContent = useCode ? `A 6-digit code is on its way to ${to}, the email address in your licence code. It works for 15 minutes.` : `If ${to} has a Vdex licence, a 6-digit code is on its way there. It works for 15 minutes. Nothing after a few minutes? Check your spam folder, or try the address you bought with.`;
     digits.focus();
   } },
-  h('p', { class: 'small muted' }, play() ? 'Sign in with the email address of your Vdex licence. We email you a 6-digit code to type in here.'
+  h('p', { class: 'small muted' }, app() ? 'Sign in with the email address of your Vdex licence. We email you a 6-digit code to type in here.'
     : 'Sign in with the email address you bought your licence with. We email you a 6-digit code to type in here.'),
   email, codeBox, h('div', null, toggle), h('div', { class: 'actions' }, send));
   const whereTo = h('p', { class: 'small muted', role: 'status' });
@@ -328,7 +361,7 @@ function releaseSheet(removeOnly = false) {
   } }, label);
   const msg = h('p', { class: 'small licence-warn', role: 'status' });
   const sh = sheet(w ? 'Sign out' : removeOnly ? 'Remove the licence code' : 'Release this computer', h('div', { class: 'stack' },
-    h('p', null, w ? `This signs Vdex out on this ${play() ? 'phone, and gives its place on your licence to another device' : 'browser'}.` : removeOnly ? 'This takes the licence code off this computer.' : 'This takes your licence off this computer, so you can use the code on another one.'),
-    h('p', { class: 'small muted' }, `Your bookings and everything else stay here. Without a licence, Vdex here goes back to the free trial, or is read-only if the trial is over. You can ${w ? 'sign in' : 'enter the code'} again at any time.`),
+    h('p', null, w ? `This signs Vdex out on this ${app() ? 'phone, and gives its place on your licence to another device' : 'browser'}.` : removeOnly ? 'This takes the licence code off this computer.' : 'This takes your licence off this computer, so you can use the code on another one.'),
+    h('p', { class: 'small muted' }, `Your bookings and everything else stay here. Without a licence, Vdex here goes back to the free trial, or is read-only if the trial is over. You can ${w ? 'sign in' : 'enter the code'}${ios() ? ', or restore the App Store purchase,' : ''} again at any time.`),
     msg, h('div', { class: 'actions' }, go)));
 }

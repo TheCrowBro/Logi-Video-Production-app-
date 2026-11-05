@@ -11,6 +11,7 @@ import * as lock from './lock.js';
 import * as backup from './backup.js';
 import { initUpdates } from './update.js';
 import { termsGate } from './terms.js';
+import * as native from './native.js';
 
 applyPrefs();
 await lock.gate(); // with a PIN set, nothing below runs until the lock screen is passed
@@ -116,7 +117,9 @@ show(start);
 window.logiGo = i => { rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); return showing; }; // lets pages jump between sections; resolves once the section is drawn
 window.logiPage = () => (tabs[current] ? tabs[current].id : null); // which section is open (the page tutorials use it)
 
-// A file shared to the app (Android share sheet) is parked by the service worker; hand it to TC Notes.
+// A file handed to Vdex: the iPhone app gets it from the phone ("Copy to Vdex"); on Android the share sheet's file is
+// parked by the service worker. Either way js/share-in.js asks what it is.
+if (native.isApp) native.files.onShared(file => import('./share-in.js').then(m => m.arrived(file)));
 if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in window) {
   history.replaceState(null, '', location.pathname);
   caches.open('logi-share').then(async c => {
@@ -124,7 +127,7 @@ if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in win
     const name = decodeURIComponent(r.headers.get('X-Name') || 'shared.docx');
     const file = new File([await r.blob()], name, { type: r.headers.get('Content-Type') || '' });
     await c.delete('shared-file');
-    import('./pages/tcnotes.js').then(m => m.receiveSharedFile(file));
+    import('./share-in.js').then(m => m.arrived(file));
   }).catch(() => {});
 }
 

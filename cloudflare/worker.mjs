@@ -8,6 +8,9 @@
 //   /licence/release           a desktop app takes its computer off the list
 //   /licence/admin             the owner's generator page: look at, clear, cancel or restore a code (signed requests)
 //   /licence/web/…             the website's sign-in: a 6-digit code emailed to a licence holder, then a signed token
+//   /licence/apple/claim       the iPhone app bought the licence through the App Store: Apple's signed receipt becomes a licence and a sign-in
+//   /licence/apple/notify      App Store Server Notifications: a refund or a revocation cancels that licence
+//   /licence/apple/status      whether App Store purchases are switched on (APPLE_BUNDLE_ID set)
 //                              (status, start, verify, check), and a place on the licence for the Google Play app
 //                              (activate, release)
 //
@@ -23,6 +26,7 @@
 //   MAIL_FROM, REPLY_TO    the email's sender (default "Vdex <licences@vdex.crowmade.app>") and where replies go
 //   WEB_SIGN_IN            "on" makes the website and the Google Play app ask for a licence after their 30-day trial
 import codes from '../desktop/licence-codes.js';
+import { verifyAppleJws } from './apple-jws.mjs';
 import KEYS from '../desktop/licence-keys.json';
 
 const SITE = 'https://vdex.crowmade.app';
@@ -170,7 +174,7 @@ async function sendCode(env, r, web) {
 // Other devices only ever see a short tag made from it, so one cannot take another off the list except through a
 // counted swap.
 const tagOf = async id => codes.b64u.enc(await sha256('vdex-seat|' + id)).slice(0, 12);
-const OS = new Set(['Mac', 'Windows', 'Linux', 'Android']);
+const OS = new Set(['Mac', 'Windows', 'Linux', 'Android', 'iPhone', 'iPad']);
 const validInstall = v => typeof v === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(v);
 async function readCode(text) { try { const r = await codes.verifyCode(String(text || ''), { keys: KEYS }); return r; } catch { return null; } }
 async function seats(env, ref) {
@@ -232,10 +236,11 @@ async function linkEmail(env, email, lic) {
 }
 // The licences an email can use now: linked ones that are not cancelled or past their end date. An email with none
 // linked is looked up in Stripe too (an order whose webhook never arrived, say).
-async function licencesFor(env, email) {
-  const rec = await env.LICENCES.get('e:' + email, 'json'); // a storage error becomes a 500, never a 'no licence' answer
+async function licencesFor(env, email) { return licencesForKey(env, 'e:' + email, email); }
+async function licencesForKey(env, key, email = '') {
+  const rec = await env.LICENCES.get(key, 'json'); // a storage error becomes a 500, never a 'no licence' answer
   let list = rec && Array.isArray(rec.licences) ? rec.licences : [];
-  if (!list.length && selling(env)) {
+  if (!list.length && email && selling(env)) {
     const found = await stripeGet(env, `checkout/sessions?customer_details[email]=${encodeURIComponent(email)}&payment_link=${encodeURIComponent(env.STRIPE_PAYMENT_LINK)}&limit=10`);
     for (const sess of (found && found.data) || []) {
       const r = await licenceForSession(sess, env); if (r.error || cleanEmail(r.email) !== email) continue;
@@ -261,9 +266,13 @@ const CODE_TTL = 15 * 60e3, CODE_TRIES = 5, CODES_PER_HOUR = 5, CODES_PER_DAY = 
 // emails always have room. SIGN_IN_EMAILS_PER_DAY raises it on a paid Resend plan.
 const emailsPerDay = env => Math.max(1, Number(env.SIGN_IN_EMAILS_PER_DAY) || 60);
 async function webReady(env) { return env.WEB_SIGN_IN === 'on' && !!env.LICENCES && !!env.RESEND_API_KEY && !!(await shopKey(env)); }
+// A sign-in token names who signed in: the email a licence belongs to, or (on an iPhone) the App Store purchase.
+const appleId = v => (/^\d{1,40}$/.test(String(v || '')) ? String(v) : '');
+const identityKey = v => (v.apple ? 'a:' + v.apple : 'e:' + v.email);
+const identityOf = v => (v.apple ? { apple: v.apple } : { email: v.email });
 async function webToken(env, token) {
   const v = await codes.readNote('web', token, { keys: KEYS, signers: [SHOP_KID] });
-  return v && cleanEmail(v.email) && /^\d{1,3}:\d{1,10}$/.test(String(v.ref)) ? v : null;
+  return v && (cleanEmail(v.email) || appleId(v.apple)) && /^\d{1,3}:\d{1,10}$/.test(String(v.ref)) ? v : null;
 }
 async function webStart(request, env) {
   if (!(await webReady(env))) return json(503, { error: 'not-ready' });
@@ -319,14 +328,14 @@ async function webCheck(request, env) {
   const b = await readJson(request), v = b && (await webToken(env, b.token));
   if (!v) return json(401, { error: 'signed-out' });
   if (!env.LICENCES) return json(503, { error: 'not-ready' });
-  const list = await licencesFor(env, v.email), l = list.find(x => x.ref === v.ref) || list[0];
+  const list = await licencesForKey(env, identityKey(v), v.email), l = list.find(x => x.ref === v.ref) || list[0];
   if (!l) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : (await endedFor(env, v)) ? 'expired' : 'signed-out' });
-  const fresh = l.ref === v.ref ? null : await codes.signNote('web', await shopKey(env), SHOP_KID, { email: v.email, ref: l.ref, iat: Date.now() });
-  return json(200, { ok: true, licence: shownLicence(l, v.email), ...(fresh ? { token: fresh } : {}) });
+  const fresh = l.ref === v.ref ? null : await codes.signNote('web', await shopKey(env), SHOP_KID, { ...identityOf(v), ref: l.ref, iat: Date.now() });
+  return json(200, { ok: true, licence: shownLicence(l, v.email || ''), ...(fresh ? { token: fresh } : {}) });
 }
 // Whether the token's licence is still linked but past its end date (a free licence given until a date).
 async function endedFor(env, v) {
-  const rec = await env.LICENCES.get('e:' + v.email, 'json').catch(() => null), l = rec && Array.isArray(rec.licences) && rec.licences.find(x => x.ref === v.ref);
+  const rec = await env.LICENCES.get(identityKey(v), 'json').catch(() => null), l = rec && Array.isArray(rec.licences) && rec.licences.find(x => x.ref === v.ref);
   return !!(l && l.expires && Date.now() >= Date.parse(l.expires + 'T00:00:00Z') + DAY);
 }
 // The Google Play app takes one of the licence's places, like a computer. When that licence is full and the same email
@@ -337,13 +346,14 @@ async function webActivate(request, env) {
   if (!b.install || !validInstall(b.install)) return json(400, { error: 'invalid' });
   if (!env.LICENCES) return json(503, { error: 'not-ready' });
   const key = await shopKey(env); if (!key) return json(503, { error: 'not-ready' });
-  const list = await licencesFor(env, v.email);
+  const os = OS.has(b.os) ? b.os : 'Android';
+  const list = await licencesForKey(env, identityKey(v), v.email);
   let l = list.find(x => x.ref === v.ref);
   if (!l && !list.length) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : (await endedFor(env, v)) ? 'expired' : 'signed-out' });
   if (!l) { // the signed-in licence ended or was refunded, but the email has another: carry on with that one, as /check does
     l = list[0];
-    const res = await takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os: 'Android', release: b.release });
-    return json(res.status, { ...(await res.json()), token: await codes.signNote('web', key, SHOP_KID, { email: v.email, ref: l.ref, iat: Date.now() }), licence: shownLicence(l, v.email) });
+    const res = await takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os, release: b.release });
+    return json(res.status, { ...(await res.json()), token: await codes.signNote('web', key, SHOP_KID, { ...identityOf(v), ref: l.ref, iat: Date.now() }), licence: shownLicence(l, v.email || '') });
   }
   if (!b.release && list.length > 1) {
     const r = await seats(env, l.ref);
@@ -352,13 +362,63 @@ async function webActivate(request, env) {
       if (other.ref === l.ref) continue;
       const o = await seats(env, other.ref);
       if (o.computers.some(c => c.id === b.install) || o.computers.length < (other.seats || 3)) {
-        const res = await takeSeat(env, key, other.ref, other.seats || 3, { install: b.install, os: 'Android' });
+        const res = await takeSeat(env, key, other.ref, other.seats || 3, { install: b.install, os });
         const body = await res.json();
-        return json(res.status, { ...body, token: await codes.signNote('web', key, SHOP_KID, { email: v.email, ref: other.ref, iat: Date.now() }), licence: shownLicence(other, v.email) });
+        return json(res.status, { ...body, token: await codes.signNote('web', key, SHOP_KID, { ...identityOf(v), ref: other.ref, iat: Date.now() }), licence: shownLicence(other, v.email || '') });
       }
     }
   }
-  return takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os: 'Android', release: b.release });
+  return takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os, release: b.release });
+}
+
+/* ---------------------------- the App Store ---------------------------- */
+// The iPhone app sells the licence through Apple (a one-off 'app.crowmade.vdex.licence'). Apple signs the purchase;
+// the app sends that signature here, and it becomes an ordinary licence under the shop key, known by the purchase's
+// original transaction id (a:<id> → the licences, like e:<email>), with the phone taking one of its places and a
+// sign-in token like the website's. A refund or a revocation that Apple notifies cancels it, as a Stripe refund does.
+const APPLE_PRODUCT = 'app.crowmade.vdex.licence';
+const appleReady = async env => !!(env.LICENCES && env.APPLE_BUNDLE_ID && (await shopKey(env)));
+const appleOpts = env => (env.APPLE_ROOT_CA ? { root: Uint8Array.from(atob(env.APPLE_ROOT_CA), c => c.charCodeAt(0)) } : {}); // APPLE_ROOT_CA: the tests' own root; never set it on the real Worker
+async function refForApple(id) { const h = await sha256('vdex-apple|' + id); const serial = new DataView(h.buffer).getUint32(0) || 1; return { serial, ref: codes.refOf(SHOP_KID, serial) }; }
+// A verified transaction → is it a purchase of the licence in this app? Returns the problem, or the purchase's id.
+function applePurchase(tx, env) {
+  if (!tx || tx.bundleId !== env.APPLE_BUNDLE_ID) return { error: 'not-ours' };
+  if (tx.productId !== APPLE_PRODUCT || (tx.type && tx.type !== 'Non-Consumable')) return { error: 'not-licence' };
+  if (tx.environment === 'Sandbox' && env.APPLE_ALLOW_SANDBOX !== 'on') return { error: 'sandbox' };
+  if (tx.revocationDate) return { error: 'revoked' };
+  const id = String(tx.originalTransactionId || ''); if (!/^\d{1,40}$/.test(id)) return { error: 'invalid' };
+  return { id, purchased: Number(tx.originalPurchaseDate || tx.purchaseDate) || Date.now() };
+}
+async function appleClaim(request, env) {
+  if (!(await appleReady(env))) return json(503, { error: 'not-ready' });
+  const b = await readJson(request, 64000); if (!b || typeof b.jws !== 'string' || !validInstall(b.install)) return json(400, { error: 'invalid' });
+  let tx; try { tx = await verifyAppleJws(b.jws, appleOpts(env)); } catch (e) { return json(400, { error: 'bad-signature', detail: e.message }); }
+  const p = applePurchase(tx, env); if (p.error) return json(p.error === 'revoked' ? 403 : 400, { error: p.error });
+  const key = await shopKey(env), { serial, ref } = await refForApple(p.id);
+  if (await env.LICENCES.get('x:' + ref)) return json(403, { error: 'cancelled' });
+  const code = await codes.signCode(key, SHOP_KID, { serial, name: 'App Store customer', email: '', issued: today(p.purchased) });
+  const v = await readCode(code); if (!v) return json(500, { error: 'server' });
+  const akey = 'a:' + p.id, rec = (await env.LICENCES.get(akey, 'json')) || {};
+  const list = Array.isArray(rec.licences) ? rec.licences : [];
+  if (!list.some(l => l.ref === ref)) { list.push({ ref, seats: v.licence.seats || 3, name: v.licence.name || '', comp: false, expires: '' }); await env.LICENCES.put(akey, JSON.stringify({ licences: list.slice(-20), purchased: p.purchased })); }
+  const l = list.find(x => x.ref === ref);
+  const res = await takeSeat(env, key, ref, l.seats || 3, { install: b.install, os: OS.has(b.os) ? b.os : 'iPhone', release: b.release });
+  return json(res.status, { ...(await res.json()), token: await codes.signNote('web', key, SHOP_KID, { apple: p.id, ref, iat: Date.now() }), licence: shownLicence(l, '') });
+}
+// App Store Server Notifications (version 2): Apple posts a signed payload; a refund or revocation cancels the licence.
+async function appleNotify(request, env) {
+  if (!(await appleReady(env))) return json(503, { error: 'not-ready' });
+  const b = await readJson(request, 200000); if (!b || typeof b.signedPayload !== 'string') return json(400, { error: 'invalid' });
+  let note; try { note = await verifyAppleJws(b.signedPayload, appleOpts(env)); } catch (e) { return json(400, { error: 'bad-signature', detail: e.message }); }
+  const d = note.data || {};
+  if (d.bundleId && d.bundleId !== env.APPLE_BUNDLE_ID) return json(200, { ignored: 'not-ours' });
+  let tx = null; if (typeof d.signedTransactionInfo === 'string') { try { tx = await verifyAppleJws(d.signedTransactionInfo, appleOpts(env)); } catch (e) { return json(400, { error: 'bad-signature', detail: e.message }); } }
+  const id = tx && /^\d{1,40}$/.test(String(tx.originalTransactionId || '')) ? String(tx.originalTransactionId) : '';
+  if (!id || (tx.productId && tx.productId !== APPLE_PRODUCT)) return json(200, { ignored: 'not-licence' });
+  const { ref } = await refForApple(id);
+  if (note.notificationType === 'REFUND' || note.notificationType === 'REVOKE') { await env.LICENCES.put('x:' + ref, JSON.stringify({ why: note.notificationType === 'REFUND' ? 'refund' : 'revoked', at: Date.now() })); return json(200, { ok: true, cancelled: 1 }); }
+  if (note.notificationType === 'REFUND_REVERSED') { await env.LICENCES.delete('x:' + ref); return json(200, { ok: true, restored: 1 }); }
+  return json(200, { ignored: note.notificationType || 'unknown' });
 }
 async function webRelease(request, env) {
   const b = await readJson(request), v = b && (await webToken(env, b.token));
@@ -422,6 +482,9 @@ export default {
       if (p === '/licence/web/check' && m === 'POST') return await webCheck(request, env);
       if (p === '/licence/web/activate' && m === 'POST') return await webActivate(request, env);
       if (p === '/licence/web/release' && m === 'POST') return await webRelease(request, env);
+      if (p === '/licence/apple/status' && m === 'GET') return json(200, { on: await appleReady(env), product: APPLE_PRODUCT }, { 'Cache-Control': 'public, max-age=300' });
+      if (p === '/licence/apple/claim' && m === 'POST') return await appleClaim(request, env);
+      if (p === '/licence/apple/notify' && m === 'POST') return await appleNotify(request, env);
       if (p === '/licence/admin') return m === 'OPTIONS' ? new Response(null, { status: 204, headers: CORS }) : m === 'POST' ? await admin(request, env) : json(405, { error: 'method' }, CORS);
       if (p.startsWith('/licence/')) return json(404, { error: 'not-found' });
     } catch (e) {

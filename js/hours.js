@@ -2,6 +2,7 @@
 import { h, sheet, toast, uid, todayISO, ymd, parseISO, fmtShort, nodes } from './util.js';
 import { db, byId, update, remove, subscribe, activeBookings, requirePaid } from './store.js';
 import { openForm } from './form.js';
+import * as native from './native.js';
 
 const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } } };
 export const standardDay = () => { const n = Number(LS.get('logi-stdday')); return n >= 1 && n <= 24 ? n : 10; }; // hours before overtime, and what an hourly crew rate is quoted for per shoot day
@@ -187,6 +188,7 @@ function exportCsv(shifts) {
   const q = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
   const rows = ['Date,Project,Client,Kind,Start,Finish,Breaks (min),Worked (h),Note', ...shifts.map(s => { const b = byId('bookings', s.bookingId) || {}; return [s.date, q(b.title || ''), q(b.client || ''), kindOf(s), new Date(s.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), s.end ? new Date(s.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '', Math.round(breakMs(s) / 6e4), hrs(workedMs(s)), q(s.note || '')].join(','); })];
   const file = new File([rows.join('\n') + '\n'], 'vdex-hours.csv', { type: 'text/csv' });
+  if (native.canShareFiles()) { native.files.share(file.name, file, file.type, { title: 'Vdex hours' }).catch(() => {}); return; }
   if (navigator.canShare?.({ files: [file] })) { navigator.share({ files: [file], title: 'Vdex hours' }).catch(() => {}); return; }
   const a = h('a', { href: URL.createObjectURL(file), download: file.name }); document.body.append(a); a.click(); a.remove(); toast('CSV saved');
 }

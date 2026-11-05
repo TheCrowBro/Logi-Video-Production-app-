@@ -148,8 +148,9 @@ function notifyPanel() {
           : perm !== 'granted' ? h('button', { class: 'btn primary', onclick: async () => { await notify.requestPermission(); draw(); } }, '🔔 Turn on break notifications')
             : [row('Notify me when a timed break is up', 'enabled', 'a system notification with a Back to work button', false),
               row('Also warn two minutes before', 'early', 'for breaks of 10 minutes or more', !p.enabled),
-              'wakeLock' in navigator && row('Keep the screen on during breaks', 'wake', 'phones suspend the app in the background after a few minutes; a lit screen keeps the countdown alive', !p.enabled)],
-      h('p', { class: 'small muted' }, 'Works while the app is open on a computer, or in the background on a phone for the first few minutes (or for the whole break with the screen kept on). If the phone has suspended the app, the notification arrives the moment you return to it.')));
+              !notify.closedToo() && 'wakeLock' in navigator && row('Keep the screen on during breaks', 'wake', 'phones suspend the app in the background after a few minutes; a lit screen keeps the countdown alive', !p.enabled)],
+      h('p', { class: 'small muted' }, notify.closedToo() ? 'The phone itself keeps the time, so the alert arrives even with Vdex closed or the phone locked, with Back to work and 5 more minutes on it.'
+        : 'Works while the app is open on a computer, or in the background on a phone for the first few minutes (or for the whole break with the screen kept on). If the phone has suspended the app, the notification arrives the moment you return to it.')));
   };
   draw();
   return wrap;

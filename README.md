@@ -80,3 +80,4 @@ Everything can be changed later, and every screen has a back button. To delete a
 - [For developers](docs/developers.md): running Vdex yourself, the tests, making the installers, signing, releasing updates, and how it is built.
 - [Security](SECURITY.md): what protects your data and what doesn't.
 - [Vdex on Google Play](docs/google-play.md): the step-by-step checklist for putting the Android app in the store, with the texts to paste.
+- [Vdex on the App Store](docs/apple-app-store.md): the step-by-step for the iPhone app: the Apple account, the Mac, the in-app purchase, testing and the review.

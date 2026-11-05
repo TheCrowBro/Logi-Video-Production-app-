@@ -28,7 +28,9 @@ The two phone guides cover the same ground in the same order, so a crew with bot
 
 ### Install it on your iPhone
 
-Vdex is a web app, so there is nothing to find in the App Store. You install it from Safari:
+There are two ways. **The Vdex app on the App Store** (search for Vdex, or follow the link on vdex.crowmade.app) is the same Vdex with what only an app can do on an iPhone: break alerts that arrive with the app closed, a "Vdex bookings" calendar in the Calendar app, backups and spreadsheets saved through the Files app, scripts and shot lists handed to it from Mail or Files, printing through the phone's print sheet, and the licence bought in the app. Its Install button does not show, because it is installed already.
+
+Or, with no app at all, install the website from Safari:
 
 1. Open the Vdex address in **Safari**. Other iPhone browsers can't add it to the Home Screen properly.
 2. Tap **Share**, the square with an arrow at the bottom of the screen.
@@ -159,7 +161,7 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Where it lives.** Inside the installed app on this phone. Nothing is uploaded unless you link a storage of your own.
 
-**Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
+**Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones. In the App Store app, Export and Import open the Files app itself (iCloud Drive, On My iPhone, Dropbox and so on), and Vdex's own folder shows in Files under *On My iPhone → Vdex*.
 
 **Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
@@ -178,6 +180,7 @@ All of these work on your iPhone and on your computer, so pick one and link it e
 1. **Add once.** On any booking, **📆 Add to calendar** → **Apple Calendar** saves a calendar file; open it and tap **Add All**. The Google Calendar and Outlook options open those apps or sites ready-filled. **📤 Share calendar event** and **✉ Email** send the details to anyone. To delete a booking, press and hold its card in a list (or its header on its own page) for three seconds and confirm, or tap **Edit**, then **Delete**.
 2. **Live feed.** With Google Drive, Dropbox or OneDrive linked (iCloud keeps Vdex's copy private and gives no link; with Nextcloud, share the feed file from your server), Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. Then on the iPhone: **Settings → Calendar** (on iOS 18, **Settings → Apps → Calendar**) → **Accounts → Add Account → Other → Add Subscribed Calendar**, paste the link. On a Mac, Calendar → *File → New Calendar Subscription* does the same and reaches the iPhone through iCloud.
 3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [the connection guides](connections.md).
+4. **The phone's own calendar** (App Store app only). Bookings → **📆 Calendar & email** → *Two-way sync* → **This phone's calendar** → **Connect**, and allow calendar access when the phone asks. Vdex makes a "Vdex bookings" calendar in the Calendar app (in your iCloud calendars too, if the phone's calendars are in iCloud) and keeps it in step both ways, with no sign-in. On a booking, **📆 Add to calendar** → **This phone's calendar** opens the phone's own new-event screen, filled in, for a one-off copy.
 
 Deliverable due dates ride along as all-day events.
 
@@ -204,7 +207,7 @@ Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 ### Lock it: PIN, Face ID and Touch ID
 
 1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
-2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On an iPhone that is Face ID or Touch ID, and it works in Safari and in the installed app on iOS 16.4 or later. If the switch doesn't appear, your iPhone or browser doesn't offer it to web apps, and the PIN is the way in.
+2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On an iPhone that is Face ID or Touch ID, and it works in Safari and in the installed app on iOS 16.4 or later (not yet in the App Store app, which opens with the PIN). If the switch doesn't appear, your iPhone or browser doesn't offer it to web apps, and the PIN is the way in.
 3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
 
 What the lock does: the screen can't be used until the PIN or Face ID opens it, and everything Vdex stores on the phone (bookings, contacts, kit serials, insurance details, cloud sign-ins) is kept **encrypted** (AES-256) whenever Vdex is locked, in the background or closed. The PIN is never stored, only a key derived from it, so after five wrong tries the lock makes you wait, and you can choose to have the phone's Vdex data **erased after 10 wrong PINs** (only sensible with a cloud storage linked or a recent backup).
@@ -230,10 +233,10 @@ They're still in Safari: the installed app and the Safari tab are separate copie
 Safari clears website data it hasn't seen for a while. Use the installed app, link a cloud storage, and export a backup now and then (with a licence).
 
 **The Install button only shows instructions.**
-That's how iPhones work: web apps are added through Safari's Share button, not a download.
+That's how iPhones work: web apps are added through Safari's Share button, not a download. The other way is the Vdex app on the App Store, which needs no installing step.
 
 **I can't turn notifications on.**
-Only the installed app can show them, on iOS 16.4 or later. Open Vdex from the Home Screen icon and try again.
+Only the installed app can show them, on iOS 16.4 or later. Open Vdex from the Home Screen icon and try again. In the App Store app, allow them when the phone asks; if you refused once, iPhone **Settings → Vdex → Notifications**.
 
 **The camera, microphone or GPS won't start.**
 They need the installed app or a secure (https) address, iOS 16.4 or later, and your permission when asked. If you refused once, see *Let Vdex use the camera…* above.
@@ -245,7 +248,7 @@ That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Si
 Put both on the same Wi‑Fi or on the iPhone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
 
 **Will I get a break notification if the phone is locked?**
-Not while it's locked or in another app: iPhone pauses web apps straight away. The alert appears when you reopen Vdex. Keep Vdex on screen with *Keep the screen on during breaks*, or use the Clock app's timer too.
+In the App Store app, yes: the phone itself keeps the time, so the alert arrives with Vdex closed or the phone locked, with **Back to work** and **5 more minutes** on it. In the Safari-installed app, not while it's locked or in another app: iPhone pauses web apps straight away, and the alert appears when you reopen Vdex. Keep Vdex on screen with *Keep the screen on during breaks*, or use the Clock app's timer too.
 
 **Can clients log in to review or approve?**
 No. Vdex is your side of the job: you record their feedback and send them the documents.
@@ -254,7 +257,7 @@ No. Vdex is your side of the job: you record their feedback and send them the do
 Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
 
 **Does it update by itself?**
-Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *General* → *About & Licence* shows the version and has **Check for updates**.
+Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *General* → *About & Licence* shows the version and has **Check for updates**. The App Store app shows the same website, so it is updated the same way; the App Store only updates the app around it now and then.
 
 **Can I start over?**
 Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN (Vdex asks for a new one at the next start), and leaves the cloud copy alone.
@@ -526,7 +529,7 @@ Open https://vdex.crowmade.app/download.html, download the file for your compute
 | **Mac** | `Vdex.dmg` | Open it and drag Vdex into Applications. If macOS says it cannot check the app, go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. |
 | **Linux** | `Vdex.AppImage` | Make it executable (right-click → Properties → *Allow executing as program*, or `chmod +x`), then double-click it. |
 
-**The licence.** Vdex is free to try for 30 days, on the website, on each computer and in the Android app. After that it needs a licence: **Buy a licence** in Settings → *General* → *About & Licence* (20 US dollars once, for up to 3 of your devices). On the website and in the Android app, press **Sign in** and use the email address you bought with: Vdex emails you a 6-digit code to type in. In the desktop app, paste the code from your email under **Enter licence code**. Keeping a copy in cloud storage, and saving backup and spreadsheet files, come with the licence (during the trial too); a storage linked before is paused until then. PDFs, printing and links for clients and crew always work. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens and prints, but nothing can be changed. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
+**The licence.** Vdex is free to try for 30 days, on the website, on each computer and in the Android and iPhone apps. After that it needs a licence: **Buy a licence** in Settings → *General* → *About & Licence* (20 US dollars once, for up to 3 of your devices; in the iPhone app the purchase goes through the App Store at the price it shows, and **Restore purchases** brings it back after a reinstall or on a second iPhone or iPad). On the website and in the Android and iPhone apps, press **Sign in** and use the email address you bought with: Vdex emails you a 6-digit code to type in. In the desktop app, paste the code from your email under **Enter licence code**. Keeping a copy in cloud storage, and saving backup and spreadsheet files, come with the licence (during the trial too); a storage linked before is paused until then. PDFs, printing and links for clients and crew always work. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens and prints, but nothing can be changed. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
 
 The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **☁ → A file in a synced folder**, which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Google Drive or iCloud (or Dropbox, OneDrive or WebDAV), and link the same one everywhere.
 

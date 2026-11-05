@@ -2,6 +2,7 @@ import { h, safeUrl, telUrl, toast } from '../util.js';
 import { db } from '../store.js';
 
 import { loadQR } from '../qr.js';
+import * as native from '../native.js';
 
 const esc = s => String(s || '').replace(/([\;,])/g, '\\$1').replace(/\n/g, '\\n');
 
@@ -50,6 +51,7 @@ export const me = {
     const vcfFile = () => new File([vcard(p)], `${(p.name || 'contact').replace(/\W+/g, '_')}.vcf`, { type: 'text/vcard' });
     const share = async () => {
       const f = vcfFile();
+      if (native.canShareFiles()) { try { await native.files.share(f.name, f, f.type, { title: p.name }); } catch (e) { toast('Could not share: ' + (e.message || e)); } return; }
       if (navigator.canShare?.({ files: [f] })) { try { await navigator.share({ files: [f], title: p.name }); return; } catch (e) { if (e.name === 'AbortError') return; } }
       const a = h('a', { href: URL.createObjectURL(f), download: f.name }); document.body.append(a); a.click(); a.remove(); toast('Saved .vcf file');
     };

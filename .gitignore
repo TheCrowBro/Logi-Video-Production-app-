@@ -5,3 +5,6 @@ tests/output/
 site/
 cloudflare/site/
 .wrangler/
+
+# the iPhone app shell (apple/): packages and the files Capacitor generates
+apple/node_modules
