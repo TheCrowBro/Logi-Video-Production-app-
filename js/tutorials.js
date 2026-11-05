@@ -2,7 +2,7 @@
 // with a one-line description. Steps whose box is not on screen (an empty list, a hidden tool) are skipped, so the
 // same tutorial fits a fresh install and a full one. "Other pages…" opens any page's tutorial from anywhere.
 import { h, sheet, toast, ymd, todayISO, uid } from './util.js';
-import { runTour, startTour, resumeTourAt } from './tour.js';
+import { runTour, startTour, resumeTourAt, tourSeen } from './tour.js';
 import * as store from './store.js';
 import * as lock from './lock.js';
 import * as providers from './providers.js';
@@ -68,7 +68,7 @@ const calendarStep = () => {
 };
 const setupSteps = () => [
   C('Welcome to Vdex', 'Your whole production in one deck: bookings, crew, kit, venues, insurance, field tools and timecode notes. This set-up takes about three minutes: a look at the deck, your details, your calendar, and two sample people to try things on. Next moves on, and Skip leaves at any point; Settings → General → About & Licence → Take the tour runs it again.'),
-  C('Your PIN', (lock.enabled() ? 'Vdex is locked with the PIN you just set' : 'Vdex locks with a PIN') + ', and everything it stores on this device is encrypted whenever it is locked, in the background or closed. A forgotten PIN cannot be recovered: the way back is to erase the device and restore from your cloud storage or a backup, so keep one of those current. Settings → Security sets when it locks, adds fingerprint or face unlock, and has a switch to erase this device after 10 wrong PINs, which stays off unless you turn it on.'),
+  C('Your PIN', (lock.enabled() ? (tourSeen() ? 'Vdex is locked with your PIN' : 'Vdex is locked with the PIN you just set') : 'Vdex locks with a PIN') + ', and everything it stores on this device is encrypted whenever it is locked, in the background or closed. A forgotten PIN cannot be recovered: the way back is to erase the device and restore from your cloud storage or a backup, so keep one of those current. Settings → Security sets when it locks, adds fingerprint or face unlock, and has a switch to erase this device after 10 wrong PINs, which stays off unless you turn it on.'),
   T('The Rolodex', 'Spin it to move between sections: drag it, tap ▲ ▼, use the arrow keys, or scroll on it. It slides away as a page scrolls down and comes back as you scroll up.', '.binder', '#rolodex', { go: 'bookings' }),
   C('What is in the deck', 'Bookings holds the calendar and, for each shoot, the call sheet, the stripboard, the crew link, the hours, the quote and the invoice. Crew, Equipment, Venues and Insurance are your lists. Me is your contact card. Field has the sun, Polaris, white balance, noise and range tools. TC Notes stamps notes with the camera’s timecode. Settings has the rest. Tap ? at the top of any page for that page’s own walkthrough.'),
   profileStep('You', 'Your name and business go on call sheets, quotes and invoices, and on your contact card. Type them here and tap Next.', [['Full name', 'name'], ['Business name', 'business']]),

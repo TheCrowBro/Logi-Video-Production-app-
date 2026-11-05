@@ -4,9 +4,9 @@
   --radius: 14px; --pad: 16px; --hit: 44px; --focus: #4aa3ff;
   color-scheme: dark;
 }
-:root[data-scheme=light] { --bg: #efe8da; --bg2: #e6dec9; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --accent-ink: #ffffff; --paper: #fbf7ec; --paper-ink: #2a2118; color-scheme: light; --edit: #6a3fc9; }
+:root[data-scheme=light] { --bg: #efe8da; --bg2: #e6dec9; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --accent-ink: #ffffff; --paper: #fbf7ec; --paper-ink: #2a2118; color-scheme: light; --edit: #6a3fc9; --danger: #b3321c; } /* a darker red reads on the light background (the error line on the lock screens) */
 /* Before the app sets data-scheme, follow the device. */
-@media (prefers-color-scheme: light) { :root:not([data-scheme]) { --bg: #efe8da; --bg2: #e6dec9; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --accent-ink: #ffffff; --paper: #fbf7ec; --paper-ink: #2a2118; color-scheme: light; --edit: #6a3fc9; } }
+@media (prefers-color-scheme: light) { :root:not([data-scheme]) { --bg: #efe8da; --bg2: #e6dec9; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --accent-ink: #ffffff; --paper: #fbf7ec; --paper-ink: #2a2118; color-scheme: light; --edit: #6a3fc9; --danger: #b3321c; } }
 :root[data-palette=noir] { --bg: #0b0b0c; --bg2: #141416; --card: #1b1b1e; --line: #2c2c31; --text: #f2f2f2; --muted: #9a9aa2; --accent: #e8412c; --accent-ink: #ffffff; --paper: #ececec; --paper-ink: #121214; --edit: #b388ff; }
 :root[data-palette=noir][data-scheme=light] { --bg: #f3f3f4; --bg2: #e9e9ec; --card: #ffffff; --line: #d6d6dc; --text: #151518; --muted: #6b6b74; --accent: #d2321e; --accent-ink: #ffffff; --paper: #ffffff; --paper-ink: #151518; --edit: #6a3fc9; }
 :root[data-palette=forest] { --bg: #0f1712; --bg2: #16211a; --card: #1d2b22; --line: #2d4034; --text: #e9f0e4; --muted: #93a596; --accent: #c9b23a; --accent-ink: #141a0a; --paper: #e9f0e4; --paper-ink: #1a2a1f; --edit: #b388ff; }
@@ -158,7 +158,7 @@ a { color: var(--accent); }
 fieldset { border: 0; margin: 0; padding: 0; } legend { font-size: .75rem; color: var(--accent); font-weight: 700; padding: 4px 0; }
 .check { display: flex; gap: 12px; align-items: center; padding: 6px 4px; min-height: var(--hit); cursor: pointer; } .check input { width: 26px; height: 26px; accent-color: var(--accent); flex: none; } .check em { color: var(--muted); font-style: normal; font-size: .85rem; }
 .form-actions { display: flex; gap: 8px; position: sticky; bottom: -20px; background: var(--bg); padding: 10px 0; }
-.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; z-index: 200; font-size: .9rem; animation: rise .25s; max-width: 90vw; } .toast.out { opacity: 0; transition: opacity .4s; }
+.toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 999px; z-index: 320; font-size: .9rem; animation: rise .25s; max-width: 90vw; } .toast.out { opacity: 0; transition: opacity .4s; }
 .stack { display: grid; gap: 8px; } .storage hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 .status-line[data-state=synced] { color: var(--ok); } .status-line[data-state=error] { color: var(--danger); }
 .file-btn input { display: none; } .note { color: var(--muted); font-size: .9rem; }
@@ -495,7 +495,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .hours .tag { font-size: .7rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; color: var(--muted); font-weight: 500; }
 
 /* ------------------------------ app lock ------------------------------ */
-.lock { position: fixed; inset: 0; z-index: 300; background: var(--bg); color: var(--text); display: flex; align-items: flex-start; justify-content: center; padding: 24px max(16px, env(safe-area-inset-left, 0px)); overflow: auto; }
+.lock { position: fixed; inset: 0; z-index: 300; background: var(--bg); color: var(--text); display: flex; align-items: flex-start; justify-content: center; padding: max(24px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); overflow: auto; }
 .lock-card { width: min(380px, 100%); text-align: center; margin: auto; } /* centred when it fits; a card taller than a short screen (a keyboard open) scrolls from its top */
 .lock-card .brand { justify-content: center; margin-bottom: 8px; }
 .lock h1 { font-size: 1.25rem; margin: 8px 0 4px; }
@@ -513,7 +513,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-8px); } 75% { transform: translateX(8px); } }
 html[data-motion=off] .lock.shake .pin-dots { animation: none; }
 .sheet-back.behind-lock { visibility: hidden; }
-.pin-input { font-size: 1.3rem; letter-spacing: .3em; text-align: center; }
+.pin-input { font-size: 1.3rem; letter-spacing: .3em; text-align: center; } .pin-input::placeholder { letter-spacing: normal; } /* the wide spacing is for the dots typed, not the label */
 
 /* ------------------------------ call sheet ------------------------------ */
 .cs-paper { background: var(--paper); color: var(--paper-ink); border-radius: 10px; padding: 14px; font-size: .84rem; line-height: 1.4; overflow: auto; max-height: 60vh; border: 1px solid var(--line); }
@@ -554,7 +554,7 @@ body.has-update-bar #page { padding-bottom: 110px; }
 body:has(.sheet-back) .licence-bar, body:has(.sc-bar) .licence-bar { display: none; } /* never over a sheet's buttons, or the script's Mark */
 .licence-bar { left: 16px; right: 16px; transform: none; width: fit-content; margin-inline: auto; flex-wrap: wrap; justify-content: center; }
 @media (max-width: 560px) { .licence-bar { gap: 6px 8px; padding: 8px 10px; border-radius: 16px; } .licence-bar > span { flex: 1 1 100%; text-align: center; line-height: 1.3; padding: 0 28px; } .licence-bar > .icon-btn { position: absolute; top: 2px; right: 2px; } }
-body.has-licence-bar .toast { z-index: 260; pointer-events: none; } /* messages show above the bar, and never block its buttons */
+body.has-licence-bar .toast { z-index: 320; pointer-events: none; } /* messages show above the bar, and never block its buttons */
 body.has-update-bar .licence-bar { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 64px); }
 body.has-licence-bar #page { padding-bottom: 110px; }
 body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }

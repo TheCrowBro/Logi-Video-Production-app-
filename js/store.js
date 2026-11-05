@@ -190,6 +190,7 @@ export async function eraseAll() {
   sealed = false; dirty = false;
   persistLocal(); emit();
   // The lock's vault, PIN and backup marks go too, otherwise the next start would bring the old data back.
+  try { dispatchEvent(new Event('vdex-erased')); } catch { /* ignore */ } // the lock lets go of its key first: no vault rewrite, no seal on the way out
   ['logi-vault', 'logi-lock', 'logi-backup-cloud', 'logi-backup-export', 'logi-sync-at', 'logi-backup-nudge', 'logi-loc'].forEach(k => lsSet(k, null));
   setTimeout(() => location.reload(), 600);
 }

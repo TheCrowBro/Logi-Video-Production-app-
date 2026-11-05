@@ -102,7 +102,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     await b.locator('.lock-setup .pin-input').nth(0).fill('135790');
     await a.locator('.lock-setup .pin-input').nth(0).fill('246810'); await a.locator('.lock-setup .pin-input').nth(1).fill('246810'); await a.locator('.lock-setup button[type=submit]').click(); await a.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
     await b.waitForSelector('.lock:not(.lock-setup)', { timeout: 10000 }); await sleep(700);
-    ok('the other tab leaves its set-up for the lock screen and says why', /Enter your PIN/.test(await b.locator('.lock h1').innerText()) && (await b.locator('.toast').allInnerTexts()).some(t => /set in another tab/.test(t)));
+    ok('the other tab leaves its set-up for the lock screen and says why, on the screen itself', /Enter your PIN/.test(await b.locator('.lock h1').innerText()) && /set in another tab/.test(await b.locator('.lock .lock-msg').innerText()));
     await b.keyboard.type('246810'); await b.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
     ok('…and the PIN set in the first tab opens it; one config, one PIN', (await b.locator('.lock').count()) === 0 && (await a.evaluate(() => JSON.parse(localStorage.getItem('logi-lock')).len)) === 6);
     await ctx.close(); }

@@ -12,6 +12,7 @@ export const acceptance = () => { const r = read(); return r && r.v === TERMS_VE
 export function termsGate() {
   if (acceptance()) return Promise.resolve();
   const changed = !!read(); // accepted an earlier version
+  let why = ''; try { why = sessionStorage.getItem('logi-wiped') || ''; if (why) sessionStorage.removeItem('logi-wiped'); } catch { /* ignore */ } // the device was just erased: say so here, where the person lands
   return new Promise(resolve => {
     const others = [...document.body.children];
     others.forEach(el => { el.inert = true; });
@@ -21,6 +22,7 @@ export function termsGate() {
     box.addEventListener('change', () => { go.disabled = !box.checked; });
     const form = h('form', { class: 'terms-card' },
       h('img', { src: 'icons/icon.svg', alt: '', class: 'terms-icon' }),
+      why && h('p', { class: 'warn small', role: 'status' }, why),
       h('h1', { id: 'terms-title' }, changed ? 'The terms have changed' : 'Before you start'),
       h('p', null, changed ? 'Please read and agree to the updated terms of service to keep using Vdex. Your information is safe and stays where it is.' : 'Vdex is free to try for 30 days, then needs a licence. To use it, please read and agree to its terms of service.'),
       h('ul', { class: 'terms-points' },
