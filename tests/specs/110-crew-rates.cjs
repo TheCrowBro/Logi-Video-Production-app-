@@ -53,6 +53,16 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await card('Old Note').locator('button[aria-label="Edit Old Note"]').click(); await page.waitForSelector('.sheet form');
   await page.locator('.sheet form input[data-key="rate"]').fill('200'); await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
   ok('an amount replaces it', (await store(() => import('./js/store.js').then(s => { const c = s.byId('crew', 'old-2'); return c.rate === 200 && c.rateUnit === 'day'; }))) && /Runner · \$200\/day/.test(await card('Old Note').innerText()));
+  // a typed rate that says more than an amount and a unit keeps the rest in the notes when it is converted
+  await store(() => import('./js/store.js').then(s => s.upsert('crew', { id: 'old-4', name: 'Old Overtime', role: 'Gaffer', rate: '$500/day, OT $60/hr', phone: '', email: '', link: '', notes: 'Own van' }))); await sleep(400);
+  await card('Old Overtime').locator('button[aria-label="Edit Old Overtime"]').click(); await page.waitForSelector('.sheet form');
+  ok('its form reads 500 per day and says what was typed', (await page.locator('.sheet form input[data-key="rate"]').inputValue()) === '500' && (await page.locator('.sheet form select').inputValue()) === 'day' && /Typed before: “\$500\/day, OT \$60\/hr”/.test(await page.locator('.sheet form').innerText()));
+  await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
+  const ot = await store(() => import('./js/store.js').then(s => s.byId('crew', 'old-4')));
+  ok('saving keeps the overtime note in the notes', ot.rate === 500 && ot.rateUnit === 'day' && ot.notes === 'Own van\nRate as typed: $500/day, OT $60/hr', JSON.stringify({ rate: ot.rate, unit: ot.rateUnit, notes: ot.notes }));
+  await card('Old Overtime').locator('button[aria-label="Edit Old Overtime"]').click(); await page.waitForSelector('.sheet form');
+  await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
+  ok('…once', (await store(() => import('./js/store.js').then(s => s.byId('crew', 'old-4').notes))) === 'Own van\nRate as typed: $500/day, OT $60/hr');
   // a unit left behind by an older copy never beats the unit written in a typed rate
   await store(() => import('./js/store.js').then(s => s.upsert('crew', { id: 'old-3', name: 'Old Mix', role: 'Grip', rate: '55/hr', rateUnit: 'day', phone: '', email: '', link: '', notes: '' }))); await sleep(400);
   await card('Old Mix').locator('button[aria-label="Edit Old Mix"]').click(); await page.waitForSelector('.sheet form');

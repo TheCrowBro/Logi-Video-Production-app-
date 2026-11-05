@@ -153,3 +153,15 @@ export const personRate = c => (hasUnit(c) ? { amount: Number(c.rate), hourly: c
   : parseRate(c && typeof c === 'object' ? c.rate : c));
 // The rate as shown on a card: "$450/day", "$55/hour"; an older typed rate is shown as it was typed.
 export const rateText = (c, sym = '$') => { if (!hasUnit(c)) return String((c && typeof c === 'object' ? c.rate : c) ?? '').trim(); const n = Number(c.rate); return `${sym}${Number.isInteger(n) ? n : n.toFixed(2)}/${c.rateUnit}`; };
+// Saving the form of an older record that held a typed rate: a blank amount keeps the typed text as it was; an amount
+// replaces it, and anything the text said beyond an amount and a unit ("$500/day, OT $60/hr") goes into the notes.
+const PLAIN_RATE = /^[^\d]{0,3}\d[\d.,\s]*(?:k\b)?\s*(?:\/|per\b|an?\b|each\b)?\s*(?:hours?|hrs?|h|days?|d|hourly|daily)?\s*\.?$/i;
+export const typedRate = c => (c && !hasUnit(c) && typeof c.rate === 'string' && c.rate.trim() ? c.rate.trim() : '');
+export function keepTypedRate(c, v) {
+  const typed = typedRate(c); if (!typed) return v;
+  if (v.rate === '' || v.rate == null) return { ...v, rate: typed, rateUnit: undefined };
+  if (PLAIN_RATE.test(typed) || String(v.notes || '').includes(typed)) return v;
+  return { ...v, notes: [v.notes, 'Rate as typed: ' + typed].filter(Boolean).join('\n') };
+}
+// The hint under the Rate box of such a record.
+export const typedRateHint = c => { const typed = typedRate(c); if (!typed) return ''; return `Typed before: “${typed}”. ` + (personRate(c).amount === '' ? 'It stays as it is until an amount replaces it. ' : 'The amount and unit read from it are filled in; anything more it said goes into the notes when you save. '); };

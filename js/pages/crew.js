@@ -1,4 +1,4 @@
-import { h, telUrl, safeUrl, empty, fmtShort, todayISO, personRate, rateText, hasUnit } from '../util.js';
+import { h, telUrl, safeUrl, empty, fmtShort, todayISO, personRate, rateText, hasUnit, keepTypedRate, typedRateHint } from '../util.js';
 import { db, upsert, remove, crewBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
 
@@ -7,13 +7,10 @@ export { ROLES };
 const S = { q: '', role: '' };
 
 // An older card holds the rate as it was typed ("$450/day", "£55 an hour"): the form shows the amount and the unit it
-// reads and saves them as a number and a unit. Typed text it cannot read ("TBC", "1,200 per week") is shown under the
-// box and kept as it is until an amount replaces it.
-const typedRate = c => (typeof c.rate === 'string' && c.rate.trim() && personRate(c).amount === '' ? c.rate.trim() : '');
+// reads and saves them as a number and a unit; the typed text is shown under the box, and what it cannot read ("TBC",
+// "1,200 per week") stays as it is until an amount replaces it (keepTypedRate in util.js).
 const rateValues = c => { const r = personRate(c); return { ...c, rate: r.amount === '' ? '' : r.amount, rateUnit: hasUnit(c) ? c.rateUnit : r.hourly ? 'hour' : 'day' }; };
-const keepTyped = (c, v) => (v.rate === '' && typedRate(c) ? { ...v, rate: typedRate(c), rateUnit: undefined } : v);
 function edit(c = {}) {
-  const typed = typedRate(c);
   openForm({
     title: c.id ? 'Edit crew member' : 'Add trusted crew',
     values: rateValues(c),
@@ -22,11 +19,11 @@ function edit(c = {}) {
       { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' },
       { key: 'phone', label: 'Phone', type: 'tel' },
       { key: 'email', label: 'Email', type: 'email' },
-      { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: (typed ? `Typed before: “${typed}”, kept until an amount replaces it. ` : '') + 'Prices this person’s line on quotes, invoices and the budget: a day rate per shoot day, or an hourly rate for a standard day’s hours (Settings → Work & billing → Hours & breaks).' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] },
+      { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: typedRateHint(c) + 'Prices this person’s line on quotes, invoices and the budget: a day rate per shoot day, or an hourly rate for a standard day’s hours (Settings → Work & billing → Hours & breaks).' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] },
       { key: 'link', label: 'Link to their work', type: 'url', placeholder: 'https://… showreel / portfolio' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
-    onSave: v => upsert('crew', keepTyped(c, v)),
+    onSave: v => upsert('crew', keepTypedRate(c, v)),
     onDelete: c.id ? () => remove('crew', c.id) : null,
   });
 }
