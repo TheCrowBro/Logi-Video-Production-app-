@@ -49,7 +49,7 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 5. **Plan the costs** in the booking's **Budget**: pick a category for each line (crew, rentals, travel, locations…) and see what's left for you after the quote. Only you see it.
 6. **Afterwards,** open the booking's **Money** block to make the quote or the invoice. Vdex suggests the lines from the shoot, or tick them from your **price list**, which starts from typical freelance rates where you work. Tap **Link for the client** to send a link that opens the invoice with Pay buttons, then **Record a payment** when the money arrives.
 
-Everything can be changed later, and every screen has a back button.
+Everything can be changed later, and every screen has a back button. To delete a booking, press and hold it for three seconds, or open it and tap **Edit**, then **Delete**.
 
 ## Keep your things safe
 

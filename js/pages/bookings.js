@@ -1,4 +1,5 @@
-import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid, toast, backBtn } from '../util.js';
+import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid, toast, backBtn, sheet, hold, wasHeld } from '../util.js';
+import { haptic } from '../a11y.js';
 import { db, byId, bookingsOn, gearClash, upsert, remove, update, endOf, covers, onDay, isEditDay, editDaysOf, qtyOf, usedQty } from '../store.js';
 import { openForm } from '../form.js';
 import { editKit } from './gear.js';
@@ -162,9 +163,21 @@ function month(go) {
 }
 
 // A booking in a list. On a day view the day is given, so an edit day says so and shows its own times.
+// Press and hold a booking (its card in a list, or its header on its own page) for three seconds: a sheet offers to
+// delete it. The ordinary way, Edit then Delete, stays for keyboards.
+const HOLD_MS = 3000;
+function deleteSheet(b) {
+  const { close } = sheet('Delete this booking?', h('div', { class: 'stack' },
+    h('p', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [dateRange(b, fmtShort), b.client].filter(Boolean).join(' · '))),
+    h('p', { class: 'small muted' }, 'Its call sheet, stripboard, shot list, budget, quote and invoice go with it, and it leaves your calendar and your cloud copy. Hours logged on it stay in your statistics, unassigned. This cannot be undone.'),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn danger', onclick: () => { close(); if (remove('bookings', b.id) !== false) { toast('Booking deleted'); haptic(30); } } }, '🗑 Delete booking'),
+      h('button', { class: 'btn ghost', onclick: () => close() }, 'Keep it'))));
+}
+const holdToDelete = (el, b) => { hold(el, HOLD_MS, () => { haptic(20); deleteSheet(byId('bookings', b.id) || b); }); return el; };
 function bookingCard(b, onclick, showDate, day = null) {
   const ed = day && !covers(b, day) ? editDaysOf(b).find(d => d.date === day) : null;
-  return h('button', { class: 'card tap', type: 'button', onclick },
+  const card = h('button', { class: 'card tap', type: 'button', title: 'Tap to open; press and hold to delete', onclick: e => { if (!wasHeld(card)) onclick(e); } },
     h('div', { class: 'card-row' },
       h('div', null,
         h('strong', null, b.title),
@@ -172,6 +185,7 @@ function bookingCard(b, onclick, showDate, day = null) {
       h('span', { class: 'pills' }, ed && h('span', { class: 'pill edit' }, 'Edit day'), pill(b.status))),
     b.address && h('div', { class: 'muted small' }, '📍 ' + b.address.split('\n')[0]),
     h('div', { class: 'muted small' }, `🎥 ${(b.gear || []).length} items · 👥 ${(b.crew || []).length + hiredPeople(b).length} crew`));
+  return holdToDelete(card, b);
 }
 
 /* -------------------------------- day -------------------------------- */
@@ -234,14 +248,14 @@ function detail(go) {
     h('div', { class: 'page-head' },
       backBtn(fmtShort(here), () => go({ view: 'day', day: here })),
       h('button', { class: 'btn ghost', onclick: () => editBooking(b, go) }, 'Edit')),
-    h('div', { class: 'card hero' },
+    holdToDelete(h('div', { class: 'card hero', title: 'Press and hold to delete this booking' },
       h('div', { class: 'card-row' }, h('h2', null, b.title), pill(b.status)),
       h('div', { class: 'muted' }, [dateRange(b, fmtLong), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`, typeLabel(b.type)].filter(Boolean).join(' · ')),
       ed.length > 0 && h('div', { class: 'small edit-days' }, '✂ Edit days: ' + ed.map(editDayText).join(', ')),
       (b.stakeholders || []).some(s => s.email) && h('div', { class: 'muted small' }, '✉ ' + b.stakeholders.filter(s => s.email).map(s => s.email).join(', ')),
       b.client && h('div', null, '🏢 ', b.client),
       b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address)),
-      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openAddToCalendar(b) }, '📆 Add to calendar'), h('button', { class: 'btn ghost small', title: 'Shares the dates and times as a calendar file (.ics), not the project itself', onclick: () => shareBooking(b) }, '📤 Share calendar event'), h('a', { class: 'btn ghost small', href: mailtoLink(b) }, '✉ Email'))),
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => openAddToCalendar(b) }, '📆 Add to calendar'), h('button', { class: 'btn ghost small', title: 'Shares the dates and times as a calendar file (.ics), not the project itself', onclick: () => shareBooking(b) }, '📤 Share calendar event'), h('a', { class: 'btn ghost small', href: mailtoLink(b) }, '✉ Email'))), b),
     // The booking's tools, right under its summary: three boxes, then the hours, then the day's weather and sun.
     h('div', { class: 'actions bk-tools' }, h('button', { class: 'btn ghost small', onclick: () => go({ view: 'callsheet', id: b.id }) }, `📋 Call sheet${{ none: '', draft: ' · draft', sent: ' · sent ✅', changed: ' · changed ⚠' }[sheetState(b)]}`),
       h('button', { class: 'btn ghost small sb-open', onclick: () => go({ view: 'strips', id: b.id }) }, `🎬 Stripboard & shot list${sceneCount(b) ? ` · ${sceneCount(b)} scene${sceneCount(b) === 1 ? '' : 's'}` : ''}`),

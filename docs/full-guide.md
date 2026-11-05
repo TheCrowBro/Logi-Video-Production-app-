@@ -175,7 +175,7 @@ All of these work on your iPhone and on your computer, so pick one and link it e
 
 ### Calendar on an iPhone
 
-1. **Add once.** On any booking, **📆 Add to calendar** → **Apple Calendar** saves a calendar file; open it and tap **Add All**. The Google Calendar and Outlook options open those apps or sites ready-filled. **📤 Share calendar event** and **✉ Email** send the details to anyone.
+1. **Add once.** On any booking, **📆 Add to calendar** → **Apple Calendar** saves a calendar file; open it and tap **Add All**. The Google Calendar and Outlook options open those apps or sites ready-filled. **📤 Share calendar event** and **✉ Email** send the details to anyone. To delete a booking, press and hold its card in a list (or its header on its own page) for three seconds and confirm, or tap **Edit**, then **Delete**.
 2. **Live feed.** With Google Drive, Dropbox or OneDrive linked (iCloud keeps Vdex's copy private and gives no link; with Nextcloud, share the feed file from your server), Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. Then on the iPhone: **Settings → Calendar** (on iOS 18, **Settings → Apps → Calendar**) → **Accounts → Add Account → Other → Add Subscribed Calendar**, paste the link. On a Mac, Calendar → *File → New Calendar Subscription* does the same and reaches the iPhone through iCloud.
 3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [the connection guides](connections.md).
 
@@ -422,7 +422,7 @@ The *file in a synced folder* option you may see on a computer doesn't appear on
 
 ### Calendar on Android
 
-1. **Add once.** On any booking, **📆 Add to calendar** → **Google Calendar** opens the Google Calendar app ready-filled; **Outlook** does the same for Outlook. The Apple option saves a calendar file for any app that imports one. **📤 Share calendar event** and **✉ Email** send the details to anyone.
+1. **Add once.** On any booking, **📆 Add to calendar** → **Google Calendar** opens the Google Calendar app ready-filled; **Outlook** does the same for Outlook. The Apple option saves a calendar file for any app that imports one. **📤 Share calendar event** and **✉ Email** send the details to anyone. To delete a booking, press and hold its card in a list (or its header on its own page) for three seconds and confirm, or tap **Edit**, then **Delete**.
 2. **Live feed.** With Google Drive, Dropbox or OneDrive linked (iCloud keeps Vdex's copy private and gives no link; with Nextcloud, share the feed file from your server), Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. The Google Calendar app can't add subscriptions itself, so open **calendar.google.com** in a browser → *Other calendars → + → From URL* and paste the link; it then shows up in the app and in Samsung Calendar. Outlook: **outlook.com → Add calendar → Subscribe from web**.
 3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [the connection guides](connections.md).
 

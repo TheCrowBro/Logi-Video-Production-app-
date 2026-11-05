@@ -765,3 +765,9 @@ html[data-motion=off] .back-btn::after, html[data-motion=bar] .back-btn::after {
 .tour-cal { gap: 6px; } .tour-cal .card-row { align-items: center; gap: 8px; } .tour-cal .btn { flex: none; width: auto; }
 .tour-card .status-line { margin: 0; }
 .tour-done .btn { width: auto; }
+
+/* press and hold a booking: a fill creeps across the bottom while the hold lasts, then the delete sheet opens */
+.holding { position: relative; overflow: hidden; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.holding::after { content: ''; position: absolute; left: 0; bottom: 0; height: 4px; width: 0; background: var(--danger); animation: hold-fill 3s linear forwards; pointer-events: none; }
+@keyframes hold-fill { to { width: 100%; } }
+.card.tap, .card.hero { touch-action: pan-y; }

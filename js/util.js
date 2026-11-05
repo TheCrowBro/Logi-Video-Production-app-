@@ -165,3 +165,22 @@ export function keepTypedRate(c, v) {
 }
 // The hint under the Rate box of such a record.
 export const typedRateHint = c => { const typed = typedRate(c); if (!typed) return ''; return `Typed before: “${typed}”. ` + (personRate(c).amount === '' ? 'It stays as it is until an amount replaces it. ' : 'The amount and unit read from it are filled in; anything more it said goes into the notes when you save. '); };
+
+/* ------------------------------- press and hold ------------------------------- */
+// Hold a finger or the mouse button on an element for `ms` without moving and fn runs; the tap that would follow is
+// swallowed. Moving (a scroll), lifting or losing the pointer first cancels. The element carries class 'holding'
+// meanwhile, for a fill that shows the wait, and controls inside it (buttons, links, fields) are left alone.
+export function hold(el, ms, fn, { ignore = 'button, a, input, select, textarea, summary' } = {}) {
+  let timer = null, x = 0, y = 0;
+  const stop = () => { if (timer) { clearTimeout(timer); timer = null; } el.classList.remove('holding'); };
+  el.addEventListener('pointerdown', e => {
+    if (timer || e.button !== 0 || (ignore && e.target !== el && e.target.closest(ignore) && e.target.closest(ignore) !== el)) return;
+    x = e.clientX; y = e.clientY;
+    el.classList.add('holding');
+    timer = setTimeout(() => { timer = null; el.classList.remove('holding'); el.dataset.held = '1'; setTimeout(() => { delete el.dataset.held; }, 1500); fn(e); }, ms);
+  });
+  el.addEventListener('pointermove', e => { if (timer && Math.hypot(e.clientX - x, e.clientY - y) > 10) stop(); });
+  for (const t of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(t, stop);
+  el.addEventListener('contextmenu', e => { if (timer || el.dataset.held) e.preventDefault(); }); // the browser's own long-press menu would end the hold early
+}
+export const wasHeld = el => { if (!el.dataset.held) return false; delete el.dataset.held; return true; };

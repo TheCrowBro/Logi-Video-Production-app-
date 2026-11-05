@@ -133,15 +133,15 @@ export const TUTORIALS = {
     T('Month to month', 'Previous, next, and Today.', '.bk-month .cal-nav'),
     T('New bookings', '+ New starts a blank booking. From template fills one in from a project template you made, with its kit, crew, deliverables and schedule.', '.bk-month .page-head .actions', '.bk-month .page-head'),
     T('Tools for all your shoots', 'Pipeline shows every project by stage. Call sheets lists each shoot’s sheet. Money has quotes and invoices. Hours & statistics and Calendar & email do what they say.', '.bk-month .bk-tiles', '.bk-month .subactions'),
-    T('Next up', 'The next few shoots, tap one to open it.', '.bk-month h3 + .list', '.bk-month .list', '.bk-month .empty'),
+    T('Next up', 'The next few shoots: tap one to open it, or press and hold it for three seconds to delete it.', '.bk-month h3 + .list', '.bk-month .list', '.bk-month .empty'),
   ] },
   day: { name: 'A day', page: 'bookings', steps: [
     T('The day', 'Step to the previous or next day; ‹ Calendar goes back to the month.', '.cal-nav'),
     T('Sun and weather', 'Sunrise, sunset and golden hour for your location, with the forecast when the day is within two weeks.', '.sunline', '.wxline'),
-    T('Bookings that day', 'Tap one to open it. Add another with + New or From template.', '.list', '.empty'),
+    T('Bookings that day', 'Tap one to open it, or press and hold it for three seconds to delete it. Add another with + New or From template.', '.list', '.empty'),
   ] },
   booking: { name: 'A booking', page: 'bookings', steps: [
-    T('The booking', 'Project, client, dates, times and address, with Add to calendar, Share calendar event and Email. Edit changes the details, including the edit days that show on the calendar in their own colour.', '.bk-detail .card.hero'),
+    T('The booking', 'Project, client, dates, times and address, with Add to calendar, Share calendar event and Email. Edit changes the details, including the edit days that show on the calendar in their own colour. Press and hold this box for three seconds to delete the booking.', '.bk-detail .card.hero'),
     T('Call sheet, stripboard and crew link', 'Call sheet opens this shoot’s sheet. Stripboard & shot list breaks the shoot down scene by scene into shooting days and keeps the shot list. Share with crew makes a read-only page for your cast and crew, with the times, location, who is on and the shot list, and never any prices or budgets.', '.bk-detail .bk-tools'),
     T('Hours', 'The clock for this job: Start work on the day (on an edit day, or any other day, the hours count as editing), Stop work, timed breaks against the approved allowance, and the total so far with overtime. While it runs, a strip under the Rolodex repeats it on every page.', '#bk-hours'),
     T('Templates', 'Save as template turns a job that went well into a template; Apply template items adds anything a template still has to offer.', '.bk-detail .bk-tools-more'),
