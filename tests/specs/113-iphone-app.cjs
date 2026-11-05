@@ -36,6 +36,17 @@ const bridge = () => {
     Filesystem: P('Filesystem', { writeFile: a => ({ uri: 'file:///cache/' + a.path }), deleteFile: () => {} }),
     Haptics: P('Haptics', { impact: () => {} }),
     App: P('App', {}),
+    // The phone's sign-in window: the service's answer, as it would come back on the vdex:// address.
+    WebAuth: P('WebAuth', { start: a => {
+      sessionStorage.setItem('cap-webauth-last', JSON.stringify(a)); // the page moves on afterwards; the spec reads it there
+      const u = new URL(a.url), state = u.searchParams.get('state') || '';
+      if (cap.authClosed) return { cancelled: true };
+      if (/dropbox\.com\/oauth2\/authorize/.test(a.url)) return { url: 'vdex://signin?state=' + encodeURIComponent(state) + '&code=dbx-code-1' };
+      if (/login\.microsoftonline\.com/.test(a.url)) return { url: 'vdex://signin?code=ms-code-1&state=' + encodeURIComponent(state) };
+      if (/signin-google\.html/.test(a.url)) return { url: 'vdex://signin?google=1&access_token=gtok-1&expires_in=3600&scope=' + encodeURIComponent(u.searchParams.get('scope') || '') };
+      if (/idmsa\.apple\.com/.test(a.url)) return { url: 'vdex://signin?app=icloud&ckWebAuthToken=ck-session-1' };
+      return { cancelled: true };
+    } }),
   } };
 };
 
@@ -54,10 +65,12 @@ const bridge = () => {
       if (p === '/licence/web/status') return ans(200, { on: true });
       if (p === '/licence/apple/status') return ans(200, { on: true, product: PRODUCT });
       if (p === '/licence/apple/claim') {
-        if (body.jws === 'good.jws') return ans(200, { ok: true, used: 1, token: 'tok-apple', licence: lic });
+        if (body.jws === 'good.jws') return ans(200, { ok: true, used: 1, token: 'tok-apple', licence: lic, code: 'VDEX-FAKE-CODE-1' });
         if (body.jws === 'full.jws') return ans(409, { error: 'full', computers: [{ tag: 't1', os: 'Windows', added: '2026-10-01', seen: '2026-11-01' }, { tag: 't2', os: 'Android', added: '2026-10-02', seen: '2026-11-02' }, { tag: 't3', os: 'iPad', added: '2026-10-03', seen: '2026-11-03' }], swapsLeft: 3, token: 'tok-apple', licence: lic });
         return ans(400, { error: 'bad-signature' });
       }
+      if (p === '/licence/apple/email') return ans(body.token === 'tok-apple' && /@/.test(body.email) ? 200 : 401, body.token === 'tok-apple' ? { ok: true } : { error: 'signed-out' });
+      if (p === '/licence/apple/email/verify') return body.code === '123456' ? ans(200, { ok: true, licence: { ...lic, email: body.email }, code: 'VDEX-FAKE-CODE-2' }) : ans(400, { error: 'wrong-code' });
       if (p === '/licence/web/check') return body.token === 'tok-apple' ? ans(200, { ok: true, licence: lic }) : ans(401, { error: 'signed-out' });
       if (p === '/licence/web/activate') return ans(200, { ok: true, used: body.release ? 3 : 1 });
       if (p === '/licence/web/release') return ans(200, { ok: true });
@@ -126,6 +139,15 @@ const bridge = () => {
     const s1 = await stored(page);
     ok('a purchase confirmed by the licence server licenses the phone at once: a sign-in token, the licence, this phone on it', s1.token === 'tok-apple' && s1.seat === 'ok' && s1.licence && s1.licence.ref === '2:7' && /Licensed through the App Store/.test(await panel(page)) && /Thank you! Vdex is licensed on this phone/.test(await toastText(page)), JSON.stringify(s1).slice(0, 160));
     await page.screenshot({ path: OUT + '/iphone-licence-licensed.png' });
+    // the buyer adds an email address, so the same licence signs in elsewhere; the desktop code is there to copy
+    ok('an App Store licence offers to add an email, and the code for the desktop app', (await btn(page, 'Add your email').count()) === 1 && (await btn(page, 'Copy the code for the desktop app').count()) === 1 && (await stored(page)).code === 'VDEX-FAKE-CODE-1');
+    await btn(page, 'Add your email').click(); await page.waitForSelector('.sheet input[type="email"]');
+    await page.locator('.sheet input[type="email"]').fill('jo@example.com'); await page.locator('.sheet').getByRole('button', { name: 'Email me a code' }).click(); await sleep(400);
+    ok('the address gets a 6-digit code (the licence server asked with the phone’s sign-in)', (() => { const e = lastHit('/licence/apple/email'); return e && e.body.email === 'jo@example.com' && e.body.token === 'tok-apple'; })() && /on its way to jo@example.com/.test(await page.locator('.sheet').innerText()));
+    await page.locator('.sheet input[aria-label="6-digit code"]').fill('111111'); await page.locator('.sheet').getByRole('button', { name: 'Add the address' }).click(); await sleep(400);
+    ok('a wrong code is said so', /not right/.test(await page.locator('.sheet').innerText()));
+    await page.locator('.sheet input[aria-label="6-digit code"]').fill('123456'); await page.locator('.sheet').getByRole('button', { name: 'Add the address' }).click(); await sleep(500);
+    ok('the right code puts the address on the licence: the panel shows it, the desktop code carries it, and the Add button is gone', /Licensed through the App Store · jo@example.com · up to 3 devices/.test(await panel(page)) && (await stored(page)).code === 'VDEX-FAKE-CODE-2' && (await btn(page, 'Add your email').count()) === 0 && (await page.locator('.sheet').count()) === 0, (await panel(page)).slice(0, 120));
     // restore purchases after signing out (a reinstall, a second iPhone)
     await btn(page, 'Sign out').click(); await page.waitForSelector('.sheet'); await page.locator('.sheet').getByRole('button', { name: 'Sign out', exact: true }).click(); await sleep(500);
     await btn(page, 'Restore purchases').click(); await sleep(500);
@@ -161,13 +183,14 @@ const bridge = () => {
 
     /* ----------------------------- the phone’s calendar ----------------------------- */
     await page.evaluate(() => window.logiGo('bookings')); await sleep(300);
-    await page.evaluate(() => import('./js/calendar.js').then(m => m.openCalendarSheet())); await page.waitForSelector('.sheet .cloud-choice[data-svc="apple"]');
-    ok('Calendar & email offers this phone’s calendar first, with no sign-in', (await page.locator('.sheet .cloud-choices .cloud-choice').first().getAttribute('data-svc')) === 'apple' && /needs no sign-in/.test(await page.locator('.sheet').innerText()));
+    await page.evaluate(() => import('./js/calendar.js').then(m => m.openCalendarSheet())); await page.waitForSelector('.sheet .card[data-svc="apple"]');
+    ok('Calendar & email offers this phone’s calendar as a link of its own beside the account ones, with no sign-in', (await page.locator('.sheet .card[data-svc="apple"]').count()) === 1 && /with no sign-in/.test(await page.locator('.sheet .card[data-svc="apple"]').innerText()) && (await page.locator('.sheet .cloud-choices .cloud-choice').count()) === 2);
     await page.locator('.sheet button[aria-label="Connect This phone’s calendar"]').click(); await sleep(1200);
     const cal = await page.evaluate(() => window.__cap.cal);
     const want = await page.evaluate(() => import('./js/calendar.js').then(m => import('./js/store.js').then(s => s.activeBookings().length + m.dueEvents().length + m.editEvents().length)));
-    const cs = await page.evaluate(() => import('./js/store.js').then(s => s.db.calSync));
-    ok('connecting makes a “Vdex bookings” calendar on the phone and puts every booking, deliverable and edit day in it, each tagged with its Vdex id', cal.calendars.length === 1 && cal.calendars[0].title === 'Vdex bookings' && cal.events.length === want && cal.events.every(e => e.calendarId === cal.calendars[0].id && /event=/.test(e.url)) && cs.provider === 'apple' && cs.calendarId === cal.calendars[0].id, `${cal.events.length} events for ${want}`);
+    const cs = await page.evaluate(() => import('./js/store.js').then(s => s.db.calSync || {})), pl = await page.evaluate(() => JSON.parse(localStorage.getItem('logi-cal-phone') || 'null'));
+    ok('connecting makes a “Vdex bookings” calendar on the phone and puts every booking, deliverable and edit day in it, each tagged with its Vdex id', cal.calendars.length === 1 && cal.calendars[0].title === 'Vdex bookings' && cal.events.length === want && cal.events.every(e => e.calendarId === cal.calendars[0].id && /event=/.test(e.url)) && pl && pl.calendarId === cal.calendars[0].id && Object.keys(pl.events || {}).length === want, `${cal.events.length} events for ${want}`);
+    ok('…as a link of this phone alone: the shared database’s account link is untouched', !cs.provider && !cs.calendarId);
     ok('…and says so', /This phone’s calendar — Up to date/.test(await page.locator('.sheet').innerText()));
     await page.screenshot({ path: OUT + '/iphone-calendar.png' });
     const first = await page.evaluate(() => import('./js/store.js').then(s => { const b = s.activeBookings()[0]; return { id: b.id, title: b.title, allDay: !b.start }; }));
@@ -180,7 +203,8 @@ const bridge = () => {
     // a change in Vdex goes out by itself
     await page.evaluate(id => import('./js/store.js').then(s => s.update(d => { const b = d.bookings.find(x => x.id === id); b.title = 'Renamed in Vdex'; b.updatedAt = Date.now(); })), first.id); await sleep(2500);
     ok('a booking renamed in Vdex is renamed on the phone’s calendar by itself', (await page.evaluate(id => window.__cap.cal.events.find(x => x.id === id).title, ev.id)).startsWith('Renamed in Vdex'));
-    await page.evaluate(() => import('./js/calendar.js').then(m => m.disconnectCalendar()));
+    await page.evaluate(() => import('./js/calendar.js').then(m => m.disconnectCalendar('phone')));
+    ok('disconnecting forgets the link on this phone', (await page.evaluate(() => localStorage.getItem('logi-cal-phone'))) === null);
     await page.keyboard.press('Escape'); await sleep(300);
     // the one-off add goes to the phone's own new-event screen
     await page.evaluate(id => import('./js/calendar.js').then(m => import('./js/store.js').then(s => m.openAddToCalendar(s.byId('bookings', id)))), first.id); await page.waitForSelector('.sheet');
@@ -222,6 +246,71 @@ const bridge = () => {
     await page.evaluate(() => import('./js/calendar.js').then(m => m.shareAll())); await sleep(500);
     const w = await calls(page, 'Filesystem', 'writeFile'), sh = await calls(page, 'Share', 'share');
     ok('sharing the bookings file goes through the phone’s share sheet, with the file written for it first', w.length === 1 && w[0].path === 'share/vdex-bookings.ics' && w[0].directory === 'CACHE' && sh.length === 1 && sh[0].files[0] === 'file:///cache/share/vdex-bookings.ics' && /BEGIN:VCALENDAR/.test(unb64(w[0].data)));
+
+    /* ------------------------------ sign-ins in the app ------------------------------ */
+    // Google, Microsoft, Dropbox and Apple refuse to sign in inside an app's web view: in the app each opens in the phone's
+    // own sign-in window and comes back on the vdex:// address, which the page then opens as the service's own return.
+    const IDS = { dropbox: 'dbxTestKey123', google: '123-test.apps.googleusercontent.com', microsoft: '11111111-2222-3333-4444-555555555555', icloud: { container: 'iCloud.test.vdex', apiToken: 'ck-test-token' } };
+    const { ctx: c3, page: p3 } = await open({ storage: { on: true, statusAt: now, first: now - 3 * DAY, seen: now, ios: true, token: 'tok-apple', licence: lic, seat: 'ok', checked: now, tried: now, seatChecked: now, seatTried: now, install: 'inst-1234567890abcdef' } });
+    await c3.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: `export const CLOUD_APPS = ${JSON.stringify(IDS)};` }));
+    const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*', 'access-control-expose-headers': 'x-apple-cloudkit-web-auth-token' };
+    const api = { dropboxToken: null, msToken: null, ckReferer: null, ck: 0 };
+    await c3.route('https://api.dropboxapi.com/**', r => { if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: CORS }); if (r.request().url().includes('/oauth2/token')) api.dropboxToken = r.request().postData(); r.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(r.request().url().includes('/oauth2/token') ? { refresh_token: 'dbx-refresh', access_token: 'dbx-access', expires_in: 14400 } : { email: 'jo@example.com', name: { display_name: 'Jo' } }) }); });
+    await c3.route('https://login.microsoftonline.com/**', r => { if (r.request().method() === 'OPTIONS') return r.fulfill({ status: 204, headers: CORS }); if (r.request().url().includes('/token')) api.msToken = r.request().postData(); r.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify({ access_token: 'ms-access', refresh_token: 'ms-refresh', expires_in: 3600, scope: 'Calendars.ReadWrite', id_token: 'e30.eyJuYW1lIjoiSm8iLCJwcmVmZXJyZWRfdXNlcm5hbWUiOiJqb0BleGFtcGxlLmNvbSJ9.x' }) }); });
+    await c3.route('https://graph.microsoft.com/**', r => r.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(r.request().url().includes('/calendars') && r.request().method() === 'POST' ? { id: 'mscal1' } : { value: [] }) }));
+    await c3.route('https://api.apple-cloudkit.com/**', r => {
+      const u = new globalThis.URL(r.request().url()); api.ck++;
+      const reply = (status, body) => r.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      if (!u.searchParams.get('ckWebAuthToken')) { api.ckReferer = r.request().headers().referer || ''; return reply(421, { serverErrorCode: 'AUTHENTICATION_REQUIRED', redirectURL: 'https://idmsa.apple.com/IDMSWebAuth/signin?appIdKey=test' }); }
+      if (u.pathname.endsWith('/users/caller')) return reply(200, { userRecordName: '_u1' });
+      if (u.pathname.endsWith('/records/lookup')) return reply(200, { records: [{ serverErrorCode: 'NOT_FOUND' }] });
+      if (u.pathname.endsWith('/zones/modify')) return reply(200, { zones: [{}] });
+      return reply(200, { records: [{ recordName: 'ok' }] });
+    });
+    await p3.reload(); await p3.waitForSelector('#rolodex .drum-btn'); await sleep(400);
+    const wait3 = act => Promise.all([p3.waitForEvent('framenavigated', { predicate: f => f === p3.mainFrame() && /[?&](state|app)=/.test(f.url()), timeout: 10000 }), act()]).then(() => p3.waitForSelector('#rolodex .drum-btn')).then(() => sleep(600));
+    // Dropbox
+    await p3.locator('#cloudBtn').click(); await p3.waitForSelector('.sheet .storage'); await sleep(200);
+    const more = p3.locator('.sheet details.twirl-more'); if (!(await more.evaluate(e => e.open))) { await more.locator('> summary').click(); await sleep(350); }
+    await wait3(() => p3.locator('.sheet .cloud-choice[data-svc="dropbox"] button').click());
+    const lastAuth = () => p3.evaluate(() => JSON.parse(sessionStorage.getItem('cap-webauth-last') || 'null'));
+    const dbx = await lastAuth(), dbxUrl = dbx && new globalThis.URL(dbx.url);
+    ok('Dropbox opens in the phone’s sign-in window, with the app’s mark on the state and the website’s own return address', !!dbxUrl && /dropbox\.com/.test(dbxUrl.host) && /~app$/.test(dbxUrl.searchParams.get('state')) && dbxUrl.searchParams.get('redirect_uri') === URL && dbx.scheme === 'vdex', dbx && dbx.url);
+    ok('…and the answer the window brings back finishes the sign-in on the page: Dropbox is connected', api.dropboxToken && /code=dbx-code-1/.test(api.dropboxToken) && (await p3.evaluate(() => localStorage.getItem('logi-provider'))) === 'dropbox', String(api.dropboxToken).slice(0, 120));
+    // Google
+    const gtok = await p3.evaluate(() => import('./js/providers.js').then(p => p.googleToken('https://www.googleapis.com/auth/drive.appdata', true)));
+    const g = await lastAuth(), gUrl = g && /signin-google/.test(g.url) && new globalThis.URL(g.url);
+    ok('Google signs in on Vdex’s own page in the phone’s window, with the app’s client and the permission asked for', !!gUrl && gUrl.pathname === '/signin-google.html' && gUrl.searchParams.get('client') === IDS.google && /drive\.appdata/.test(gUrl.searchParams.get('scope')), g && g.url);
+    ok('…and the token it brings back is kept, as the website keeps Google’s', gtok === 'gtok-1' && /gtok-1/.test(await p3.evaluate(() => localStorage.getItem('logi-google-tokens') || '')));
+    // Microsoft (the calendar)
+    await wait3(() => p3.evaluate(() => import('./js/providers.js').then(p => p.microsoftBegin(['Calendars.ReadWrite'], 'calendar'))));
+    const ms = await lastAuth(), msUrl = ms && /microsoftonline/.test(ms.url) && new globalThis.URL(ms.url);
+    ok('Microsoft opens in the phone’s window with the app’s mark, and its answer connects the calendar', !!msUrl && /~app$/.test(msUrl.searchParams.get('state')) && api.msToken && /code=ms-code-1/.test(api.msToken) && (await p3.evaluate(() => import('./js/store.js').then(s => s.db.calSync && s.db.calSync.provider))) === 'microsoft', String(api.msToken).slice(0, 100));
+    await p3.evaluate(() => import('./js/calendar.js').then(m => m.disconnectCalendar()));
+    // iCloud
+    await wait3(() => p3.evaluate(() => import('./js/store.js').then(s => s.connectIcloud().catch(() => {}))));
+    const ap = await lastAuth().then(a => a && /idmsa\.apple/.test(a.url) && a);
+    ok('iCloud asks Apple with the page’s marked address, opens Apple’s page in the phone’s window, and keeps the session it brings back', !!ap && /\?app=icloud$/.test(api.ckReferer || '') && (await p3.evaluate(() => localStorage.getItem('logi-icloud-session'))) === 'ck-session-1' && (await p3.evaluate(() => localStorage.getItem('logi-provider'))) === 'icloud', `referer ${api.ckReferer}`);
+    ok('…and the page’s address is clean again', (await p3.evaluate(() => location.search)) === '');
+    // a window closed early
+    await p3.evaluate(() => { window.__cap.authClosed = true; });
+    const closed = await p3.evaluate(() => import('./js/providers.js').then(p => p.googleToken('https://www.googleapis.com/auth/calendar.app.created', true).then(() => 'token', e => e.name + ': ' + e.message)));
+    ok('a sign-in window closed before the end is a cancelled sign-in, not an error', /^AbortError: The sign-in was closed/.test(closed), closed);
+    await c3.close();
+    // the hand-over itself: on the website, a page opened by the sign-in window with the app's mark goes to the vdex:// address and no further
+    const c4 = await browser.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' });
+    await c4.addInitScript(() => { window.__vdexSignin = u => { window.__bounced = u; }; localStorage.setItem('logi-tour', 'done'); });
+    await c4.addInitScript(acceptTerms());
+    const p4 = await c4.newPage();
+    await p4.goto(URL + 'index.html?state=vdex-abc~app&code=x').catch(() => {}); await sleep(300);
+    const b1 = await p4.evaluate(() => window.__bounced || '');
+    await p4.goto(URL + 'index.html?app=icloud&ckWebAuthToken=t1').catch(() => {}); await sleep(300);
+    const b2 = await p4.evaluate(() => window.__bounced || '');
+    await p4.goto(URL + 'index.html?state=vdex-abc&code=x').catch(() => {}); await sleep(300);
+    const b3 = await p4.evaluate(() => window.__bounced || '');
+    ok('a marked Dropbox or Microsoft answer and a marked iCloud session are handed to the app', b1 === 'vdex://signin?state=vdex-abc~app&code=x' && b2 === 'vdex://signin?app=icloud&ckWebAuthToken=t1', b1 + ' | ' + b2);
+    ok('…while the website’s own returns are left alone', b3 === '' && (await p4.locator('#rolodex .drum-btn').count()) > 0);
+    await c4.close();
 
     /* ------------------------------ read-only in the app ------------------------------ */
     const { page: p2 } = await open({ storage: { on: true, statusAt: now, first: now - 31 * DAY, seen: now } });

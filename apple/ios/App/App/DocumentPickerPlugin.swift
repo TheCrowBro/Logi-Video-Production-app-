@@ -63,8 +63,14 @@ public class DocumentPickerPlugin: CAPPlugin, CAPBridgedPlugin, UIDocumentPicker
             info.jobName = "Vdex"
             controller.printInfo = info
             controller.printFormatter = webView.viewPrintFormatter()
-            controller.present(animated: true) { _, completed, error in
+            let done: UIPrintInteractionController.CompletionHandler = { _, completed, error in
                 if let error = error { call.reject("Could not print: \(error.localizedDescription)") } else { call.resolve(["printed": completed]) }
+            }
+            if UIDevice.current.userInterfaceIdiom == .pad { // an iPad shows the print sheet as a popover, which needs a place to point at
+                let anchor = CGRect(x: webView.bounds.midX, y: webView.bounds.maxY - 1, width: 1, height: 1)
+                controller.present(from: anchor, in: webView, animated: true, completionHandler: done)
+            } else {
+                controller.present(animated: true, completionHandler: done)
             }
         }
     }
@@ -94,7 +100,11 @@ enum Inbox {
     private static var queue: [[String: Any]] = []
 
     static func take(_ contexts: Set<UIOpenURLContext>) {
-        for c in contexts where c.url.isFileURL { if let file = read(c.url) { queue.append(file); try? FileManager.default.removeItem(at: c.url) } } // "Copy to Vdex" leaves the copy in Documents/Inbox: taken, then removed
+        for c in contexts where c.url.isFileURL {
+            guard let file = read(c.url) else { continue }
+            queue.append(file)
+            if c.url.path.contains("/Inbox/") { try? FileManager.default.removeItem(at: c.url) } // "Copy to Vdex" leaves its copy in Documents/Inbox: taken, then removed; a file opened in place is never touched
+        }
         flush()
     }
     static func read(_ url: URL) -> [String: Any]? {

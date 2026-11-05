@@ -429,7 +429,7 @@ function openImport(log, preset) {
       h('p', { class: 'small muted' }, 'A .docx from Word or Pages, or a Google Doc downloaded as Word (File → Download → Microsoft Word). Plain .txt and Fountain files work too.'),
       h('label', { class: 'btn ghost file-btn' }, '📄 Choose file…', fileIn)),
     h('div', { class: 'card' }, h('strong', null, 'Google Docs'),
-      h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on Android (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
+      h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on Android or iPhone (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
       paste, h('button', { class: 'btn ghost small', onclick: () => { const lines = textToLines(paste.value); lines.length ? show('Pasted script', lines) : fail(new Error('Nothing pasted yet')); } }, 'Use pasted text')),
     h('button', { class: 'btn ghost small tc-sample', onclick: () => show('Sample script', textToLines(SAMPLE_SCRIPT)) }, 'Try a sample script'),
     preview,

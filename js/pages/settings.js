@@ -7,7 +7,7 @@ import { db, update } from '../store.js';
 import * as store from '../store.js';
 import { storagePanel, backupPanel } from '../storage-ui.js';
 import { displayPanel, prefsSummary } from '../a11y.js';
-import { calendarPanel, calState } from '../calendar.js';
+import { calendarPanel, calState, phoneLink, phoneState } from '../calendar.js';
 import { openInstallHelp, installState } from '../install.js';
 import { startTour } from '../tour.js';
 import { VERSION, BUILD, BUILT } from '../version.js';
@@ -91,7 +91,7 @@ export const settings = {
     const section = (title, status, body, open = false) => fold('settings-section', title, status, body, open);
     const group = (title, status, sections, open = false) => fold('settings-group', title, status, sections, open);
     const c = store.cloud, cs = db.calSync || {}, l = loc();
-    const calStatus = cs.provider ? `${cs.provider === 'google' ? 'Google' : 'Microsoft'} · ${calState.status}` : cs.feed ? 'live feed on' : 'not linked';
+    const calStatus = [cs.provider && cs.provider !== 'apple' && `${cs.provider === 'google' ? 'Google' : 'Microsoft'} · ${calState.status}`, phoneLink() && `this phone · ${phoneState.status}`].filter(Boolean).join(', ') || (cs.feed ? 'live feed on' : 'not linked');
     const storageStatus = () => [`${db.bookings.length} bookings · ${db.gear.length} items`, c.adapter ? `${c.adapter.label} · ${c.paused ? 'paused' : c.status}` : 'this device only', !store.isPaid() ? 'backups with a licence' : backupHealth().level === 'ok' ? `copy ${backupHealth().when}` : backupHealth().level === 'empty' ? '' : '⚠ no recent copy'].filter(Boolean).join(' · ');
     const rate = billing().dayRate, nTemplates = projectTemplates().length;
     root.append(

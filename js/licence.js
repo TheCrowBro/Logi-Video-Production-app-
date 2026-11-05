@@ -88,7 +88,7 @@ function describe(s) {
     case 'trial': return { line: `Free trial: ${plural(s.trialLeft, 'day')} left${s.trialEnds ? ` (until ${day(s.trialEnds)})` : ''}. After that Vdex is read-only here until you ${offer}.`, buy: shop, enter: true, restore };
     case 'ended': return { line: `Your free trial has ended, so Vdex is read-only here: you can open, search and print everything, but not change it. To change things again, ${offer}.`, tone: 'warn', buy: shop, enter: true, restore };
     case 'licensed': return web()
-      ? { line: `${l.email ? `Signed in as ${l.email}` : 'Licensed through the App Store'}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${app() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true }
+      ? { line: `${s.via === 'apple' ? 'Licensed through the App Store' + (l.email ? ' · ' + l.email : '') : `Signed in as ${l.email}`}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${app() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true, addEmail: s.via === 'apple' && !l.email, copy: s.via === 'apple' && !!s.code }
       : { line: `Licensed to ${who(l)}${l && l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}.`, tone: 'ok', copy: true, release: true };
     case 'pending': return web()
       ? { line: `Signed in as ${l.email}, but this phone is not on your licence yet: Vdex needs the internet once to add it.`, tone: s.canEdit ? '' : 'warn', retry: true, release: true }
@@ -107,7 +107,8 @@ function actions(s, d, after = () => {}) {
   if (d.restore) b.push(h('button', { class: 'btn ghost', onclick: e => restoreInApp(e.target, after) }, 'Restore purchases'));
   if (d.again) b.push(h('button', { class: 'btn primary', onclick: async () => (web() ? addPhone() : enterCode(await l.code())) }, web() ? 'Add this phone' : 'Activate here again'));
   if (d.retry) b.push(h('button', { class: 'btn primary', onclick: e => retry(e.target, after) }, 'Try again'));
-  if (d.copy) b.push(h('button', { class: 'btn ghost', onclick: async () => { try { await navigator.clipboard.writeText(await l.code()); toast('Licence code copied'); } catch { toast('Could not copy'); } } }, 'Copy the code'));
+  if (d.addEmail) b.push(h('button', { class: 'btn ghost', onclick: () => addEmailSheet(after) }, 'Add your email'));
+  if (d.copy) b.push(h('button', { class: 'btn ghost', onclick: async () => { try { await navigator.clipboard.writeText(await l.code()); toast(web() ? 'Licence code copied: paste it in the desktop app under Enter licence code' : 'Licence code copied'); } catch { toast('Could not copy'); } } }, web() ? 'Copy the code for the desktop app' : 'Copy the code'));
   if (d.release) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet() }, web() ? 'Sign out' : 'Release this computer'));
   if (d.remove) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet(true) }, 'Remove the code'));
   return b;
@@ -307,7 +308,7 @@ export function signIn() {
   } },
   h('p', { class: 'small muted' }, app() ? 'Sign in with the email address of your Vdex licence. We email you a 6-digit code to type in here.'
     : 'Sign in with the email address you bought your licence with. We email you a 6-digit code to type in here.'),
-  email, codeBox, h('div', null, toggle), h('div', { class: 'actions' }, send));
+  email, codeBox, !ios() && h('div', null, toggle), h('div', { class: 'actions' }, send)); // the iPhone app never takes a code (Apple's rule): email, or the App Store
   const whereTo = h('p', { class: 'small muted', role: 'status' });
   const digits = h('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 7, pattern: '[0-9 ]*', 'aria-label': '6-digit code', placeholder: '123456', class: 'licence-digits' });
   const verify = h('button', { type: 'submit', class: 'btn primary' }, 'Sign in');
@@ -333,6 +334,45 @@ export function signIn() {
     toast(r.mode === 'licensed' ? 'Signed in. Thank you!' : r.mode === 'pending' ? 'Signed in. Vdex adds this phone to your licence the next time it is online.' : 'Signed in.');
   } }, whereTo, digits, h('div', { class: 'actions' }, verify, again));
   const sh = sheet('Sign in to Vdex', h('div', { class: 'stack' }, step1, step2, msg));
+  setTimeout(() => email.focus(), 50);
+}
+
+// An App Store licence: add an email address, so the same licence signs in on the website and in the Android app, and
+// the desktop code carries it. Step 1 emails a 6-digit code there; step 2 links the address.
+function addEmailSheet(after = () => {}) {
+  const l = L(); if (!l || !l.addEmail) return;
+  const msg = h('p', { class: 'small', role: 'status' });
+  const email = h('input', { type: 'email', autocomplete: 'email', inputMode: 'email', 'aria-label': 'Email address', placeholder: 'you@example.com' });
+  const send = h('button', { type: 'submit', class: 'btn primary' }, 'Email me a code');
+  let to = '';
+  const step1 = h('form', { class: 'stack', novalidate: true, onsubmit: async e => {
+    e.preventDefault(); msg.textContent = ''; msg.className = 'small';
+    const addr = email.value.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) { msg.textContent = 'Type the email address to add.'; msg.className = 'small licence-warn'; return; }
+    send.disabled = true; send.textContent = 'Sending…';
+    const r = await l.addEmail(addr);
+    send.disabled = false; send.textContent = 'Email me a code';
+    if (r.error) { msg.textContent = r.error; msg.className = 'small licence-warn'; return; }
+    to = addr.toLowerCase(); step1.hidden = true; step2.hidden = false;
+    whereTo.textContent = `A 6-digit code is on its way to ${to}. It works for 15 minutes. Nothing after a few minutes? Check your spam folder.`;
+    digits.focus();
+  } },
+  h('p', { class: 'small muted' }, 'Your licence works on up to 3 of your devices. With an email address on it, you can sign in with that address on the website and in the Android app, and the code for the desktop app carries it too. We email you a 6-digit code to type in here.'),
+  email, h('div', { class: 'actions' }, send));
+  const whereTo = h('p', { class: 'small muted', role: 'status' });
+  const digits = h('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 7, pattern: '[0-9 ]*', 'aria-label': '6-digit code', placeholder: '123456', class: 'licence-digits' });
+  const link = h('button', { type: 'submit', class: 'btn primary' }, 'Add the address');
+  const again = h('button', { type: 'button', class: 'btn ghost', onclick: () => { step2.hidden = true; step1.hidden = false; msg.textContent = ''; digits.value = ''; send.focus(); } }, 'Send a new code');
+  const step2 = h('form', { class: 'stack', hidden: true, onsubmit: async e => {
+    e.preventDefault(); msg.textContent = ''; msg.className = 'small';
+    link.disabled = true; link.textContent = 'Adding…';
+    const r = await l.verifyEmail(to, digits.value);
+    link.disabled = false; link.textContent = 'Add the address';
+    if (!r || r.error) { msg.textContent = (r && r.error) || 'Something went wrong. Try again.'; msg.className = 'small licence-warn'; return; }
+    set(r); sh.close(); after();
+    toast(`${to} is on your licence: sign in with it on the website and in the Android app.`);
+  } }, whereTo, digits, h('div', { class: 'actions' }, link, again));
+  const sh = sheet('Add your email', h('div', { class: 'stack' }, step1, step2, msg));
   setTimeout(() => email.focus(), 50);
 }
 

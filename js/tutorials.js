@@ -6,7 +6,8 @@ import { runTour, startTour, resumeTourAt, tourSeen } from './tour.js';
 import * as store from './store.js';
 import * as lock from './lock.js';
 import * as providers from './providers.js';
-import { connectCalendar } from './calendar.js';
+import { connectCalendar, phoneLink } from './calendar.js';
+import * as native from './native.js';
 
 const T = (title, text, ...rest) => { const opts = rest.length && typeof rest[rest.length - 1] === 'object' ? rest.pop() : {}; return { title, text, target: rest, ...opts }; };
 const tab = n => () => { const b = document.querySelector(`.tc-views button:nth-child(${n})`); if (b) b.click(); };
@@ -48,9 +49,9 @@ const revealSetting = title => async () => { await closeSheets(); const m = awai
 // licence note for the live feed when this device has no licence. Next skips it; Settings → Calendar & email later.
 const calendarStep = () => {
   const paid = store.isPaid();
-  const text = `Two-way sync keeps a “Vdex bookings” calendar in your Google or Microsoft account: bookings go there, and changes made there come back. Connect now, or tap Next to skip this and do it later under Settings → Calendar & email. Apple Calendar and other apps take a calendar file (Export once) or follow the live feed${paid ? '.' : ', which keeps a file in your cloud storage. Cloud storage comes with a Vdex licence (20 USD once, for up to 3 of your devices): Buy and Sign in are under Settings → General → About & Licence.'}`;
+  const text = `Two-way sync keeps a “Vdex bookings” calendar in your Google or Microsoft account${native.calendar.available() ? ', or in this phone’s own Calendar app' : ''}: bookings go there, and changes made there come back. Connect now, or tap Next to skip this and do it later under Settings → Calendar & email. Apple Calendar and other apps take a calendar file (Export once) or follow the live feed${paid ? '.' : ', which keeps a file in your cloud storage. Cloud storage comes with a Vdex licence (20 USD once, for up to 3 of your devices): Buy and Sign in are under Settings → General → About & Licence.'}`;
   const choice = (ctx, svc, name) => {
-    const on = providers.signIn.available(svc === 'google' ? 'google-calendar' : svc);
+    const on = svc === 'apple' || providers.signIn.available(svc === 'google' ? 'google-calendar' : svc);
     return h('div', { class: 'card-row' },
       h('div', { class: 'grow' }, h('strong', null, name), !on && h('div', { class: 'small muted' }, `Not ready yet: sign-in for ${name} is still being set up for this copy of Vdex.`)),
       h('button', { class: 'btn primary small', type: 'button', disabled: !on, 'aria-label': `Connect ${name}`, onclick: async e => {
@@ -62,8 +63,9 @@ const calendarStep = () => {
   };
   return { title: 'Your calendar', text, target: ['#page details[data-s="Calendar & email"]'], go: 'settings', before: revealSetting('Calendar & email'),
     body: ctx => { const cs = store.db.calSync || {};
-      return cs.provider ? h('p', { class: 'status-line', 'data-state': 'synced' }, `${cs.provider === 'google' ? 'Google Calendar' : 'Outlook / Microsoft 365'} is connected. Sync now and Disconnect are under Settings → Calendar & email.`)
-        : h('div', { class: 'stack tour-cal' }, choice(ctx, 'google', 'Google Calendar'), choice(ctx, 'microsoft', 'Outlook / Microsoft 365')); },
+      const pl = native.calendar.available() && phoneLink();
+      return cs.provider && cs.provider !== 'apple' ? h('p', { class: 'status-line', 'data-state': 'synced' }, `${cs.provider === 'google' ? 'Google Calendar' : 'Outlook / Microsoft 365'} is connected. Sync now and Disconnect are under Settings → Calendar & email.`)
+        : h('div', { class: 'stack tour-cal' }, pl ? h('p', { class: 'status-line', 'data-state': 'synced' }, 'This phone’s calendar is connected.') : native.calendar.available() && choice(ctx, 'apple', 'This phone’s calendar'), choice(ctx, 'google', 'Google Calendar'), choice(ctx, 'microsoft', 'Outlook / Microsoft 365')); },
     footer: !paid ? stop => h('button', { class: 'btn ghost small', type: 'button', onclick: async () => { stop(); const m = await import('./pages/settings.js'); await m.openSettingsSection('About & Licence'); } }, 'Licence…') : null };
 };
 const setupSteps = () => [
@@ -124,7 +126,7 @@ export const TUTORIALS = {
   setup: { name: 'Set up Vdex', page: null, hidden: true, dynamic: setupSteps },
   around: { name: 'Getting around', page: null, steps: [
     T('The Rolodex', 'Spin it to move between sections: drag or swipe it, tap ▲ ▼, or use the arrow keys on a keyboard.', '.binder', '#rolodex'),
-    T('The top bar', 'Aa sets text size, theme and accessibility. ☁ links your cloud storage and shows the sync state. 🔒 appears once a PIN is set and locks Vdex at once. ⤓ installs the app.', '.top-actions'),
+    T('The top bar', 'Aa sets text size, theme and accessibility. ☁ links your cloud storage and shows the sync state. 🔒 appears once a PIN is set and locks Vdex at once.' + (native.isApp ? '' : ' ⤓ installs the app.'), '.top-actions'),
     T('This button', 'Tap ? on any page for its tutorial. The first card has “Other pages…” to read about a page you are not on.', '#helpBtn'),
     T('The running clock', 'While the clock runs, this strip shows the time on every page: stop work or take a timed break from anywhere. Start it in the Hours box of the booking.', '#clockbar:not([hidden])'),
   ] },
@@ -270,7 +272,7 @@ export const TUTORIALS = {
     T('Take a note', 'Type what you see: “plane overhead”, “great take”, “boom in shot”. The timecode is captured the moment you start typing, not when you finish, so the stamp is the moment you noticed it. Enter adds the note.', '.tc-composer', { before: backToNotes }),
     T('Mark now', '⏺ Mark now drops a stamp with no words for a fast moment; tap the note later to add the text. Next note at shows the stamp the next note will get.', '.tc-composer .card-row'),
     T('Your notes', 'In timecode order. Tap the text to edit it, the timecode to correct it (a note taken before syncing says unsynced and can be fixed here), and a quoted line to jump to that spot in the script.', '.tc-notes'),
-    T('The script', 'Add the script and tap any line, or press and hold to select words, to pin a stamp to it. Word documents, Google Docs (downloaded as Word, or shared to Vdex on Android), plain text and Fountain all work, and Try a sample script shows how.', '.script', '#page .tc-pane .empty', { before: tab(2) }),
+    T('The script', 'Add the script and tap any line, or press and hold to select words, to pin a stamp to it. Word documents, Google Docs (downloaded as Word, or shared to Vdex on Android or iPhone), plain text and Fountain all work, and Try a sample script shows how.', '.script', '#page .tc-pane .empty', { before: tab(2) }),
     T('Mark a line', 'What you selected shows here with the live timecode. Mark stamps it; Mark + note stamps it with a note. The badge on the line shows its stamp; tap it to read the note.', '.sc-bar'),
     T('Replace or remove', 'The script’s name and counts. Replace swaps the document and keeps your notes and their quotes.', '.sc-head'),
     T('Link a laptop', 'Two devices, one log: show a code on one, scan it on the other, then scan the reply. Same Wi‑Fi or hotspot, no internet, no account. Their clocks are measured against each other, so stamps agree to a few milliseconds. Typing on a laptop while the phone sits by the camera is the comfortable set-up.', '.sheet .actions.center', '.sheet .link-code', '.sheet .link-state', { before: openLinkSheet }),
@@ -314,7 +316,7 @@ export const TUTORIALS = {
   ] },
   tcimport: { name: 'Timecode: adding a script', page: null, sheet: true, steps: [
     T('Word document', 'A .docx from Word or Pages, a Google Doc downloaded as Word, or plain text and Fountain files. Each line becomes a tappable paragraph.', '.card'),
-    T('Google Docs', 'Google does not let an app read a Doc directly: download it as Word, share it to Vdex from the Docs app on Android, or copy and paste the text here.', '.card ~ .card'),
+    T('Google Docs', 'Google does not let an app read a Doc directly: download it as Word, share it to Vdex from the Docs app on Android or iPhone, or copy and paste the text here.', '.card ~ .card'),
     T('Try a sample', 'A short sample script, to see how marking works.', '.tc-sample'),
     T('What was found', 'The lines Vdex read. Use this script loads them; replacing a script keeps your notes and their quotes.', '.import-preview'),
   ] },
@@ -396,7 +398,7 @@ const GUIDE = [
   ['Before the shoot', ['One log per camera and per shoot day. Name it so it still makes sense in a year: job, day, camera.', 'Frame rate: the camera’s timecode rate, from its timecode menu, which is not always the recording rate. Most mirrorless and cinema cameras shooting 24p use 23.976; PAL regions use 25; NTSC broadcast uses 29.97. 29.97 and 59.94 come in drop frame (DF, written with a semicolon, 01:04:22;15) and non-drop; the camera menu says which.', 'Mode: free run means the clock always counts, like a wall clock, even between takes; record run means it counts only while recording. Documentary, event and corporate work is usually free run; drama and some camera defaults are record run. On most cameras this lives under a menu called Timecode, TC/UB or TC Setup, as TC Run or Run Mode.', 'A wrong rate or mode is the usual cause of stamps that drift: 23.976 taken as 24 drifts about 3.6 seconds every hour.']],
   ['Syncing', ['Tap Sync on the log. Type the timecode the camera shows and tap Sync at the exact moment it shows that value, or point the phone at the camera’s display and tap Scan. A trick for typing: enter the next round number, say 01:05:00:00, and tap as the camera reaches it. Being a second out matters; the frame does not.', 'The scan takes its reading at the instant you tap, then works out the digits, so a slow read never puts you out. It downloads the text reader the first time, so do that with a connection. Check the digits it read before accepting them.', 'In record run, tick Recording right now? if the camera is rolling while you sync; leave it unticked if the camera is stopped and holding a timecode.', 'Once synced, the sheet shows the timecode the phone expects the camera to show. Compare them now and then, and after lunch, battery changes or the camera being switched off: a second or more of difference means re-sync.', 'Several cameras: one log each, each synced to its own camera. If the cameras are jam-synced to one timecode generator, one sync serves them all; keep a log per camera anyway, for the editor’s sake.']],
   ['During the shoot', ['Type what you see, as it happens: “plane overhead”, “great take”, “boom in shot”. The stamp is taken the moment you start typing, not when you finish, so it is the moment you noticed it. Enter adds the note.', '⏺ Mark now drops a stamp with no words for a fast moment; add the words later by tapping the note.', 'Record run: tap ● Roll as the camera starts and ■ Cut as it stops. The clock pauses between takes and each take is logged with its length.', 'Tap a note’s text to edit it, its timecode to correct it, a quoted line to jump to the script. Notes taken before the sync say unsynced; correct them by hand from the camera’s display.']],
-  ['Scripts', ['Add the script to mark lines rather than describe them. Word documents (.docx), plain text and Fountain files open directly; a Google Doc is downloaded as Word, shared to Vdex from the Docs app on Android, or pasted as text. Try a sample script shows how it works.', 'Tap a line, or press and hold to select words, then Mark to stamp it or Mark + note to stamp it with a note. The badge on the line shows its stamp. Replacing the script keeps the notes and their quotes.']],
+  ['Scripts', ['Add the script to mark lines rather than describe them. Word documents (.docx), plain text and Fountain files open directly; a Google Doc is downloaded as Word, shared to Vdex from the Docs app on Android or iPhone, or pasted as text. Try a sample script shows how it works.', 'Tap a line, or press and hold to select words, then Mark to stamp it or Mark + note to stamp it with a note. The badge on the line shows its stamp. Replacing the script keeps the notes and their quotes.']],
   ['A phone and a laptop together', ['Link device on both: one shows a code, the other scans it, then they swap. Same Wi‑Fi or hotspot, no internet, no account. The clocks are measured against each other, so stamps from either device agree to a few milliseconds. A laptop without a camera uses Copy code and paste instead.', 'While linked, the open log, its sync, Roll and Cut and every note stay identical on both. The comfortable set-up: the phone by the camera for syncing and quick marks, the laptop for typing.']],
   ['After the shoot', ['Export shares the notes as text for anyone, or as a spreadsheet (CSV) with the timecode, the note, the script line and the time of day it was captured. Editors turn the CSV into markers in their editing software, or simply search it. Send it the same evening, while it is fresh.', 'Logs travel with your cloud storage like everything else in Vdex, so they are on your computer too.']],
   ['When something looks wrong', ['Stamps are a few seconds out: the frame rate or mode is wrong, or the camera drifted. Fix the rate in ⚙ and re-sync.', 'The clock shows dashes: the log is not synced yet.', 'Notes say unsynced: they were taken before the sync. Tap their timecode to correct them.', 'The phone and the laptop disagree: link them, or sync each to the camera separately.', 'Drop-frame confusion: a timecode with a semicolon is drop frame; set the log to the DF rate and type the semicolon, or let the scan read it.', 'A practice log, with a sync, a few notes and the sample script, lets you try all of this without a camera: Walk me through it below makes one.']],

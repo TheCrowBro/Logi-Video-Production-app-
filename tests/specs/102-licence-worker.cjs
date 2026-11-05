@@ -258,13 +258,14 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
       return `${header}.${body}.${bu(sig)}`;
     };
     const txn = (over = {}) => ({ transactionId: '2000000123456789', originalTransactionId: '2000000123456789', bundleId: 'app.crowmade.vdex', productId: 'app.crowmade.vdex.licence', purchaseDate: Date.parse('2026-11-05T10:00:00Z'), originalPurchaseDate: Date.parse('2026-11-05T10:00:00Z'), quantity: 1, type: 'Non-Consumable', inAppOwnershipType: 'PURCHASED', signedDate: Date.now(), environment: 'Production', transactionReason: 'PURCHASE', storefront: 'USA', price: 19990, currency: 'USD', ...over });
-    const aenv = { ...env, APPLE_BUNDLE_ID: 'app.crowmade.vdex', APPLE_ROOT_CA: fs.readFileSync(path.join(wd, 'root.der')).toString('base64') };
+    const aenv = { ...env, WEB_SIGN_IN: 'on', APPLE_BUNDLE_ID: 'app.crowmade.vdex', APPLE_ROOT_CA: fs.readFileSync(path.join(wd, 'root.der')).toString('base64') };
     ok('App Store purchases are off until the app is named', (await (await get('/licence/apple/status')).json()).on === false);
     await mf2.dispose(); mf2 = new Miniflare(opts(aenv));
     const apost = async (p, body) => { const r = await post(p, body, mf2); return { status: r.status, body: await r.json().catch(() => ({})) }; };
     ok('…and on when it is', (await (await mf2.dispatchFetch(SITE + '/licence/apple/status')).json()).on === true);
     const iphone = id(21), claimed = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' }), cb = claimed.body;
     ok('a purchase signed by the App Store becomes a licence, the phone takes a place and gets a sign-in', claimed.status === 200 && cb.ok && !!cb.token && !!cb.licence && cb.licence.seats === 3 && cb.used === 1, JSON.stringify(claimed).slice(0, 200));
+    ok('…and a desktop code for the same licence, with no email in it yet', typeof cb.code === 'string' && (await codes.verifyCode(cb.code, { keys: KEYS })).licence.ref === cb.licence.ref && (await codes.verifyCode(cb.code, { keys: KEYS })).licence.email === '', String(cb.code).slice(0, 30));
     const reclaim = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });
     ok('claiming the same purchase again (a reinstall, Restore purchases) is the same licence and the same place', reclaim.body.ok && reclaim.body.licence.ref === cb.licence.ref && reclaim.body.used === 1, JSON.stringify(reclaim).slice(0, 160));
     const ipad = await apost('/licence/apple/claim', { jws: jws(txn()), install: id(22), os: 'iPad' });
@@ -284,6 +285,22 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     for (const [what, bad] of refusals) { const r = await apost('/licence/apple/claim', { jws: bad, install: id(23), os: 'iPhone' }); ok(`refused: ${what}`, r.status === 400 || r.status === 403, String(r.status) + ' ' + JSON.stringify(r.body).slice(0, 100)); }
     const noRoot = await apost('/licence/apple/claim', { jws: jws(txn({ originalTransactionId: '2000000999' }), { chain: ['leaf.pem', 'inter.pem'] }), install: id(24), os: 'iPhone' });
     ok('a chain sent without its root still verifies against the pinned root', noRoot.status === 200, JSON.stringify(noRoot).slice(0, 160));
+    // The buyer adds an email address: then the website and the Android app sign in with it, and the desktop code carries it
+    const mailsBefore = mails().length;
+    const es = await apost('/licence/apple/email', { token: cb.token, email: 'app@example.com' }), ecode = lastCode('app@example.com');
+    ok('an App Store buyer adding an email address gets a 6-digit code there', es.status === 200 && es.body.ok && !!ecode && mails().length === mailsBefore + 1, JSON.stringify(es.body));
+    ok('…only with a sign-in: without one nothing is sent', (await apost('/licence/apple/email', { token: 'x.y.z', email: 'app@example.com' })).status === 401 && mails().length === mailsBefore + 1);
+    ok('a wrong code does not link it', (await apost('/licence/apple/email/verify', { token: cb.token, email: 'app@example.com', code: '000000' })).status === 400);
+    const linked = await apost('/licence/apple/email/verify', { token: cb.token, email: 'app@example.com', code: ecode });
+    const linkedCode = linked.body.code && (await codes.verifyCode(linked.body.code, { keys: KEYS }));
+    ok('the right code links the address: the licence shows it, and the desktop code now carries it', linked.status === 200 && linked.body.ok && linked.body.licence.email === 'app@example.com' && linkedCode && linkedCode.licence.ref === cb.licence.ref && linkedCode.licence.email === 'app@example.com', JSON.stringify(linked.body).slice(0, 160));
+    ok('…the phone’s daily check shows the email too', (await apost('/licence/web/check', { token: cb.token })).body.licence.email === 'app@example.com');
+    const ws = await apost('/licence/web/start', { email: 'app@example.com' }), wcode = lastCode('app@example.com');
+    const wv = await apost('/licence/web/verify', { email: 'app@example.com', code: wcode });
+    ok('…the website signs in with that email, to the same licence', ws.status === 200 && wv.status === 200 && wv.body.licence.ref === cb.licence.ref, JSON.stringify(wv.body).slice(0, 120));
+    ok('…and a website sign-in, which is not the purchase’s own, cannot add addresses to it', (await apost('/licence/apple/email', { token: wv.body.token, email: 'other@example.com' })).status === 401 && !lastCode('other@example.com'));
+    const desk = await apost('/licence/activate', { code: linked.body.code, install: id(26), os: 'Windows' });
+    ok('…and the desktop app activates with the code on the same licence, taking its third place', desk.status === 200 && desk.body.ok && desk.body.used === 3, JSON.stringify(desk.body).slice(0, 120));
     // a refund through Apple cancels it; a reversed refund restores it
     const notice = (type, over = {}) => jws({ notificationType: type, subtype: '', notificationUUID: 'n-' + type, version: '2.0', signedDate: Date.now(), data: { bundleId: 'app.crowmade.vdex', environment: 'Production', signedTransactionInfo: jws(txn(over)) } });
     ok('an unsigned notice is refused', (await apost('/licence/apple/notify', { signedPayload: 'x.y.z' })).status === 400);

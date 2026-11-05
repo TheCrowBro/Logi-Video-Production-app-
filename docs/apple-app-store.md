@@ -38,6 +38,7 @@ The app never links to the website's Buy page, and the website's Buy page is nev
 5. Select the **App** target → **Signing & Capabilities**: tick **Automatically manage signing** and choose your team. Xcode makes the certificates and the app's profile itself. The bundle identifier is `app.crowmade.vdex` and must stay so.
 6. Still under Signing & Capabilities, press **+ Capability** and add **In-App Purchase**. (Push Notifications is not needed: break alerts are local notifications.)
 7. Plug in your iPhone, pick it at the top of Xcode and press **Run** (▶). The first time, the iPhone asks you to trust the developer under Settings → General → VPN & Device Management. Vdex opens on the phone.
+8. From now on, every change pushed to GitHub under `apple/` also runs an unsigned build of the app on GitHub's own Mac runners (the *iPhone app* workflow, `.github/workflows/ios.yml`, under the repository's **Actions** tab), which catches Swift errors before your Mac does. It cannot sign, archive or upload, so Steps 7 and 8 stay with your Mac; and because Mac minutes are dear, it runs only when something under `apple/` changes, or when you press **Run workflow** there.
 
 ## Step 3. Create the app in App Store Connect
 
@@ -62,6 +63,8 @@ A refund or a chargeback through Apple should cancel the licence, as a Stripe re
 
 Then give the website Apple's app identifiers so it can check receipts: in Cloudflare → Workers → the `vdex` worker → Settings → Variables, add `APPLE_BUNDLE_ID` = `app.crowmade.vdex`. Nothing secret is needed: Apple signs every receipt, and the website checks that signature against Apple's own root certificate, which is built in.
 
+Add a second variable there, `APPLE_ALLOW_SANDBOX` = `on`. TestFlight, your own sandbox tester (Step 7) and Apple's reviewers all buy in Apple's **Sandbox** environment, where nothing is charged, so the licence server has to accept sandbox purchases while you test and while the app is under review; without it, such a purchase is refused with "That is a test purchase, which does not license Vdex". A sandbox purchase gets a licence of its own, which never touches a real one: it can neither unlock nor cancel anything bought for real. The variable can stay on for good, because a sandbox purchase needs a sandbox tester account that only you can create in App Store Connect; or delete it between reviews and add it back before the next one.
+
 ## Step 6. The store listing
 
 Most of it is the Google Play text, which lives in [google-play.md](google-play.md) under "Texts to paste"; the differences:
@@ -69,25 +72,38 @@ Most of it is the Google Play text, which lives in [google-play.md](google-play.
 - **Subtitle** (30 characters): `Bookings, crew, kit, call sheets`
 - **Promotional text**: `Your whole production in one deck, on your phone and your computer.`
 - **Keywords**: `videographer,film,production,call sheet,crew,equipment,stripboard,timecode,invoice,booking`
-- **Support URL**: https://vdex.crowmade.app/docs/full-guide.md · **Marketing URL**: https://vdex.crowmade.app · **Privacy policy URL**: https://vdex.crowmade.app/privacy.html
+- **Support URL**: https://vdex.crowmade.app/privacy.html (it has to be a published page, and that one ends with how to reach you; the `docs/` folder is never published, so a `.md` address would not open) · **Marketing URL**: https://vdex.crowmade.app · **Privacy policy URL**: https://vdex.crowmade.app/privacy.html
 - **Category**: Productivity (secondary: Business).
 - **Age rating**: answer No to everything → 4+.
-- **Screenshots**: the Android ones under `store/android/screenshots` are the wrong shape; take iPhone ones from the phone (Settings → Developer → or simply the side-button + volume-up shortcut) at 6.7-inch and 6.1-inch sizes, with the Bookings calendar, a booking, the call sheet, the stripboard and the quote.
-- **App Privacy** (the nutrition label): Vdex collects no data. Answer **No, we do not collect data from this app** (the licence email goes to your own website only when the person buys or signs in, which Apple counts as not collected by the app's developer for tracking; say in the review notes that the website keeps the licence email and nothing else).
+- **Screenshots**: the app is offered for iPhone only (an iPad runs it in compatibility mode, as a scaled-up iPhone app), so App Store Connect asks for iPhone screenshots only, at the 6.7-inch and 6.1-inch sizes. The Android ones under `store/android/screenshots` are the wrong shape: take iPhone ones on the phone (press the side button and volume up together) of the Bookings calendar, a booking, the call sheet, the stripboard and the quote, and keep them under `store/apple/screenshots`, next to the 1024 × 1024 icon (`store/apple/icon-1024.png`, the same picture that is built into the app, which App Store Connect takes from the uploaded build).
+- **App Privacy** (the nutrition label): press **Get Started** and answer as in "App Privacy answers" below: four data types, none of them used for tracking.
 - **Sign-in information for the review**: the reviewer needs to try the app. Under App Review Information write: "No account is needed; the app has a 30-day free trial. To test the licence sign-in, use the code we attached" and attach a free licence code made with the licence generator (docs/selling-desktop.md).
 - **Notes for the reviewer**: "Vdex is a web app for freelance videographers that runs in this app with native notifications, calendar, Files and the App Store purchase. The licence can be bought in the app (In-App Purchase) or, for people who already bought on our website, by signing in with their email. The app never shows the website's purchase."
 
 ## Step 7. Test on your phone, then with TestFlight
 
 1. Run from Xcode once more; try the native parts: start a break on a booking and lock the phone (the alert comes, with Back to work on it), share a .docx script from Files or Mail to Vdex (Vdex asks whether it is a script or a shot list), connect the calendar under Bookings → Calendar & email → This phone's calendar (the "Vdex bookings" calendar appears in the Calendar app), export a backup (the Files picker opens), and print a call sheet (the print sheet opens).
-2. Sandbox purchases: Settings → App Store → Sandbox Account on the iPhone, with a sandbox tester made in App Store Connect → Users and Access → Sandbox. Buy the licence in the app: Apple's sheet shows "[Environment: Sandbox]" and nothing is charged. Settings → General → About & Licence then says "Licensed".
-3. In Xcode: **Product → Archive**, then **Distribute App → TestFlight & App Store → Upload**. After a few minutes the build is in App Store Connect → TestFlight; add yourself as a tester and install the TestFlight app on the phone.
+2. Sandbox purchases: Settings → App Store → Sandbox Account on the iPhone, with a sandbox tester made in App Store Connect → Users and Access → Sandbox. Buy the licence in the app: Apple's sheet shows "[Environment: Sandbox]" and nothing is charged. Settings → General → About & Licence then says "Licensed". This only works while `APPLE_ALLOW_SANDBOX` is `on` on the website's Worker (Step 5); otherwise the app answers "That is a test purchase, which does not license Vdex".
+3. In Xcode: **Product → Archive**, then **Distribute App → TestFlight & App Store → Upload**. After a few minutes the build is in App Store Connect → TestFlight; add yourself as a tester and install the TestFlight app on the phone. Every upload to App Store Connect needs a higher **Build** number than the one before, even for the same version (unlike Google Play, where GitHub's build carries the number): before each Archive, select the App target → **General** and raise **Build** by one (it is `CURRENT_PROJECT_VERSION` in the project). **Version** is kept equal to the website's by the code, so leave it alone.
+
+### First run on the Mac: what to check
+
+Before the upload in point 3, go through this list on the phone. Each item is something only the app can do, so the website's own tests never see it:
+
+- **Offline.** Open Vdex once with a connection, close it, turn on Airplane Mode and open it again: it starts and shows your bookings (the app keeps an offline copy of the website, which the first visit registers).
+- **A break alert with the app closed.** Open a booking, start a 15-minute break, close the app and lock the phone. When the break ends, the alert arrives on the lock screen; **Back to work** on it opens Vdex (after the PIN) with the break ended.
+- **The phone's calendar.** Bookings → Calendar & email → **This phone's calendar**: the phone asks for calendar access, and a "Vdex bookings" calendar appears in the Calendar app with your shoots.
+- **Files.** Export a backup (Settings → Storage, sync & backups): the Files picker opens and the file saves; Import opens the picker and reads it back.
+- **Printing.** Print on a call sheet, a quote or an invoice opens the phone's print sheet.
+- **The purchase.** With `APPLE_ALLOW_SANDBOX` = `on` (Step 5) and the sandbox tester signed in (point 2), Buy a licence under About & Licence goes through, and the page says "Licensed".
+- **Cloud sign-ins.** Connecting Google Drive, iCloud, Dropbox or OneDrive opens the sign-in and comes back to the app with the storage connected (the sign-in window closes by itself).
+- **The look.** The icon on the home screen is the Vdex camera on its dark background, and the picture shown while the app starts is the same logo on the same dark background, never a white screen.
 
 ## Step 8. Submit
 
-1. App Store Connect → the app → **1.3 Prepare for Submission**: pick the uploaded build, check everything above, tick the In-App Purchase under "In-App Purchases and Subscriptions", and press **Add for Review**, then **Submit to App Review**.
+1. App Store Connect → the app → **1.3 Prepare for Submission**: pick the uploaded build, check everything above, tick the In-App Purchase under "In-App Purchases and Subscriptions", and press **Add for Review**, then **Submit to App Review**. Apple's reviewers try the purchase in the Sandbox too, so `APPLE_ALLOW_SANDBOX` stays `on` (Step 5) for as long as the app is under review.
 2. Review takes one to three days. Common questions and the answers are in Step 6. If Apple asks why the licence can also be bought outside, answer: "The in-app purchase is offered to everyone; sign-in is only for people who already own a licence from our website, as Apple's guideline 3.1.3(b) allows for multiplatform services."
-3. Once approved, choose **Manually release** or let it go out at once. Later versions: `git pull`, `npx cap sync ios`, bump the version in Xcode (App target → General → Version and Build), Archive, upload, submit.
+3. Once approved, choose **Manually release** or let it go out at once. Later versions: `git pull`, `npx cap sync ios`, raise the Build number in Xcode (App target → General → Build; a new version number comes with the code), Archive, upload, submit.
 
 ## What is in the app, and what is not yet
 
@@ -98,7 +114,21 @@ Most of it is the Google Play text, which lives in [google-play.md](google-play.
 - Calendar: Settings → Calendar & email offers **This phone's calendar** beside Google and Outlook. It makes a "Vdex bookings" calendar in the Calendar app and keeps it in step both ways.
 - Backups: export and import go through the Files picker (iCloud Drive, On My iPhone, Dropbox and so on). The app's own folder also shows in the Files app under On My iPhone → Vdex. Spreadsheets, calendar files and the asset register go the same way, and Share buttons open the phone's share sheet.
 - Printing: Print on a call sheet, quote or invoice opens the phone's print sheet (AirPrint, or Save to Files for a PDF).
-- The purchase: Buy a licence in Settings → General → About & Licence shows Apple's sheet at the App Store's price; a licence bought on the website is used with Sign in. After a reinstall, or on a second iPhone or iPad with the same Apple ID, the app finds the purchase by itself within a day, and Restore purchases does it at once.
+- The purchase: Buy a licence in Settings → General → About & Licence shows Apple's sheet at the App Store's price; a licence bought on the website is used with Sign in. After a reinstall, or on a second iPhone or iPad with the same Apple ID, the app finds the purchase by itself within a day, and Restore purchases does it at once. The same licence works on the person's other devices too: **Add your email** puts an email address on it (a 6-digit code to that address), after which the website and the Android app sign in with it, and **Copy the code for the desktop app** gives the code to paste into the desktop app. No code is ever typed into the iPhone app (Apple's rule 3.1.1); the Sign in sheet there takes an email only.
+- Cloud storage and calendar accounts: Google Drive, iCloud, Dropbox, OneDrive, Google Calendar and Outlook sign in through the phone's own sign-in window (the one Safari and other apps use), because none of those services sign in inside an app's web view. The answer comes back to the app by itself. Nothing needs registering for it beyond what the website already has (docs/turn-on-sign-in.md), except one optional Google address for a fallback, described there.
+
+## App Privacy answers
+
+Apple asks what the app does with people's information, as Google does (the "Data safety answers" in [google-play.md](google-play.md)). Two things leave the phone. The weather forecast sends the coordinates of the shoot location, or of the phone's own location if that is what is set, to Open-Meteo, which uses them once and does not keep them. And the licence: a purchase in the app sends Apple's signed receipt, with the purchase's transaction number, to Vdex's licence server, which keeps that number so the purchase can be found again and a refund cancels it; signing in instead sends the email address the person types, and the server emails it a sign-in code; either way the phone then takes one of the licence's places, which sends a random number made for that installation. So under App Privacy → **Get Started** answer **Yes, we collect data from this app**, tick these four data types, and answer the questions about each as in the table. Everything else: not collected.
+
+| Data type | Why it is collected | Linked to the user's identity? | Used for tracking? | Purpose |
+|---|---|---|---|---|
+| **Contact Info → Email Address** | Optional: only when the person signs in with a licence bought by email on the website; the server keeps which addresses belong to which licences. | Yes | No | App Functionality |
+| **Identifiers → Device ID** | A random number made for the installation, so the licence's devices can be counted (never the phone's own identifier). | Yes | No | App Functionality |
+| **Location → Precise Location** and **Coarse Location** | Optional: for the weather and the sun times, sent to Open-Meteo, which uses the coordinates once and does not keep them. | No | No | App Functionality |
+| **Purchases → Purchase History** | The App Store purchase's transaction number, kept by our licence server so the purchase can be found again (Restore purchases) and a refund cancels it. | Yes | No | App Functionality |
+
+Why "not collected" for the rest (name, photos, files, contacts, usage, crash data…): everything a person types into Vdex about their work stays on the phone. When they link their own Google Drive, iCloud, Dropbox or OneDrive, the backup goes to the person's own account at their own request, which Apple does not count as collection by the developer. The privacy policy explains all of it. If a reviewer asks for changes to this section, send me what they wrote and I will adjust the wording.
 
 ## If something goes wrong
 
@@ -107,3 +137,5 @@ Most of it is the Google Play text, which lives in [google-play.md](google-play.
 - **"Vdex could not confirm the purchase"** after paying: the website could not check the receipt; the purchase is kept by Apple, and **Restore purchases** under About & Licence tries again (also after a reinstall or on a second iPhone with the same Apple ID).
 - **Apple asks for a demo account**: Vdex has none; point to the free trial and the attached licence code.
 - **The app shows a blank page the first time**: the phone has no connection; the app needs one once, then works offline.
+- **"That is a test purchase, which does not license Vdex"**: the purchase was made in Apple's Sandbox (TestFlight, your sandbox tester, App Review) while `APPLE_ALLOW_SANDBOX` is not `on` on the Worker: Step 5.
+- **The upload is refused because a build with this number already exists**: raise the Build number (Step 7, point 3) and Archive again.

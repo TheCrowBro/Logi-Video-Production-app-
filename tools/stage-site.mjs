@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Copies only the files the public website needs into a folder for publishing, never the Android, desktop, test,
-// docs or store sources (the deploy used to publish the whole repository, signing-key file included).
+// Copies only the files the public website needs into a folder for publishing, never the Android, iPhone (apple/),
+// desktop, test, docs or store sources (the deploy used to publish the whole repository, signing-key file included).
 //   node tools/stage-site.mjs site                       → the GitHub Pages copy
 //   node tools/stage-site.mjs cloudflare/site --cloudflare → the vdex.crowmade.app copy, plus the _headers and
 //                                                          _redirects files Cloudflare reads

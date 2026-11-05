@@ -86,10 +86,23 @@
 	<string>Your location gives the sun times, the weather for a shoot day and the field tools.</string>
 	<key>NSMotionUsageDescription</key>
 	<string>The sun pointer and the range finder use the phone’s motion sensors.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>app.crowmade.vdex</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>vdex</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
-	<true/>
+	<false/>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -114,7 +127,7 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>
-			<string>Owner</string>
+			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>public.json</string>

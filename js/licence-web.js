@@ -49,7 +49,7 @@ export function webLicence() {
   const emit = st => { const sig = JSON.stringify(st); if (sig !== last) { last = sig; listeners.forEach(f => { try { f(st); } catch { /* ignore */ } }); } };
 
   function describe(s, t) {
-    const base = { kind: 'web', play: !!s.play, ios: !!s.ios, app: inApp(s), enabled: !!s.on, seats: (s.licence && s.licence.seats) || SEATS, os: s.play ? 'Android' : s.ios ? native.device() : 'Web', price: s.price || '' };
+    const base = { kind: 'web', play: !!s.play, ios: !!s.ios, app: inApp(s), enabled: !!s.on, seats: (s.licence && s.licence.seats) || SEATS, os: s.play ? 'Android' : s.ios ? native.device() : 'Web', price: s.price || '', via: s.via || '', code: s.code || '' };
     if (!s.on) return { ...base, mode: 'off', canEdit: true };
     const left = Math.max(0, TRIAL_DAYS - Math.floor(((s.seen || t) - (s.first || t)) / DAY));
     const trial = { trialLeft: left, trialEnds: new Date((s.first || t) + TRIAL_DAYS * DAY).toISOString().slice(0, 10) };
@@ -103,6 +103,13 @@ export function webLicence() {
     if (r.answered && ['cancelled', 'signed-out', 'expired'].includes(b.error)) { signedOut(b.error); return { error: { cancelled: 'This licence has been cancelled.', 'signed-out': 'You have been signed out. Sign in again.', expired: 'This licence has ended.' }[b.error] }; }
     update(x => { x.seatTried = now(); }); return { offline: true };
   }
+  // A store app signing in to another licence while it holds a place on one: that place goes back first, so it is
+  // not left taken on a licence this phone no longer uses (the next weekly check could not do it: the token is gone).
+  async function giveBack(next) {
+    const s = read();
+    if (!inApp(s) || s.seat !== 'ok' || !s.token || !s.licence || (next && next.ref === s.licence.ref)) return;
+    try { await call('release', { token: s.token, install: s.install }); } catch { /* the place can still be moved from the chooser later */ }
+  }
   // Only when the licence server itself says so: a firewall's or a network filter's refusal is not an answer.
   function signedOut(why) { update(x => { delete x.token; delete x.seat; if (why === 'cancelled') x.cancelled = true; if (why === 'expired') x.expired = true; else delete x.licence; }); }
 
@@ -110,18 +117,18 @@ export function webLicence() {
   // Apple's signed purchase → a licence, with this phone on it. Answers like verify(): the state, or { error }.
   async function claim(jws) {
     if (!read().install) update(x => { x.install = x.install || rand(); });
-    let r; try { r = await call('/licence/apple/claim', { jws, install: read().install, os: native.device() }); } catch { return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; }
+    let r; try { r = await call('/licence/apple/claim', { jws, install: read().install, os: native.device() }); } catch { update(x => { delete x.autoAt; }); return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; }
     const b = r.body, t = now();
-    if (b.token && b.licence) update(x => { x.token = b.token; x.licence = b.licence; x.checked = x.tried = t; delete x.cancelled; delete x.expired; });
+    if (b.token && b.licence) { await giveBack(b.licence); update(x => { x.token = b.token; x.licence = b.licence; x.via = 'apple'; if (b.code) x.code = b.code; x.checked = x.tried = t; delete x.cancelled; delete x.expired; }); }
     if (r.status === 200 && b.ok) { update(x => { x.seat = 'ok'; x.seatChecked = x.seatTried = t; }); return state(); }
     if (b.error === 'full' && b.token) { update(x => { x.seat = 'full'; x.seatTried = t; }); return { ...state(), full: { computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft } }; }
-    if (!r.answered) return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' };
+    if (!r.answered) { update(x => { delete x.autoAt; }); return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; } // looked for again at the next check
     return { error: { cancelled: 'This purchase was refunded, so it no longer licenses Vdex. Buy again, or sign in with the email address of a licence.', revoked: 'Apple has revoked this purchase.', sandbox: 'That is a test purchase, which does not license Vdex.', 'not-ready': 'Buying in the app is not switched on yet. Try again later, or sign in with the email address of a licence.', swaps: 'This licence has been moved between devices 3 times in the last 30 days, so it cannot move again yet.' }[b.error] || 'Vdex could not confirm the purchase with Apple. Use Restore purchases in a moment.' };
   }
   async function buyInApp() {
     let r; try { r = await native.purchases.buy(PRODUCT); } catch (e) { return { error: e.message || 'The App Store could not complete the purchase.' }; }
     if (!r || r.state === 'cancelled') return { cancelled: true };
-    if (r.state === 'pending') return { pending: true }; // Ask to Buy: the entitlement arrives later, and recheck() picks it up
+    if (r.state === 'pending') { update(x => { delete x.autoAt; }); return { pending: true }; } // Ask to Buy: the entitlement arrives later, and recheck() picks it up
     if (!r.jws) return { error: 'The App Store did not return a receipt. Use Restore purchases.' };
     return claim(r.jws);
   }
@@ -136,6 +143,19 @@ export function webLicence() {
     return last;
   }
   if (read().ios && native.purchases.available()) native.purchases.product(PRODUCT).then(p => { if (p && p.price) update(x => { x.price = p.price; }); }).catch(() => {});
+  // The buyer adds an email address to an App Store licence (then the website and the Android app sign in with it, and
+  // the desktop code carries it). Step 1 sends a 6-digit code to it; step 2 links it.
+  const EMAIL_ERR = { 'invalid-email': 'That email address does not look right.', 'email-failed': 'The email could not be sent just now. Try again in a minute.', busy: 'Vdex has sent as many emails as it can today. Please try again tomorrow.', 'not-ready': 'Adding an email is not available yet.', 'signed-out': 'Sign in again (Restore purchases), then add the address.', cancelled: 'This licence has been cancelled.', 'wrong-code': 'That code is not right, or has run out (a code works for 15 minutes and 5 tries). Check it, or send a new one.' };
+  async function addEmail(email) {
+    let r; try { r = await call('/licence/apple/email', { token: read().token, email }); } catch { return { error: 'Vdex could not reach the licence server. Check the internet connection and try again.' }; }
+    return r.status === 200 && r.body.ok ? { ok: true } : { error: EMAIL_ERR[r.body.error] || 'Something went wrong. Try again.' };
+  }
+  async function verifyEmail(email, code) {
+    let r; try { r = await call('/licence/apple/email/verify', { token: read().token, email, code }); } catch { return { error: 'Vdex could not reach the licence server. Check the internet connection and try again.' }; }
+    if (r.status !== 200 || !r.body.ok) return { error: EMAIL_ERR[r.body.error] || 'Something went wrong. Try again.' };
+    update(x => { x.licence = r.body.licence || x.licence; if (r.body.code) x.code = r.body.code; });
+    return state();
+  }
 
   return {
     kind: 'web',
@@ -148,7 +168,8 @@ export function webLicence() {
     // The shop in a new tab; in the iPhone app, the App Store purchase (answers like verify(), or { cancelled } / { pending }).
     buy: async () => { const s = read(); if (s.ios) return buyInApp(); if (!s.play) window.open('/buy', '_blank', 'noopener'); return true; },
     restore: async () => restoreInApp(false),
-    code: async () => '',
+    addEmail, verifyEmail,
+    code: async () => read().code || '', // an App Store licence's desktop code, once bought here
     // Step 1: email (or a licence code with an email inside). The Worker answers the same either way.
     start: async ({ email, code }) => {
       let r; try { r = await call('start', code ? { code } : { email }); } catch { return { error: 'Vdex could not reach the sign-in server. Check the internet connection and try again.' }; }
@@ -161,7 +182,8 @@ export function webLicence() {
       let r; try { r = await call('verify', { email, code }); } catch { return { error: 'Vdex could not reach the sign-in server. Check the internet connection and try again.' }; }
       const b = r.body;
       if (r.status !== 200 || !b.token) return { error: { 'wrong-code': 'That code is not right, or has run out (a code works for 15 minutes and 5 tries). Check it, or send a new one.', 'no-licence': `No licence is linked to this email address. Use the one your licence belongs to${read().play ? '' : ', or buy a licence'}.` }[b.error] || 'Something went wrong. Try again.' };
-      update(x => { x.token = b.token; x.licence = b.licence; x.checked = x.tried = now(); delete x.cancelled; delete x.expired; delete x.seat; });
+      await giveBack(b.licence);
+      update(x => { x.token = b.token; x.licence = b.licence; x.via = 'email'; delete x.code; x.checked = x.tried = now(); delete x.cancelled; delete x.expired; delete x.seat; });
       if (inApp(read())) { const sr = await seat(); if (sr.full) return { ...state(), full: sr }; }
       return state();
     },
@@ -197,7 +219,7 @@ export function webLicence() {
         let r; try { r = await call('release', { token: s.token, install: s.install }); } catch { r = null; }
         if (!r || (r.status !== 200 && r.status !== 404 && r.status !== 400)) return { error: 'Vdex could not reach the licence server. Connect to the internet and try again, so this phone\'s place can go to another device.' };
       }
-      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.cancelled; delete x.expired; });
+      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.cancelled; delete x.expired; delete x.via; delete x.code; });
       return state();
     },
   };

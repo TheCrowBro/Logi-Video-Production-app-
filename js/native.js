@@ -60,6 +60,7 @@ export const canShareFiles = () => isApp && has('Share') && has('Filesystem');
 const ACTIONS = 'VDEX_BREAK';
 let perm = 'prompt', actionsRegistered = false;
 const actionSubs = new Set();
+let heldActions = []; // pressed before anyone listens (the app opened by the button, the lock screen first): handed to the first listener
 export const notifications = {
   available: () => has('LocalNotifications'),
   // 'granted' | 'denied' | 'prompt', as last seen (asking the phone is asynchronous; refresh() keeps this current).
@@ -75,13 +76,17 @@ export const notifications = {
   },
   async cancel(ids) { const p = plugin('LocalNotifications'); if (!p || !ids.length) return; await p.cancel({ notifications: ids.map(id => ({ id })) }).catch(() => {}); },
   // The buttons on a notification, and a tap on it: cb('back' | 'later' | 'tap', extra).
-  onAction(cb) { actionSubs.add(cb); return () => actionSubs.delete(cb); },
+  onAction(cb) { actionSubs.add(cb); const held = heldActions; heldActions = []; for (const [id, extra] of held) { try { cb(id, extra); } catch { /* ignore */ } } return () => actionSubs.delete(cb); },
 };
 {
   const p = plugin('LocalNotifications');
   if (p) {
     notifications.refresh();
-    p.addListener('localNotificationActionPerformed', ev => { const id = ev && ev.actionId === 'tap' ? 'tap' : (ev && ev.actionId) || 'tap'; actionSubs.forEach(f => { try { f(id, ev && ev.notification && ev.notification.extra); } catch { /* ignore */ } }); });
+    p.addListener('localNotificationActionPerformed', ev => {
+      const id = (ev && ev.actionId) || 'tap', extra = ev && ev.notification && ev.notification.extra;
+      if (!actionSubs.size) { heldActions.push([id, extra]); return; }
+      actionSubs.forEach(f => { try { f(id, extra); } catch { /* ignore */ } });
+    });
   }
 }
 
@@ -126,6 +131,15 @@ export const purchases = {
   // What this Apple ID owns: [{ state: 'owned' | 'revoked', jws, productId, … }]
   async owned() { const p = plugin('Purchases'); if (!p) return []; return (await p.current()).entitlements || []; },
   async restore() { const p = plugin('Purchases'); if (!p) return; await p.restore(); },
+};
+
+/* ------------------------------- sign-ins ------------------------------- */
+// The phone's own sign-in window (ASWebAuthenticationSession: it shares Safari's sign-ins and is what Google, Microsoft,
+// Dropbox and Apple expect of an app). The window ends on a vdex:// address, which comes back here.
+export const auth = {
+  available: () => has('WebAuth'),
+  // → the vdex://… address the window ended on, or null when it was closed before the end.
+  async start(url) { const p = plugin('WebAuth'); if (!p) return null; const r = await p.start({ url, scheme: 'vdex' }); return r && r.url ? String(r.url) : null; },
 };
 
 /* --------------------------------- the app --------------------------------- */

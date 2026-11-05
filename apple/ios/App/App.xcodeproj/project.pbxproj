@@ -12,6 +12,7 @@
 		50379B232058CBB4000EE86E /* capacitor.config.json in Resources */ = {isa = PBXBuildFile; fileRef = 50379B222058CBB4000EE86E /* capacitor.config.json */; };
 		504EC3081FED79650016851F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 504EC3071FED79650016851F /* AppDelegate.swift */; };
 		A1C0FFEE00000006 /* DocumentPickerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE00000005 /* DocumentPickerPlugin.swift */; };
+		A1C0FFEE00000008 /* WebAuthPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE00000007 /* WebAuthPlugin.swift */; };
 		A1C0FFEE00000004 /* PurchasesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE00000003 /* PurchasesPlugin.swift */; };
 		A1C0FFEE00000002 /* VdexViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1C0FFEE00000001 /* VdexViewController.swift */; };
 		504EC30D1FED79650016851F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC30B1FED79650016851F /* Main.storyboard */; };
@@ -27,6 +28,7 @@
 		504EC3041FED79650016851F /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		504EC3071FED79650016851F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		A1C0FFEE00000005 /* DocumentPickerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DocumentPickerPlugin.swift; sourceTree = "<group>"; };
+		A1C0FFEE00000007 /* WebAuthPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebAuthPlugin.swift; sourceTree = "<group>"; };
 		A1C0FFEE00000003 /* PurchasesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchasesPlugin.swift; sourceTree = "<group>"; };
 		A1C0FFEE00000001 /* VdexViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VdexViewController.swift; sourceTree = "<group>"; };
 		504EC30C1FED79650016851F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
@@ -74,6 +76,7 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				A1C0FFEE00000005 /* DocumentPickerPlugin.swift */,
+				A1C0FFEE00000007 /* WebAuthPlugin.swift */,
 				A1C0FFEE00000003 /* PurchasesPlugin.swift */,
 				A1C0FFEE00000001 /* VdexViewController.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -169,6 +172,7 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				A1C0FFEE00000006 /* DocumentPickerPlugin.swift in Sources */,
+				A1C0FFEE00000008 /* WebAuthPlugin.swift in Sources */,
 				A1C0FFEE00000004 /* PurchasesPlugin.swift in Sources */,
 				A1C0FFEE00000002 /* VdexViewController.swift in Sources */,
 				9582B6832FE993A70072D4E8 /* SceneDelegate.swift in Sources */,
@@ -325,7 +329,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -346,7 +350,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

@@ -6,7 +6,8 @@
     "url": "https://vdex.crowmade.app/?src=ios",
     "allowNavigation": [
       "vdex.crowmade.app"
-    ]
+    ],
+    "errorPath": "index.html"
   },
   "ios": {
     "contentInset": "automatic",

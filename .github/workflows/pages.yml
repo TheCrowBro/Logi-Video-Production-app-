@@ -5,7 +5,8 @@
 # "mirror" job moves main to that same commit and starts this workflow again on main, where the "cloudflare" job
 # stamps the build and publishes it. So main is always exactly what is live, and each change is tested once (the run
 # on main publishes the commit that was just tested). "Run workflow" on main from the Actions tab publishes on demand.
-# Only the website's own files are published (tools/stage-site.mjs), never the Android, desktop, docs or test sources.
+# Only the website's own files are published (tools/stage-site.mjs), never the Android, iPhone (apple/), desktop, docs
+# or test sources.
 # Publishing needs the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets (docs/cloudflare.md); until
 # they exist the run says so and stays green. (GitHub Pages, the old address, stopped when the repository went private.)
 name: Publish the website
@@ -122,3 +123,6 @@ jobs:
           # The licence script answers its own addresses: a request without a code is refused by it, not a missing file.
           lic=$(curl -sS -o /tmp/lic -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$site/licence/activate")
           [ "$lic" = 400 ] && grep -q '"invalid"' /tmp/lic || { echo "::error::$site/licence/activate answered HTTP $lic, not the licence script"; exit 1; }
+          # The App Store switch: {"on":false,…} until the owner sets APPLE_BUNDLE_ID (docs/apple-app-store.md, Step 5), but always the script's answer.
+          ap=$(curl -sS -o /tmp/ap -w '%{http_code}' "$site/licence/apple/status")
+          [ "$ap" = 200 ] && grep -q '"on"' /tmp/ap || { echo "::error::$site/licence/apple/status answered HTTP $ap, not the licence script"; exit 1; }
