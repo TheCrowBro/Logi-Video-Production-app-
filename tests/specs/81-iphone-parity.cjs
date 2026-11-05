@@ -103,7 +103,7 @@ try {
   ok('the store kit has the 1024 icon (the very file built into the app) and says which screenshots go beside it', exists('store/apple/icon-1024.png') && same('store/apple/icon-1024.png', iconFile) && /6\.7-inch/.test(read('store/apple/README.md')) && /6\.1-inch/.test(read('store/apple/README.md')));
 
   // ---- the owner's steps ----
-  ok('the owner\'s steps cover the build number, iPhone-only screenshots, the privacy answers, a published support page and the Mac build check', /CURRENT_PROJECT_VERSION/.test(doc) && /iPhone screenshots only/.test(doc) && /\n## App Privacy answers\n/.test(doc) && /\*\*Support URL\*\*: a published page where people can reach you directly/.test(doc) && !/full-guide\.md/.test(doc) && /ios\.yml/.test(doc));
+  ok('the owner\'s steps cover the build number, iPhone-only screenshots, the privacy answers, a published support page and the Mac build check', /CURRENT_PROJECT_VERSION/.test(doc) && /iPhone screenshots only/.test(doc) && /\n## App Privacy answers\n/.test(doc) && /\*\*Support URL\*\*: https:\/\/crowmade\.app\/vdex\//.test(doc) && !/full-guide\.md/.test(doc) && /ios\.yml/.test(doc));
 
   // ---- the Mac build check ----
   const yml = fs.readFileSync(path.join(REPO, '.github/workflows/ios.yml'), 'utf8'), job = yml.split('\njobs:\n')[1] || '';
