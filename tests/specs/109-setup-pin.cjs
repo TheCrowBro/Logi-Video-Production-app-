@@ -80,6 +80,33 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     ok('the lock button is in the top bar from the start', await page.locator('#lockBtn').isVisible());
     await ctx.close(); }
 
+  // --- a short screen (a phone with its keyboard up): the card scrolls from its top, nothing is cut off ---
+  { const ctx = await browser.newContext({ viewport: { width: 360, height: 520 } });
+    await ctx.addInitScript(t => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); } }, TERMS_RECORD);
+    const page = await ctx.newPage(); watch(page);
+    await page.goto(BASE); await page.waitForSelector('.lock-setup'); await sleep(300);
+    const fit = await page.evaluate(() => { const c = document.querySelector('.lock-setup'), card = document.querySelector('.lock-card'); const topBefore = card.getBoundingClientRect().top; c.scrollTop = 1e5; const save = document.querySelector('.lock-setup button[type=submit]').getBoundingClientRect(); return { taller: c.scrollHeight > c.clientHeight, topBefore: Math.round(topBefore), saveInView: save.bottom <= innerHeight && save.top >= 0 }; });
+    ok('on a short screen the set-up card is taller than the screen, starts at the top and scrolls to Save', fit.taller && fit.topBefore >= 0 && fit.saveInView, JSON.stringify(fit));
+    await page.locator('.lock-setup .pin-input').nth(0).fill('246810'); await page.locator('.lock-setup .pin-input').nth(1).fill('246810'); await page.locator('.lock-setup button[type=submit]').click();
+    await page.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
+    await page.locator('#lockBtn').click(); await page.waitForSelector('.lock'); await page.locator('.lock button', { hasText: 'Forgot PIN?' }).click(); await sleep(200);
+    const forgot = await page.evaluate(() => { const b = document.querySelector('.lock-forgot .btn.danger'); b.scrollIntoView(); const r = b.getBoundingClientRect(); document.querySelector('.lock').scrollTop = 0; return { eraseInView: r.bottom <= innerHeight && r.top >= 0, topBack: document.querySelector('.lock-card .brand').getBoundingClientRect().top >= 0 }; });
+    ok('…and so does the lock screen with the Forgot PIN panel open', forgot.eraseInView && forgot.topBack, JSON.stringify(forgot));
+    await ctx.close(); }
+
+  // --- two tabs at the set-up at once: the first PIN saved wins, the other tab goes to the lock screen for it ---
+  { const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    await ctx.addInitScript(t => { if (!localStorage.getItem('spec-seeded')) { localStorage.setItem('spec-seeded', '1'); localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); } }, TERMS_RECORD);
+    const a = await ctx.newPage(), b = await ctx.newPage(); watch(a); watch(b);
+    await a.goto(BASE); await a.waitForSelector('.lock-setup'); await b.goto(BASE); await b.waitForSelector('.lock-setup');
+    await b.locator('.lock-setup .pin-input').nth(0).fill('135790');
+    await a.locator('.lock-setup .pin-input').nth(0).fill('246810'); await a.locator('.lock-setup .pin-input').nth(1).fill('246810'); await a.locator('.lock-setup button[type=submit]').click(); await a.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
+    await b.waitForSelector('.lock:not(.lock-setup)', { timeout: 10000 }); await sleep(700);
+    ok('the other tab leaves its set-up for the lock screen and says why', /Enter your PIN/.test(await b.locator('.lock h1').innerText()) && (await b.locator('.toast').allInnerTexts()).some(t => /set in another tab/.test(t)));
+    await b.keyboard.type('246810'); await b.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
+    ok('…and the PIN set in the first tab opens it; one config, one PIN', (await b.locator('.lock').count()) === 0 && (await a.evaluate(() => JSON.parse(localStorage.getItem('logi-lock')).len)) === 6);
+    await ctx.close(); }
+
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

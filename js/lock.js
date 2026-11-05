@@ -298,8 +298,13 @@ export function ensurePin() {
   const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save the PIN and continue');
   const card = h('form', { class: 'lock-card stack', noValidate: true });
   const screen = h('div', { class: 'lock lock-setup', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pin-setup-title' }, card);
+  // Vdex open in two tabs at once, both at the set-up: the first PIN saved wins, and the other tab starts again on
+  // the lock screen asking for it (a second set-up would wrap a new data key and lock the first tab's data away).
+  const elsewhere = () => { try { sessionStorage.setItem('logi-wiped', 'A PIN was just set in another tab: enter it here.'); } catch { /* ignore */ } location.reload(); };
+  const onStorage = e => { if (e.key === CFG && e.newValue) elsewhere(); };
+  window.addEventListener('storage', onStorage);
   return new Promise(resolve => {
-    const done = () => { screen.remove(); if (app) { app.inert = false; app.removeAttribute('aria-hidden'); } announce('PIN set'); resolve(); };
+    const done = () => { window.removeEventListener('storage', onStorage); screen.remove(); if (app) { app.inert = false; app.removeAttribute('aria-hidden'); } announce('PIN set'); resolve(); };
     // The second card: fingerprint, face or Windows Hello, where the device offers it to web apps.
     const offerBio = () => {
       const turnOn = h('button', { class: 'btn primary', type: 'button' }, 'Turn it on');
@@ -316,6 +321,7 @@ export function ensurePin() {
       const problem = pinProblem(a.value, b.value);
       if (problem) { err.textContent = problem; announce(problem); (problem.startsWith('The two') ? b : a).focus(); return; }
       save.disabled = true; save.textContent = 'Setting up…'; err.textContent = '';
+      if (readCfg()) return elsewhere(); // set in another tab meanwhile
       try { await setPin(a.value); } catch (e2) { save.disabled = false; save.textContent = 'Save the PIN and continue'; err.textContent = 'Could not set the PIN: ' + (e2.message || e2); return; }
       if (await bioAvailable()) offerBio(); else done();
     });
