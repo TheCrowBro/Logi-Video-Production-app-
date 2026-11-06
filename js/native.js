@@ -144,6 +144,17 @@ export const auth = {
   async start(url) { const p = plugin('WebAuth'); if (!p) return null; const r = await p.start({ url, scheme: 'vdex' }); return r && r.url ? String(r.url) : null; },
 };
 
+/* ------------------------------ legal pages ------------------------------ */
+// In the iPhone app, the terms and the privacy policy open inside the app, not in Safari: Safari would show the
+// website, with its own way to buy, outside the app. Both pages end with a link back to Vdex.
+if (isApp && typeof document !== 'undefined') document.addEventListener('click', e => {
+  const a = e.target && e.target.closest ? e.target.closest('a[target="_blank"]') : null;
+  if (!a || !a.href) return;
+  let u; try { u = new URL(a.href, location.href); } catch { return; }
+  if (u.origin !== location.origin || !/\/(terms|privacy)\.html$/.test(u.pathname)) return;
+  e.preventDefault(); location.href = u.href;
+}, true);
+
 /* --------------------------------- the app --------------------------------- */
 // Back from the background (the clock catches up, the licence looks again).
 export function onResume(cb) { const p = plugin('App'); if (p) p.addListener('appStateChange', s => { if (s && s.isActive) cb(); }); }

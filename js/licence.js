@@ -153,6 +153,10 @@ async function retry(btn, after = () => {}) {
   toast(m === 'licensed' ? 'Licence confirmed' : m === 'released' ? 'Your licence is in use on its other devices' : m === 'cancelled' ? 'This licence has been cancelled' : m === was ? 'Still not able to reach the licence server' : 'Licence checked');
 }
 
+// Next to Buy on the website and in the desktop app: what is bought (California's rule for digital goods: a licence,
+// not a copy, and it can be cancelled). In the iPhone app the App Store sells it, under Apple's terms.
+const buyNote = d => (d && d.buy && !ios() && !play() ? h('p', { class: 'small muted licence-buy-note' }, 'You are buying a licence to use Vdex, not ownership of a copy. It can be cancelled in the cases the ', h('a', { href: 'terms.html#paid', target: '_blank', rel: 'noopener' }, 'terms'), ' describe.') : '');
+
 /* ------------------------ Settings → General → About & Licence ------------------------ */
 export function licencePanel() {
   const el = h('div', { class: 'stack licence-panel', hidden: true });
@@ -161,7 +165,7 @@ export function licencePanel() {
     if (!d) { el.replaceChildren(); el.hidden = true; return; }
     el.hidden = false;
     const b = actions(s, d, draw);
-    el.replaceChildren(h('h3', { class: 'licence-title' }, 'Licence'), h('p', { class: 'small' + (d.tone === 'warn' ? ' licence-warn' : '') }, d.line), b.length ? h('div', { class: 'actions' }, ...b) : '');
+    el.replaceChildren(h('h3', { class: 'licence-title' }, 'Licence'), h('p', { class: 'small' + (d.tone === 'warn' ? ' licence-warn' : '') }, d.line), b.length ? h('div', { class: 'actions' }, ...b) : '', buyNote(d));
   };
   draw();
   const off = onLicence(draw);
@@ -224,7 +228,7 @@ function readOnlySheet() {
   const sh = sheet('Vdex is read-only', h('div', { class: 'stack' },
     h('p', null, d.line || 'Vdex is read-only here.'),
     h('p', { class: 'small muted' }, 'That change was not saved. Everything already in Vdex is safe, and with a licence you can change everything again here.'),
-    h('div', { class: 'actions' }, ...actions(s, d, () => sh.close()))));
+    h('div', { class: 'actions' }, ...actions(s, d, () => sh.close())), buyNote(d)));
   sh.el.classList.add('licence-readonly');
   S.roClose = sh.close;
   announce('Vdex is read-only. That change was not saved.');
@@ -239,14 +243,14 @@ function needsLicence(what) {
   const sh = sheet('Comes with a licence', h('div', { class: 'stack' },
     h('p', null, `${thing} comes with a Vdex licence.`),
     h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
-    h('div', { class: 'actions' }, ...actions(s, { buy: !play(), enter: true, restore: ios() }, () => sh.close()))));
+    h('div', { class: 'actions' }, ...actions(s, { buy: !play(), enter: true, restore: ios() }, () => sh.close())), buyNote({ buy: true })));
   sh.el.classList.add('licence-needed');
   S.needClose = sh.close;
   sh.el.tabIndex = -1; setTimeout(() => sh.el.focus(), 50); // not a button: someone still typing must not press Buy by accident
 }
 function detailsSheet() {
   const s = S.cur, d = describe(s); if (!d) return;
-  const sh = sheet('Licence', h('div', { class: 'stack' }, h('p', null, d.line), h('div', { class: 'actions' }, ...actions(s, d, () => sh.close()))));
+  const sh = sheet('Licence', h('div', { class: 'stack' }, h('p', null, d.line), h('div', { class: 'actions' }, ...actions(s, d, () => sh.close())), buyNote(d)));
 }
 
 const shortDay = iso => day(iso) || 'unknown';

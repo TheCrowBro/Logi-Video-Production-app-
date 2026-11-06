@@ -356,6 +356,18 @@ const bridge = () => {
     ok('an older App Store sign-in (from before the app recorded how) reads as one, with Add your email and the desktop code', /Licensed through the App Store/.test(await panel(p6)) && (await btn(p6, 'Add your email').count()) === 1 && (await btn(p6, 'Copy the code for the desktop app').count()) === 1);
     await c6.close();
 
+    /* ------------------------------ the first screen in the app ------------------------------ */
+    // Apple asks an app with a trial to say, before it starts, how long it lasts, what stops after it and what it costs.
+    const c9 = await browser.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' });
+    await c9.addInitScript(bridge);
+    const p9 = await c9.newPage(); const popups = []; c9.on('page', pg => popups.push(pg.url()));
+    await p9.goto(URL + 'index.html?src=ios'); await p9.waitForSelector('.terms-gate');
+    const gateText = await p9.locator('.terms-gate').innerText();
+    ok('the iPhone app’s first screen states the trial in full: 30 days, then read-only until the in-app purchase or a sign-in, and what needs the licence from the start', /free to try for 30 days\. After that it becomes read-only until you buy the Vdex Licence in the app, a one-off purchase whose price the App Store shows before you buy, or sign in with a licence you already have\. Cloud storage, backup files and spreadsheets need the licence from the start\./.test(gateText), gateText.slice(0, 300));
+    await Promise.all([p9.waitForURL(/terms\.html/, { timeout: 8000 }).catch(() => {}), p9.locator('.terms-gate a[href="terms.html"]').first().click()]);
+    ok('…and the terms open inside the app, not in Safari, with the way back to Vdex', /\/terms\.html$/.test(p9.url()) && popups.length === 0 && (await p9.locator('a.back').count()) === 1, p9.url() + ' popups ' + popups.length);
+    await c9.close();
+
     /* ------------------------------ Vdex's Google sign-in page ------------------------------ */
     const c7 = await browser.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' });
     await c7.route('https://accounts.google.com/gsi/client', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: 'window.google = { accounts: { oauth2: { initTokenClient: cfg => ({ requestAccessToken: o => { window.__greq = { cfg: { client_id: cfg.client_id, scope: cfg.scope }, o }; setTimeout(() => cfg.callback({ access_token: "gtok-page", expires_in: 3599, scope: cfg.scope }), 0); } }) } } };' }));

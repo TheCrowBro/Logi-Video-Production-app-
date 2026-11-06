@@ -64,6 +64,8 @@ Every setting in this guide that goes into Cloudflare goes in the same place, as
 
    `https://vdex.crowmade.app/licence/thanks?session_id={CHECKOUT_SESSION_ID}`
 
+   Under **Advanced options → Add custom text → Near the Pay button**, paste: `You are buying a licence to use Vdex, not ownership of a copy. It can be cancelled in the cases the terms describe: vdex.crowmade.app/terms.html` (California's law on digital goods asks for this before anyone pays; the app's Buy buttons say it too). If the link already exists, edit it to add the text.
+
    Optionally tick **Allow promotion codes**. **Create link**.
 7. In Cloudflare (as in part 2), add two secrets:
    - `BUY_URL`: the link's address, starting `https://buy.stripe.com/`.
