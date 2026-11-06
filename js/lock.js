@@ -7,7 +7,7 @@ import * as C from './crypto.js';
 import { haptic } from './a11y.js';
 
 const CFG = 'logi-lock', VAULT = 'logi-vault', DB = 'logi-db-v1', SETUP = 'logi-lock-setup';
-const SEALED = ['logi-dbx-token', 'logi-ms-token', 'logi-google-tokens', 'logi-webdav', 'logi-loc', 'logi-wx', 'logi-cloud-who', 'logi-google-email', 'logi-icloud-session']; // secrets and private settings that live outside the database
+const SEALED = ['logi-dbx-token', 'logi-ms-token', 'logi-google-tokens', 'logi-webdav', 'logi-loc', 'logi-wx', 'logi-cloud-who', 'logi-google-email', 'logi-icloud-session', 'logi-feed-url']; // secrets and private settings that live outside the database
 export const AUTO_LOCK = [[0, 'Straight away'], [1, 'After 1 minute'], [5, 'After 5 minutes'], [15, 'After 15 minutes'], [-1, 'Only when Vdex is closed']];
 const WAITS = [[12, 900], [9, 300], [7, 60], [5, 30]]; // wrong attempts → seconds before the next try
 export const WIPE_AT = 10;
@@ -467,7 +467,7 @@ export function securityPanel() {
     el.replaceChildren(...nodes(
       c ? h('p', { class: 'status-line', 'data-state': 'synced' }, `🔒 PIN set${c.bio ? ' · fingerprint / face on' : ''} · locks ${lockWhen}`)
         : h('p', { class: 'warn small' }, '🔓 No PIN. Anyone who picks up this device with Vdex open can read your bookings, contacts, kit serials and insurance details. Vdex asks for a PIN the next time it starts.'),
-      h('p', { class: 'small muted' }, 'Vdex locks its screen with your PIN and keeps everything it stores encrypted (AES-256) whenever it is locked, in the background or closed. Only your PIN, or your fingerprint or face, opens it. Every device that runs Vdex has a PIN; Change PIN… sets a new one.'),
+      h('p', { class: 'small muted' }, 'Vdex locks its screen with your PIN and keeps your work and your sign-ins encrypted (AES-256) whenever it is locked, in the background or closed. Only your PIN, or your fingerprint or face, opens it. Every device that runs Vdex has a PIN; Change PIN… sets a new one.'),
       h('div', { class: 'actions' },
         c ? [h('button', { class: 'btn primary', onclick: () => lockNow() }, '🔒 Lock now'), h('button', { class: 'btn ghost', onclick: changePin }, 'Change PIN…')]
           : h('button', { class: 'btn primary', onclick: createPin }, '🔒 Set a PIN…')),

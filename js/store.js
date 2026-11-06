@@ -98,6 +98,9 @@ export const setGate = fn => { gate = typeof fn === 'function' ? fn : null; };
 
 // Whether a change would be accepted now (and, when not, the gate explains why). Forms check it before closing.
 export const canChange = () => !gate || gate({ form: true });
+// The same question asked without a word to the person: for side effects of something that is allowed anyway
+// (marking a call sheet sent when it is printed), which are simply skipped when Vdex is read-only.
+export const canChangeQuietly = () => !gate || gate({ quiet: true });
 
 // Redraws the page from what is stored (after a refused change, so a ticked box shows the stored value again).
 export const redraw = () => emit();
@@ -189,9 +192,14 @@ export async function eraseAll() {
   db = blank(); db.updatedAt = Date.now();
   sealed = false; dirty = false;
   persistLocal(); emit();
-  // The lock's vault, PIN and backup marks go too, otherwise the next start would bring the old data back.
+  // The lock's vault, PIN and backup marks go too, otherwise the next start would bring the old data back; and so does
+  // everything else Vdex keeps on this device (sign-ins, the phone's calendar link, the feed's link, the weather and
+  // location caches, the fingerprint or face key), except plain preferences and the terms already agreed to. The
+  // licence sign-in stays: Sign out under About & Licence gives it up (terms section 17).
   try { dispatchEvent(new Event('vdex-erased')); } catch { /* ignore */ } // the lock lets go of its key first: no vault rewrite, no seal on the way out
-  ['logi-vault', 'logi-lock', 'logi-backup-cloud', 'logi-backup-export', 'logi-sync-at', 'logi-backup-nudge', 'logi-loc'].forEach(k => lsSet(k, null));
+  const KEEP = new Set(['logi-terms', 'logi-prefs', 'logi-tour', 'logi-tour-at', 'logi-tab', 'logi-units', 'logi-stdday', 'logi-breakdefault', 'logi-notify', 'logi-hours-range', 'logi-eyeh', 'logi-decl', 'logi-lock-setup']);
+  try { const keys = []; for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); keys.filter(k => k && (k.startsWith('logi-') || k.startsWith('msal.')) && !KEEP.has(k)).forEach(k => localStorage.removeItem(k)); } catch { /* blocked storage */ }
+  try { await new Promise(res => { const r = indexedDB.deleteDatabase('logi'); r.onsuccess = r.onerror = r.onblocked = () => res(); }); } catch { /* ignore */ }
   setTimeout(() => location.reload(), 600);
 }
 

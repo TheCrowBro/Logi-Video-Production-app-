@@ -115,6 +115,31 @@ const bridge = start => `(() => {
     ok('everything can still be read', exported);
     await ctx.close();
 
+    // Read-only means read-only: printing and sending still work (without marking anything), but replacing the data does not.
+    ({ ctx, page } = await open({ enabled: true, mode: 'ended', canEdit: false, trialLeft: 0, trialEnds: '2026-10-01', seats: 3 }));
+    const dialogs = []; page.on('dialog', d => { dialogs.push(d.message()); d.accept(); });
+    await page.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); const b = s.db.bookings.find(x => /Harbour Brewing/.test(x.client || x.title)); if (b) b.callSheet = { ...(b.callSheet || {}), generalCall: '08:00' }; s.redraw(); })); // seeding the test's data, not a person's action
+    const count0 = await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.length));
+    await page.evaluate(() => window.logiGo('bookings')); await sleep(300);
+    await page.getByRole('button', { name: 'Call sheets' }).click(); await page.waitForSelector('.sheet .card.tap');
+    await page.locator('.sheet .card.tap').filter({ hasText: 'Harbour Brewing' }).first().click(); await page.waitForSelector('.cs-page .cs-doc');
+    await page.evaluate(() => { window.__printed = 0; window.print = () => { window.__printed++; }; });
+    await page.getByRole('button', { name: 'Print' }).click(); await sleep(500);
+    ok('read-only: a call sheet still prints, with no read-only notice, and is not marked as sent', (await page.evaluate(() => window.__printed)) === 1 && (await page.locator('.sheet.licence-readonly').count()) === 0 && !/Sent/.test(await page.locator('.cs-page .status-line').innerText().catch(() => '')));
+    const markBtn = page.getByRole('button', { name: 'Mark as sent' });
+    if (await markBtn.count()) { await markBtn.click(); await sleep(300); }
+    ok('…while Mark as sent, a change, is refused and explained', (await markBtn.count()) === 1 && (await page.locator('.sheet.licence-readonly').count()) === 1, `buttons ${await markBtn.count()}, sheets ${await page.locator('.sheet.licence-readonly').count()}, status ${await page.locator('.cs-page .status-line').innerText().catch(() => '?')}`);
+    await page.keyboard.press('Escape'); await sleep(200);
+    await page.evaluate(() => window.logiGo('settings')); await sleep(300);
+    await openSetting(page, 'Storage, sync & backups'); await sleep(200);
+    await page.getByRole('button', { name: 'Load sample data' }).click(); await sleep(300);
+    ok('read-only: Load sample data is refused and explained, before any question', dialogs.length === 0 && (await page.locator('.sheet.licence-readonly').count()) === 1);
+    await page.keyboard.press('Escape'); await sleep(200);
+    await page.getByRole('button', { name: 'Load sample data' }).focus(); await page.keyboard.press('Enter'); await page.keyboard.press('Escape'); await sleep(100); // a recent key press: the import below counts as asked for
+    const imported = await page.evaluate(() => import('./js/backup.js').then(async b => { const f = new File([JSON.stringify({ bookings: [{ id: 'x1', title: 'Imported', date: '2026-01-01', status: 'Booked' }], gear: [] })], 'b.json', { type: 'application/json' }); await b.importData(f); return import('./js/store.js').then(s => s.db.bookings.length); }));
+    ok('read-only: importing a backup is refused too: replacing everything is a change', imported === count0 && dialogs.length === 0, `${imported} vs ${count0}`);
+    await ctx.close();
+
     // A form saved while read-only stays open with what was typed.
     ({ ctx, page } = await open({ enabled: true, mode: 'ended', canEdit: false, trialLeft: 0, trialEnds: '2026-10-01', seats: 3 }));
     await page.evaluate(() => window.logiGo('bookings')); await sleep(300);
@@ -130,6 +155,17 @@ const bridge = start => `(() => {
     ok('keys pressed straight after (someone still typing) never buy anything', !(await page.evaluate(() => window.__lic.calls.some(c => c[0] === 'buy'))));
     await page.keyboard.press('Escape'); await sleep(200);
     ok('closing the explanation returns to the form', await page.evaluate(() => !!document.activeElement?.closest('.sheet form') && !document.querySelector('.licence-readonly')));
+    await ctx.close();
+
+    // Erase all data on this device: everything Vdex keeps goes, except plain preferences, the terms agreed to and the
+    // licence sign-in (which Sign out gives up).
+    ({ ctx, page } = await open({ enabled: true, mode: 'trial', canEdit: true, trialLeft: 20, seats: 3 }));
+    await page.evaluate(() => { for (const [k, v] of Object.entries({ 'logi-cal-phone': '{"calendarId":"c1"}', 'logi-ms-token': '{"refresh":"r"}', 'logi-google-tokens': '{}', 'logi-feed-url': 'https://x/feed.ics', 'logi-wx': '{}', 'logi-google-email': 'jo@example.com', 'msal.cache': 'x', 'logi-prefs': '{"text":"large"}', 'vdex-licence': '{"on":true}' })) localStorage.setItem(k, v); });
+    await Promise.all([page.waitForEvent('load', { timeout: 15000 }), page.evaluate(() => import('./js/store.js').then(s => s.eraseAll()))]);
+    await sleep(500);
+    const left = await page.evaluate(() => Object.keys(localStorage).sort());
+    ok('erasing removes sign-ins, the phone calendar link, the feed link and the caches', !left.some(k => ['logi-cal-phone', 'logi-ms-token', 'logi-google-tokens', 'logi-feed-url', 'logi-wx', 'logi-google-email', 'msal.cache'].includes(k)), left.join(', '));
+    ok('…and keeps the display preferences, the terms agreed to and the licence sign-in', left.includes('logi-prefs') && left.includes('logi-terms') && left.includes('vdex-licence'), left.join(', '));
     await ctx.close();
 
     // The bar offers each state's own next step: someone who has paid is never asked to buy again.

@@ -136,7 +136,7 @@ export function backupPanel() {
         : h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: backup.importFile }))),
     a && a.readExtra && h('button', { class: 'btn ghost', onclick: () => backup.restoreFromCloud() }, '☁ Restore an automatic cloud backup…'),
     h('p', { class: 'small muted' }, 'With a cloud storage linked (Google Drive, iCloud, Dropbox, OneDrive or WebDAV), Vdex also writes a dated backup next to its database once a day after a change: one per weekday and one per month. Backup files are plain unless you choose the encrypted one, so keep them somewhere private.'),
-    h('button', { class: 'btn ghost', onclick: () => { if (confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),
+    h('button', { class: 'btn ghost', onclick: () => { if (store.canChange() && confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),
     erase);
 }
 

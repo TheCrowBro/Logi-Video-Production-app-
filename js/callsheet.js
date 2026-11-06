@@ -3,7 +3,7 @@
 // a web page, shared, or emailed to the whole crew. "Call sheets" on the Bookings page lists every shoot and whether
 // its sheet has gone out.
 import { h, toast, nodes, sheet, fmtLong, fmtShort, fmtTime, parseISO, todayISO, mapsUrl, uid, backBtn } from './util.js';
-import { db, byId, endOf, upsert, activeBookings } from './store.js';
+import { db, byId, endOf, upsert, activeBookings, canChange, canChangeQuietly } from './store.js';
 import { getTimes } from './suncalc.js';
 import { setCheck, itemId, hiredPeople, rentalsOf } from './workflow.js';
 import { saveOrShare } from './backup.js';
@@ -229,7 +229,10 @@ const cancelEdit = () => { E.id = null; E.draft = null; E.crewCall = null; E.cha
 window.addEventListener('pagehide', () => commitDraft());
 
 /* ------------------------------------ page ------------------------------------ */
-function markSent(id) {
+// quiet: a side effect of printing, saving or sending, which still happen when Vdex is read-only (only the mark is
+// skipped); the Mark as sent button itself is a change like any other, and says so.
+function markSent(id, quiet = true) {
+  if (!(quiet ? canChangeQuietly() : canChange())) return;
   const cur = byId('bookings', id); if (!cur) return;
   setCheck(cur, itemId('Prepped', 'Call sheet sent'), true);
   upsert('bookings', { ...byId('bookings', id), callSheet: { ...sheetOf(cur), sentAt: Date.now() } });
@@ -262,7 +265,7 @@ export function callSheetPage(b, go) {
     h('div', { class: 'muted' }, `${b.title} · ${dateLabel(b, fmtShort)}`),
     h('div', { class: 'card-row' },
       h('p', { class: 'status-line', 'data-state': state === 'sent' ? 'synced' : state === 'changed' ? 'error' : '' }, `${state === 'sent' ? '✅' : state === 'changed' ? '⚠' : '📝'} ${STATE_LABEL[state]}${cs.sentAt ? ' · sent ' + new Date(cs.sentAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''}${cs.version ? ' · v' + cs.version : ''}`),
-      !editing && state !== 'sent' && hasContent(cs) && h('button', { class: 'btn ghost small', onclick: () => markSent(b.id) }, 'Mark as sent')),
+      !editing && state !== 'sent' && hasContent(cs) && h('button', { class: 'btn ghost small', onclick: () => markSent(b.id, false) }, 'Mark as sent')),
     !editing && forecastLine(callSheetData(b).loc, b.date, { onUse: txt => { const cur = byId('bookings', b.id); upsert('bookings', { ...cur, callSheet: { ...sheetOf(cur), weather: txt, editedAt: Date.now() } }); toast('Forecast added to the sheet'); } }),
     editing
       ? h('p', { class: 'small muted' }, 'Change anything directly on the sheet: times, the schedule, who is on set, weather, the emergency contact, instructions, and each person’s call time. Done saves a new version.')

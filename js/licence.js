@@ -49,8 +49,9 @@ async function start() {
   P.onChange(set);
   // Another window signed in or out (the website keeps its sign-in in this browser's storage).
   window.addEventListener('storage', e => { if (e.key === 'vdex-licence' && web()) P.state().then(set).catch(() => {}); });
-  setGate(({ form = false } = {}) => {
+  setGate(({ form = false, quiet = false } = {}) => {
     if (!S.cur || S.cur.canEdit !== false) return true;
+    if (quiet) return false; // a side effect of something allowed: skipped without a word
     muteToasts(600);
     // Background work (a calendar sync, say) is refused quietly; a change someone just asked for is explained.
     const asked = Date.now() - S.input < 3000;

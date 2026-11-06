@@ -4,7 +4,7 @@
 // deliberately not part of the agreement (terms.html section 1).
 import { h } from './util.js';
 
-export const TERMS_VERSION = '2026-11-05'; // the terms' date, plus a count for a second change on the same day
+export const TERMS_VERSION = '2026-11-06'; // the terms' date, plus a count for a second change on the same day
 const KEY = 'logi-terms';
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; } };
 export const acceptance = () => { const r = read(); return r && r.v === TERMS_VERSION ? r : null; };
@@ -34,7 +34,8 @@ export function termsGate() {
       h('label', { class: 'check terms-check', for: 'terms-ok' }, box, h('span', null, 'I have read and agree to the ', link('terms.html', 'terms of service'), '.')),
       h('p', { class: 'small' }, 'The ', link('privacy.html', 'privacy policy'), ' explains how your information is handled.'),
       go,
-      h('p', { class: 'small muted' }, 'If you don’t agree, close Vdex. Nothing is sent anywhere, and anything already on this device stays here.'));
+      changed && h('p', { class: 'small' }, 'Want your information first? ', h('button', { type: 'button', class: 'btn ghost small terms-save', onclick: () => import('./backup.js').then(m => m.exportFile({ always: true })).catch(() => {}) }, 'Save a backup file'), ' It works whether or not you have a licence.'),
+      h('p', { class: 'small muted' }, changed ? 'If you don’t agree, close Vdex. Nothing is sent anywhere, and anything already on this device stays here, but Vdex will not open again until you agree.' : 'If you don’t agree, close Vdex. Nothing is sent anywhere, and anything already on this device stays here.'));
     const gate = h('div', { class: 'terms-gate', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'terms-title' }, form);
     form.addEventListener('submit', e => {
       e.preventDefault();

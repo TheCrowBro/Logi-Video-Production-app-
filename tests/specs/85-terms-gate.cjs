@@ -10,7 +10,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const browser = await chromium.launch();
   const errors = [];
   const newPage = async () => {
-    const ctx = await browser.newContext({ viewport: { width: 400, height: 820 }, serviceWorkers: 'block' });
+    const ctx = await browser.newContext({ viewport: { width: 400, height: 820 }, serviceWorkers: 'block', acceptDownloads: true });
     const page = await ctx.newPage();
     page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
     return { ctx, page };
@@ -52,6 +52,10 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     await ctx.addInitScript(() => { if (!sessionStorage.getItem('seeded')) { sessionStorage.setItem('seeded', '1'); localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', JSON.stringify({ v: '2000-01-01', at: '2000-01-01T00:00:00.000Z' })); } });
     await page.goto(BASE); await page.waitForSelector('.terms-gate');
     ok('when the terms change, everyone is asked again, and told why', /The terms have changed/.test(await page.locator('.terms-gate h1').innerText()) && /stays where it is/.test(await page.locator('.terms-gate').innerText()));
+    const [dl] = await Promise.all([page.waitForEvent('download', { timeout: 8000 }).catch(() => null), page.locator('.terms-gate button.terms-save').click()]);
+    let saved = null; try { saved = dl && JSON.parse(require('fs').readFileSync(await dl.path(), 'utf8')); } catch { /* below */ }
+    ok('…and anyone, licence or not, can save a backup file of their information there before deciding', !!dl && /^vdex-backup-\d{4}-\d\d-\d\d\.json$/.test(dl.suggestedFilename()) && !!saved && Array.isArray(saved.bookings) && (await page.locator('.terms-gate').count()) === 1, dl ? dl.suggestedFilename() : 'no download');
+    ok('…and is told Vdex will not open again until they agree', /will not open again until you agree/.test(await page.locator('.terms-gate').innerText()));
     await page.locator('.terms-gate label.terms-check input').check();
     await page.locator('.terms-gate button:has-text("Agree and continue")').click();
     await page.waitForSelector('.lock-setup', { timeout: 15000 });

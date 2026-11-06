@@ -62,8 +62,9 @@ export async function saveOrShare(text, name, type) {
   return true;
 }
 
-export async function exportFile({ encrypted = false } = {}) {
-  if (!store.requirePaid('export')) return;
+// always: the changed-terms screen, where anyone may save their information before deciding (terms section 18).
+export async function exportFile({ encrypted = false, always = false } = {}) {
+  if (!always && !store.requirePaid('export')) return;
   let text = store.exportJSON(), name = `vdex-backup-${todayISO()}.json`;
   if (encrypted) {
     const pass = await askSecret({ title: 'Passphrase for this backup', confirm: true, numeric: false, minLength: 8, intro: 'Anyone with the file and this passphrase can open it, and a forgotten passphrase cannot be recovered.' });
@@ -87,6 +88,7 @@ export async function importFromPicker() {
   if (f) return importData(f);
 }
 export async function importData(f) {
+  if (!store.canChange()) return; // read-only: replacing everything is a change too
   try {
     let data = JSON.parse(await f.text());
     if (data && data.vdex === 'encrypted-backup') {
