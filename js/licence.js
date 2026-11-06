@@ -89,7 +89,9 @@ function describe(s) {
     case 'trial': return { line: `Free trial: ${plural(s.trialLeft, 'day')} left${s.trialEnds ? ` (until ${day(s.trialEnds)})` : ''}. After that Vdex is read-only here until you ${offer}.`, buy: shop, enter: true, restore };
     case 'ended': return { line: `Your free trial has ended, so Vdex is read-only here: you can open, search and print everything, but not change it. To change things again, ${offer}.`, tone: 'warn', buy: shop, enter: true, restore };
     case 'licensed': return web()
-      ? { line: `${s.via === 'apple' ? 'Licensed through the App Store' + (l.email ? ' · ' + l.email : '') : `Signed in as ${l.email}`}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${app() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true, addEmail: s.via === 'apple' && !l.email, copy: s.via === 'apple' }
+      ? { line: s.via === 'apple' && ios()
+          ? `Licensed through the App Store${l.email ? ' · ' + l.email : ''} · on every iPhone and iPad of your Apple Account, and up to ${plural(seats, 'other device')}.`
+          : `${s.via === 'apple' ? 'Licensed through the App Store' + (l.email ? ' · ' + l.email : '') : `Signed in as ${l.email}`}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${app() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true, addEmail: s.via === 'apple' && !l.email, copy: s.via === 'apple' }
       : { line: `Licensed to ${who(l)}${l && l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}.`, tone: 'ok', copy: true, release: true };
     case 'pending': return web()
       ? { line: `Signed in as ${l.email}, but this phone is not on your licence yet: Vdex needs the internet once to add it.`, tone: s.canEdit ? '' : 'warn', retry: true, release: true }
@@ -111,6 +113,7 @@ function actions(s, d, after = () => {}) {
   if (d.addEmail) b.push(h('button', { class: 'btn ghost', onclick: () => addEmailSheet(after) }, 'Add your email'));
   if (d.copy) b.push(h('button', { class: 'btn ghost', onclick: async e => { const btn = e.target, was = btn.textContent; btn.disabled = true; btn.textContent = 'Fetching…'; let code = ''; try { code = await l.code(); } catch (err) { toast(err.message || 'The code could not be fetched'); } btn.disabled = false; btn.textContent = was; if (!code) return; try { await navigator.clipboard.writeText(code); toast(web() ? 'Licence code copied: paste it in the desktop app under Enter licence code' : 'Licence code copied'); } catch { toast('Could not copy'); } } }, web() ? 'Copy the code for the desktop app' : 'Copy the code'));
   if (d.release) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet() }, web() ? 'Sign out' : 'Release this computer'));
+  if (d.release && web() && L().forget && ['licensed', 'pending', 'released', 'offline'].includes(s.mode)) b.push(h('button', { class: 'btn ghost small', onclick: () => forgetSheet() }, 'Delete my licence records'));
   if (d.remove) b.push(h('button', { class: 'btn ghost', onclick: () => releaseSheet(true) }, 'Remove the code'));
   return b;
 }
@@ -393,6 +396,24 @@ async function addPhone() {
     set(r); sh.close(); toast('This phone is on your licence');
   };
   go();
+}
+
+// Delete my licence records (Apple's rule for apps with an account, and anyone's right to ask): says what goes and what
+// stays before anything is deleted.
+function forgetSheet() {
+  const l = L(), s = S.cur || {}, lic = s.licence || {};
+  const what = lic.email ? `the email address of your licence (${lic.email})` : 'the link between your licence and your App Store purchase';
+  const msg = h('p', { class: 'small licence-warn', role: 'status' });
+  const go = h('button', { class: 'btn danger', onclick: async () => {
+    go.disabled = true; go.textContent = 'Deleting…';
+    const r = await l.forget().catch(e => ({ error: e.message }));
+    if (!r || r.error) { go.disabled = false; go.textContent = 'Delete my records'; msg.textContent = (r && r.error) || 'Something went wrong. Try again.'; return; }
+    set(r); sh.close(); toast('Your licence records have been deleted, and Vdex is signed out here');
+  } }, 'Delete my records');
+  const sh = sheet('Delete my licence records', h('div', { class: 'stack' },
+    h('p', null, `This deletes what Vdex's licence server keeps about you: ${what}, and the list of devices on your licence. Vdex signs out here, and your other devices are signed out at their next check.`),
+    h('p', { class: 'small muted' }, `Your licence itself is not cancelled: ${ios() ? 'restore your App Store purchase, or ' : ''}sign in again at any time, and the records are made afresh. Stripe, Link and Apple keep their own records of a purchase. Your work in Vdex is not touched.`),
+    msg, h('div', { class: 'actions' }, go)));
 }
 
 function releaseSheet(removeOnly = false) {

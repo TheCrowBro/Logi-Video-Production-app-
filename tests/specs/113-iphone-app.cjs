@@ -70,12 +70,13 @@ const bridge = () => {
       if (p === '/licence/web/status') return ans(200, { on: true });
       if (p === '/licence/apple/status') return ans(200, { on: true, product: PRODUCT });
       if (p === '/licence/apple/claim') {
-        if (body.jws === 'good.jws') return ans(200, { ok: true, used: 1, token: 'tok-apple', licence: lic, code: 'VDEX-FAKE-CODE-1' });
-        if (body.jws === 'full.jws') return ans(409, { error: 'full', computers: [{ tag: 't1', os: 'Windows', added: '2026-10-01', seen: '2026-11-01' }, { tag: 't2', os: 'Android', added: '2026-10-02', seen: '2026-11-02' }, { tag: 't3', os: 'iPad', added: '2026-10-03', seen: '2026-11-03' }], swapsLeft: 3, token: 'tok-apple', licence: lic });
+        if (body.jws === 'good.jws') return ans(200, { ok: true, appleDevices: true, token: 'tok-apple', licence: lic, code: 'VDEX-FAKE-CODE-1' });
+        if (body.jws === 'full.jws') return ans(200, { ok: true, appleDevices: true, token: 'tok-apple', licence: lic, code: 'VDEX-FAKE-CODE-1' }); // a licence whose 3 places are all taken elsewhere: an Apple device needs none of them
         return ans(400, { error: 'bad-signature' });
       }
       if (p === '/licence/apple/email') return ans(body.token === 'tok-apple' && /@/.test(body.email) ? 200 : 401, body.token === 'tok-apple' ? { ok: true } : { error: 'signed-out' });
       if (p === '/licence/apple/email/verify') return body.code === '123456' ? ans(200, { ok: true, licence: { ...lic, email: body.email }, code: 'VDEX-FAKE-CODE-2' }) : ans(400, { error: 'wrong-code' });
+      if (p === '/licence/web/forget') return ans(body.token === 'tok-apple' ? 200 : 401, body.token === 'tok-apple' ? { ok: true } : { error: 'signed-out' });
       if (p === '/licence/apple/code') return ans(body.token === 'tok-apple' ? 200 : 401, body.token === 'tok-apple' ? { ok: true, code: 'VDEX-FAKE-CODE-3' } : { error: 'signed-out' });
       if (p === '/licence/web/check') return body.token === 'tok-apple' ? ans(200, { ok: true, licence: lic }) : body.token === 'tok-email' ? ans(200, { ok: true, licence: { ...lic, ref: '1:1', email: 'jo@example.com' } }) : ans(401, { error: 'signed-out' });
       if (p === '/licence/web/activate') return ans(200, { ok: true, used: body.release ? 3 : 1 });
@@ -124,26 +125,26 @@ const bridge = () => {
     await page.evaluate(() => { window.__cap.buy = { state: 'cancelled' }; });
     await btn(page, 'Buy a licence · £19.99').click(); await sleep(500);
     ok('a purchase cancelled in Apple’s sheet asks the App Store for the product and changes nothing', (await calls(page, 'Purchases', 'buy')).length === 1 && (await calls(page, 'Purchases', 'buy'))[0].id === PRODUCT && !lastHit('/licence/apple/claim') && /Buy a licence/.test(await panel(page)));
-    // a purchase while the licence's three places are taken: choose one to take off
+    // a purchase while the licence's three places are taken elsewhere: an iPhone or iPad needs none of them
+    const activatesBefore = hits.filter(x => x.p === '/licence/web/activate').length;
     await page.evaluate(() => { window.__cap.buy = { state: 'purchased', jws: 'full.jws' }; });
-    await btn(page, 'Buy a licence · £19.99').click(); await page.waitForSelector('.sheet .lic-computers li'); await sleep(200);
+    await btn(page, 'Buy a licence · £19.99').click(); await sleep(600);
     const claim1 = lastHit('/licence/apple/claim');
     ok('Apple’s signed purchase goes to the licence server with this phone’s install id and “iPhone”', claim1 && claim1.body.jws === 'full.jws' && /^[\w-]{16,}$/.test(claim1.body.install) && claim1.body.os === 'iPhone', JSON.stringify(claim1 && claim1.body).slice(0, 120));
-    ok('with 3 devices already on the licence, the app lists them (iPad and Android apps named) and offers to move one here', (await page.locator('.sheet .lic-computers li').count()) === 3 && /iPad app/.test(await page.locator('.sheet').innerText()) && /Android app/.test(await page.locator('.sheet').innerText()));
-    await page.screenshot({ path: OUT + '/iphone-licence-full.png' });
-    await page.locator('.sheet .lic-computers li').first().getByRole('button', { name: 'Move it here' }).click(); await sleep(500);
-    const act1 = lastHit('/licence/web/activate');
-    ok('moving it here releases that device and licenses this phone', act1 && act1.body.release === 't1' && act1.body.token === 'tok-apple' && act1.body.os === 'iPhone' && /Licensed through the App Store · up to 3 devices, and this phone is one of them/.test(await panel(page)), (await panel(page)).slice(0, 160));
+    ok('it licenses the phone at once, on every iPhone and iPad of the Apple Account, with no device to move and no place taken', /Licensed through the App Store · on every iPhone and iPad of your Apple Account, and up to 3 other devices/.test(await panel(page)) && (await page.locator('.sheet .lic-computers li').count()) === 0, (await panel(page)).slice(0, 160));
+    await page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(true))); await sleep(400);
+    ok('…and its checks never ask for a place', hits.filter(x => x.p === '/licence/web/activate').length === activatesBefore);
     ok('…and the store is paid: cloud storage and files are allowed', await page.evaluate(() => import('./js/store.js').then(s => s.isPaid())));
-    // sign out gives the place back
+    await page.screenshot({ path: OUT + '/iphone-licence-all-devices.png' });
+    // sign out: nothing to give back, and the purchase is offered again
+    const releasesBefore = hits.filter(x => x.p === '/licence/web/release').length;
     await btn(page, 'Sign out').click(); await page.waitForSelector('.sheet'); await page.locator('.sheet').getByRole('button', { name: 'Sign out', exact: true }).click(); await sleep(500);
-    const rel = lastHit('/licence/web/release');
-    ok('signing out gives the phone’s place back and returns to the trial, with the purchase offered again', rel && rel.body.token === 'tok-apple' && /Free trial/.test(await panel(page)) && /Buy a licence · £19\.99/.test(await panel(page)));
+    ok('signing out returns to the trial with the purchase offered again; there is no place to give back', hits.filter(x => x.p === '/licence/web/release').length === releasesBefore && /Free trial/.test(await panel(page)) && /Buy a licence · £19\.99/.test(await panel(page)));
     // a straightforward purchase
     await page.evaluate(() => { window.__cap.buy = { state: 'purchased', jws: 'good.jws' }; });
     await btn(page, 'Buy a licence · £19.99').click(); await sleep(600);
     const s1 = await stored(page);
-    ok('a purchase confirmed by the licence server licenses the phone at once: a sign-in token, the licence, this phone on it', s1.token === 'tok-apple' && s1.seat === 'ok' && s1.licence && s1.licence.ref === '2:7' && /Licensed through the App Store/.test(await panel(page)) && /Thank you! Vdex is licensed on this phone/.test(await toastText(page)), JSON.stringify(s1).slice(0, 160));
+    ok('a purchase confirmed by the licence server licenses the phone at once: a sign-in token and the licence, no place', s1.token === 'tok-apple' && !s1.seat && s1.via === 'apple' && s1.licence && s1.licence.ref === '2:7' && /Licensed through the App Store/.test(await panel(page)) && /Thank you! Vdex is licensed on this phone/.test(await toastText(page)), JSON.stringify(s1).slice(0, 160));
     await page.screenshot({ path: OUT + '/iphone-licence-licensed.png' });
     // the buyer adds an email address, so the same licence signs in elsewhere; the desktop code is there to copy
     ok('an App Store licence offers to add an email, and the code for the desktop app, which is kept nowhere on the phone', (await btn(page, 'Add your email').count()) === 1 && (await btn(page, 'Copy the code for the desktop app').count()) === 1 && !(await stored(page)).code);
@@ -156,7 +157,7 @@ const bridge = () => {
     await page.locator('.sheet input[aria-label="6-digit code"]').fill('111111'); await page.locator('.sheet').getByRole('button', { name: 'Add the address' }).click(); await sleep(400);
     ok('a wrong code is said so', /not right/.test(await page.locator('.sheet').innerText()));
     await page.locator('.sheet input[aria-label="6-digit code"]').fill('123456'); await page.locator('.sheet').getByRole('button', { name: 'Add the address' }).click(); await sleep(500);
-    ok('the right code puts the address on the licence: the panel shows it and the Add button is gone', /Licensed through the App Store · jo@example.com · up to 3 devices/.test(await panel(page)) && (await btn(page, 'Add your email').count()) === 0 && (await page.locator('.sheet').count()) === 0, (await panel(page)).slice(0, 120));
+    ok('the right code puts the address on the licence: the panel shows it and the Add button is gone', /Licensed through the App Store · jo@example.com · on every iPhone and iPad of your Apple Account/.test(await panel(page)) && (await btn(page, 'Add your email').count()) === 0 && (await page.locator('.sheet').count()) === 0, (await panel(page)).slice(0, 120));
     // restore purchases after signing out (a reinstall, a second iPhone)
     await btn(page, 'Sign out').click(); await page.waitForSelector('.sheet'); await page.locator('.sheet').getByRole('button', { name: 'Sign out', exact: true }).click(); await sleep(500);
     await page.evaluate(() => { window.__cap.owned = [{ state: 'owned', jws: 'good.jws', productId: 'app.crowmade.vdex.licence', originalTransactionId: '2000000123456789' }]; });
@@ -168,6 +169,11 @@ const bridge = () => {
     await page.evaluate(() => { window.__cap.owned = [{ state: 'owned', jws: 'good.jws', productId: 'app.crowmade.vdex.licence', originalTransactionId: '2000000123456789' }]; });
     await btn(page, 'Restore purchases').click(); await sleep(600);
     ok('Restore purchases asks the App Store again and brings an owned purchase back as the licence', (await calls(page, 'Purchases', 'restore')).length >= 1 && /Licensed through the App Store/.test(await panel(page)) && /Your purchase is back/.test(await toastText(page)));
+    await btn(page, 'Delete my licence records').click(); await page.waitForSelector('.sheet');
+    ok('Delete my licence records says what goes and what stays before anything is deleted', /the link between your licence and your App Store purchase/.test(await page.locator('.sheet').innerText()) && /Your licence itself is not cancelled/.test(await page.locator('.sheet').innerText()) && !lastHit('/licence/web/forget'));
+    await page.locator('.sheet').getByRole('button', { name: 'Delete my records' }).click(); await sleep(500);
+    ok('…and deleting signs this phone out, with the purchase offered again', (() => { const f = lastHit('/licence/web/forget'); return f && f.body.token === 'tok-apple'; })() && /Free trial/.test(await panel(page)) && /Restore purchases/.test(await panel(page)) && (await stored(page)).signedOut === true);
+    await btn(page, 'Restore purchases').click(); await sleep(600);
 
     /* ------------------------------ break alerts ------------------------------ */
     await page.evaluate(() => window.logiGo('bookings')); await sleep(300);
@@ -339,7 +345,7 @@ const bridge = () => {
     ok('with the trial over, the read-only bar offers the App Store purchase at its price and signing in', /Vdex is read-only/.test(bar) && /Buy · £19\.99/.test(bar) && (await p2.locator('.licence-bar').getByRole('button', { name: 'Sign in' }).count()) === 1 && !/USD/.test(bar), bar);
     await p2.screenshot({ path: OUT + '/iphone-readonly.png' });
     await p2.locator('.licence-bar').getByRole('button', { name: 'Buy · £19.99' }).click(); await sleep(600);
-    ok('…and buying from the bar licenses the phone', (await p2.evaluate(() => JSON.parse(localStorage.getItem('vdex-licence')).seat)) === 'ok' && (await p2.locator('.licence-bar').count()) === 0);
+    ok('…and buying from the bar licenses the phone', (await p2.evaluate(() => { const v = JSON.parse(localStorage.getItem('vdex-licence')); return v.token === 'tok-apple' && v.via === 'apple'; })) && (await p2.locator('.licence-bar').count()) === 0);
 
     /* ------------------------------ moving between licences ------------------------------ */
     // A phone on an email licence that restores an App Store purchase gives the email licence's place back first.

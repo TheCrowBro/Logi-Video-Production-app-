@@ -5,7 +5,7 @@
 import { h } from './util.js';
 import { isApp } from './native.js';
 
-export const TERMS_VERSION = '2026-11-06.2'; // the terms' date, plus a count for a second change on the same day
+export const TERMS_VERSION = '2026-11-06.3'; // the terms' date, plus a count for a second change on the same day
 const KEY = 'logi-terms';
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; } };
 export const acceptance = () => { const r = read(); return r && r.v === TERMS_VERSION ? r : null; };
@@ -29,10 +29,10 @@ export function termsGate() {
       h('ul', { class: 'terms-points' },
         h('li', null, 'Vdex comes as it is. It can have mistakes or lose information, so keep your own backups.'),
         h('li', null, 'You stay responsible for your shoots, your call sheets, quotes and invoices, your taxes, people’s safety, and the information you keep about others.'),
-        h('li', null, 'The developer’s responsibility is very limited: many kinds of loss are excluded and the rest is capped at 50 US dollars (', link('terms.html#liability', 'sections 13 and 14'), '). This does not affect rights the law gives you that cannot be taken away.'),
+        h('li', null, 'The developer’s responsibility is limited (', link('terms.html#liability', 'sections 13 to 16'), '). If you use Vdex for your business, many kinds of loss are excluded and the rest is capped at 50 US dollars. If you use it as a consumer, you keep your legal rights.'),
         h('li', null, 'Your work stays on your device, and in storage you link. The developer never receives it.')),
       h('p', { class: 'terms-links' }, link('terms.html', 'Read the terms of service'), link('privacy.html', 'Read the privacy policy')),
-      h('label', { class: 'check terms-check', for: 'terms-ok' }, box, h('span', null, 'I have read and agree to the ', link('terms.html', 'terms of service'), '.')),
+      h('label', { class: 'check terms-check', for: 'terms-ok' }, box, h('span', null, 'I am 18 or over, and I have read and agree to the ', link('terms.html', 'terms of service'), '.')),
       h('p', { class: 'small' }, 'The ', link('privacy.html', 'privacy policy'), ' explains how your information is handled.'),
       go,
       changed && h('p', { class: 'small' }, 'Want your information first? ', h('button', { type: 'button', class: 'btn ghost small terms-save', onclick: () => import('./backup.js').then(m => m.exportFile({ always: true })).catch(() => {}) }, 'Save a backup file'), ' It works whether or not you have a licence.'),

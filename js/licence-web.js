@@ -40,7 +40,10 @@ function markApp() {
   if (!s.play && (/[?&]src=play(&|$)/.test(location.search) || /^android-app:\/\/app\.crowmade\.vdex/.test(document.referrer))) { s.play = true; write(s); }
   if (!s.ios && native.isApp) { s.ios = true; write(s); }
 }
-const inApp = s => !!(s.play || s.ios); // a store app: takes a place on the licence, never links to the shop
+const inApp = s => !!(s.play || s.ios); // a store app: never links to the shop, and takes a place on the licence
+// …except an iPhone or iPad licensed by an App Store purchase: Apple's licence covers all of the Apple Account's devices.
+const viaOf = s => s.via || (s.token && s.licence && s.ios && !s.licence.email ? 'apple' : s.token ? 'email' : ''); // older sign-ins carry no via
+const seated = s => inApp(s) && !(s.ios && viaOf(s) === 'apple');
 
 export function webLicence() {
   markApp();
@@ -49,7 +52,7 @@ export function webLicence() {
   const emit = st => { const sig = JSON.stringify(st); if (sig !== last) { last = sig; listeners.forEach(f => { try { f(st); } catch { /* ignore */ } }); } };
 
   function describe(s, t) {
-    const via = s.via || (s.token && s.licence && s.ios && !s.licence.email ? 'apple' : s.token ? 'email' : ''); // older sign-ins carry no via
+    const via = viaOf(s);
     const base = { kind: 'web', play: !!s.play, ios: !!s.ios, app: inApp(s), enabled: !!s.on, seats: (s.licence && s.licence.seats) || SEATS, os: s.play ? 'Android' : s.ios ? native.device() : 'Web', price: s.price || '', via };
     if (!s.on) return { ...base, mode: 'off', canEdit: true };
     const left = Math.max(0, TRIAL_DAYS - Math.floor(((s.seen || t) - (s.first || t)) / DAY));
@@ -61,7 +64,7 @@ export function webLicence() {
     const licence = s.licence;
     // Past the limit, read-only only once a check made after it has failed (not while it is still checking).
     if (t - (s.checked || 0) > OFFLINE_LIMIT && (s.tried || 0) > (s.checked || 0) + OFFLINE_LIMIT) return { ...base, licence, mode: 'offline', canEdit: false };
-    if (inApp(s)) {
+    if (seated(s)) {
       if (s.seat === 'released' || s.seat === 'full') return { ...base, ...trial, licence, mode: 'released', canEdit: left > 0 };
       if (s.seat !== 'ok') return { ...base, ...trial, licence, mode: 'pending', daysLeft: 0, canEdit: left > 0 };
     }
@@ -120,9 +123,8 @@ export function webLicence() {
     if (!read().install) update(x => { x.install = x.install || rand(); });
     let r; try { r = await call('/licence/apple/claim', { jws, install: read().install, os: native.device() }); } catch { update(x => { delete x.autoAt; }); return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; }
     const b = r.body, t = now();
-    if (b.token && b.licence) { await giveBack(b.licence); update(x => { x.token = b.token; x.licence = b.licence; x.via = 'apple'; delete x.signedOut; x.checked = x.tried = t; delete x.cancelled; delete x.expired; }); }
-    if (r.status === 200 && b.ok) { update(x => { x.seat = 'ok'; x.seatChecked = x.seatTried = t; }); return state(); }
-    if (b.error === 'full' && b.token) { update(x => { x.seat = 'full'; x.seatTried = t; }); return { ...state(), full: { computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft } }; }
+    if (b.token && b.licence) { await giveBack(b.licence); update(x => { x.token = b.token; x.licence = b.licence; x.via = 'apple'; delete x.seat; delete x.signedOut; x.checked = x.tried = t; delete x.cancelled; delete x.expired; }); }
+    if (r.status === 200 && b.ok) return state(); // no place to take: the purchase covers every iPhone and iPad of the Apple Account
     if (!r.answered) { update(x => { delete x.autoAt; }); return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; } // looked for again at the next check
     return { error: { cancelled: 'This purchase was refunded, so it no longer licenses Vdex. Buy again, or sign in with the email address of a licence.', revoked: 'Apple has revoked this purchase.', sandbox: 'That is a test purchase, which does not license Vdex.', 'not-ready': 'Buying in the app is not switched on yet. Try again later, or sign in with the email address of a licence.', swaps: 'This licence has been moved between devices 3 times in the last 30 days, so it cannot move again yet.' }[b.error] || 'Vdex could not confirm the purchase with Apple. Use Restore purchases in a moment.' };
   }
@@ -181,6 +183,15 @@ export function webLicence() {
     buy: async () => { const s = read(); if (s.ios) return buyInApp(); if (!s.play) window.open('/buy', '_blank', 'noopener'); return true; },
     restore: async () => restoreInApp(false),
     addEmail, verifyEmail,
+    // Delete my licence records: the licence server forgets this sign-in's email address or App Store purchase and the
+    // devices on the licence, and every sign-in made before now stops working. Then this device is signed out.
+    forget: async () => {
+      const s = read(); if (!s.token) return { error: 'Sign in first: the records are found through your sign-in.' };
+      let r; try { r = await call('forget', { token: s.token }); } catch { return { error: 'Vdex could not reach the licence server. Check the internet connection and try again.' }; }
+      if (!(r.status === 200 && r.body.ok) && !(r.answered && r.status === 401)) return { error: 'The records could not be deleted just now. Try again in a minute.' };
+      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.cancelled; delete x.expired; delete x.via; if (x.ios) x.signedOut = true; });
+      return state();
+    },
     code: async () => (read().via === 'apple' || (read().ios && read().licence && !read().licence.email) ? desktopCode() : ''), // an App Store licence's desktop code, fetched when asked for
     // Step 1: email (or a licence code with an email inside). The Worker answers the same either way.
     start: async ({ email, code }) => {
@@ -219,7 +230,7 @@ export function webLicence() {
         } catch { update(x => { x.tried = now(); }); }
       }
       const s2 = read();
-      if (inApp(s2) && s2.token) {
+      if (seated(s2) && s2.token) {
         const t2 = now(), wait = s2.seat === 'ok' ? null : s2.seat ? DAY : 3600e3; // on the list: weekly; moved off or full: daily; not yet: hourly
         const due = force || (wait === null ? t2 - (s2.seatChecked || 0) > SEAT_EVERY : t2 - (s2.seatTried || 0) > wait) || t2 < (s2.seatTried || 0);
         if (due) await seat();

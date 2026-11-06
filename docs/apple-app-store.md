@@ -8,7 +8,7 @@ This is the step-by-step for putting Vdex on the iPhone App Store, written for t
 
 Apple's rules: anything bought inside an iPhone app must go through Apple's own purchase (Apple keeps 15 % under the Small Business Program, 30 % otherwise). So the app offers both:
 
-1. **Buy in the app:** a one-off "Vdex Licence" at 19.99 USD through the App Store. The app sends Apple's signed receipt to vdex.crowmade.app, which turns it into an ordinary Vdex licence (the same 3 devices, the same code, the same email flow when the person adds an email). A refund through Apple cancels it, as a Stripe refund does.
+1. **Buy in the app:** a one-off "Vdex Licence" at 19.99 USD through the App Store. The app sends Apple's signed receipt to vdex.crowmade.app, which turns it into a Vdex licence that works on every iPhone and iPad of the buyer's Apple Account, as Apple's standard licence promises, without taking any of its 3 places; those stay free for the buyer's computers and Android phone (the same code and the same email flow when the person adds an email). A refund through Apple cancels it, as a Stripe refund does.
 2. **Sign in:** someone who bought on the website signs in with that email, as on Android.
 
 The app never links to the website's Buy page, and the website's Buy page is never shown inside the app: Apple rejects apps that point to a cheaper purchase elsewhere.
@@ -50,7 +50,8 @@ The app never links to the website's Buy page, and the website's Buy page is nev
 1. In the app's page → **Monetization → In-App Purchases** → **+**.
 2. Type **Non-Consumable**, reference name `Vdex Licence`, product ID **`app.crowmade.vdex.licence`** (the app asks for exactly this id; it can never change).
 3. Price: pick the tier closest to **19.99 USD** (Apple sets the other currencies).
-4. Localization: display name **Vdex Licence**, description **One licence, up to 3 devices, for good.** (App Store Connect allows 30 characters for the name and 45 for the description.)
+4. Localization: display name **Vdex Licence**, description **All your iPhones and iPads, for good.** (App Store Connect allows 30 characters for the name and 45 for the description.)
+   Leave **Family Sharing** off for it: the licence is for one person.
 5. Review screenshot: any screenshot of the licence panel in Settings → General → About & Licence (Apple needs one).
 6. Save. It says "Ready to Submit" and is submitted together with the app's first version.
 
@@ -76,11 +77,12 @@ Most of it is the Google Play text, which lives in [google-play.md](google-play.
 - **Keywords**: `videographer,film,production,call sheet,crew,equipment,stripboard,timecode,invoice,booking`
 - **Support URL**: https://crowmade.app/vdex/ (Vdex's page on your own site, with its Support email link: Apple checks that the Support URL gives a direct way to reach you, so keep that link on the page). The `docs/` folder is never published, so a `.md` address would not open. · **Marketing URL**: https://vdex.crowmade.app · **Privacy policy URL**: https://vdex.crowmade.app/privacy.html
 - **Category**: Productivity (secondary: Business).
-- **Age rating**: answer No to everything → 4+.
+- **Age rating**: answer No to every content question, then set the age rating to **18+** (App Store Connect lets an app with a higher minimum age than its content needs choose a higher rating). Vdex's terms ask for users of 18 or over, and the Google Play listing is 18 and over too.
 - **Screenshots**: the app is offered for iPhone only (an iPad runs it in compatibility mode, as a scaled-up iPhone app), so App Store Connect asks for iPhone screenshots only. Its upload page lists the sizes it needs (at the moment the 6.9-inch size, which also takes 6.7-inch pictures); take them on your phone and App Store Connect scales them for the smaller sizes. The Android ones under `store/android/screenshots` are the wrong shape: take iPhone ones on the phone (press the side button and volume up together) of the Bookings calendar, a booking, the call sheet, the stripboard and the quote, and keep them under `store/apple/screenshots`, next to the 1024 × 1024 icon (`store/apple/icon-1024.png`, the same picture that is built into the app, which App Store Connect takes from the uploaded build).
 - **App Privacy** (the nutrition label): press **Get Started** and answer as in "App Privacy answers" below: four data types, none of them used for tracking.
 - **Sign-in information for the review**: the reviewer needs to try the app, and the iPhone app takes no licence codes (Apple's rule), only an email sign-in or the purchase. Make a mailbox for the reviewer (a new address and password at any free email service), give it a free licence with the licence generator (docs/selling-desktop.md; the email inside the code links it by itself), and under App Review Information write: "No account is needed; the app has a 30-day free trial and the licence can be bought in the app (In-App Purchase). To test signing in with a licence bought on our website: Settings → General → About & Licence → Sign in, with the email address below; the 6-digit code arrives in that mailbox." Then give the mailbox's address and password in the sign-in fields.
 - **License agreement**: leave Apple's standard licence agreement in place (App Store Connect → App Information → License Agreement: do not upload your own). Section 21 of Vdex's terms of service already contains what Apple asks of an app's own terms, so the two fit together.
+- **Account deletion** (Apple's guideline 5.1.1(v)): there is no account to create, but a licence can be linked to an email address, so the app has **Delete my licence records** under Settings → General → About & Licence. Mention it in the notes below if the reviewer asks.
 - **Notes for the reviewer**: "Vdex is a web app for freelance videographers that runs in this app with native notifications, calendar, Files and the App Store purchase. The licence can be bought in the app (In-App Purchase) or, for people who already bought on our website, by signing in with their email. The app never shows the website's purchase."
 
 ## Step 7. Test on your phone, then with TestFlight
