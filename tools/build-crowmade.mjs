@@ -12,6 +12,8 @@ import { PRICE, RATES, withTax } from '../js/tax.js';
 const out = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'crowmade');
 const SUPPORT = 'support@crowmade.app';
 const VDEX = 'https://vdex.crowmade.app/';
+const VES = 'https://github.com/TheCrowBro/Valheim-Easy-Server-'; // public: the app updates itself from its releases
+const VES_DL = `${VES}/releases/latest/download/`;
 // The Vdex licence's price with tax where the law asks for the whole price (js/tax.js, as on vdex.crowmade.app/download.html).
 const EU = Object.keys(RATES).filter(c => c !== 'GB' && c !== 'AU').map(c => Number(withTax(c).total));
 const TAXED = `${withTax('GB').total} US dollars in the UK, ${withTax('AU').total} in Australia, and ${Math.min(...EU).toFixed(2)} to ${Math.max(...EU).toFixed(2)} in the EU, depending on the country`;
@@ -102,7 +104,7 @@ const home = page('Crowmade', `
 <div class="apps">
 ${appCard('/journee/', '/journee/icon.png', 'Little Journee', "Your child's days, logged by the whole family. Encrypted, in your own cloud.", [['Coming soon', 'wait'], 'Android', 'iPhone'], 'See Little Journee')}
 ${appCard('/vdex/', '/vdex/icon.png', 'Vdex', 'For people who film things for a living: shoots, crew, kit, call sheets, stripboards, quotes and invoices, in one place.', [['Available now', 'ok'], 'iPhone', 'Android', 'Windows', 'Mac', 'Linux'], 'See Vdex')}
-${appCard('/valheim/', '/valheim/icon.png', 'Valheim Easy Server', 'Run a Valheim dedicated server on a spare Windows PC or Mac, and look after it with one simple app. No command line.', [['Copies on request', 'wait'], 'Windows', 'Mac'], 'See Valheim Easy Server')}
+${appCard('/valheim/', '/valheim/icon.png', 'Valheim Easy Server', 'Run a Valheim dedicated server on a spare Windows PC or Mac, and look after it with one simple app. No command line.', [['Available now', 'ok'], 'Windows', 'Mac'], 'See Valheim Easy Server')}
 </div>
 <div class="values">
 <div><b>Your data stays yours</b><p>No tracking and no ads. What you make stays on your devices, or in your own cloud if you choose.</p></div>
@@ -141,8 +143,9 @@ ${feature('Safe and in sync', 'Lock it with a PIN, fingerprint or face. With a l
 { desc: 'Vdex: bookings, crew, kit, venues, insurance, call sheets, stripboards, budgets, quotes and invoices for freelance videographers.', icon: '/vdex/icon.svg', here: '/vdex/', image: '/vdex/icon.png' });
 
 const valheim = page('Valheim Easy Server', `
-<div class="hero"><img src="icon.png" alt=""><div><h1>Valheim Easy Server</h1><p>Your own Valheim server on a spare PC or Mac. One button to start it, nobody touches a command line.</p>${chips([['Copies on request', 'wait'], 'Windows', 'macOS 12 or newer'])}</div></div>
-<div class="card notice"><p style="margin:0"><b>Downloads are coming to this page.</b> Until then, write to <a href="mailto:${SUPPORT}">${SUPPORT}</a> and we'll send you a copy.</p></div>
+<div class="hero"><img src="icon.png" alt=""><div><h1>Valheim Easy Server</h1><p>Your own Valheim server on a spare PC or Mac. One button to start it, nobody touches a command line.</p>${chips([['Available now', 'ok'], 'Free', 'Windows', 'macOS 12 or newer'])}</div></div>
+<div class="btns"><a class="btn" href="${VES_DL}ValheimEasyServer-windows.zip">Download for Windows</a><a class="btn" href="${VES_DL}ValheimEasyServer-mac.zip">Download for Mac</a><a class="btn alt" href="${VES}#readme">Read the full guide</a></div>
+<p class="note">Free. The newest build, straight from <a href="${VES}/releases/latest">the project's releases</a>; after that, the app keeps itself up to date.</p>
 <img class="wide" src="shot-home.jpg" alt="The control panel's home page">
 <h2>What it does</h2>
 <div class="features">
@@ -163,8 +166,8 @@ ${feature('Looks after itself', 'Updates the server through Steam before each st
 </div>
 <h2>Get started</h2>
 <ol class="steps">
-<li>Unzip <b>ValheimEasyServer-windows.zip</b> (or <b>-mac.zip</b>).</li>
-<li>Put it in a folder such as <code>C:\\Valheim Server</code> and double-click it. On a Mac, drag it into Applications and open it.</li>
+<li>Download and unzip <b>ValheimEasyServer-windows.zip</b> (or <b>-mac.zip</b>).</li>
+<li>Put it in a folder such as <code>C:\\Valheim Server</code> and double-click it. The app isn't code-signed yet, so Windows may say "Windows protected your PC": click <b>More info → Run anyway</b>. On a Mac, drag it into Applications, then right-click it and choose <b>Open</b> (on macOS 15 and newer: <b>System Settings → Privacy &amp; Security → Open Anyway</b>).</li>
 <li>Click <b>Install the server</b>, set a name and password in <b>Settings</b>, then <b>Start server</b>. When it says <b>Online</b>, friends can join.</li>
 </ol>
 <p class="note">Works on Windows, and on macOS 12 Monterey or newer (Intel or Apple silicon). The control panel only answers on the server computer itself, so there's nothing for strangers to reach. Valheim is a trademark of Iron Gate AB; this is an independent tool.</p>`,
