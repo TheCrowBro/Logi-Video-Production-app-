@@ -27,6 +27,10 @@
   .dl b { display: block; font-size: 1.1rem; } .dl span { color: var(--muted); font-size: .9rem; }
   .buy { display: inline-block; background: var(--accent); color: var(--ink); font-weight: 700; padding: 12px 22px; border-radius: 12px; text-decoration: none; margin: 4px 12px 4px 0; }
   .muted { color: var(--muted); }
+  .prices { list-style: none; padding: 0; margin: 8px 0 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); gap: 0 14px; font-size: .95rem; }
+  .prices.wide { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); font-size: 1rem; }
+  .prices li { margin: 3px 0; }
+  .prices span { white-space: nowrap; }
   code { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; font-size: .92em; }
   .back { display: inline-block; margin-top: 32px; }
 </style>
@@ -37,14 +41,51 @@
     <img src="icons/icon.svg" alt="">
     <h1>Vdex for Windows, Mac and Linux</h1>
   </header>
-  <p class="lead">The same Vdex as the website, in its own window, with your work kept on your computer. Try it free for 30 days (cloud storage and backup files come with the licence). Then it is 20 US dollars once, for up to 3 of your own devices, and the same licence lets you sign in on the website. No subscription.</p>
+  <p class="lead">The same Vdex as the website, in its own window, with your work kept on your computer. Try it free for 30 days (cloud storage and backup files come with the licence). Then it is 20 US dollars once plus any tax where you live (<a href="#price">the price with tax</a>), for up to 3 of your own devices, and the same licence lets you sign in on the website. No subscription.</p>
 
   <div class="grid">
     <a class="dl" href="https://download.crowmade.app/vdex/Vdex-Setup.exe"><b>Windows</b><span>Windows 10 or 11 · Vdex-Setup.exe</span></a>
     <a class="dl" href="https://download.crowmade.app/vdex/Vdex.dmg"><b>Mac</b><span>macOS 12 or later, Apple or Intel · Vdex.dmg</span></a>
     <a class="dl" href="https://download.crowmade.app/vdex/Vdex.AppImage"><b>Linux</b><span>64-bit · Vdex.AppImage</span></a>
   </div>
-  <p><a class="buy" href="/buy">Buy a licence · 20 USD</a> <span class="muted">You can also buy from inside Vdex, at any time during the trial.</span></p>
+  <h2 id="price">Price</h2>
+  <p>20 US dollars once, for up to 3 of your own devices. The checkout adds any tax due where you live. In the UK, the EU and Australia, where the law asks shops to show the whole price first, the price with tax is, in US dollars:</p>
+  <ul class="prices wide">
+    <li data-c="GB">United Kingdom <b>24.00</b> <span class="muted">20% VAT</span></li>
+    <li data-c="AU">Australia <b>22.00</b> <span class="muted">10% GST</span></li>
+  </ul>
+  <p>In the European Union, with your country's VAT:</p>
+  <ul class="prices">
+    <li data-c="AT">Austria <b>24.00</b> <span class="muted">20%</span></li>
+    <li data-c="BE">Belgium <b>24.20</b> <span class="muted">21%</span></li>
+    <li data-c="BG">Bulgaria <b>24.00</b> <span class="muted">20%</span></li>
+    <li data-c="HR">Croatia <b>25.00</b> <span class="muted">25%</span></li>
+    <li data-c="CY">Cyprus <b>23.80</b> <span class="muted">19%</span></li>
+    <li data-c="CZ">Czechia <b>24.20</b> <span class="muted">21%</span></li>
+    <li data-c="DK">Denmark <b>25.00</b> <span class="muted">25%</span></li>
+    <li data-c="EE">Estonia <b>24.80</b> <span class="muted">24%</span></li>
+    <li data-c="FI">Finland <b>25.10</b> <span class="muted">25.5%</span></li>
+    <li data-c="FR">France <b>24.00</b> <span class="muted">20%</span></li>
+    <li data-c="DE">Germany <b>23.80</b> <span class="muted">19%</span></li>
+    <li data-c="GR">Greece <b>24.80</b> <span class="muted">24%</span></li>
+    <li data-c="HU">Hungary <b>25.40</b> <span class="muted">27%</span></li>
+    <li data-c="IE">Ireland <b>24.60</b> <span class="muted">23%</span></li>
+    <li data-c="IT">Italy <b>24.40</b> <span class="muted">22%</span></li>
+    <li data-c="LV">Latvia <b>24.20</b> <span class="muted">21%</span></li>
+    <li data-c="LT">Lithuania <b>24.20</b> <span class="muted">21%</span></li>
+    <li data-c="LU">Luxembourg <b>23.40</b> <span class="muted">17%</span></li>
+    <li data-c="MT">Malta <b>23.60</b> <span class="muted">18%</span></li>
+    <li data-c="NL">Netherlands <b>24.20</b> <span class="muted">21%</span></li>
+    <li data-c="PL">Poland <b>24.60</b> <span class="muted">23%</span></li>
+    <li data-c="PT">Portugal <b>24.60</b> <span class="muted">23%</span></li>
+    <li data-c="RO">Romania <b>24.20</b> <span class="muted">21%</span></li>
+    <li data-c="SK">Slovakia <b>24.60</b> <span class="muted">23%</span></li>
+    <li data-c="SI">Slovenia <b>24.40</b> <span class="muted">22%</span></li>
+    <li data-c="ES">Spain <b>24.20</b> <span class="muted">21%</span></li>
+    <li data-c="SE">Sweden <b>25.00</b> <span class="muted">25%</span></li>
+  </ul>
+  <p class="muted">At checkout you can pay in US dollars, or in your own currency at Stripe's exchange rate (2 to 4% more).</p>
+  <p><a class="buy" href="/buy">Buy a licence</a> <span class="muted">You can also buy from inside Vdex, at any time during the trial.</span></p>
   <p class="muted">You are buying a licence to use Vdex, not ownership of a copy. It can be cancelled in the cases the <a href="terms.html#paid">terms</a> describe.</p>
 
   <h2>Already bought, or given a code?</h2>

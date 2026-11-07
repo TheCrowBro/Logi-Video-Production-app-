@@ -8,6 +8,7 @@ import * as lock from './lock.js';
 import * as providers from './providers.js';
 import { connectCalendar, phoneLink } from './calendar.js';
 import * as native from './native.js';
+import { offer as licenceOffer } from './licence.js';
 
 const T = (title, text, ...rest) => { const opts = rest.length && typeof rest[rest.length - 1] === 'object' ? rest.pop() : {}; return { title, text, target: rest, ...opts }; };
 const tab = n => () => { const b = document.querySelector(`.tc-views button:nth-child(${n})`); if (b) b.click(); };
@@ -49,7 +50,7 @@ const revealSetting = title => async () => { await closeSheets(); const m = awai
 // licence note for the live feed when this device has no licence. Next skips it; Settings → Calendar & email later.
 const calendarStep = () => {
   const paid = store.isPaid();
-  const text = `Two-way sync keeps a “Vdex bookings” calendar in your Google or Microsoft account${native.calendar.available() ? ', or in this phone’s own Calendar app' : ''}: bookings go there, and changes made there come back. Connect now, or tap Next to skip this and do it later under Settings → Calendar & email. Apple Calendar and other apps take a calendar file (Export once) or follow the live feed${paid ? '.' : ', which keeps a file in your cloud storage. Cloud storage comes with a Vdex licence' + (native.isApp ? ' (for up to 3 of your devices): Buy and Sign in are under Settings → General → About & Licence.' : ' (20 USD once, for up to 3 of your devices): Buy and Sign in are under Settings → General → About & Licence.')}`;
+  const text = `Two-way sync keeps a “Vdex bookings” calendar in your Google or Microsoft account${native.calendar.available() ? ', or in this phone’s own Calendar app' : ''}: bookings go there, and changes made there come back. Connect now, or tap Next to skip this and do it later under Settings → Calendar & email. Apple Calendar and other apps take a calendar file (Export once) or follow the live feed${paid ? '.' : ', which keeps a file in your cloud storage. Cloud storage comes with a Vdex licence' + (native.isApp || !licenceOffer().price ? (licenceOffer().buy ? ' (for up to 3 of your devices): Buy and Sign in are under Settings → General → About & Licence.' : ': sign in under Settings → General → About & Licence.') : ` (${licenceOffer().price}, for up to 3 of your devices): Buy and Sign in are under Settings → General → About & Licence.`)}`;
   const choice = (ctx, svc, name) => {
     const on = svc === 'apple' || providers.signIn.available(svc === 'google' ? 'google-calendar' : svc);
     return h('div', { class: 'card-row' },

@@ -19,7 +19,7 @@ It works on an iPhone, an Android phone, and a computer. It is free to try for 3
 2. **Put it on your home screen** so it works like a normal app, even with no signal:
    - **iPhone:** open the address in Safari, tap the **Share** button (the square with an arrow), then **Add to Home Screen**.
    - **Android:** tap **Install** at the top of the page.
-   - **Computer:** tap **Install** at the top of the page. Or get the desktop app for Windows, Mac or Linux from https://vdex.crowmade.app/download.html. Vdex is free to try for 30 days; then a licence is 20 US dollars once, for up to 3 of your devices, and you sign in on the website with the email address you bought with.
+   - **Computer:** tap **Install** at the top of the page. Or get the desktop app for Windows, Mac or Linux from https://vdex.crowmade.app/download.html. Vdex is free to try for 30 days; then a licence is 20 US dollars once plus the tax where you live (the download page lists the whole price for the UK, the EU and Australia), for up to 3 of your devices, and you sign in on the website with the email address you bought with.
 3. **Tap ? at the top of any page.** It walks you through that page, box by box. You can do this as often as you like.
 
 That's it. You're in.

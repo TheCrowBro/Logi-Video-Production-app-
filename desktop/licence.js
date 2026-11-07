@@ -176,6 +176,17 @@ function netPost(url, body) {
     .then(async r => ({ status: r.status, body: await r.json().catch(() => ({})) }));
 }
 
+// The price with tax where this computer is (GET /licence/price: the server answers from the request's country), for
+// the Buy button. Only the shape the page uses is passed on; anything else, or no answer within 10 seconds, is null.
+function netPrice(url) {
+  const { net } = require('electron');
+  return net.fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(10e3) }).then(r => (r.ok ? r.json() : null)).then(b => {
+    if (!b || typeof b !== 'object') return null; // no answer (offline, or an error): the page asks again later
+    const t = b.taxed;
+    return { taxed: t && typeof t === 'object' ? { place: String(t.place || '').slice(0, 40), tax: String(t.tax || '').slice(0, 8), rate: Number(t.rate) || 0, total: String(t.total || '').slice(0, 10) } : null };
+  }).catch(() => null);
+}
+
 // Called from main.js before the window opens: hasPriorData must be read before this run creates any data.
 function wireLicence({ ipcMain, fromApp, getWindow, shell, dir, hasPriorData, mirror, site }) {
   const send = s => { const w = getWindow(); if (w && !w.isDestroyed()) w.webContents.send('licence:changed', s); };
@@ -188,6 +199,7 @@ function wireLicence({ ipcMain, fromApp, getWindow, shell, dir, hasPriorData, mi
   ipcMain.handle('licence:release', guard(() => lic.release()));
   ipcMain.handle('licence:code', guard(() => lic.code()));
   ipcMain.handle('licence:buy', guard(() => { shell.openExternal((site || SITE) + '/buy'); return true; }));
+  ipcMain.handle('licence:price', guard(() => netPrice((site || SITE) + '/licence/price')));
   lic.state().catch(() => {});
   const tick = () => lic.recheck(false).catch(() => {});
   setTimeout(tick, 1500); // straight away, so a computer back after a long break is confirmed before anyone notices

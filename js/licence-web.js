@@ -177,6 +177,12 @@ export function webLicence() {
     get ios() { return !!read().ios; },
     get app() { return inApp(read()); },
     price: () => read().price || '',
+    // The website's price with tax where this browser is (the licence server answers from the request's country:
+    // GET /licence/price). Never in the store apps: the App Store shows its own price, and the Play app none.
+    localPrice: async () => {
+      const s = read(); if (s.ios || s.play) return null;
+      try { const r = await call('/licence/price'); return r.status === 200 ? r.body : null; } catch { return null; }
+    },
     state: async () => { await status(false); return state(); },
     onChange: cb => { listeners.add(cb); return () => listeners.delete(cb); },
     // The shop in a new tab; in the iPhone app, the App Store purchase (answers like verify(), or { cancelled } / { pending }).

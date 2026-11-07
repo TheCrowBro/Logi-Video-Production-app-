@@ -58,6 +58,15 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('any other address is the static website', (await (await get('/index.html')).text()) === 'static file /index.html');
     const buy = await get('/buy');
     ok('/buy goes to the Stripe payment link', buy.status === 302 && buy.headers.get('location') === 'https://buy.stripe.com/test_vdex');
+    { // the price with tax in the country the request comes from (js/tax.js), for the Buy buttons
+      const at = async country => { const r = await mf.dispatchFetch(SITE + '/licence/price', { cf: { country } }); return { cc: r.headers.get('cache-control') || '', body: await r.json() }; };
+      const gb = (await at('GB')).body, au = (await at('AU')).body, de = (await at('DE')).body, fi = (await at('FI')).body, hu = (await at('HU')).body, lu = (await at('LU')).body;
+      ok('/licence/price: 24.00 USD with 20% VAT in the UK, 22.00 with 10% GST in Australia', gb.taxed && gb.taxed.total === '24.00' && gb.taxed.tax === 'VAT' && gb.taxed.rate === 20 && gb.taxed.place === 'the UK' && au.taxed && au.taxed.total === '22.00' && au.taxed.tax === 'GST' && au.taxed.rate === 10, JSON.stringify([gb, au]));
+      ok('…and each EU country\'s VAT: 23.80 in Germany, 25.10 in Finland (25.5%), 25.40 in Hungary, 23.40 in Luxembourg', de.taxed.total === '23.80' && fi.taxed.total === '25.10' && fi.taxed.rate === 25.5 && hu.taxed.total === '25.40' && lu.taxed.total === '23.40', JSON.stringify([de, fi, hu, lu]));
+      const us = await at('US'), odd = (await at('<b>')).body;
+      ok('…the price before tax anywhere else (any tax is added at checkout), and for a country it cannot read', us.body.taxed === null && us.body.country === 'US' && us.body.price === '20.00' && us.body.currency === 'USD' && odd.taxed === null && odd.country === '', JSON.stringify([us.body, odd]));
+      ok('…and no answer is kept by a cache, since each is for one country', /no-store/.test(us.cc), us.cc);
+    }
 
     /* ---------------------------- after paying ---------------------------- */
     const sid = 'cs_test_a1B2c3D4e5F6g7H8i9J0';

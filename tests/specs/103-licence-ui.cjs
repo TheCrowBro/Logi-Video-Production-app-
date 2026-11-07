@@ -9,7 +9,8 @@ const OUT = process.env.S || '/tmp';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 // The stand-in bridge. window.__lic.state is what the desktop app would report; calls are recorded in window.__lic.calls.
-const bridge = start => `(() => {
+// With a price, the bridge also answers localPrice(), as the desktop app does from the licence server.
+const bridge = (start, price) => `(() => {
   const L = window.__lic = { state: ${JSON.stringify(start)}, calls: [], listeners: [] };
   const licensed = { enabled: true, mode: 'licensed', canEdit: true, seats: 3, licence: { name: 'Jane Smith', email: 'jane@example.com', comp: false, ref: '2:4242', seats: 3 } };
   const full = { error: 'full', seats: 3, swapsLeft: 2, computers: [
@@ -25,6 +26,7 @@ const bridge = start => `(() => {
       release: async () => { L.calls.push(['release']); L.state = { enabled: true, mode: 'trial', canEdit: true, trialLeft: 12, trialEnds: '2026-11-14', seats: 3 }; return L.state; },
       code: async () => 'VDEX-AAAAA-BBBBB',
       buy: async () => { L.calls.push(['buy']); return true; },
+      ${price === undefined ? '' : `localPrice: async () => { L.calls.push(['price']); const a = ${JSON.stringify(Array.isArray(price) ? { seq: price } : { one: price })}; return a.seq ? (L.seq = (L.seq || 0) + 1, a.seq[L.seq - 1] === undefined ? null : a.seq[L.seq - 1]) : a.one; },`}
       onChange: cb => { L.listeners.push(cb); return () => {}; },
     },
   };
@@ -34,12 +36,12 @@ const bridge = start => `(() => {
 (async () => {
   const browser = await chromium.launch();
   const errors = [];
-  const open = async (state, { desktop = true, width = 420 } = {}) => {
+  const open = async (state, { desktop = true, width = 420, price } = {}) => {
     const ctx = await browser.newContext({ viewport: { width, height: 860 }, serviceWorkers: 'block' });
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
     await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
     await ctx.addInitScript(acceptTerms());
-    if (desktop) await ctx.addInitScript(bridge(state));
+    if (desktop) await ctx.addInitScript(bridge(state, price));
     const page = await ctx.newPage();
     page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
     const loaded = []; page.on('request', q => loaded.push(q.url()));
@@ -94,6 +96,43 @@ const bridge = start => `(() => {
     await panel.getByRole('button', { name: 'Release this computer' }).click();
     await page.locator('.sheet').getByRole('button', { name: 'Release this computer' }).click(); await sleep(300);
     ok('releasing this computer goes back to the trial', /Free trial: 12 days left/.test(await panel.innerText()));
+    ok('with no price from the licence server, the offer is the price before tax, plus any tax where the buyer lives', /add a licence: 20 USD once plus any tax where you live, for up to 3 of your devices/.test(await panel.innerText()) && (await panel.getByRole('button', { name: 'Buy a licence · 20 USD' }).count()) === 1);
+    ok('…and the note says the checkout takes US dollars or the buyer\'s own currency', /pay in US dollars, or in your own currency at Stripe’s exchange rate \(2 to 4% more\)/.test(await panel.innerText()));
+    await ctx.close();
+
+    // The whole price where the law asks for it (the UK, the EU and Australia), from the licence server's answer.
+    const ended = { enabled: true, mode: 'ended', canEdit: false, trialLeft: 0, seats: 3 };
+    ({ ctx, page } = await open(ended, { price: { taxed: { place: 'the UK', tax: 'VAT', rate: 20, total: '24.00' } } }));
+    await about(page); await sleep(200);
+    {
+      const t = await page.locator('.licence-panel').innerText(), bar = await page.locator('.licence-bar').innerText().catch(() => '');
+      ok('in the UK, the offer and both Buy buttons show the whole price: 24.00 USD with 20% VAT', /add a licence: 24\.00 USD once in the UK, including 20% VAT, for up to 3 of your devices/.test(t) && (await page.locator('.licence-panel').getByRole('button', { name: 'Buy a licence · 24.00 USD with VAT' }).count()) === 1 && /Buy · 24\.00 USD with VAT/.test(bar), t + ' | ' + bar);
+    }
+    await page.screenshot({ path: OUT + '/licence-price-uk.png' });
+    const tourOffer = await page.evaluate(() => import('./js/licence.js').then(m => m.offer()));
+    ok('the setup tour words the offer the same way (Buy, and the whole price)', tourOffer.buy === true && tourOffer.price === '24.00 USD once in the UK, including 20% VAT', JSON.stringify(tourOffer));
+    await ctx.close();
+    ({ ctx, page } = await open(ended, { price: { taxed: { place: 'Finland', tax: 'VAT', rate: 25.5, total: '25.10' } } }));
+    await about(page); await sleep(200);
+    ok('in Finland, 25.10 USD with its 25.5% VAT', /add a licence: 25\.10 USD once in Finland, including 25\.5% VAT/.test(await page.locator('.licence-panel').innerText()) && (await page.locator('.licence-panel').getByRole('button', { name: 'Buy a licence · 25.10 USD with VAT' }).count()) === 1);
+    await ctx.close();
+    ({ ctx, page } = await open(ended, { price: { taxed: null } }));
+    await about(page); await sleep(200);
+    ok('anywhere else, the price before tax', /add a licence: 20 USD once plus any tax where you live/.test(await page.locator('.licence-panel').innerText()) && (await page.locator('.licence-panel').getByRole('button', { name: 'Buy a licence · 20 USD' }).count()) === 1);
+    await ctx.close();
+    ({ ctx, page } = await open(ended, { price: { taxed: { place: 'the UK', tax: 'VAT', rate: 20, total: '<img src=x onerror=alert(1)>' } } }));
+    await about(page); await sleep(200);
+    ok('an answer that is not a price is ignored', (await page.locator('.licence-panel').getByRole('button', { name: 'Buy a licence · 20 USD' }).count()) === 1 && (await page.locator('.licence-panel img').count()) === 0);
+    await ctx.close();
+    ({ ctx, page } = await open(ended, { price: [null, { taxed: { place: 'Australia', tax: 'GST', rate: 10, total: '22.00' } }] }));
+    await about(page); await sleep(200);
+    const first = await page.locator('.licence-panel').innerText();
+    await page.evaluate(() => window.__licPush({ enabled: true, mode: 'ended', canEdit: false, trialLeft: 0, seats: 3 })); await sleep(300);
+    ok('with no answer (offline), the price before tax, and the server is asked again at the next change: then 22.00 USD with GST in Australia', /20 USD once plus any tax/.test(first) && (await page.locator('.licence-panel').getByRole('button', { name: 'Buy a licence · 22.00 USD with GST' }).count()) === 1 && (await page.evaluate(() => window.__lic.calls.filter(c => c[0] === 'price').length)) === 2);
+    await ctx.close();
+    ({ ctx, page } = await open({ enabled: true, mode: 'licensed', canEdit: true, seats: 3, licence: { name: 'Jane Smith', email: 'jane@example.com', comp: false, ref: '2:4242', seats: 3 } }, { price: { taxed: null } }));
+    await about(page); await sleep(300);
+    ok('a licensed computer never asks for the price', !(await page.evaluate(() => window.__lic.calls.some(c => c[0] === 'price'))));
     await ctx.close();
 
     // After the trial: read-only.

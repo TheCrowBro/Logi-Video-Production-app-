@@ -39,6 +39,9 @@ const DAY = 86400e3;
 
   const browser = await chromium.launch();
   const errors = [];
+  // The country the licence server sees each request come from (Cloudflare's request.cf), and the paths asked for.
+  let country = '';
+  const asked = [];
   const open = async ({ width = 420, start = '', storage = null } = {}) => {
     const ctx = await browser.newContext({ viewport: { width, height: 860 }, serviceWorkers: 'block' });
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
@@ -46,7 +49,8 @@ const DAY = 86400e3;
       const q = r.request();
       // The test swaps the fake licence server now and then; a request caught in between gets "unavailable", as it would
       // from a real server that is restarting, instead of crashing the test.
-      let res; try { res = await mf.dispatchFetch('https://vdex.crowmade.app' + new globalThis.URL(q.url()).pathname, { method: q.method(), headers: { 'Content-Type': 'application/json' }, body: q.method() === 'POST' ? q.postData() : undefined }); } catch { res = null; }
+      asked.push(new globalThis.URL(q.url()).pathname);
+      let res; try { res = await mf.dispatchFetch('https://vdex.crowmade.app' + new globalThis.URL(q.url()).pathname, { method: q.method(), headers: { 'Content-Type': 'application/json' }, body: q.method() === 'POST' ? q.postData() : undefined, cf: { country } }); } catch { res = null; }
       if (!res) return r.fulfill({ status: 503, contentType: 'application/json', body: '{"error":"not-ready"}' }).catch(() => {});
       await r.fulfill({ status: res.status, contentType: 'application/json', body: await res.text() }).catch(() => {});
     });
@@ -80,6 +84,20 @@ const DAY = 86400e3;
     ok('switched on, a browser gets a 30-day trial, with Buy and Sign in', /Free trial: 30 days left/.test(await page.locator('.licence-panel').innerText()) && (await page.locator('.licence-panel').getByRole('button', { name: /Buy a licence/ }).count()) === 1 && (await page.locator('.licence-panel').getByRole('button', { name: 'Sign in' }).count()) === 1);
     ok('the trial starts on the first visit after it is switched on (people who used the website before get it too)', Math.abs((await lic(page)).first - Date.now()) < 60e3);
     await ctx.close();
+
+    // The whole price where the law asks for it (the UK, the EU and Australia): the licence server answers from the
+    // country the request comes from.
+    country = 'DE';
+    ({ ctx, page } = await open());
+    await about(page); await sleep(400);
+    ok('in Germany, the website offers the licence at 23.80 USD with 19% VAT', (await page.locator('.licence-panel').getByRole('button', { name: 'Buy a licence · 23.80 USD with VAT' }).count()) === 1 && /\(23\.80 USD once in Germany, including 19% VAT, for up to 3 of your devices\)/.test(await page.locator('.licence-panel').innerText()));
+    await ctx.close();
+    country = 'US';
+    ({ ctx, page } = await open());
+    await about(page); await sleep(400);
+    ok('…and in the US, 20 USD plus any tax', (await page.locator('.licence-panel').getByRole('button', { name: 'Buy a licence · 20 USD' }).count()) === 1 && /\(20 USD once plus any tax where you live, for up to 3 of your devices\)/.test(await page.locator('.licence-panel').innerText()));
+    await ctx.close();
+    country = '';
 
     // After the trial: read-only, then sign in.
     ({ ctx, page } = await open({ storage: { on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY } }));
@@ -164,7 +182,11 @@ const DAY = 86400e3;
     const barText = await page.locator('.licence-bar').innerText();
     ok('in the Play app the read-only bar offers only Sign in: no Buy and no price (Google Play\'s rule)', !/Buy|USD/.test(barText) && (await page.locator('.licence-bar').getByRole('button', { name: 'Sign in' }).count()) === 1, barText.replace(/\n/g, ' | '));
     await about(page);
-    ok('nor does Settings in the Play app', !/Buy|USD|20/.test(await page.locator('.licence-panel').innerText()));
+    asked.length = 0; country = 'GB'; await page.reload(); await page.waitForSelector('#rolodex .drum-btn'); await about(page); await sleep(600);
+    ok('nor does Settings in the Play app, and it never asks the licence server for a price', !/Buy|USD|20/.test(await page.locator('.licence-panel').innerText()) && !asked.includes('/licence/price'), asked.join(' '));
+    const playOffer = await page.evaluate(() => import('./js/licence.js').then(m => m.offer()));
+    ok('…nor the setup tour: no Buy and no price', playOffer.buy === false && playOffer.price === '', JSON.stringify(playOffer));
+    country = '';
     // Fill the licence's 3 places first, from three computers.
     for (let i = 1; i <= 3; i++) await mf.dispatchFetch('https://vdex.crowmade.app/licence/activate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: freeCode, install: 'install-computer-0000000' + i, os: 'Mac' }) });
     await page.evaluate(() => import('./js/licence.js').then(m => m.signIn()));

@@ -24,12 +24,35 @@ const app = () => web() && !!P.app;    // either store app: takes one of the lic
 const here = () => (app() ? 'phone' : 'computer');
 const price = () => (ios() && P.price && P.price()) || ''; // the App Store's price in the person's currency, once the App Store has said it; nothing before (Apple's rule: only its price)
 
+// On the website and in the desktop app, the whole price where the law asks to see it before buying (the UK, the EU and
+// Australia: js/tax.js). The licence server answers from the country the request comes from (GET /licence/price);
+// until it has, and anywhere else, the price before tax. Not in the store apps: the App Store shows its own price, and
+// the Play app none.
+const T = { local: null, asked: false };
+function askLocalPrice() {
+  if (T.asked || !P || ios() || play() || typeof P.localPrice !== 'function') return;
+  T.asked = true;
+  Promise.resolve().then(() => P.localPrice()).then(b => {
+    if (!b || typeof b !== 'object' || b.error) { T.asked = false; return; } // no answer: asked again at the next change
+    const t = b.taxed;
+    if (!t || !/^\d{1,4}\.\d\d$/.test(String(t.total)) || !/^(VAT|GST)$/.test(t.tax) || !(Number(t.rate) > 0) || typeof t.place !== 'string') return;
+    T.local = { total: String(t.total), tax: t.tax, rate: Number(t.rate), place: t.place.slice(0, 40) };
+    if (S.cur) set(S.cur); // the panel, the bar and an open offer show it
+  }).catch(() => { T.asked = false; });
+}
+const tag = () => (T.local ? `${T.local.total} USD with ${T.local.tax}` : '20 USD'); // on the Buy buttons
+const once = () => (T.local ? `${T.local.total} USD once in ${T.local.place}, including ${T.local.rate}% ${T.local.tax}` : '20 USD once plus any tax where you live');
+// The offer as other screens word it (the setup tour): where Buy is offered, and the website's price ('' in the store
+// apps: the App Store shows its own price, and the Play app has no Buy and no price, Google Play's rule).
+export const offer = () => ({ buy: !play(), price: ios() || play() ? '' : once() });
+
 // The states in which this device counts as having a licence (or licences are not switched on): cloud storage and
 // saving data files work only in these (store.setPaid).
 const PAID = new Set(['off', 'founder', 'licensed', 'pending', 'offline', 'released']);
 function set(s) {
   if (!s || s.error || !s.mode) return;
   S.cur = s;
+  if (['trial', 'ended', 'cancelled', 'expired'].includes(s.mode)) askLocalPrice(); // the states that offer Buy
   setPaid(PAID.has(s.mode), needsLicence);
   if (PAID.has(s.mode) && S.needClose) closeWhenOnTop('licence-needed', 'needClose'); // just signed in: the offer is out of date
   if (s.canEdit !== false && S.roClose) closeWhenOnTop('licence-readonly', 'roClose'); // licensed now: the read-only explanation is out of date
@@ -81,8 +104,8 @@ function describe(s) {
   const l = s.licence, seats = (l && l.seats) || s.seats || 3;
   const offer = play() ? 'sign in with the email address of your Vdex licence'
     : ios() ? `buy a licence (${price() ? price() + ' once, ' : 'once, '}for up to ${seats} of your devices), or sign in with the email address of a licence you already have`
-      : web() ? `sign in with the email address you bought a licence with (20 USD once, for up to ${seats} of your devices)`
-        : `add a licence: 20 USD once, for up to ${seats} of your devices`;
+      : web() ? `sign in with the email address you bought a licence with (${once()}, for up to ${seats} of your devices)`
+        : `add a licence: ${once()}, for up to ${seats} of your devices`;
   const shop = !play(), restore = ios();
   switch (s.mode) {
     case 'founder': return { line: 'Free licence: thank you for using Vdex from the start.', tone: 'ok' };
@@ -105,7 +128,7 @@ function describe(s) {
 }
 function actions(s, d, after = () => {}) {
   const l = L(), b = [];
-  if (d.buy) b.push(h('button', { class: 'btn primary', onclick: e => (ios() ? buyInApp(e.target, after) : l.buy()) }, ios() ? `Buy a licence${price() ? ' · ' + price() : ''}` : 'Buy a licence · 20 USD'));
+  if (d.buy) b.push(h('button', { class: 'btn primary', onclick: e => (ios() ? buyInApp(e.target, after) : l.buy()) }, ios() ? `Buy a licence${price() ? ' · ' + price() : ''}` : `Buy a licence · ${tag()}`));
   if (d.enter) b.push(h('button', { class: 'btn ghost', onclick: () => (web() ? signIn() : enterCode()) }, web() ? 'Sign in' : 'Enter licence code'));
   if (d.restore) b.push(h('button', { class: 'btn ghost', onclick: e => restoreInApp(e.target, after) }, 'Restore purchases'));
   if (d.again) b.push(h('button', { class: 'btn primary', onclick: async () => (web() ? addPhone() : enterCode(await l.code())) }, web() ? 'Add this phone' : 'Activate here again'));
@@ -158,7 +181,7 @@ async function retry(btn, after = () => {}) {
 
 // Next to Buy on the website and in the desktop app: what is bought (California's rule for digital goods: a licence,
 // not a copy, and it can be cancelled). In the iPhone app the App Store sells it, under Apple's terms.
-const buyNote = d => (d && d.buy && !ios() && !play() ? h('p', { class: 'small muted licence-buy-note' }, 'You are buying a licence to use Vdex, not ownership of a copy. It can be cancelled in the cases the ', h('a', { href: 'terms.html#paid', target: '_blank', rel: 'noopener' }, 'terms'), ' describe.') : '');
+const buyNote = d => (d && d.buy && !ios() && !play() ? h('p', { class: 'small muted licence-buy-note' }, 'You are buying a licence to use Vdex, not ownership of a copy. It can be cancelled in the cases the ', h('a', { href: 'terms.html#paid', target: '_blank', rel: 'noopener' }, 'terms'), ' describe. At checkout you can pay in US dollars, or in your own currency at Stripe’s exchange rate (2 to 4% more).') : '');
 
 /* ------------------------ Settings → General → About & Licence ------------------------ */
 export function licencePanel() {
@@ -195,7 +218,7 @@ function paintBar() {
   // Each state's own next step: someone who has paid is never asked to buy again.
   const buttons = d.retry ? [small('Try again', e => retry(e.target), true), small('Details', () => detailsSheet())]
     : d.again ? [small(web() ? 'Add this phone' : 'Activate here again', async () => (web() ? addPhone() : enterCode(await L().code())), true), small('Details', () => detailsSheet())]
-    : d.buy ? [small(ios() ? `Buy${price() ? ' · ' + price() : ' a licence'}` : 'Buy · 20 USD', e => (ios() ? buyInApp(e.target) : L().buy()), true), small(web() ? 'Sign in' : 'Enter code', enter)]
+    : d.buy ? [small(ios() ? `Buy${price() ? ' · ' + price() : ' a licence'}` : `Buy · ${tag()}`, e => (ios() ? buyInApp(e.target) : L().buy()), true), small(web() ? 'Sign in' : 'Enter code', enter)]
     : d.enter ? [small('Sign in', enter, true)]
     : [small('Details', () => detailsSheet(), true)];
   const bar = h('div', { class: 'update-bar licence-bar' + (urgent ? ' urgent' : ''), role: 'status' },

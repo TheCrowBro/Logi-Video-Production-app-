@@ -8,14 +8,16 @@
 //   /licence/release           a desktop app takes its computer off the list
 //   /licence/admin             the owner's generator page: look at, clear, cancel or restore a code (signed requests)
 //   /licence/web/…             the website's sign-in: a 6-digit code emailed to a licence holder, then a signed token
+//                              (status, start, verify, check), and a place on the licence for the Google Play app
+//                              (activate, release)
 //   /licence/apple/claim       the iPhone app bought the licence through the App Store: Apple's signed receipt becomes a licence and a sign-in
 //   /licence/apple/notify      App Store Server Notifications: a refund or a revocation cancels that licence
 //   /licence/apple/status      whether App Store purchases are switched on (APPLE_BUNDLE_ID set)
 //   /licence/apple/email, …/email/verify   an App Store buyer adds an email address (a 6-digit code to it), for the website, Android and the desktop code
 //   /licence/apple/code        the desktop code of an App Store licence, for the person's computer
 //   /licence/web/forget        Delete my licence records: the sign-in's email links or purchase link, and the devices list
-//                              (status, start, verify, check), and a place on the licence for the Google Play app
-//                              (activate, release)
+//   /licence/price             the price with tax in the country the request comes from (js/tax.js: the UK, the EU and
+//                              Australia), for the Buy buttons on the website and in the desktop app
 //
 // Codes are made and checked by desktop/licence-codes.js, the same file the app and the generator use. The list of
 // computers for each code, and which codes are cancelled, are kept in the LICENCES KV namespace (created by Wrangler on
@@ -31,6 +33,7 @@
 //   WEB_SIGN_IN            "on" makes the website and the Google Play app ask for a licence after their 30-day trial
 import codes from '../desktop/licence-codes.js';
 import { verifyAppleJws } from './apple-jws.mjs';
+import { PRICE, withTax } from '../js/tax.js';
 import KEYS from '../desktop/licence-keys.json';
 
 const SITE = 'https://vdex.crowmade.app';
@@ -569,6 +572,11 @@ export default {
         const to = String(env.BUY_URL || '');
         if (m === 'GET' && /^https:\/\/[^/\s]+\/\S*$/.test(to)) return new Response(null, { status: 302, headers: { Location: to, 'Cache-Control': 'no-store' } });
         return page(200, 'Vdex licence', '<h1>The Vdex licence is not on sale yet</h1><p>A licence will cost 20 USD once, for up to 3 of your own devices. Until then, <a href="/index.html">use Vdex in your web browser</a>.</p>');
+      }
+      if (p === '/licence/price' && m === 'GET') {
+        // Cloudflare says which country the request comes from; the page shows that country's total, if it has one.
+        const country = /^[A-Z]{2}$/.test(String(request.cf && request.cf.country)) ? request.cf.country : '';
+        return json(200, { price: PRICE.toFixed(2), currency: 'USD', country, taxed: withTax(country) });
       }
       if (p === '/licence/thanks' && m === 'GET') return await thanks(url, env);
       if (p === '/licence/stripe-webhook' && m === 'POST') return await webhook(request, env);
