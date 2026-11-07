@@ -2,11 +2,12 @@
 // weather, emergency contact, instructions, each person's call time), then printed from the app, saved as a PDF or
 // a web page, shared, or emailed to the whole crew. "Call sheets" on the Bookings page lists every shoot and whether
 // its sheet has gone out.
-import { h, toast, nodes, sheet, fmtLong, fmtShort, fmtTime, parseISO, todayISO, mapsUrl, uid } from './util.js';
-import { db, byId, endOf, upsert, activeBookings } from './store.js';
+import { h, toast, nodes, sheet, fmtLong, fmtShort, fmtTime, parseISO, todayISO, mapsUrl, uid, backBtn } from './util.js';
+import { db, byId, endOf, upsert, activeBookings, canChange, canChangeQuietly } from './store.js';
 import { getTimes } from './suncalc.js';
-import { setCheck, itemId } from './workflow.js';
+import { setCheck, itemId, hiredPeople, rentalsOf } from './workflow.js';
 import { saveOrShare } from './backup.js';
+import * as native from './native.js';
 import { forecastLine } from './weather.js';
 import { boardPlan, ieOf, dnOf, fmtEighths, castNumbers } from './board.js';
 
@@ -35,7 +36,8 @@ const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 /* ----------------------------------- data ----------------------------------- */
 export function callSheetData(b, cs = sheetOf(b), crewCall = b.crewCall || {}) {
   const p = db.profile, v = b.venueId ? byId('venues', b.venueId) : null;
-  const crew = (b.crew || []).map(id => byId('crew', id)).filter(Boolean).map(c => ({ ...c, call: crewCall[c.id] || cs.generalCall || b.start || '' }));
+  // Your own crew and the people hired for this job, in one list: both get a call time and go on the sheet and the crew link.
+  const crew = [...(b.crew || []).map(id => byId('crew', id)).filter(Boolean), ...hiredPeople(b).map(hr => ({ id: hr.id, name: hr.name, role: hr.role, phone: hr.phone, email: hr.email, hired: true }))].map(c => ({ ...c, call: crewCall[c.id] || cs.generalCall || b.start || '' }));
   const gear = (b.gear || []).map(id => byId('gear', id)).filter(Boolean);
   const kit = {}; gear.forEach(g => { const c = g.category || 'Other'; kit[c] = (kit[c] || 0) + Math.max(1, Number((b.gearQty || {})[g.id]) || 1); });
   let loc = null; try { loc = v && v.geo && Number.isFinite(Number(v.geo.lat)) ? { lat: +v.geo.lat, lon: +v.geo.lon } : JSON.parse(localStorage.getItem('logi-loc')); } catch { /* none */ }
@@ -45,7 +47,7 @@ export function callSheetData(b, cs = sheetOf(b), crewCall = b.crewCall || {}) {
   const days = multiDay(b) ? [...new Set([b.date, ...schedule.map(r => r.date).filter(Boolean)])].sort() : [b.date];
   const producer = [p.name, p.business].filter(Boolean).join(' · ') || 'Vdex';
   const producerLine = `${producer}${p.phone ? ' · ' + p.phone : ''}${p.email ? ' · ' + p.email : ''}`;
-  return { b, p, v, cs, crew, kit, hires: b.hires || [], sun, loc, address, schedule, days, producer, producerLine, generalCall: cs.generalCall || b.start || '', wrap: cs.wrap || b.end || '', breaks: [b.breakMinutes && b.breakMinutes + ' min approved', b.breakNote].filter(Boolean).join(' · ') };
+  return { b, p, v, cs, crew, kit, hires: rentalsOf(b), sun, loc, address, schedule, days, producer, producerLine, generalCall: cs.generalCall || b.start || '', wrap: cs.wrap || b.end || '', breaks: [b.breakMinutes && b.breakMinutes + ' min approved', b.breakNote].filter(Boolean).join(' · ') };
 }
 
 /* ----------------------------------- text ----------------------------------- */
@@ -73,7 +75,7 @@ export function callSheetText(b) {
     ...(inc.contacts ? (b.stakeholders || []).map(s => [s.name, s.role, s.phone].filter(Boolean).join(' · ')) : []),
     inc.contacts && cs.attendees, inc.contacts && ((b.stakeholders || []).length || cs.attendees) && '',
     inc.kit && Object.keys(d.kit).length && 'KIT', inc.kit && Object.keys(d.kit).length && Object.entries(d.kit).map(([c, n]) => `${c}: ${n}`).join(' · '),
-    inc.kit && d.hires.length && 'Hires: ' + d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '),
+    inc.kit && d.hires.length && 'Rented: ' + d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '),
     inc.kit && Object.keys(d.kit).length && '',
     cs.dress && line('Dress code / bring', cs.dress), cs.emergency && line('Emergency contact', cs.emergency), (cs.dress || cs.emergency) && '',
     (cs.notes || (inc.notes && b.notes)) && 'NOTES', cs.notes, inc.notes && b.notes && b.notes !== cs.notes ? b.notes : null, (cs.notes || (inc.notes && b.notes)) && '',
@@ -126,7 +128,7 @@ export function renderDoc(b, { cs = sheetOf(b), crewCall = b.crewCall || {}, edi
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'On set'), area('attendees', 'Who is coming from the client or talent, when, and who looks after them')) : cs.attendees && h('p', { class: 'cs-pre' }, cs.attendees),
       kv('Producer', d.producerLine),
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'Emergency'), input('emergency', 'text', 'Emergency contact on the day: name · phone')) : kv('Emergency contact', cs.emergency)),
-    include('kit') && sec('Kit', Object.keys(d.kit).length && h('p', null, Object.entries(d.kit).map(([c, n]) => `${c}: ${n}`).join(' · ')), d.hires.length && kv('Hires', d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '))),
+    include('kit') && sec('Kit', Object.keys(d.kit).length && h('p', null, Object.entries(d.kit).map(([c, n]) => `${c}: ${n}`).join(' · ')), d.hires.length && kv('Rented', d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '))),
     sec('Day notes', include('sun') && d.sun && kv('Golden hour', `ends ${fmtTime(d.sun.goldenHourEnd)}, from ${fmtTime(d.sun.goldenHour)}`),
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'Weather'), input('weather', 'text', 'e.g. 14°C, showers from 3pm — bring rain covers')) : kv('Weather', cs.weather),
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'Dress / bring'), input('dress', 'text', 'e.g. All black, sturdy boots, hi-vis for the yard')) : kv('Dress code / bring', cs.dress),
@@ -175,7 +177,7 @@ export async function callSheetPdf(b) {
   if (inc.kit && (Object.keys(d.kit).length || d.hires.length)) {
     blocks.push({ type: 'heading', text: 'Kit' });
     if (Object.keys(d.kit).length) blocks.push({ type: 'text', text: Object.entries(d.kit).map(([c, n]) => `${c}: ${n}`).join('  ·  ') });
-    kv('Hires', d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '));
+    kv('Rented', d.hires.map(x => x.item + (x.from ? ' (' + x.from + ')' : '')).join(', '));
   }
   const notes = [];
   if (inc.sun && d.sun) notes.push({ type: 'kv', k: 'Golden hour', v: `ends ${fmtTime(d.sun.goldenHourEnd)}, from ${fmtTime(d.sun.goldenHour)}` });
@@ -202,7 +204,8 @@ export function printElement(el) {
   let done = false;
   const finish = () => { if (done) return; done = true; root.remove(); document.body.classList.remove('print-cs'); window.removeEventListener('afterprint', finish); };
   window.addEventListener('afterprint', finish);
-  setTimeout(() => { try { window.print(); } catch { finish(); toast('Printing is not available here; use Save PDF'); } }, 60);
+  if (native.isApp) { setTimeout(() => native.files.print().catch(() => toast('Printing is not available here; use Save PDF')).finally(finish), 60); }
+  else setTimeout(() => { try { window.print(); } catch { finish(); toast('Printing is not available here; use Save PDF'); } }, 60);
   setTimeout(finish, 90000);
 }
 
@@ -226,7 +229,10 @@ const cancelEdit = () => { E.id = null; E.draft = null; E.crewCall = null; E.cha
 window.addEventListener('pagehide', () => commitDraft());
 
 /* ------------------------------------ page ------------------------------------ */
-function markSent(id) {
+// quiet: a side effect of printing, saving or sending, which still happen when Vdex is read-only (only the mark is
+// skipped); the Mark as sent button itself is a change like any other, and says so.
+function markSent(id, quiet = true) {
+  if (!(quiet ? canChangeQuietly() : canChange())) return;
   const cur = byId('bookings', id); if (!cur) return;
   setCheck(cur, itemId('Prepped', 'Call sheet sent'), true);
   upsert('bookings', { ...byId('bookings', id), callSheet: { ...sheetOf(cur), sentAt: Date.now() } });
@@ -237,7 +243,7 @@ export function callSheetPage(b, go) {
   if (E.id && E.id !== b.id) commitDraft(); // a draft left over from another shoot
   const redraw = () => { const y = window.scrollY; go({}); window.scrollTo(0, y); };
   const cs = sheetOf(b), state = sheetState(b);
-  const crew = (b.crew || []).map(id => byId('crew', id)).filter(Boolean), withEmail = crew.filter(c => c.email);
+  const withEmail = callSheetData(b).crew.filter(c => c.email);
   const text = () => callSheetText(byId('bookings', b.id));
   const share = async () => { if (navigator.share) { try { await navigator.share({ title: 'Call sheet — ' + b.title, text: text() }); markSent(b.id); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const copy = async () => { try { await navigator.clipboard.writeText(text()); toast('Copied'); markSent(b.id); } catch { toast('Select the text and copy it'); } };
@@ -251,7 +257,7 @@ export function callSheetPage(b, go) {
   const emailClick = () => { if (longMail) { const w = navigator.clipboard && navigator.clipboard.writeText(text()); if (w) w.then(() => toast('The call sheet is long, so it was copied: paste it into the email'), () => toast('Use Copy text, then paste it into the email')); else toast('Use Copy text, then paste it into the email'); } markSent(b.id); };
   return h('div', { class: 'cs-page' },
     h('div', { class: 'page-head' },
-      h('button', { class: 'btn ghost small', onclick: () => { commitDraft(); go({ view: 'booking', id: b.id }); } }, '‹ Booking'),
+      backBtn('Booking', () => { commitDraft(); go({ view: 'booking', id: b.id }); }),
       editing
         ? h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => { cancelEdit(); redraw(); } }, 'Cancel'), h('button', { class: 'btn primary', onclick: () => { commitDraft(); redraw(); } }, '✓ Done'))
         : h('button', { class: 'btn primary', onclick: () => { startEdit(b); redraw(); } }, '✏️ Edit sheet')),
@@ -259,7 +265,7 @@ export function callSheetPage(b, go) {
     h('div', { class: 'muted' }, `${b.title} · ${dateLabel(b, fmtShort)}`),
     h('div', { class: 'card-row' },
       h('p', { class: 'status-line', 'data-state': state === 'sent' ? 'synced' : state === 'changed' ? 'error' : '' }, `${state === 'sent' ? '✅' : state === 'changed' ? '⚠' : '📝'} ${STATE_LABEL[state]}${cs.sentAt ? ' · sent ' + new Date(cs.sentAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''}${cs.version ? ' · v' + cs.version : ''}`),
-      !editing && state !== 'sent' && hasContent(cs) && h('button', { class: 'btn ghost small', onclick: () => markSent(b.id) }, 'Mark as sent')),
+      !editing && state !== 'sent' && hasContent(cs) && h('button', { class: 'btn ghost small', onclick: () => markSent(b.id, false) }, 'Mark as sent')),
     !editing && forecastLine(callSheetData(b).loc, b.date, { onUse: txt => { const cur = byId('bookings', b.id); upsert('bookings', { ...cur, callSheet: { ...sheetOf(cur), weather: txt, editedAt: Date.now() } }); toast('Forecast added to the sheet'); } }),
     editing
       ? h('p', { class: 'small muted' }, 'Change anything directly on the sheet: times, the schedule, who is on set, weather, the emergency contact, instructions, and each person’s call time. Done saves a new version.')
@@ -271,7 +277,7 @@ export function callSheetPage(b, go) {
         h('button', { class: 'btn ghost small', onclick: web }, '💾 Web page'),
         h('button', { class: 'btn ghost small', onclick: copy }, 'Copy text')),
     h('div', { class: 'cs-paper' + (editing ? ' editing' : '') }, renderDoc(b, editing ? { cs: E.draft, crewCall: E.crewCall, edit: { touch: () => { E.changed = true; }, redraw } } : {})),
-    !editing && h('p', { class: 'small muted' }, 'The sheet is built from the booking, venue, crew, kit, hires and the sun for the day, plus what you add with Edit sheet. Print uses this device’s print dialog (save as PDF there too); Save PDF makes a file for the share sheet; Web page makes a file that opens on any phone.'));
+    !editing && h('p', { class: 'small muted' }, 'The sheet is built from the booking, venue, crew and hired people, kit, rentals and the sun for the day, plus what you add with Edit sheet. Print uses this device’s print dialog (save as PDF there too); Save PDF makes a file for the share sheet; Web page makes a file that opens on any phone.'));
 }
 
 /* ------------------------------------ list ------------------------------------ */
@@ -282,7 +288,7 @@ export function openCallSheets(onOpen) {
   const past = all.filter(b => endOf(b) < today).sort((x, y) => y.date.localeCompare(x.date)).slice(0, 12);
   let close = () => {};
   const row = b => { const st = sheetState(b), cs = sheetOf(b); return h('button', { class: 'card tap', type: 'button', onclick: () => { close(); onOpen(b); } },
-    h('div', { class: 'card-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [dateLabel(b, fmtShort), (cs.generalCall || b.start) && 'call ' + (cs.generalCall || b.start), (b.crew || []).length ? `${b.crew.length} crew` : null].filter(Boolean).join(' · '))),
+    h('div', { class: 'card-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [dateLabel(b, fmtShort), (cs.generalCall || b.start) && 'call ' + (cs.generalCall || b.start), ((b.crew || []).length + hiredPeople(b).length) ? `${(b.crew || []).length + hiredPeople(b).length} crew` : null].filter(Boolean).join(' · '))),
       h('span', { class: 'pill ' + (st === 'sent' ? 'st-confirmed' : st === 'changed' ? 'st-cancelled' : st === 'draft' ? 'st-enquiry' : '') }, STATE_LABEL[st]))); };
   const body = h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'One call sheet per shoot, built in the app. Open one to fill in the schedule and details, then print it or send it to the crew. ✅ means it has gone out; ⚠ means it changed since.'),

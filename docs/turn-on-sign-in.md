@@ -30,6 +30,7 @@ Copy these exactly, including the slash at the end where there is one.
 | JavaScript origin, second one (Google only) | `http://localhost:47831` |
 | Sign-in callback, website token (Apple only) | `https://vdex.crowmade.app/` |
 | Allowed origin, website token (Apple only) | `https://vdex.crowmade.app` |
+| Redirect URI for the iPhone app's Google fallback (Google only, optional) | `https://vdex.crowmade.app/signin-google.html` |
 | Allowed origin, desktop token (Apple only) | `http://localhost:47831` |
 
 ## 1. Google (about 15 minutes)
@@ -161,7 +162,7 @@ Send only the ones you have; the rest stay grey. They go into `js/cloud-config.j
 
 | What you see | What it means |
 |---|---|
-| The Connect button for a service is still grey | That service's code isn't in yet (iCloud needs the container and a token: the website token on the website, the desktop token in the desktop app), or the website hasn't updated. Wait five minutes and reopen Vdex. Still grey after ten? Open the repository's **Actions** tab: if *Deploy to GitHub Pages* shows a red cross for your change, open it and choose **Re-run failed jobs**, or send its link to whoever maintains Vdex. In the desktop app, the codes arrive with its next update. |
+| The Connect button for a service is still grey | That service's code isn't in yet (iCloud needs the container and a token: the website token on the website, the desktop token in the desktop app), or the website hasn't updated. Wait five minutes and reopen Vdex. Still grey after ten? Open the repository's **Actions** tab: if *Publish the website* shows a red cross for your change, open it and choose **Re-run failed jobs**, or send its link to whoever maintains Vdex. In the desktop app, the codes arrive with its next update. |
 | iCloud: Vdex says *iCloud said: Cannot create new type VdexFile in production schema* | Step 6 of the Apple section (Deploy Schema Changes) hasn't been done. |
 | iCloud: Vdex says *iCloud didn’t accept Vdex’s app details* | A token was copied wrongly, belongs to the Development environment, or the website's address isn't under its Allowed Origins (step 7 or 8). |
 | iCloud: after signing in at Apple, people land somewhere else or aren't connected | The URL Redirect address in step 7 is wrong. It must be the website address from the table, with the slash at the end. |
@@ -173,3 +174,7 @@ Send only the ones you have; the rest stay grey. They go into `js/cloud-config.j
 | Microsoft says "Need admin approval" | That person is using a work or school account. A personal Microsoft account works, or their IT department can approve Vdex. |
 
 If Vdex later moves to its own domain name, add the new addresses at each service in the same places, next to the old ones.
+
+## The iPhone app
+
+The iPhone app (docs/apple-app-store.md) needs nothing of its own here: its sign-ins open the website's pages in the phone's own sign-in window, so Google, Microsoft, Dropbox and Apple see the same addresses as the website. One optional extra for Google: if Google's own sign-in window cannot open inside the phone's window, the page offers "Sign in the other way", which sends it to Google and back; for that, add `https://vdex.crowmade.app/signin-google.html` under **Authorized redirect URIs** of the Vdex client in the Google Cloud console (step 7 above). Without it, that fallback shows Google's "redirect_uri_mismatch" page and the first way is the only one.

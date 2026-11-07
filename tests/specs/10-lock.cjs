@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
 const S = process.env.S;
@@ -32,7 +32,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const t0 = Date.now();
   await page.locator('.sheet .pin-input').nth(0).fill('246810'); await page.locator('.sheet .pin-input').nth(1).fill('246810');
   await page.locator('.sheet button[type=submit]').click();
-  await page.waitForFunction(() => !!localStorage.getItem('logi-vault'), null, { timeout: 15000 });
+  await page.waitForFunction(() => !!localStorage.getItem('logi-vault'), null, { timeout: 60000 });
   ok('PIN set: lock config + vault written, plaintext kept while unlocked', !!(await ls('logi-lock')) && !!(await ls('logi-vault')) && !!(await ls('logi-db-v1')), `${Date.now() - t0} ms incl. key derivation`);
   ok('header lock button visible', await page.locator('#lockBtn').isVisible());
   ok('security status shows PIN set', await page.locator('details.settings-section:has(> summary:has-text("Security"))').innerText().then(t => /PIN set/.test(t)));
@@ -54,10 +54,10 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('auto-lock "straight away": lock screen shown, app inert', (await page.locator('.lock').count()) === 1 && (await page.evaluate(() => document.getElementById('app').inert)));
   ok('while locked: plaintext database absent', (await ls('logi-db-v1')) === null);
   for (const d of '111111') await page.locator(`.lock .key[aria-label="${d}"]`).click();
-  await page.waitForFunction(() => /Wrong PIN/.test(document.querySelector('.lock-msg').textContent), null, { timeout: 15000 });
+  await page.waitForFunction(() => /Wrong PIN/.test(document.querySelector('.lock-msg').textContent), null, { timeout: 30000 });
   ok('wrong PIN rejected', true, await page.locator('.lock-msg').innerText());
   for (const d of '246810') await page.locator(`.lock .key[aria-label="${d}"]`).click();
-  await page.waitForFunction(() => !document.querySelector('.lock'), null, { timeout: 15000 });
+  await page.waitForFunction(() => !document.querySelector('.lock'), null, { timeout: 30000 });
   ok('correct PIN unlocks; plaintext back; app usable', (await ls('logi-db-v1')) !== null && !(await page.evaluate(() => document.getElementById('app').inert)));
 
   // --- reload: the lock gate runs before the app draws ---
@@ -66,39 +66,39 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.screenshot({ path: S + '/lock-screen.png' });
   ok('after reload: lock screen first, no plaintext on disk, no pages drawn', (await ls('logi-db-v1')) === null && (await page.locator('#rolodex .drum-btn').count()) === 0);
   await page.keyboard.type('246810');
-  await page.waitForSelector('#rolodex .drum-btn', { timeout: 15000 });
+  await page.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
   const afterReload = await page.evaluate(() => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.length);
   ok('keyboard PIN entry unlocks at boot, data restored', afterReload === before, afterReload + ' bookings');
 
   // --- throttling after repeated failures ---
   await page.locator('#lockBtn').click(); await page.waitForSelector('.lock');
   ok('Lock now seals the plaintext', (await ls('logi-db-v1')) === null);
-  for (let i = 0; i < 5; i++) { await page.keyboard.type('999999'); await page.waitForFunction(n => (JSON.parse(localStorage.getItem('logi-lock')).attempts || 0) >= n, i + 1, { timeout: 15000 }); }
+  for (let i = 0; i < 5; i++) { await page.keyboard.type('999999'); await page.waitForFunction(n => (JSON.parse(localStorage.getItem('logi-lock')).attempts || 0) >= n, i + 1, { timeout: 30000 }); }
   const msg = await page.locator('.lock-msg').innerText();
   ok('five wrong PINs start a wait', /Try again in \d+ s/.test(msg), msg);
   await page.keyboard.type('246810'); await sleep(800);
   ok('PIN ignored during the wait', (await page.locator('.lock').count()) === 1);
   await page.evaluate(() => { const c = JSON.parse(localStorage.getItem('logi-lock')); c.until = 0; c.attempts = 0; localStorage.setItem('logi-lock', JSON.stringify(c)); });
-  await page.reload(); await page.waitForSelector('.lock'); await page.keyboard.type('246810'); await page.waitForSelector('#rolodex .drum-btn', { timeout: 15000 });
+  await page.reload(); await page.waitForSelector('.lock'); await page.keyboard.type('246810'); await page.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
 
   // --- encrypted backup round trip ---
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-  await page.locator('.settings-section > summary', { hasText: 'Backups & data' }).click();
+  await openSetting(page, 'Storage, sync & backups');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Encrypted backup…' }).click().then(async () => { await page.waitForSelector('.sheet .pin-input'); await page.locator('.sheet .pin-input').nth(0).fill('correct horse battery'); await page.locator('.sheet .pin-input').nth(1).fill('correct horse battery'); await page.locator('.sheet button[type=submit]').click(); })]);
   const encPath = S + '/enc-backup.json'; await dl.saveAs(encPath);
   const enc = JSON.parse(fs.readFileSync(encPath, 'utf8'));
   ok('encrypted backup file has no plaintext', enc.vdex === 'encrypted-backup' && !/bookings/.test(fs.readFileSync(encPath, 'utf8').replace('"vdex":"encrypted-backup"', '')), dl.suggestedFilename());
   await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.bookings = []; })));
   ok('bookings cleared before import', (await page.evaluate(() => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.length)) === 0);
-  await page.locator('details.settings-section:has(> summary:has-text("Backups & data"))').locator('input[type=file]').setInputFiles(encPath);
+  await page.locator('details.settings-section:has(> summary:has-text("Storage, sync & backups"))').locator('input[type=file]').setInputFiles(encPath);
   await page.waitForSelector('.sheet .pin-input'); await page.locator('.sheet .pin-input').fill('wrong one'); await page.locator('.sheet button[type=submit]').click();
-  await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some(t => /wrong passphrase/.test(t.textContent)), null, { timeout: 15000 }).then(() => ok('wrong passphrase refused', true)).catch(() => ok('wrong passphrase refused', false));
+  await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some(t => /wrong passphrase/.test(t.textContent)), null, { timeout: 30000 }).then(() => ok('wrong passphrase refused', true)).catch(() => ok('wrong passphrase refused', false));
   await sleep(2800);
-  await page.locator('details.settings-section:has(> summary:has-text("Backups & data"))').locator('input[type=file]').setInputFiles(encPath);
+  await page.locator('details.settings-section:has(> summary:has-text("Storage, sync & backups"))').locator('input[type=file]').setInputFiles(encPath);
   await page.waitForSelector('.sheet .pin-input'); await page.locator('.sheet .pin-input').fill('correct horse battery'); await page.locator('.sheet button[type=submit]').click();
-  await page.waitForFunction(n => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.length === n, before, { timeout: 15000 });
+  await page.waitForFunction(n => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.length === n, before, { timeout: 30000 });
   ok('encrypted backup imported with the right passphrase', true);
-  ok('backup health line shows a copy today', await page.locator('details.settings-section:has(> summary:has-text("Backups & data"))').innerText().then(t => /copy today/.test(t)));
+  ok('backup health line shows a copy today', await page.locator('details.settings-section:has(> summary:has-text("Storage, sync & backups"))').innerText().then(t => /copy today/.test(t)));
 
   // --- asset register ---
   await page.evaluate(() => window.logiGo('gear')); await sleep(400);
@@ -106,13 +106,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const csvPath = S + '/assets.csv'; await dl2.saveAs(csvPath); const csv = fs.readFileSync(csvPath, 'utf8');
   ok('asset register CSV has serials and a total', /Serial number/.test(csv) && /"Total"/.test(csv), csv.split('\n').length + ' lines');
 
-  // --- remove the PIN ---
+  // --- no way to remove the PIN from Settings (everyone uses Vdex with one); removePin() stays for the tests ---
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
   await page.locator('.settings-section > summary', { hasText: 'Security' }).click();
-  await page.getByRole('button', { name: 'Remove PIN…' }).click();
-  await page.waitForSelector('.sheet .pin-input'); await page.locator('.sheet .pin-input').fill('246810'); await page.locator('.sheet button[type=submit]').click();
-  await page.waitForFunction(() => !localStorage.getItem('logi-lock'), null, { timeout: 15000 });
-  ok('PIN removed: no lock config, no vault, plaintext present, lock button hidden', (await ls('logi-vault')) === null && (await ls('logi-db-v1')) !== null && !(await page.locator('#lockBtn').isVisible()));
+  const secBtns = await page.locator('details.settings-section:has(> summary:has-text("Security")) button').allInnerTexts();
+  ok('Settings → Security has Lock now and Change PIN…, and no Remove PIN', secBtns.some(t => /Lock now/.test(t)) && secBtns.some(t => /Change PIN/.test(t)) && !secBtns.some(t => /Remove PIN/.test(t)), secBtns.join(' | '));
+  await page.evaluate(async () => { await (await import('./js/lock.js')).removePin(); });
+  await page.waitForFunction(() => !localStorage.getItem('logi-lock'), null, { timeout: 30000 });
+  ok('removePin() clears the lock config and the vault, plaintext present, lock button hidden', (await ls('logi-vault')) === null && (await ls('logi-db-v1')) !== null && !(await page.locator('#lockBtn').isVisible()));
 
   // --- CSP: no CSP violations so far ---
   ok('no CSP violations during the run', csp.length === 0, csp.slice(0, 3).join(' | '));

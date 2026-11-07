@@ -5,6 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://accounts.google.com https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; connect-src 'self' https:; img-src 'self' data: blob: https://tile.openstreetmap.org https://*.tile.openstreetmap.org; style-src 'self' 'unsafe-inline' https://accounts.google.com; frame-src https://accounts.google.com; font-src 'self'; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self' https://www.dropbox.com; manifest-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#14110f">
+<script src="js/return.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <title>Vdex</title>
@@ -22,10 +23,10 @@
     <div class="brand"><span class="dot"></span>VDEX <small>production deck</small></div>
     <div class="top-actions">
     <button id="helpBtn" class="cloud" aria-label="Tutorial for this page" title="Tutorial for this page"><span class="cloud-ico" aria-hidden="true">?</span></button>
-    <button id="installBtn" class="cloud" hidden aria-label="Install Vdex" title="Install Vdex"><span class="cloud-ico" aria-hidden="true">⤓</span><span>Install</span></button>
+    <button id="installBtn" class="cloud" hidden aria-label="Install Vdex" title="Install Vdex"><span class="cloud-ico" aria-hidden="true">⤓</span><span class="cloud-label">Install</span></button>
     <button id="lockBtn" class="cloud" hidden aria-label="Lock Vdex" title="Lock Vdex"><span class="cloud-ico" aria-hidden="true">🔒</span></button>
     <button id="displayBtn" class="cloud" aria-label="Display and accessibility settings"><span class="cloud-ico" aria-hidden="true">Aa</span></button>
-    <button id="cloudBtn" class="cloud" aria-label="Storage and sync"><span class="cloud-ico">☁</span><span id="cloudLabel">Local</span></button>
+    <button id="cloudBtn" class="cloud" aria-label="Storage, sync and backups"><span class="cloud-ico">☁</span><span id="cloudLabel" class="cloud-label">Local</span></button>
     </div>
   </header>
   <nav id="rolodex" class="rolodex" aria-label="Sections"></nav>
@@ -49,6 +50,7 @@
 <link rel="modulepreload" href="js/callsheet.js">
 <link rel="modulepreload" href="js/hours.js">
 <link rel="modulepreload" href="js/money.js">
+<link rel="modulepreload" href="js/native.js">
 <link rel="modulepreload" href="js/notify.js">
 <link rel="modulepreload" href="js/pages/gear.js">
 <link rel="modulepreload" href="js/pages/venues.js">

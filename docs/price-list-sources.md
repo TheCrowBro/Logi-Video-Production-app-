@@ -1,6 +1,6 @@
 # Where the price list's typical rates come from
 
-Vdex's price list (Settings → Quotes & invoices → 🏷 Edit the price list) starts from typical freelance rates for the region your currency belongs to. This page lists every figure with the note and the sources behind it.
+Vdex's price list (Settings → Work & billing → Quotes & invoices → 🏷 Edit the price list) starts from typical freelance rates for the region your currency belongs to. This page lists every figure with the note and the sources behind it.
 
 **These are starting points, not advice.** They describe what working freelancers charge small-business, corporate, event and wedding clients: neither the cheapest nor premium rates, and not union scale for feature films. Most figures come from 2025–2026 sources; a few older figures were adjusted for inflation, and the notes say so. Your market, city, experience, kit and the job decide your price. Every price in the list is yours to change.
 

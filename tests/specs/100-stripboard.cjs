@@ -270,7 +270,7 @@ The taproom is full. Ana pours. Tom carries crates. Maya watches from the corner
   // ---- two devices ----
   const merged = await page.evaluate(() => import('./js/store.js').then(s => { const local = JSON.parse(s.serialize()), remote = JSON.parse(s.serialize()); const rb = remote.bookings.find(x => x.id === window.__id); rb.title = 'Renamed elsewhere'; rb.updatedAt = Date.now() + 5000; rb.board = { list: [], cast: [], updatedAt: 1 }; const out = s.mergeDb(local, remote).bookings.find(x => x.id === window.__id); return { title: out.title, scenes: out.board.list.filter(x => x.type === 'scene').length }; }));
   ok('a newer edit to the booking on another device keeps the newer stripboard', merged.title === 'Renamed elsewhere' && merged.scenes === 7, JSON.stringify(merged));
-  ok('the booking page counts the scenes on its Stripboard button', await (async () => { await page.locator('.sb-page .page-head button').click(); await page.waitForSelector('.bk-detail'); return /Stripboard · 7 scenes/.test(await page.locator('.bk-tools .sb-open').innerText()); })());
+  ok('the booking page counts the scenes on its Stripboard button', await (async () => { await page.locator('.sb-page .page-head button').click(); await page.waitForSelector('.bk-detail'); return /Stripboard & shot list · 7 scenes/.test(await page.locator('.bk-tools .sb-open').innerText()); })());
   ok('no errors', !errors.length, errors.slice(0, 3).join(' | '));
   fs.rmSync(file, { force: true });
   await browser.close();

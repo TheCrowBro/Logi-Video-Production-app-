@@ -7,7 +7,7 @@ export const CLOUD_APPS = {
   // (sign-in callback: URL Redirect to the website) and one for the desktop app (sign-in callback: Post Message)
   icloud: { container: '', apiToken: '', desktopToken: '' }, // container looks like iCloud.app.crowmade.vdex
   dropbox: '',   // Dropbox App key (App Console → your app → Settings)
-  google: '',    // Google OAuth client ID, ends in .apps.googleusercontent.com
+  google: '943564062295-f5ut36hads3mdv7sjhnah971msh7btq6.apps.googleusercontent.com', // Google OAuth client ID (Google Cloud project Vdex)
   microsoft: '', // Microsoft Application (client) ID, looks like 00000000-0000-0000-0000-000000000000
   googleCalendar: true, // false while Google treats the calendar permission as "sensitive" (docs/turn-on-sign-in.md, Google step 6)
 };

@@ -1,6 +1,7 @@
-// What gets published: only the website's own files (never the Android, desktop, docs, store or test sources), the
-// Cloudflare copy with headers that match each page's own security policy, the dormant-until-set-up Cloudflare job, and
-// an Android app whose package, address and asset links agree with each other and with vdex.crowmade.app.
+// What gets published: only the website's own files (never the Android, iPhone (apple/), desktop, docs, store or test
+// sources), the Cloudflare copy with headers that match each page's own security policy, the dormant-until-set-up
+// Cloudflare job, and an Android app whose package, address and asset links agree with each other and with
+// vdex.crowmade.app.
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
@@ -16,8 +17,8 @@ try {
   execFileSync(process.execPath, ['tools/stage-site.mjs', out], { cwd: ROOT, stdio: 'pipe' });
   const files = walk(path.join(ROOT, out)).map(f => path.relative(path.join(ROOT, out), f).split(path.sep).join('/'));
   const tops = [...new Set(files.map(f => f.split('/')[0]))].sort();
-  ok('only the website is published: pages, styles, manifest, worker, js, vendor, icons and .well-known', JSON.stringify(tops) === JSON.stringify(['.well-known', 'crew.html', 'download.html', 'icons', 'index.html', 'invoice.html', 'js', 'manifest.webmanifest', 'privacy.html', 'styles.css', 'sw.js', 'terms.html', 'vendor']), tops.join(', '));
-  ok('no Android, desktop, docs, store, test or tool files, no signing key, and never the licence generator or keys', !files.some(f => /^(android|desktop|docs|store|tests|tools|cloudflare|\.github)\/|keystore|licence-(generator|key|codes)|package(-lock)?\.json$|\.md$/.test(f) && f !== 'vendor/LICENSES.md'), files.filter(f => /keystore|^android|^docs|licence-/.test(f)).join(', '));
+  ok('only the website is published: pages, styles, manifest, worker, js, vendor, icons and .well-known', JSON.stringify(tops) === JSON.stringify(['.well-known', 'crew.html', 'download.html', 'icons', 'index.html', 'invoice.html', 'js', 'manifest.webmanifest', 'privacy.html', 'signin-google.html', 'styles.css', 'sw.js', 'terms.html', 'vendor']), tops.join(', '));
+  ok('no Android, iPhone, desktop, docs, store, test or tool files, no signing key, and never the licence generator or keys', !files.some(f => /^(android|apple|desktop|docs|store|tests|tools|cloudflare|\.github)\/|keystore|licence-(generator|key|codes)|package(-lock)?\.json$|\.md$/.test(f) && f !== 'vendor/LICENSES.md'), files.filter(f => /keystore|^android|^apple|^docs|licence-/.test(f)).join(', '));
   const shell = [...read('sw.js').match(/const SHELL = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(m => m[1]).filter(f => f !== './');
   ok('every file the offline copy asks for is published', shell.every(f => files.includes(f)), shell.filter(f => !files.includes(f)).join(', '));
   ok('no _headers or _redirects in the plain copy', !files.includes('_headers') && !files.includes('_redirects'));

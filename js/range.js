@@ -5,6 +5,7 @@
 //    subject meets the ground; distance = height / tan(angle). Aim at the top for the subject's height.
 import { h, toast } from './util.js';
 import { haptic } from './a11y.js';
+import * as native from './native.js';
 
 const LS = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* ignore */ } } };
 let units = LS.get('logi-units') || 'm';
@@ -24,7 +25,7 @@ export function range(root) {
   const stops = [];
   const unitSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Units' }, [['m', 'Metres'], ['ft', 'Feet']].map(([u, l]) => h('button', { type: 'button', class: units === u ? 'on' : '', 'aria-pressed': units === u, onclick: () => { units = u; LS.set('logi-units', u); root.replaceChildren(); stops.forEach(f => f()); range(root); } }, l)));
   root.append(
-    h('div', { class: 'warn small' }, '⚠ Not every phone can measure distance. AR measuring needs an Android phone with ARCore, in Chrome. iPhones can’t do it in a browser yet. The tilt method works on most phones but is an estimate, about ±10%, and needs level ground.'),
+    h('div', { class: 'warn small' }, native.isApp ? '⚠ Measuring by camera (AR) is not available here yet. The tilt method works on most phones but is an estimate, about ±10%, and needs level ground.' : '⚠ Not every phone can measure distance. AR measuring needs an Android phone with ARCore, in Chrome. iPhones can’t do it in a browser yet. The tilt method works on most phones but is an estimate, about ±10%, and needs level ground.'),
     h('div', { class: 'card-row' }, h('strong', null, 'Range finder'), unitSeg),
     arCard(stops), tiltCard(stops));
   return () => stops.forEach(f => f());

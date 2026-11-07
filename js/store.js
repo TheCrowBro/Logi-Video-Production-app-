@@ -25,12 +25,26 @@ function load() {
   return blank();
 }
 
+// Older copies kept rented gear under booking.hires; hires are now the people hired for the job and the gear lives
+// under booking.rentals. Runs on load, on a backup import and on every remote copy, so every device agrees. Lossless:
+// nothing else on the booking changes, and a copy that already moved them is left as it is.
+export function migrateBooking(b) {
+  if (!b || typeof b !== 'object' || !Array.isArray(b.hires)) return b;
+  const gear = b.hires.filter(x => x && typeof x === 'object' && !x.name && (x.item != null || x.from != null || x.cost != null)); // gear-shaped, even with a blank item
+  if (!gear.length) return b;
+  const have = new Set((Array.isArray(b.rentals) ? b.rentals : []).map(x => x && x.id).filter(Boolean));
+  return { ...b, hires: b.hires.filter(x => !gear.includes(x)), rentals: [...(Array.isArray(b.rentals) ? b.rentals : []), ...gear.filter(x => !(x.id && have.has(x.id)))] };
+}
+
+// The same, in place, for a booking being edited inside update().
+export const splitHires = x => { const m = migrateBooking(x); if (m !== x) { x.hires = m.hires; x.rentals = m.rentals; } return x; };
+
 function normalise(raw) {
   const b = blank();
   return {
     ...b, ...raw,
     profile: { ...b.profile, ...(raw.profile || {}) },
-    bookings: Array.isArray(raw.bookings) ? raw.bookings : [],
+    bookings: (Array.isArray(raw.bookings) ? raw.bookings : []).map(migrateBooking),
     crew: Array.isArray(raw.crew) ? raw.crew : [],
     gear: Array.isArray(raw.gear) ? raw.gear : [],
     insurance: Array.isArray(raw.insurance) ? raw.insurance : [],
@@ -84,6 +98,9 @@ export const setGate = fn => { gate = typeof fn === 'function' ? fn : null; };
 
 // Whether a change would be accepted now (and, when not, the gate explains why). Forms check it before closing.
 export const canChange = () => !gate || gate({ form: true });
+// The same question asked without a word to the person: for side effects of something that is allowed anyway
+// (marking a call sheet sent when it is printed), which are simply skipped when Vdex is read-only.
+export const canChangeQuietly = () => !gate || gate({ quiet: true });
 
 // Redraws the page from what is stored (after a refused change, so a ticked box shows the stored value again).
 export const redraw = () => emit();
@@ -127,8 +144,14 @@ export const endOf = b => (b.endDate && b.endDate > b.date ? b.endDate : b.date)
 export const covers = (b, date) => b.date <= date && date <= endOf(b);
 export const overlaps = (a, b) => a.date <= endOf(b) && b.date <= endOf(a);
 
+// Edit days: post-production days a booking also happens on, each with optional times. They are not shoot days, so
+// covers()/overlaps() (kit clashes, the calendar event's span) leave them alone; the day list and the clock use onDay().
+export const editDaysOf = b => (Array.isArray(b && b.editDays) ? b.editDays.filter(d => d && /^\d{4}-\d{2}-\d{2}$/.test(d.date)) : []);
+export const isEditDay = (b, date) => editDaysOf(b).some(d => d.date === date);
+export const onDay = (b, date) => covers(b, date) || isEditDay(b, date);
+
 export const bookingsOn = date =>
-  db.bookings.filter(b => covers(b, date)).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
+  db.bookings.filter(b => onDay(b, date)).sort((a, b) => (a.start || '').localeCompare(b.start || ''));
 
 export const activeBookings = () => db.bookings.filter(b => b.status !== 'Cancelled');
 
@@ -169,8 +192,14 @@ export async function eraseAll() {
   db = blank(); db.updatedAt = Date.now();
   sealed = false; dirty = false;
   persistLocal(); emit();
-  // The lock's vault, PIN and backup marks go too, otherwise the next start would bring the old data back.
-  ['logi-vault', 'logi-lock', 'logi-backup-cloud', 'logi-backup-export', 'logi-sync-at', 'logi-backup-nudge', 'logi-loc'].forEach(k => lsSet(k, null));
+  // The lock's vault, PIN and backup marks go too, otherwise the next start would bring the old data back; and so does
+  // everything else Vdex keeps on this device (sign-ins, the phone's calendar link, the feed's link, the weather and
+  // location caches, the fingerprint or face key), except plain preferences and the terms already agreed to. The
+  // licence sign-in stays: Sign out under About & Licence gives it up (terms section 17).
+  try { dispatchEvent(new Event('vdex-erased')); } catch { /* ignore */ } // the lock lets go of its key first: no vault rewrite, no seal on the way out
+  const KEEP = new Set(['logi-terms', 'logi-prefs', 'logi-tour', 'logi-tour-at', 'logi-tab', 'logi-units', 'logi-stdday', 'logi-breakdefault', 'logi-notify', 'logi-hours-range', 'logi-eyeh', 'logi-decl', 'logi-lock-setup']);
+  try { const keys = []; for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); keys.filter(k => k && (k.startsWith('logi-') || k.startsWith('msal.')) && !KEEP.has(k)).forEach(k => localStorage.removeItem(k)); } catch { /* blocked storage */ }
+  try { await new Promise(res => { const r = indexedDB.deleteDatabase('logi'); r.onsuccess = r.onerror = r.onblocked = () => res(); }); } catch { /* ignore */ }
   setTimeout(() => location.reload(), 600);
 }
 
@@ -188,16 +217,16 @@ export function loadSample() {
   ];
   ['Flight case 1', 'Flight case 1', 'Flight case 1', 'Van', 'Van', 'Audio bag', 'Audio bag', 'Van', 'Studio', 'Flight case 1'].forEach((place, i) => { if (gear[i]) gear[i].location = place; });
   const crew = [
-    { id: uid(), name: 'Sam Rivera', role: 'Sound Recordist', phone: '+1 555 0101', email: 'sam@example.com', link: 'https://example.com/sam', rate: '$450/day', notes: '' },
-    { id: uid(), name: 'Jo Chen', role: '1st AC', phone: '+1 555 0102', email: 'jo@example.com', link: 'https://example.com/jo', rate: '$400/day', notes: '' },
-    { id: uid(), name: 'Mika Dahl', role: 'Gaffer', phone: '+1 555 0103', email: '', link: 'https://example.com/mika', rate: '$425/day', notes: '' },
-    { id: uid(), name: 'Priya Nair', role: 'Editor', phone: '', email: 'priya@example.com', link: 'https://example.com/priya', rate: '$55/hr', notes: '' },
+    { id: uid(), name: 'Sam Rivera', role: 'Sound Recordist', phone: '+1 555 0101', email: 'sam@example.com', link: 'https://example.com/sam', rate: 450, rateUnit: 'day', notes: '' },
+    { id: uid(), name: 'Jo Chen', role: '1st AC', phone: '+1 555 0102', email: 'jo@example.com', link: 'https://example.com/jo', rate: 400, rateUnit: 'day', notes: '' },
+    { id: uid(), name: 'Mika Dahl', role: 'Gaffer', phone: '+1 555 0103', email: '', link: 'https://example.com/mika', rate: 425, rateUnit: 'day', notes: '' },
+    { id: uid(), name: 'Priya Nair', role: 'Editor', phone: '', email: 'priya@example.com', link: 'https://example.com/priya', rate: 55, rateUnit: 'hour', notes: '' },
   ];
   db = normalise({
     ...db,
     gear, crew,
     bookings: [
-      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', type: 'brand', date: iso(2), start: '07:30', end: '17:00', status: 'Prepped', venueId: venueA, checks: { 'confirmed:deposit-received': 1, 'confirmed:booking-in-the-calendar': 1, 'confirmed:crew-asked-and-confirmed': 1, 'confirmed:venue-confirmed-permits-requested': 1, 'confirmed:insurance-certificate-sent': 1, 'confirmed:hires-booked': 1, 'prepped:shot-list-storyboard-done': 1, 'prepped:treatment-and-shot-list-approved': 1 }, crewStatus: { [crew[0].id]: 'confirmed', [crew[1].id]: 'asked' }, crewCall: { [crew[0].id]: '07:30', [crew[1].id]: '07:00' }, shots: [{ id: uid(), text: 'Wide: steam over the mash tun at first light', done: false }, { id: uid(), text: 'Ana interview, two lights, 50mm', done: false }, { id: uid(), text: 'Keg roll to the van, tracking', done: false }], hires: [{ id: uid(), item: 'Easyrig Vario 5', from: 'Dock Rentals', cost: 60, pickup: iso(1), return: iso(3), booked: 'yes' }], deliverables: [{ id: uid(), name: 'Brand film 16:9, 90 s', duration: '90 s', due: iso(23), status: 'Planned', link: '', delivered: '' }, { id: uid(), name: 'Social cut 9:16, 30 s', duration: '30 s', due: iso(27), status: 'Planned', link: '', delivered: '' }], address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id], gearQty: { [gear[4].id]: 2 }, notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
+      { id: uid(), title: 'Harbour Brewing brand film', client: 'Harbour Brewing Co.', type: 'brand', date: iso(2), start: '07:30', end: '17:00', status: 'Prepped', venueId: venueA, checks: { 'confirmed:deposit-received': 1, 'confirmed:booking-in-the-calendar': 1, 'confirmed:crew-asked-and-confirmed': 1, 'confirmed:venue-confirmed-permits-requested': 1, 'confirmed:insurance-certificate-sent': 1, 'confirmed:hires-booked': 1, 'prepped:shot-list-storyboard-done': 1, 'prepped:treatment-and-shot-list-approved': 1 }, crewStatus: { [crew[0].id]: 'confirmed', [crew[1].id]: 'asked' }, crewCall: { [crew[0].id]: '07:30', [crew[1].id]: '07:00' }, shots: [{ id: uid(), text: 'Wide: steam over the mash tun at first light', done: false }, { id: uid(), text: 'Ana interview, two lights, 50mm', done: false }, { id: uid(), text: 'Keg roll to the van, tracking', done: false }], rentals: [{ id: uid(), item: 'Easyrig Vario 5', from: 'Dock Rentals', cost: 60, pickup: iso(1), return: iso(3), booked: 'yes' }], deliverables: [{ id: uid(), name: 'Brand film 16:9, 90 s', duration: '90 s', due: iso(23), status: 'Planned', link: '', delivered: '' }, { id: uid(), name: 'Social cut 9:16, 30 s', duration: '30 s', due: iso(27), status: 'Planned', link: '', delivered: '' }], address: '12 Dock Road, Portside', stakeholders: [{ name: 'Ana Ruiz', role: 'Marketing lead', phone: '+1 555 0199' }, { name: 'Tom Hale', role: 'Head brewer', phone: '' }], crew: [crew[0].id, crew[1].id], gear: [gear[0].id, gear[1].id, gear[3].id, gear[4].id, gear[5].id, gear[6].id], gearQty: { [gear[4].id]: 2 }, notes: 'Golden hour exterior at 17:30. Parking behind the loading bay.' },
       { id: uid(), title: 'Corporate interviews', client: 'Northline Legal', type: 'corporate', date: iso(2), start: '19:00', end: '21:00', status: 'Quoted', checks: { 'enquiry:brief-received-objectives-audience-deliverables': 1, 'enquiry:budget-range-known': 1, 'quoted:quote-estimate-sent': 1 }, address: '88 King Street, Level 9', stakeholders: [{ name: 'Dee Okafor', role: 'Comms', phone: '+1 555 0144' }], crew: [], gear: [gear[0].id, gear[4].id, gear[5].id], gearQty: { [gear[4].id]: 2 }, notes: '' },
       { id: uid(), title: 'Wedding weekend', client: 'Lee & Marcus', type: 'wedding', date: iso(9), endDate: iso(11), start: '10:00', end: '22:00', status: 'Confirmed', checks: { 'confirmed:deposit-received': 1 }, address: 'Elm Hall Gardens', stakeholders: [{ name: 'Lee Park', role: 'Client', phone: '+1 555 0177' }], crew: [crew[1].id], gear: [gear[0].id, gear[2].id, gear[8].id], notes: '' },
       { id: todayJob, title: 'Location recce — Elm Hall', client: 'Lee & Marcus', date: iso(0), start: '10:00', end: '14:00', status: 'Confirmed', address: 'Elm Hall Gardens', breakMinutes: 30, breakNote: '30 min lunch', stakeholders: [], crew: [], gear: [gear[0].id, gear[2].id], notes: 'Walk the ceremony route and check power at the marquee.' },

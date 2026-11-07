@@ -39,7 +39,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
       gr.value = 9876;
       Object.assign(x, { address: '1 Quay Street, Portside', type: 'vertical', date: new Date(Date.now() + 2 * 864e5).toISOString().slice(0, 10), crew: [c.id], gear: [g.id], venueId: v ? v.id : undefined, notes: 'SECRET BOOKING NOTE', status: 'Confirmed',
         stakeholders: [{ name: 'Client Person', role: 'Client', phone: '+1 555 0999', email: 'client@example.com' }],
-        hires: [{ id: 'h1', item: 'Prism lens', from: 'Camera Co', cost: 150 }], licences: [{ id: 'l1', kind: 'Music', title: 'Track One', cost: 60 }],
+        hires: [{ id: 'h1', item: 'Prism lens', from: 'Camera Co', cost: 150 }], rentals: [], licences: [{ id: 'l1', kind: 'Music', title: 'Track One', cost: 60 }],
         shots: [{ id: 's1', text: 'Wide of the harbour at dawn', done: false }, { id: 's2', text: 'Close-up of the hands', done: true }],
         deliverables: [{ id: 'd1', name: 'Main cut 9:16', duration: '60 s', due: '', status: 'Planned', link: 'https://private.example/review' }],
         quote: { number: 'Q-0099', status: 'Sent', date: new Date().toISOString().slice(0, 10), taxRate: 20, lines: [{ id: 'q1', desc: 'Production', qty: 1, unit: 'item', price: 2500 }] },
@@ -54,6 +54,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   // ---- budget ----
   const money = n => page.evaluate(v => import('./js/money.js').then(m => m.fmtMoney(v)), n);
+  await page.locator('#bk-work').evaluate(d => { d.open = true; }); await sleep(150);
   const budget = page.locator('#bk-budget');
   ok('the booking has a private Budget section', /Only you see it/.test(await budget.innerText()));
   await budget.locator('button:has-text("Fill from booking")').click(); await sleep(400);
@@ -119,7 +120,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const snap = await page.evaluate(u => import('./js/link-pack.js').then(m => m.unpack(new URL(u).hash)), url);
   const raw = JSON.stringify({ ...snap, made: 0, ref: '' }); // the timestamp and the random id could contain any digits
   const keys = new Set(); (function walk(o) { if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) { if (!Array.isArray(o)) keys.add(k); walk(v); } })(snap);
-  const FORBIDDEN = ['rate', 'price', 'cost', 'value', 'actual', 'budget', 'quote', 'invoice', 'payments', 'pay', 'link', 'notesOnBooking'];
+  const FORBIDDEN = ['rate', 'rateUnit', 'price', 'cost', 'value', 'actual', 'budget', 'quote', 'invoice', 'payments', 'pay', 'link', 'notesOnBooking'];
   ok('the link carries no money: no rates, prices, costs, values, budgets, quotes or invoices', !FORBIDDEN.some(k => keys.has(k)) && !/450|9876|2500|Q-0099|Van|SECRET BOOKING NOTE|private\.example/.test(raw), [...keys].join(','));
   ok('…and carries what the crew needs', snap.title === seed.title && snap.call.general === '07:30' && snap.schedule.some(r => r.item === 'First set-up on the quay') && snap.crew.some(c => c.name === seed.crewName && c.call === '07:30' && c.phone) && snap.shots.length === 2 && snap.kit.length === 1 && snap.notes === 'Bring a head torch' && snap.type === 'Vertical video (9:16)');
   ok('the link carries a stable reference so a newer link updates the crew’s calendar event', snap.ref === seed.id);

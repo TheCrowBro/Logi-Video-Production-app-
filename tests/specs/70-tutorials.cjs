@@ -7,6 +7,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
   await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+  // Sign-in switched off, whatever js/cloud-config.js holds, so the calendar card shows its greyed state (spec 95 covers it on).
+  await ctx.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: "export const CLOUD_APPS = { icloud: { container: '', apiToken: '', desktopToken: '' }, dropbox: '', google: '', microsoft: '', googleCalendar: true };" }));
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
   await ctx.addInitScript(acceptTerms());
   const page = await ctx.newPage();
@@ -44,7 +46,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => { const c = [...document.querySelectorAll('#page .card.tap')].find(x => /Harbour/.test(x.textContent)); if (c) c.click(); }); await page.waitForSelector('.bk-detail'); await expect('A booking', 8);
   await page.locator('.bk-tools button').first().click(); await page.waitForSelector('.cs-page'); await expect('Call sheet', 3);
   await page.getByRole('button', { name: '‹ Booking' }).click(); await sleep(300);
+  await page.locator('#bk-work').evaluate(d => { d.open = true; }); await sleep(150);
   await page.locator('#bk-money button').first().click(); await page.waitForSelector('.money-page'); await expect('Money', 2);
+  ok('the Money page offers newcomers the guide, and its tutorial card offers it too', (await page.locator('.money-page .walk-btn').count()) === 1);
+  await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card .tour-actions');
+  ok('…as a Guide button on the first card', (await page.locator('.tour-card button:has-text("Guide")').count()) === 1);
+  await page.keyboard.press('Escape'); await sleep(200);
   for (const [tab, name, min] of [['crew', 'Crew', 3], ['gear', 'Equipment', 5], ['venues', 'Venues', 3], ['insurance', 'Insurance', 3], ['me', 'Me', 3], ['field', 'Field', 2], ['settings', 'Settings', 10]]) {
     await page.evaluate(t => window.logiGo(t), tab); await sleep(450); await expect(name, min);
   }
@@ -79,7 +86,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card');
   await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet');
   const names = await page.locator('.sheet .card.tap').allInnerTexts();
-  ok('chooser lists every page tutorial (sheet walkthroughs live behind the sheets’ own ?)', names.length === 17 && names.some(n => /Stripboard/.test(n)) && names.some(n => /a log/.test(n)) && names.some(n => /start to finish/.test(n)), names.join(', '));
+  ok('chooser lists every page tutorial (sheet walkthroughs live behind the sheets’ own ?; the set-up walkthrough has its own button)', names.length === 18 && names.some(n => /Stripboard/.test(n)) && names.some(n => /a log/.test(n)) && names.some(n => /Timecode, start to finish/.test(n)) && names.some(n => /Quotes & invoices, start to finish/.test(n)) && !names.some(n => /Set up/.test(n)), names.join(', '));
+  ok('…with the two guides and the set-up walkthrough as buttons', (await page.locator('.sheet button:has-text("Quotes & invoices guide")').count()) === 1 && (await page.locator('.sheet button:has-text("set-up walkthrough")').count()) === 1);
   await page.locator('.sheet .card.tap', { hasText: 'A booking' }).click();
   await page.waitForSelector('.tour-card', { timeout: 10000 });
   ok('choosing “A booking” opens a booking and starts its tutorial', (await page.locator('.bk-detail').count()) === 1 && /booking/i.test(await page.locator('.tour-card h2').innerText()));
@@ -104,6 +112,50 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card .tour-actions');
   ok('the timecode page tutorials offer the guide', (await page.locator('.tour-card button:has-text("Guide")').count()) === 1);
   await page.keyboard.press('Escape'); await sleep(200);
+  // Quotes & invoices, start to finish: through Settings, then a practice job's quote, invoice, a payment and the overview
+  await page.evaluate(() => window.logiGo('bookings')); await sleep(400);
+  await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('moneycourse')));
+  const mc = await walk(null);
+  ok(`Quotes & invoices, start to finish: ${mc.cards} steps, ${mc.spots} highlighted, ends on Done at ${mc.cards} / ${mc.cards}`, mc.cards >= 18 && mc.spots >= 14 && mc.closed && mc.label === 'Done' && mc.counter === `${mc.cards} / ${mc.cards}`, `${mc.counter} · ` + mc.titles.join(' · '));
+  ok('the course visited the rates, the quote, the invoice, a payment and the overview', ['Your rates, once', 'Getting paid', 'The quote', 'Sent, then accepted', 'Now the invoice', 'The invoice', 'Payments received', 'The Money overview', 'Tidy up'].every(t => mc.titles.includes(t)));
+  const practice = await page.evaluate(() => import('./js/store.js').then(s => { const b = s.db.bookings.find(x => x.practice); return b && { q: b.quote && b.quote.number + ' ' + b.quote.status, inv: b.invoice && b.invoice.number + ' ' + b.invoice.status + ' ' + (b.invoice.payments || []).length, checks: Object.keys(b.checks || {}), real: s.db.bookings.filter(x => !x.practice && x.quote).map(x => x.quote.number) }; }));
+  ok('it ran on a practice job with its own numbers: quote accepted, invoice sent with one payment, the pipeline ticked', practice && practice.q === 'Q-PRACTICE Accepted' && practice.inv === 'INV-PRACTICE Sent 1' && practice.checks.includes('quoted:quote-estimate-sent') && practice.checks.includes('delivered:final-invoice-sent'), JSON.stringify(practice));
+  ok('no sheet is left open after the course', (await page.locator('.sheet').count()) === 0);
+  await page.evaluate(() => import('./js/tutorials.js').then(m => m.openMoneyGuide())); await page.waitForSelector('.sheet .money-guide-body');
+  const mg = await page.locator('.sheet').last().innerText();
+  ok('the quotes & invoices guide reads through the whole job', /How quotes and invoices work/i.test(mg) && /Before the first quote/i.test(mg) && /Making the quote/i.test(mg) && /From quote to invoice/i.test(mg) && /Getting paid/i.test(mg) && /Late payers/i.test(mg) && /accountant/i.test(mg)); // headings are shown in capitals
+  ok('…and offers the walkthrough and the practice job', (await page.locator('.sheet button:has-text("Walk me through it")').count()) === 1 && (await page.locator('.sheet button:has-text("practice job")').count()) === 1);
+  await page.keyboard.press('Escape'); await sleep(300);
+  // the last card of the course removes the practice job
+  await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('moneycourse'))); await page.waitForSelector('.tour-card');
+  for (let i = 0; i < 30 && (await page.locator('.tour-card h2').innerText()) !== 'Tidy up'; i++) { const was = await page.locator('.tour-step').innerText(); await page.locator('.tour-card .btn.primary').click(); await page.waitForFunction(prev => (document.querySelector('.tour-step') || {}).textContent !== prev, was, { timeout: 8000 }).catch(() => {}); await sleep(120); }
+  await page.locator('.tour-form button', { hasText: 'Remove the practice job' }).click(); await sleep(500);
+  ok('Remove the practice job on the last card takes it away, and the course ends on the month view', !(await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.some(x => x.practice)))) && /removed/.test(await page.locator('.tour-form').innerText()));
+  await page.locator('.tour-card .btn.primary').click(); await sleep(300);
+  ok('…with the real quotes untouched', (await page.locator('.tour').count()) === 0 && (await page.locator('.bk-month').count()) === 1);
+  // The set-up walkthrough (the first-run tour, and Take the tour later): it saves what is typed and adds the samples
+  await page.evaluate(() => import('./js/tour.js').then(m => m.startTour())); await page.waitForSelector('.tour-card', { timeout: 10000 }); await sleep(300);
+  const seen = []; let calCard = false, samplesSeen = false, removed = false, arrowStayed = false, closedOk = false;
+  for (let i = 0; i < 20; i++) {
+    const h2 = await page.locator('.tour-card h2').innerText(); seen.push(h2);
+    const step = await page.locator('.tour-step').innerText();
+    if (h2 === 'You') { await page.locator('.tour-form input[data-key="name"]').fill('Sam Operator'); await page.keyboard.press('ArrowRight'); await sleep(250); arrowStayed = (await page.locator('.tour-card h2').innerText()) === 'You'; await page.locator('.tour-form input[data-key="business"]').fill('Operator Films'); }
+    if (h2 === 'How clients reach you') { await page.locator('.tour-form input[data-key="phone"]').fill('+1 555 0199'); await page.locator('.tour-form input[data-key="email"]').fill('sam@example.com'); }
+    if (h2 === 'Your website') { await page.locator('.tour-form input[data-key="website"]').fill('https://operator.example'); }
+    if (h2 === 'Your calendar') calCard = (await page.locator('.tour-form button[aria-label^="Connect"]').count()) === 2 && /Not ready yet/.test(await page.locator('.tour-form').innerText()) && (await page.locator('.tour-form button[aria-label^="Connect"]').first().isDisabled());
+    if (h2 === 'Two sample people') samplesSeen = await page.evaluate(() => import('./js/store.js').then(s => { const t = s.db.crew.find(c => c.id === 'sample-talent'), c = s.db.crew.find(x => x.id === 'sample-crew'); return !!(t && t.role === 'Talent' && t.name === 'Sample talent' && c && c.name === 'Sample crew member'); })) && !(await page.locator('.tour-spot').evaluate(el => el.classList.contains('center')));
+    if (h2 === 'Keep the samples?') { await page.locator('.tour-form button', { hasText: 'Remove the samples' }).click(); await sleep(400); removed = await page.evaluate(() => import('./js/store.js').then(s => !s.db.crew.some(c => c.sample))) && /removed/.test(await page.locator('.tour-form').innerText()); }
+    const label = await page.locator('.tour-actions .btn.primary').innerText();
+    await page.locator('.tour-actions .btn.primary').click();
+    if (label === 'Done') { closedOk = (await page.locator('.tour').count()) === 0; break; }
+    await page.waitForFunction(prev => !document.querySelector('.tour-card') || (document.querySelector('.tour-step') || {}).textContent !== prev, step, { timeout: 8000 }).catch(() => {}); await sleep(150);
+  }
+  ok('the set-up walkthrough runs through the deck, your details, the calendar and the samples, and ends on Done', ['Welcome to Vdex', 'Your PIN', 'The Rolodex', 'What is in the deck', 'You', 'How clients reach you', 'Your website', 'Where they live', 'Your calendar', 'Two sample people', 'Removing someone', 'Keep the samples?'].every(t => seen.includes(t)) && closedOk, seen.join(' · '));
+  const prof = await page.evaluate(() => import('./js/store.js').then(s => s.db.profile));
+  ok('what was typed on the cards is saved to the profile', prof.name === 'Sam Operator' && prof.business === 'Operator Films' && prof.phone === '+1 555 0199' && prof.email === 'sam@example.com' && prof.website === 'https://operator.example', JSON.stringify(prof));
+  ok('arrow keys do not move the walkthrough while typing in its fields', arrowStayed);
+  ok('the calendar card offers Google and Microsoft from the card itself (greyed until sign-in is switched on), and Next skips it', calCard);
+  ok('the samples were added as crew (Sample talent with the Talent role) and removed again from the last card', samplesSeen && removed);
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.error('TEST CRASHED', e); process.exit(1); });

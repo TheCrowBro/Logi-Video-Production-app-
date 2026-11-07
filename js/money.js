@@ -1,13 +1,14 @@
 // Quotes and invoices, one of each per booking. Lines are suggested from the booking (shoot days, crew with their
 // day rates, kit, the deliverables a template put there) or, for the invoice, copied from the quote or built from the
 // hours logged; the user edits them. Printed from the app, saved as PDF, emailed to the client's contacts, and
-// summed up on the Money overview. Rates, the price list, numbering, tax and payment terms live in Settings → Quotes &
+// summed up on the Money overview. Rates, the price list, numbering, tax and payment terms live in Settings → Work & billing → Quotes &
 // invoices.
-import { h, sheet, toast, nodes, fmtShort, fmtLong, todayISO, parseISO, ymd, uid } from './util.js';
+import { h, sheet, toast, nodes, fmtShort, fmtLong, todayISO, parseISO, ymd, uid, backBtn, parseRate, personRate } from './util.js';
+export { parseRate };
 import { db, byId, upsert, update, endOf, requirePaid } from './store.js';
 import { openForm } from './form.js';
-import { setCheck, itemId } from './workflow.js';
-import { stats, workedMs } from './hours.js';
+import { setCheck, itemId, hiredPeople, rentalsOf } from './workflow.js';
+import { stats, workedMs, standardDay } from './hours.js';
 import { saveOrShare } from './backup.js';
 import { printElement, htmlDocument } from './callsheet.js';
 import { KINDS, calc, renderDoc, docText, pdfBlocks, docTitle, payButtons } from './money-doc.js';
@@ -39,26 +40,9 @@ const shootDays = b => Math.max(1, Math.round((parseISO(endOf(b)) - parseISO(b.d
 const addDays = (iso, n) => { const d = parseISO(iso); return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)); };
 export const isOverdue = b => { const inv = docOf(b, 'invoice'); return !!(inv && inv.status === 'Sent' && inv.due && inv.due < todayISO() && totals(inv).balance > 0); };
 const num = v => (v === '' || v == null ? '' : Number(v));
-// A crew rate is typed freely: "450", "$450/day", "£55 an hour", "$500/day, OT $60/hr", "1.200,50 €". The amount
-// that counts is the one per day (or with no unit); an hourly amount is used only when there is nothing else. A
-// weekly rate, or nothing readable, gives '' so the line is left for the person to fill in.
-const toNumber = t => { const m = t.match(/^(.*?)(?:[.,](\d{1,2}))?$/), whole = m[1].replace(/[.,\s]/g, ''); return Number(whole + (m[2] ? '.' + m[2] : '')); };
-const RATE_UNIT = /^\s*(?:(?:\/|per\b|an?\b|each\b)\s*(hours?|hrs?|h|days?|d|weeks?|wk)|(hourly|daily|weekly))\b/i;
-const COUNT = /^\s*(hours?|hrs?|h|days?|d|weeks?|wk|people|persons?|crew)\b/i; // "2 days at 450", "10hr day": a count, not a price
-export function parseRate(r) {
-  const s = String(r ?? ''), found = [], re = /\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?(?!\d)|\d+(?:[.,]\d{1,2})?(?!\d)/g;
-  for (let m; (m = re.exec(s));) {
-    let rest = s.slice(m.index + m[0].length), n = toNumber(m[0]);
-    if (/^k\b/i.test(rest)) { n *= 1000; rest = rest.slice(1); } // "$1k/day"
-    const um = rest.match(RATE_UNIT), u = ((um && (um[1] || um[2])) || '').toLowerCase();
-    if (!um && COUNT.test(rest)) continue;
-    found.push({ n, unit: u[0] === 'h' ? 'hour' : u[0] === 'w' ? 'week' : u[0] === 'd' ? 'day' : '' });
-  }
-  const pick = found.find(f => f.unit === 'day') || found.find(f => f.unit === '') || found.find(f => f.unit === 'hour');
-  return pick && Number.isFinite(pick.n) ? { amount: pick.n, hourly: pick.unit === 'hour' } : { amount: '', hourly: false };
-}
+// The amount in a typed cost ("$120", "1.200,50 €"); the parser lives in util.js. A person's hourly rate is quoted for a
+// standard day's hours (Settings → Work & billing → Hours & breaks) per shoot day.
 export const rateOf = r => parseRate(r).amount;
-const perHour = r => parseRate(r).hourly;
 
 // Suggested lines: from the booking, from the quote, or from the hours logged.
 export function suggestLines(b, kind, source = 'booking') {
@@ -77,10 +61,11 @@ export function suggestLines(b, kind, source = 'booking') {
     return lines;
   }
   line(`Shoot day${days === 1 ? '' : 's'} — ${b.title}`, days, 'day', bl.dayRate);
-  for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const hourly = perHour(c.rate); line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, hourly ? days * 10 : days, hourly ? 'hour' : 'day', rateOf(c.rate)); } }
+  for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const r = personRate(c); line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, r.hourly ? days * standardDay() : days, r.hourly ? 'hour' : 'day', r.amount); } }
+  for (const hr of hiredPeople(b)) { const r = personRate(hr), n = Number(hr.days) || days; line(`Crew: ${hr.name}${hr.role ? ' (' + hr.role + ')' : ''}`, r.hourly ? n * standardDay() : n, r.hourly ? 'hour' : 'day', r.amount); }
   if ((b.gear || []).length || (b.kits || []).length) line('Equipment package', days, 'day', bl.kitRate);
   for (const dl of b.deliverables || []) line(`${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
-  if (kind === 'invoice') for (const hr of b.hires || []) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
+  if (kind === 'invoice') for (const hr of rentalsOf(b)) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
   return lines;
 }
 
@@ -204,7 +189,7 @@ export function removePayment(b, id, onDone) {
 }
 // Once a day at start-up: a word about invoices that have passed their due date unpaid.
 export function moneyNudge() {
-  const over = db.bookings.filter(isOverdue); if (!over.length) return;
+  const over = db.bookings.filter(b => !b.practice && isOverdue(b)); if (!over.length) return; // the walkthrough's practice job never nags
   let last = 0; try { last = Number(localStorage.getItem('logi-money-nudge')) || 0; } catch { /* ignore */ }
   if (Date.now() - last < 864e5) return;
   try { localStorage.setItem('logi-money-nudge', String(Date.now())); } catch { /* ignore */ }
@@ -234,7 +219,7 @@ export function moneyPage(b, kind, go) {
   const partPaid = doc && kind === 'invoice' && doc.status !== 'Paid' && t.received > 0;
   return h('div', { class: 'cs-page money-page' },
     h('div', { class: 'page-head' },
-      h('button', { class: 'btn ghost small', onclick: () => go({ view: 'booking', id: b.id }) }, '‹ Booking'),
+      backBtn('Booking', () => go({ view: 'booking', id: b.id })),
       h('div', { class: 'seg', role: 'tablist' }, ...Object.entries(KINDS).map(([k, v]) => h('button', { role: 'tab', class: k === kind ? 'on' : '', 'aria-selected': k === kind, onclick: () => go({ kind: k }) }, v.label + (b[k] ? ' ✓' : ''))))),
     h('h1', null, K.label), h('div', { class: 'muted' }, [b.title, b.client].filter(Boolean).join(' · ')),
     doc ? [
@@ -263,14 +248,16 @@ export function moneyPage(b, kind, go) {
         h('div', { class: 'muted small' }, `Paid ${fmtMoney(t.paid)} of ${fmtMoney(t.total)} · balance ${fmtMoney(t.balance)}`)),
       h('div', { class: 'cs-paper' }, renderMoneyDoc(b, kind)),
     ] : h('div', { class: 'stack' },
-      h('p', { class: 'muted' }, kind === 'quote' ? 'No quote yet. Start from the booking and Vdex suggests the lines: shoot days at your day rate, each crew member at theirs, the kit, and the deliverables. Edit anything, then send it.' : 'No invoice yet. Start from the quote, from the hours logged on the shoot, or from the booking.'),
+      h('p', { class: 'muted' }, kind === 'quote' ? 'No quote yet. Start from the booking and Vdex suggests the lines: shoot days at your day rate, each crew member at their day or hourly rate, the kit, and the deliverables. Edit anything, then send it.' : 'No invoice yet. Start from the quote, from the hours logged on the shoot, or from the booking.'),
       h('div', { class: 'actions' },
         h('button', { class: 'btn primary', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'booking') }) }, '＋ From the booking'),
         kind === 'invoice' && b.quote && h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'quote'), taxRate: b.quote.taxRate }) }, '＋ From the quote'),
         kind === 'invoice' && h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh, { lines: suggestLines(b, kind, 'hours') }) }, '＋ From hours logged'),
         h('button', { class: 'btn ghost', onclick: fromList }, '＋ From the price list'),
         h('button', { class: 'btn ghost', onclick: () => editMoney(b, kind, refresh) }, 'Start blank')),
-      !billing().dayRate && h('p', { class: 'small muted' }, 'Tip: set your day, hour and kit rates under Settings → Quotes & invoices, and each person’s day rate on the Crew page, and the suggested lines come priced.')));
+      !billing().dayRate && h('p', { class: 'small muted' }, 'Tip: set your day, hour and kit rates under Settings → Work & billing → Quotes & invoices, and each person’s day or hourly rate on the Crew page, and the suggested lines come priced.'),
+      // New to this? A read-through and a walkthrough on a practice job (the tutorials load on first use).
+      h('div', { class: 'actions' }, h('button', { class: 'btn ghost small walk-btn', type: 'button', onclick: () => import('./tutorials.js').then(m => m.openMoneyGuide()).catch(e => toast('Could not open the guide: ' + (e.message || e))) }, '🎓 New to quoting? Start here'))));
 }
 export function moneyBlock(b, go) {
   const row = kind => { const doc = docOf(b, kind), K = KINDS[kind]; return h('div', { class: 'card-row' }, h('div', null, h('strong', null, K.label), h('div', { class: 'muted small' }, doc ? `${doc.number} · ${doc.status}${isOverdue(b) && kind === 'invoice' ? ' · overdue' : ''} · ${fmtMoney(totals(doc).total)}${kind === 'invoice' && doc.status !== 'Paid' && totals(doc).paid > 0 ? ` · ${fmtMoney(totals(doc).balance)} due` : ''}` : 'none yet')), h('button', { class: 'btn ghost small', onclick: () => go({ view: 'money', id: b.id, kind }) }, doc ? 'Open' : 'Create')); };
@@ -312,13 +299,14 @@ function editBudgetLine(b, line) {
     onDelete: line ? () => patchBooking(b, bd => { bd.lines = bd.lines.filter(l => l.id !== line.id); if (line.src) bd.skip = [...new Set([...(bd.skip || []), line.src])]; }) : null, // Fill from booking leaves it out from now on
   });
 }
-// Lines from what the booking already knows: crew at their day rates, hires and licences at their cost. Only adds
-// what is not there yet, so it can be tapped again after the booking changes.
+// Lines from what the booking already knows: crew and hired people at their day or hourly rates, rented gear and licences at
+// their cost. Only adds what is not there yet, so it can be tapped again after the booking changes.
 export function fillBudget(b) {
   b = current(b);
   const have = new Set([...((b.budget && b.budget.lines) || []).map(l => l.src).filter(Boolean), ...((b.budget && b.budget.skip) || [])]), add = [], days = shootDays(b);
-  for (const id of b.crew || []) { const c = byId('crew', id); if (c && !have.has('crew:' + id)) { const hourly = perHour(c.rate); add.push({ cat: 'Crew', desc: c.name + (c.role ? ` (${c.role})` : '') + (hourly ? ' — check the hours' : ''), qty: hourly ? days * 10 : days, unit: hourly ? 'hour' : 'day', rate: rateOf(c.rate), src: 'crew:' + id }); } }
-  for (const hr of b.hires || []) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
+  for (const id of b.crew || []) { const c = byId('crew', id); if (c && !have.has('crew:' + id)) { const r = personRate(c), hourly = r.hourly; add.push({ cat: 'Crew', desc: c.name + (c.role ? ` (${c.role})` : '') + (hourly ? ' — check the hours' : ''), qty: hourly ? days * standardDay() : days, unit: hourly ? 'hour' : 'day', rate: r.amount, src: 'crew:' + id }); } }
+  for (const hr of hiredPeople(b)) if (!have.has('person:' + hr.id)) { const r = personRate(hr), hourly = r.hourly, n = Number(hr.days) || days; add.push({ cat: 'Crew', desc: hr.name + (hr.role ? ` (${hr.role})` : '') + ' — hired' + (hourly ? ', check the hours' : ''), qty: hourly ? n * standardDay() : n, unit: hourly ? 'hour' : 'day', rate: r.amount, src: 'person:' + hr.id }); }
+  for (const hr of rentalsOf(b)) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
   for (const lc of b.licences || []) if (!have.has('lic:' + lc.id)) add.push({ cat: 'Music & licences', desc: [lc.kind, lc.title].filter(Boolean).join(': '), qty: 1, unit: 'item', rate: rateOf(lc.cost), src: 'lic:' + lc.id });
   if (add.length) patchBooking(b, bd => { bd.lines.push(...add.map(l => ({ ...l, id: uid(), actual: '', supplier: '' }))); });
   return add.length;
@@ -417,13 +405,13 @@ export function billingPanel() {
     ? h('textarea', { rows: 2, value: bl[key] ?? '', 'aria-label': label, onchange: e => setBilling({ [key]: e.target.value }) })
     : h('input', { type, value: bl[key] ?? '', 'aria-label': label, inputMode: type === 'number' ? 'decimal' : null, ...extra, onchange: e => setBilling({ [key]: type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value }) }));
   wrap.append(
-    h('p', { class: 'small muted' }, 'Rates feed the suggested lines on quotes and invoices; each crew member’s day rate is on their own card. Your name, business, phone and email come from the Me page.'),
+    h('p', { class: 'small muted' }, 'Rates feed the suggested lines on quotes and invoices; each crew member’s day or hourly rate is on their own card (an hourly rate is quoted for a standard day’s hours per shoot day). Your name, business, phone and email come from your profile (Settings → General → Profile).'),
     h('div', { class: 'grid2' }, field(`Day rate (${sym()})`, 'dayRate', 'number', { min: 0 }), field(`Hour rate for editing (${sym()})`, 'hourRate', 'number', { min: 0 }), field(`Overtime hour rate (${sym()})`, 'overtimeRate', 'number', { min: 0 }), field(`Equipment package per day (${sym()})`, 'kitRate', 'number', { min: 0 })),
     h('div', { class: 'grid2' }, field('Tax name', 'taxLabel'), field('Tax rate (%)', 'taxRate', 'number', { min: 0 }), field('Quote number prefix', 'quotePrefix'), field('Next quote number', 'nextQuote', 'number', { min: 1 }), field('Invoice number prefix', 'invoicePrefix'), field('Next invoice number', 'nextInvoice', 'number', { min: 1 }), field('Quotes valid for (days)', 'validDays', 'number', { min: 1 }), field('Invoices due in (days)', 'dueDays', 'number', { min: 0 })),
     field('Payment terms (on every invoice)', 'terms', 'textarea'),
     h('h4', { class: 'pay-head' }, 'Price list'),
     h('p', { class: 'small muted' }, 'The lines you charge for again and again, with your prices, to pick into a quote or an invoice with ＋ From the price list. It starts from typical freelance rates where you work: change any price to yours.'),
-    h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: () => import('./price-list.js').then(m => m.openPriceList()).catch(e => toast('Could not open the price list: ' + (e.message || e))) }, '🏷 Edit the price list')),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost price-list-btn', onclick: () => import('./price-list.js').then(m => m.openPriceList()).catch(e => toast('Could not open the price list: ' + (e.message || e))) }, '🏷 Edit the price list')),
     h('h4', { class: 'pay-head' }, 'Getting paid'),
     h('p', { class: 'small muted' }, 'Add the ways you like to be paid, as many as you want. Every invoice then carries a Pay button for each one that has a link, with the balance filled in, plain instructions for the ones that do not, bank details with a QR code banking apps can scan, and the invoice number as the reference. The link you send a client opens the invoice with the same buttons.'),
     h('div', { class: 'field' }, h('label', null, 'Currency for payment links'), h('select', { 'aria-label': 'Currency for payment links', onchange: e => setBilling({ currencyCode: e.target.value }) }, ...CURRENCIES.map(([c, sy]) => h('option', { value: c, selected: c === code() ? 'selected' : null }, `${c} ${sy.trim()}`)))),

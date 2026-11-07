@@ -1,9 +1,10 @@
-// Storage & sync panel and backup actions, shared by the ☁ sheet and the Settings page.
+// The storage panel (the cloud link and its state) and the backup actions, shared by the ☁ sheet and Settings → Storage, sync & backups.
 import { h, toast } from './util.js';
 import * as store from './store.js';
 import * as providers from './providers.js';
 import * as backup from './backup.js';
 import { REPO } from './version.js';
+import { isApp as phoneApp } from './native.js';
 
 export const SWITCH_ON = REPO + '/blob/main/docs/turn-on-sign-in.md';
 // Load Google's sign-in library ahead of the tap, so its window opens straight from the tap (browsers block late ones).
@@ -102,7 +103,7 @@ export function storagePanel() {
               h('div', { class: 'actions' }, h('button', { class: 'btn ghost', onclick: paidRun(store.createCloudFile) }, 'Create database file…'), h('button', { class: 'btn ghost', onclick: paidRun(store.openCloudFile) }, 'Open existing file…'))]
             : h('p', { class: 'small muted' }, ios ? 'Not on iPhone or iPad: they cannot give an app a file to keep writing to. Use Google Drive or iCloud above.' : 'Needs Chrome, Edge or the Vdex desktop app on a computer.')),
         h('div', { class: 'card stack' }, h('strong', null, '💾 No cloud at all'),
-          h('p', { class: 'small muted' }, store.isPaid() ? 'Keep everything on this device and save a backup file now and then under Backups & data.' : 'Everything stays on this device. Backup files come with a licence.')),
+          h('p', { class: 'small muted' }, store.isPaid() ? 'Keep everything on this device and save a backup file now and then under Backups, just below.' : 'Everything stays on this device. Backup files come with a licence.')),
         more('For developers: use your own app', 'Only if you run your own copy of Vdex', [
           h('p', { class: 'small muted' }, 'Only needed if you host Vdex yourself or want sign-ins to go through an app you registered. A key here replaces the built-in one on this device; leave it empty to use the built-in one.'),
           field('Dropbox app key', providers.settings.ownDropboxKey, providers.settings.setDropboxKey, 'Dropbox app key'),
@@ -131,10 +132,11 @@ export function backupPanel() {
     h('div', { class: 'actions' },
       h('button', { class: 'btn primary', onclick: () => backup.exportFile() }, 'Export backup'),
       h('button', { class: 'btn ghost', onclick: () => backup.exportFile({ encrypted: true }) }, '🔐 Encrypted backup…'),
-      h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: backup.importFile }))),
+      phoneApp ? h('button', { class: 'btn ghost', onclick: () => backup.importFromPicker() }, 'Import backup…')
+        : h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: backup.importFile }))),
     a && a.readExtra && h('button', { class: 'btn ghost', onclick: () => backup.restoreFromCloud() }, '☁ Restore an automatic cloud backup…'),
     h('p', { class: 'small muted' }, 'With a cloud storage linked (Google Drive, iCloud, Dropbox, OneDrive or WebDAV), Vdex also writes a dated backup next to its database once a day after a change: one per weekday and one per month. Backup files are plain unless you choose the encrypted one, so keep them somewhere private.'),
-    h('button', { class: 'btn ghost', onclick: () => { if (confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),
+    h('button', { class: 'btn ghost', onclick: () => { if (store.canChange() && confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),
     erase);
 }
 

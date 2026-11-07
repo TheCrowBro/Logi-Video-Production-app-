@@ -1,0 +1,50 @@
+# Checks that the iPhone app still builds: apple/ is a Capacitor 8 shell that opens the live Vdex website in its own
+# window and adds what only an app can do on an iPhone (docs/apple-app-store.md). GitHub's Mac runners have Xcode, so
+# this run proves that the three Swift plugins in apple/ios/App/App and the Swift packages Capacitor pulls in
+# (CapApp-SPM, which points at apple/node_modules) still compile and link for the iPhone simulator, without an Apple
+# account: the build is unsigned. It cannot prove the rest: signing and the App Store profile, the in-app purchase, the
+# notifications, the calendar and the Files app on a real phone, or an upload. The owner does those from the Mac
+# (Product → Archive, as the docs say); there is no upload step here. A Mac minute costs about ten Linux minutes and the
+# repository is private, so this runs only for a push that touches apple/ (or this file), or by hand from the Actions
+# tab, never for a change to the website.
+name: iPhone app
+on:
+  push:
+    branches: [claude/videographer-gear-app-xlg8eb, main]
+    paths: ['apple/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ios
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40   # a build that hangs must not keep a Mac minute longer than a working one would
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apple/package-lock.json
+      - name: Capacitor and its plugins, at the exact versions in apple/package-lock.json
+        run: npm ci
+        working-directory: apple
+      - name: Copy the web shell and the plugin list into the Xcode project
+        run: npx cap sync ios
+        working-directory: apple
+      - name: Resolve the Swift packages (Capacitor from GitHub, the plugins from node_modules)
+        run: |
+          set -o pipefail
+          xcodebuild -resolvePackageDependencies -project ios/App/App.xcodeproj -scheme App 2>&1 | tail -n 30
+        working-directory: apple
+      - name: Build for the simulator, unsigned
+        # Plain xcodebuild output, kept whole in a log: the last lines say whether it built, and on a failure every
+        # error line from the whole log is printed, so the Swift mistake is on this page and not on the owner's Mac.
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build 2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | tail -n 40 || {
+            echo; echo "The errors, from the whole log:"; grep -E '(error|fatal error):' "$RUNNER_TEMP/xcodebuild.log" | sort -u; exit 1; }
+        working-directory: apple

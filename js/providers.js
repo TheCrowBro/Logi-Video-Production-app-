@@ -4,6 +4,7 @@
 // kept on this device only and wins over the built-in one.
 import { CLOUD_APPS } from './cloud-config.js';
 import { toast } from './util.js';
+import * as native from './native.js';
 
 const LS = {
   get: k => { try { return localStorage.getItem(k); } catch { return null; } },
@@ -74,11 +75,23 @@ const pkce = async () => { const verifier = b64url(crypto.getRandomValues(new Ui
 // The desktop app's sign-ins are registered at its usual address; on a stand-in port they would be refused.
 const desktopAway = () => window.vdexDesktop && location.port && location.port !== '47831';
 const AWAY = 'Vdex can’t open the sign-in page because another program on this computer is using the connection Vdex needs. Restart the computer, open Vdex first, and try again. Until then, More ways to keep a copy still work.';
+// The iPhone app: the page opens in the phone's own sign-in window (js/native.js), the service's answer comes back
+// on the vdex:// address (js/return.js hands it over from the window), and this page opens it as if the service had
+// sent it here, so the finishers below run exactly as on the website.
 async function openSignIn(url) {
   if (desktopAway()) throw new Error(AWAY);
   if (window.vdexDesktop?.openSignIn) { if (!(await window.vdexDesktop.openSignIn(url))) throw new Error(AWAY); return 'browser'; }
+  if (native.auth.available()) { location.href = await cameBack(url); return 'page'; }
   location.href = url; return 'page';
 }
+const CLOSED = () => { const e = new Error('The sign-in was closed before it finished. Tap Connect when you are ready to try again.'); e.name = 'AbortError'; return e; };
+async function cameBack(url) {
+  const back = await native.auth.start(url);
+  if (!back) throw CLOSED();
+  const i = back.indexOf('?');
+  return location.origin + location.pathname + (i >= 0 ? back.slice(i) : '');
+}
+const APP_MARK = () => (native.auth.available() ? '~app' : ''); // on the state of a sign-in the app started: js/return.js knows it by this
 
 export async function dropboxBegin() {
   const key = settings.dropboxKey();
@@ -87,7 +100,7 @@ export async function dropboxBegin() {
   LS.set('logi-dbx-redirect', redirect); // the token exchange has to name the same address
   const { verifier, challenge } = await pkce();
   LS.set('logi-dbx-verifier', verifier);
-  const state = 'vdex-' + b64url(crypto.getRandomValues(new Uint8Array(16))); // random, checked on return (no cross-site login injection)
+  const state = 'vdex-' + b64url(crypto.getRandomValues(new Uint8Array(16))) + APP_MARK(); // random, checked on return (no cross-site login injection)
   LS.set('logi-dbx-state', state);
   LS.set('logi-dbx-client', key); // refreshes keep using the app this sign-in was made with
   const q = new URLSearchParams({ client_id: key, response_type: 'code', code_challenge: challenge, code_challenge_method: 'S256', token_access_type: 'offline', redirect_uri: redirect, state });
@@ -219,6 +232,15 @@ export async function googleToken(scope, interactive) {
     toast('Carry on in your web browser: sign in to Google there, then come back to Vdex.');
     const r = await window.vdexDesktop.googleSignIn({ client: id, scope: wanted.join(' '), hint });
     return new Promise((res, rej) => take(r || { error: 'failed' }, res, rej));
+  }
+  // The iPhone app: Google's sign-in on Vdex's own page (signin-google.html) in the phone's sign-in window, which
+  // Google accepts; the answer comes back on the vdex:// address.
+  if (native.auth.available()) {
+    const q = new URLSearchParams({ client: id, scope: wanted.join(' ') });
+    const back = await native.auth.start(`${location.origin}${location.pathname.replace(/[^/]*$/, '')}signin-google.html?${q}${hint ? '#hint=' + encodeURIComponent(hint) : ''}`); // the account's address after the #, so it never reaches a server log
+    if (!back) throw CLOSED();
+    const r = Object.fromEntries(new URL(back).searchParams);
+    return new Promise((res, rej) => take(r, res, rej));
   }
   await loadGIS();
   return new Promise((res, rej) => {
@@ -358,7 +380,7 @@ const ckSignedOut = redirect => { const e = new Error('iCloud wants you to sign 
 // One request at a time: each answer carries the session for the next request. The newest session is saved at once
 // (and the lock told, so its sealed copy keeps up). If the lock cleared it while a request was out, the new one is
 // kept here and put back in place of the used one when the lock opens again; a sign-out in between drops it.
-let ckChain = Promise.resolve(), ckHeld = null, ckEpoch = 0;
+let ckChain = Promise.resolve(), ckHeld = null, ckEpoch = 0, ckFullAddress = false;
 const ckSave = v => { LS.set(CK_SESSION, v); dispatchEvent(new Event('vdex-secrets')); };
 function ckRequest(db, path, body) {
   const run = async () => {
@@ -368,7 +390,8 @@ function ckRequest(db, path, body) {
     const epoch = ckEpoch, q = new URLSearchParams({ ckAPIToken: ckToken() });
     if (session) q.set('ckWebAuthToken', session);
     let r;
-    try { r = await fetch(ckBase(db) + path + '?' + q, body === undefined ? { credentials: 'omit' } : { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), credentials: 'omit' }); }
+    const ref = { referrerPolicy: ckFullAddress ? 'no-referrer-when-downgrade' : 'strict-origin-when-cross-origin' }; // the app's sign-in sends this page's full address (see appleSignInAddress)
+    try { r = await fetch(ckBase(db) + path + '?' + q, body === undefined ? { credentials: 'omit', ...ref } : { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), credentials: 'omit', ...ref }); }
     catch { throw new Error('Could not reach iCloud. Check the connection and try again'); }
     const next = r.headers.get('x-apple-cloudkit-web-auth-token') || r.headers.get('x-apple-cloudkit-session');
     if (next && session && epoch === ckEpoch) { const now = LS.get(CK_SESSION); if (now === session) ckSave(next); else if (now == null) ckHeld = { used: session, next }; }
@@ -380,12 +403,22 @@ function ckRequest(db, path, body) {
   const p = ckChain.then(run, run); ckChain = p.catch(() => {}); return p;
 }
 // Apple's sign-in address comes from asking iCloud who is signed in (users/caller, as CloudKit JS 2.6 does), with no session.
-async function appleSignInAddress() {
+// marked (the iPhone app): Apple sends the sign-in back to the address that asked for it, so for this one request the
+// page's address carries the app's marker (?app=icloud), which js/return.js looks for in the sign-in window.
+async function appleSignInAddress(marked = false) {
+  if (marked) { history.replaceState(null, '', location.pathname + '?app=icloud'); ckFullAddress = true; }
   try { await ckRequest('public', 'users/caller'); } catch (e) { if (e.name === 'NotAllowedError' && e.redirectURL) return e.redirectURL; throw e; }
+  finally { if (marked) { ckFullAddress = false; history.replaceState(null, '', location.pathname + location.hash); } }
   throw new Error('Apple sign-in didn’t start. Tap Connect to try again');
 }
 async function icloudSignIn() {
   if (!signIn.available('icloud')) throw notOn('iCloud');
+  if (native.auth.available()) { // the iPhone app: Apple's page in the phone's sign-in window, and back here with the session
+    const url = await appleSignInAddress(true);
+    LS.set(CK_PENDING, String(Date.now()));
+    location.href = await cameBack(url);
+    const e = new Error('Going to Apple to sign in'); e.name = 'AbortError'; throw e;
+  }
   if (window.vdexDesktop) { // the desktop app: Apple's page opens in the web browser and the answer comes back to the app
     if (desktopAway() || !window.vdexDesktop.icloudSignIn) throw new Error(AWAY);
     toast('Carry on in your web browser: sign in with your Apple ID there, then come back to Vdex.');
@@ -501,7 +534,7 @@ const msError = (code, text = '') => {
 export async function microsoftBegin(scopes, intent) {
   const id = settings.msId(); if (!id) throw notOn('Microsoft');
   const { verifier, challenge } = await pkce();
-  const state = 'vdexms-' + b64url(crypto.getRandomValues(new Uint8Array(16)));
+  const state = 'vdexms-' + b64url(crypto.getRandomValues(new Uint8Array(16))) + APP_MARK();
   const t = msTok(), all = [...new Set([...scopes, ...((t && t.scopes) || [])])]; // keep what was granted before
   LS.set('logi-ms-pkce', JSON.stringify({ verifier, state, redirect: redirectUri('microsoft'), client: id, intent, scopes, first: !(t && t.username) }));
   const q = new URLSearchParams({ client_id: id, response_type: 'code', response_mode: 'query', redirect_uri: redirectUri('microsoft'), scope: ['openid', 'profile', 'offline_access', ...all].join(' '), state, code_challenge: challenge, code_challenge_method: 'S256' });

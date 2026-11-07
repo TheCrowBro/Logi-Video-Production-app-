@@ -11,7 +11,7 @@ const win = await app.firstWindow({ timeout: 60000 });
 const bad = []; win.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) bad.push(m.text()); }); win.on('pageerror', e => bad.push('pageerror: ' + e.message));
 await win.waitForLoadState('domcontentloaded');
 const { TERMS_RECORD } = createRequire(import.meta.url)('./helpers.cjs');
-await win.evaluate(t => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); }, TERMS_RECORD);
+await win.evaluate(t => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); localStorage.setItem('logi-lock-setup', 'skip'); }, TERMS_RECORD); // no tour, terms agreed, no PIN set-up (a PIN left in the profile still asks below)
 await win.reload();
 if (await win.locator('.lock').count()) await win.keyboard.type('2468');
 await win.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
@@ -70,9 +70,14 @@ signin.icloudAnswer = aPost.status === 204 && (await win.evaluate(() => window._
 const keysIn = Object.keys(JSON.parse((await import('node:fs')).readFileSync(resolve(repo, 'desktop/licence-keys.json'), 'utf8'))).length > 0;
 const licenceOk = !!info.licence && info.licence.canEdit === true && (keysIn ? ['trial', 'founder', 'licensed'].includes(info.licence.mode) : info.licence.mode === 'off');
 console.log((licenceOk ? 'PASS' : 'FAIL') + ' desktop licence bridge answers' + (keysIn ? '' : ' and stays out of the way until licence keys are built in') + ' —', JSON.stringify(info.licence));
+// The price with tax for Buy: the main process asks the licence server and passes on only the price's shape (or
+// nothing, offline or before the server has the address). It must never throw.
+const priced = await win.evaluate(() => window.vdexDesktop.licence.localPrice().then(p => ({ p }), e => ({ error: String(e && e.message) })));
+const priceOk = !priced.error && (priced.p === null || (typeof priced.p === 'object' && 'taxed' in priced.p && (priced.p.taxed === null || /^\d+\.\d\d$/.test(priced.p.taxed.total))));
+console.log((priceOk ? 'PASS' : 'FAIL') + ' the desktop bridge answers the price with tax (or nothing) without failing —', JSON.stringify(priced));
 const signinOk = Object.values(signin).every(Boolean);
 console.log((signinOk ? 'PASS' : 'FAIL') + ' desktop sign-ins open in the web browser and come back only for sign-ins the app started —', JSON.stringify(signin));
 await app.close();
-const ok = licenceOk && signinOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
+const ok = licenceOk && signinOk && priceOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
 console.log((ok ? 'PASS' : 'FAIL') + ' desktop app launches, serves locally, exposes the update bridge, keeps no service worker, no errors —', JSON.stringify(info), bad.join(' | '));
 process.exit(ok ? 0 : 1);

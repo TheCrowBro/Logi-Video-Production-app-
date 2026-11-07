@@ -8,6 +8,7 @@ import { openForm } from '../form.js';
 import { RATES, rate, framesToTc, tcToFrames, tcAt, framesAt, durationText } from '../timecode.js';
 import { haptic } from '../a11y.js';
 import { docxToLines, textToLines, buildScript, SAMPLE_SCRIPT } from '../docx.js';
+import * as native from '../native.js';
 
 // pending = frames captured when the user started typing the next note; target = the script line/selection about to be marked
 const S = { id: null, pending: null, view: 'notes', target: null, shared: null, redraw: () => {}, cleanupScript: null };
@@ -188,6 +189,7 @@ const asCsv = log => 'Timecode,Note,Script line,Captured\n' + log.notes.map(n =>
 
 async function shareFile(name, type, text) {
   const file = new File([text], name, { type });
+  if (native.canShareFiles()) { try { await native.files.share(name, file, type, { title: name }); } catch (e) { toast('Could not share: ' + (e.message || e)); } return; }
   if (navigator.canShare?.({ files: [file] })) { try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e.name === 'AbortError') return; } }
   const a = h('a', { href: URL.createObjectURL(file), download: name }); document.body.append(a); a.click(); a.remove();
 }
@@ -427,7 +429,7 @@ function openImport(log, preset) {
       h('p', { class: 'small muted' }, 'A .docx from Word or Pages, or a Google Doc downloaded as Word (File → Download → Microsoft Word). Plain .txt and Fountain files work too.'),
       h('label', { class: 'btn ghost file-btn' }, '📄 Choose file…', fileIn)),
     h('div', { class: 'card' }, h('strong', null, 'Google Docs'),
-      h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on Android (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
+      h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on your phone (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
       paste, h('button', { class: 'btn ghost small', onclick: () => { const lines = textToLines(paste.value); lines.length ? show('Pasted script', lines) : fail(new Error('Nothing pasted yet')); } }, 'Use pasted text')),
     h('button', { class: 'btn ghost small tc-sample', onclick: () => show('Sample script', textToLines(SAMPLE_SCRIPT)) }, 'Try a sample script'),
     preview,

@@ -1,0 +1,22 @@
+{
+  "appId": "app.crowmade.vdex",
+  "appName": "Vdex",
+  "webDir": "www",
+  "server": {
+    "url": "https://vdex.crowmade.app/?src=ios",
+    "allowNavigation": [
+      "vdex.crowmade.app"
+    ],
+    "errorPath": "index.html"
+  },
+  "ios": {
+    "contentInset": "automatic",
+    "limitsNavigationsToAppBoundDomains": true
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#e0a43a",
+      "presentationOptions": []
+    }
+  }
+}

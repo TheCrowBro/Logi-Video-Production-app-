@@ -1,6 +1,6 @@
 # Selling Vdex
 
-Vdex is ready to sell: a **30-day free trial**, then **20 US dollars once** for up to **3 devices**, bought through Stripe, plus **free codes you make yourself**. The licence covers the desktop app for Windows, Mac and Linux (each computer takes one of the 3 places), the Android app from Google Play (each phone takes a place too), and the website, where people sign in with the email address they bought with. This guide is everything only the owner can do. Do the parts in order; each says roughly how long it takes.
+Vdex is ready to sell: a **30-day free trial**, then **20 US dollars once** (plus the tax where the buyer lives) for up to **3 devices**, bought through Stripe, plus **free codes you make yourself**. The licence covers the desktop app for Windows, Mac and Linux (each computer takes one of the 3 places), the Android app from Google Play (each phone takes a place too), and the website, where people sign in with the email address they bought with. This guide is everything only the owner can do. Do the parts in order; each says roughly how long it takes.
 
 ## What happens until you finish
 
@@ -59,12 +59,16 @@ Every setting in this guide that goes into Cloudflare goes in the same place, as
 2. **Support email.** **Settings → Business details**: set a customer support email you read. Stripe sends buyers' questions there and may refund a buyer itself if nobody answers within 48 hours.
 3. **Managed Payments.** Open https://dashboard.stripe.com/settings/managed-payments, switch it on and accept its terms. Stripe checks you are eligible (the US is supported). This makes Link, Stripe's checkout, the seller of record, so it works out, collects and pays sales tax and VAT for you, including California's new tax on downloaded software from 1 January 2027. If Stripe refuses, tell me: there are other ways.
 4. **Checkout links.** **Settings → Checkout**: add the terms (`https://vdex.crowmade.app/terms.html`) and privacy policy (`https://vdex.crowmade.app/privacy.html`).
-5. **Product.** **Product catalog → Create product**: name "Vdex desktop licence", description "One-time licence for Vdex on your computer, for up to 3 computers", product tax code **Downloadable Software - business use**, price **One-off, 20.00 USD**, tax not included. **Add product**.
+5. **Product.** **Product catalog → Create product**: name "Vdex desktop licence", description "One-time licence for Vdex on your computer, for up to 3 computers", product tax code **Downloadable Software - business use**, price **One-off, 20.00 USD**, with **Include tax in price** set to **No**: the checkout adds the tax where the buyer lives (VAT, GST or sales tax, worked out on the 20 USD). UK, EU and Australian law ask that consumers see the whole price before they buy, so Vdex shows it there: the download page lists the total with tax for the UK, Australia and each EU country, and the Buy button in Vdex shows the buyer's own (24.00 USD with VAT in the UK, for example). **Add product**.
 6. **Payment link** (on the website, not the Stripe phone app). **Payment Links → New**, choose the product, quantity 1. Check **Enable Managed Payments** is ticked (it can't be changed later). In **After the payment**, choose to redirect customers to your website, with this address, exactly as written, braces included:
 
    `https://vdex.crowmade.app/licence/thanks?session_id={CHECKOUT_SESSION_ID}`
 
+   Under **Advanced options → Add custom text → Near the Pay button**, paste: `You are buying a licence to use Vdex, not ownership of a copy. It can be cancelled in the cases the terms describe: vdex.crowmade.app/terms.html` (California's law on digital goods asks for this before anyone pays; the app's Buy buttons say it too). If the link already exists, edit it to add the text.
+
    Optionally tick **Allow promotion codes**. **Create link**.
+
+   **Tax rates, currencies and changing the price.** The totals with tax come from `js/tax.js` (the standard rates as at November 2026); if a country changes its rate, ask me to update it, and the download page changes with it. Stripe shows buyers the price in their own currency at its exchange rate, which adds 2 to 4% (they can choose US dollars instead); Vdex says so next to Buy. A Stripe price can't be edited, so to change the price later: in the product, **Add another price**, make a new payment link with it exactly as in this step (Managed Payments ticked, the same address after payment, the same custom text), then in Cloudflare (step 7) set `BUY_URL` to the new link's address and `STRIPE_PAYMENT_LINK` to both IDs, new first, separated by a comma (`plink_new…,plink_old…`), so earlier purchases keep their codes and their sign-ins. Archive the old price so nobody buys it by mistake, and ask me to change the price in Vdex, on the download page and in the terms.
 7. In Cloudflare (as in part 2), add two secrets:
    - `BUY_URL`: the link's address, starting `https://buy.stripe.com/`.
    - `STRIPE_PAYMENT_LINK`: the link's ID, starting `plink_`. It is at the end of the address bar when you open the link in the Stripe Dashboard. Only payments through this link get a code.
@@ -117,7 +121,7 @@ Even signed, a new Windows app shows a milder "not commonly downloaded" prompt n
 ## Part 7. Release and try it (30 minutes)
 
 1. Tell me you are ready (or, in GitHub: **Actions → Build desktop installers → Run workflow**, tick **Publish**, **Run workflow**). When it is green, `https://download.crowmade.app/vdex/latest.yml` shows the new version and https://vdex.crowmade.app/download.html downloads work.
-2. Install Vdex on a computer that has never had it. Settings → About should show the free trial.
+2. Install Vdex on a computer that has never had it. Settings → General → About & Licence should show the free trial.
 3. Buy a licence yourself through **Buy a licence**. Check the thank-you page shows a code, the email arrives, and **Enter licence code** activates it.
 4. Refund yourself in Stripe. Within about a week, Vdex says the code was cancelled. To see it at once: **Release this computer**, then **Enter licence code** with the same code, and Vdex says it has been cancelled. Stripe keeps its fee on a refund.
 5. Make a free code in the generator page (part 8) and try it on a second computer.
@@ -141,7 +145,7 @@ Until you do this, the website stays free for everyone. Once you do it, every br
 1. Make sure part 4 (Resend) is done: signing in works by emailing a code. Resend's free plan sends at most 100 emails a day (3,000 a month), shared with purchase emails, so Vdex sends at most 60 sign-in codes a day in all (and at most 4 a day to any one address) and keeps the rest for purchases; when the 60 are used up, sign-in says to try again tomorrow. Once many people use the website, take a paid Resend plan (from about 20 USD a month for 50,000 emails) and add the Cloudflare setting `SIGN_IN_EMAILS_PER_DAY` with a higher number, such as `1000`.
 2. Update the Google Play Data safety answers (docs/google-play.md) if the Android app is already listed: signing in collects an email address.
 3. In Cloudflare (as in part 2), add a **Text** variable (or a Secret) named `WEB_SIGN_IN` with the value `on`. Within about 6 hours every open copy of Vdex picks it up. To switch it off again, delete it: trials then pause, and carry on where they were if you switch it on again.
-4. Try it: in a private browser window open https://vdex.crowmade.app, Settings → About → **Sign in**, with a licence that is live: for example a free code you made for your own email address in part 7 (the generator links it). A refunded test purchase, or one made in Stripe's test mode, cannot sign in.
+4. Try it: in a private browser window open https://vdex.crowmade.app, Settings → General → About & Licence → **Sign in**, with a licence that is live: for example a free code you made for your own email address in part 7 (the generator links it). A refunded test purchase, or one made in Stripe's test mode, cannot sign in.
 
 Who can sign in: anyone who bought through the shop (with the email they paid with, found in Stripe if needed), anyone you made a free code for with an email address (the generator page links it when you make the code, or press **Link for website sign-in** later), and anyone who has entered their code in the desktop app. Someone with a code can also use **Have a licence code? Use it instead**: the sign-in code then goes to the email address inside it.
 

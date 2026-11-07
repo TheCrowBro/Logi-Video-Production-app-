@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -25,8 +25,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => import('./js/store.js').then(s => { const b = s.byId('bookings', window.__id); document.querySelectorAll('.card.tap').forEach(c => { if (c.textContent.includes(b.title)) c.click(); }); }));
   await page.waitForSelector('.bk-detail');
   await page.waitForFunction(() => /chance of rain/.test(document.querySelector('.bk-detail .wxline')?.textContent || ''), null, { timeout: 10000 }).then(() => ok('forecast line on the booking page', true, (document => '')(null))).catch(() => ok('forecast line on the booking page', false));
-  const wx = await page.locator('.bk-detail .wxline').innerText();
-  ok('forecast summary reads well', /Showers, 9–14°C, 60% chance of rain, wind to 24 km\/h \(gusts 45\)/.test(wx), wx);
+  const wx = await page.locator('.bk-detail .wx-card').innerText();
+  ok('the weather card reads well: the sky, the range, rain and wind', /Showers/.test(wx) && /9–14°C/.test(wx) && /60% chance of rain/.test(wx) && /wind to 24 km\/h \(gusts 45\)/.test(wx), wx.replace(/\n/g, ' | '));
   await page.getByRole('button', { name: /Call sheet/ }).first().click(); await page.waitForSelector('.cs-page');
   await page.waitForSelector('.cs-page .wxline button');
   await page.locator('.cs-page .wxline button').click(); await sleep(300);
@@ -36,7 +36,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   // ---- quotes and invoices ----
   await page.evaluate(() => window.logiGo('settings')); await sleep(300);
-  await page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices")) > summary').click();
+  await openSetting(page, 'Quotes & invoices');
   const sec = page.locator('details.settings-section:has(> summary:has-text("Quotes & invoices"))');
   for (const [label, val] of [['Day rate', '600'], ['Hour rate for editing', '55'], ['Equipment package per day', '250'], ['Tax rate (%)', '20'], ['Tax name', 'VAT']]) { await sec.locator(`input[aria-label^="${label}"]`).fill(val); await sec.locator(`input[aria-label^="${label}"]`).press('Tab'); await sleep(150); }
   await sec.locator('textarea[aria-label^="How to pay"]').fill('Bank: 12-34-56 · 12345678'); await sec.locator('textarea[aria-label^="How to pay"]').press('Tab'); await sleep(150);
@@ -49,6 +49,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('.bk-detail .page-head button').first().click(); await sleep(200); await page.getByRole('button', { name: 'Calendar' }).click(); await sleep(300);
   await page.evaluate(() => { document.querySelectorAll('.card.tap').forEach(c => { if (c.textContent.includes('Harbour')) c.click(); }); }); await page.waitForSelector('.bk-detail');
   ok('booking page has a Money block', (await page.locator('.bk-detail h3', { hasText: 'Money' }).count()) === 1);
+  await page.locator('#bk-work').evaluate(d => { d.open = true; }); await sleep(150);
   await page.locator('.bk-detail .block:has(h3:has-text("Money")) button', { hasText: 'Create' }).first().click(); await page.waitForSelector('.money-page');
   await page.getByRole('button', { name: 'From the booking' }).click(); await page.waitForSelector('.sheet form');
   const f = page.locator('.sheet').last();

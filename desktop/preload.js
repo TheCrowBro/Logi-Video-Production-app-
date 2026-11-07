@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('vdexDesktop', {
     release: () => ipcRenderer.invoke('licence:release'),
     code: () => ipcRenderer.invoke('licence:code'),
     buy: () => ipcRenderer.invoke('licence:buy'),
+    localPrice: () => ipcRenderer.invoke('licence:price'),
     onChange: cb => { const fn = (_e, s) => cb(s); ipcRenderer.on('licence:changed', fn); return () => ipcRenderer.removeListener('licence:changed', fn); },
   },
 });

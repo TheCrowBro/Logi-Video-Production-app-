@@ -1,0 +1,23 @@
+{
+  "name": "vdex-apple",
+  "version": "1.3.1",
+  "private": true,
+  "description": "The Vdex iPhone app: a Capacitor shell that opens vdex.crowmade.app with the phone's own notifications, calendar, Files app and App Store purchase. See docs/apple-app-store.md.",
+  "scripts": {
+    "sync": "cap sync ios",
+    "open": "cap open ios"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.0"
+  },
+  "dependencies": {
+    "@capacitor/core": "8.6.0",
+    "@capacitor/ios": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/filesystem": "8.1.5",
+    "@capacitor/haptics": "8.0.2",
+    "@capacitor/local-notifications": "8.3.1",
+    "@capacitor/share": "8.0.3",
+    "@ebarooni/capacitor-calendar": "8.10.0"
+  }
+}

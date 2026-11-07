@@ -121,3 +121,66 @@ export const safeUrl = u => {
 };
 
 export const empty = (msg, action) => h('div', { class: 'empty' }, h('p', null, msg), action);
+
+// The button that goes back up a level (day → calendar, booking → day, call sheet → booking): a clear return mark in
+// a ring, with a shine when it appears and a pulse under the pointer. The text keeps the ‹ so its name reads as before.
+export const backBtn = (label, onclick) => h('button', { class: 'btn ghost small back-btn', type: 'button', onclick }, h('span', { class: 'back-arrow' }, '‹'), ' ' + label);
+
+/* ----------------------------------- rates ----------------------------------- */
+// A rate typed freely: "450", "$450/day", "£55 an hour", "$500/day, OT $60/hr", "1.200,50 €". The amount that counts
+// is the one per day (or with no unit); an hourly amount is used only when there is nothing else. A weekly rate, or
+// nothing readable, gives '' so the line is left for the person to fill in.
+const toNumber = t => { const m = t.match(/^(.*?)(?:[.,](\d{1,2}))?$/), whole = m[1].replace(/[.,\s]/g, ''); return Number(whole + (m[2] ? '.' + m[2] : '')); };
+const RATE_UNIT = /^\s*(?:(?:\/|per\b|an?\b|each\b)\s*(hours?|hrs?|h|days?|d|weeks?|wk)|(hourly|daily|weekly))\b/i;
+const COUNT = /^\s*(hours?|hrs?|h|days?|d|weeks?|wk|people|persons?|crew)\b/i; // "2 days at 450", "10hr day": a count, not a price
+export function parseRate(r) {
+  const s = String(r ?? ''), found = [], re = /\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?(?!\d)|\d+(?:[.,]\d{1,2})?(?!\d)/g;
+  for (let m; (m = re.exec(s));) {
+    let rest = s.slice(m.index + m[0].length), n = toNumber(m[0]);
+    if (/^k\b/i.test(rest)) { n *= 1000; rest = rest.slice(1); } // "$1k/day"
+    const um = rest.match(RATE_UNIT), u = ((um && (um[1] || um[2])) || '').toLowerCase();
+    if (!um && COUNT.test(rest)) continue;
+    found.push({ n, unit: u[0] === 'h' ? 'hour' : u[0] === 'w' ? 'week' : u[0] === 'd' ? 'day' : '' });
+  }
+  const pick = found.find(f => f.unit === 'day') || found.find(f => f.unit === '') || found.find(f => f.unit === 'hour');
+  return pick && Number.isFinite(pick.n) ? { amount: pick.n, hourly: pick.unit === 'hour' } : { amount: '', hourly: false };
+}
+// A person's rate (crew, or someone hired for a job): the amount and whether it is per hour. New records carry the
+// amount as a number with rateUnit 'day' or 'hour'; older ones hold whatever was typed, read as above.
+export const hasUnit = c => !!(c && typeof c === 'object' && (c.rateUnit === 'day' || c.rateUnit === 'hour') && c.rate !== '' && c.rate != null && Number.isFinite(Number(c.rate)));
+export const personRate = c => (hasUnit(c) ? { amount: Number(c.rate), hourly: c.rateUnit === 'hour' }
+  : c && typeof c === 'object' && (c.rate === '' || c.rate == null) && (c.rateUnit === 'day' || c.rateUnit === 'hour') ? { amount: '', hourly: c.rateUnit === 'hour' } // a unit chosen, no amount yet: the line is still an hours line
+  : parseRate(c && typeof c === 'object' ? c.rate : c));
+// The rate as shown on a card: "$450/day", "$55/hour"; an older typed rate is shown as it was typed.
+export const rateText = (c, sym = '$') => { if (!hasUnit(c)) return String((c && typeof c === 'object' ? c.rate : c) ?? '').trim(); const n = Number(c.rate); return `${sym}${Number.isInteger(n) ? n : n.toFixed(2)}/${c.rateUnit}`; };
+// Saving the form of an older record that held a typed rate: a blank amount keeps the typed text as it was; an amount
+// replaces it, and anything the text said beyond an amount and a unit ("$500/day, OT $60/hr") goes into the notes.
+const PLAIN_RATE = /^[^\d]{0,3}\d[\d.,\s]*(?:k\b)?\s*(?:\/|per\b|an?\b|each\b)?\s*(?:hours?|hrs?|h|days?|d|hourly|daily)?\s*\.?$/i;
+export const typedRate = c => (c && !hasUnit(c) && typeof c.rate === 'string' && c.rate.trim() ? c.rate.trim() : '');
+export function keepTypedRate(c, v) {
+  const typed = typedRate(c); if (!typed) return v;
+  if (v.rate === '' || v.rate == null) return { ...v, rate: typed, rateUnit: undefined };
+  if (PLAIN_RATE.test(typed) || String(v.notes || '').includes(typed)) return v;
+  return { ...v, notes: [v.notes, 'Rate as typed: ' + typed].filter(Boolean).join('\n') };
+}
+// The hint under the Rate box of such a record.
+export const typedRateHint = c => { const typed = typedRate(c); if (!typed) return ''; return `Typed before: “${typed}”. ` + (personRate(c).amount === '' ? 'It stays as it is until an amount replaces it. ' : 'The amount and unit read from it are filled in; anything more it said goes into the notes when you save. '); };
+
+/* ------------------------------- press and hold ------------------------------- */
+// Hold a finger or the mouse button on an element for `ms` without moving and fn runs; the tap that would follow is
+// swallowed. Moving (a scroll), lifting or losing the pointer first cancels. The element carries class 'holding'
+// meanwhile, for a fill that shows the wait, and controls inside it (buttons, links, fields) are left alone.
+export function hold(el, ms, fn, { ignore = 'button, a, input, select, textarea, summary' } = {}) {
+  let timer = null, x = 0, y = 0;
+  const stop = () => { if (timer) { clearTimeout(timer); timer = null; } el.classList.remove('holding'); };
+  el.addEventListener('pointerdown', e => {
+    if (timer || e.button !== 0 || (ignore && e.target !== el && e.target.closest(ignore) && e.target.closest(ignore) !== el)) return;
+    x = e.clientX; y = e.clientY;
+    el.classList.add('holding');
+    timer = setTimeout(() => { timer = null; el.classList.remove('holding'); el.dataset.held = '1'; setTimeout(() => { delete el.dataset.held; }, 1500); fn(e); }, ms);
+  });
+  el.addEventListener('pointermove', e => { if (timer && Math.hypot(e.clientX - x, e.clientY - y) > 10) stop(); });
+  for (const t of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(t, stop);
+  el.addEventListener('contextmenu', e => { if (timer || el.dataset.held) e.preventDefault(); }); // the browser's own long-press menu would end the hold early
+}
+export const wasHeld = el => { if (!el.dataset.held) return false; delete el.dataset.held; return true; };

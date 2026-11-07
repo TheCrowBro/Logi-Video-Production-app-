@@ -64,7 +64,7 @@ export function initUpdates() {
   window.addEventListener('online', check);
 }
 
-/* ------------------------------ Settings → About ------------------------------ */
+/* ------------------------ Settings → General → About & Licence ------------------------ */
 export function updatePanel() {
   const el = h('div', { class: 'stack' });
   let busy = false;

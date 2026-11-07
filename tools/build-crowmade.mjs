@@ -7,10 +7,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PRICE, RATES, withTax } from '../js/tax.js';
 
 const out = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'crowmade');
 const SUPPORT = 'support@crowmade.app';
 const VDEX = 'https://vdex.crowmade.app/';
+// The Vdex licence's price with tax where the law asks for the whole price (js/tax.js, as on vdex.crowmade.app/download.html).
+const EU = Object.keys(RATES).filter(c => c !== 'GB' && c !== 'AU').map(c => Number(withTax(c).total));
+const TAXED = `${withTax('GB').total} US dollars in the UK, ${withTax('AU').total} in Australia, and ${Math.min(...EU).toFixed(2)} to ${Math.max(...EU).toFixed(2)} in the EU, depending on the country`;
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 // The same look as the Little Journee pages, plus buttons and a three-up screenshot row for the wide Valheim shots.
@@ -56,8 +60,9 @@ ${appCard('/valheim/', '/valheim/icon.png', 'Valheim Easy Server', 'Run a Valhei
 const vdex = page('Vdex', `
 <div class="hero"><img src="icon.png" alt=""><div><h1 style="margin:0">Vdex</h1><p>The production deck for people who film things for a living.</p></div></div>
 <p>Vdex keeps your shoots, your crew, your camera gear, the places you film and your insurance in one place. On the day of a shoot it clocks your hours, prints your call sheet and tells you when the sun sets. Afterwards it makes the quote and the invoice.</p>
-<div class="btns"><a class="btn" href="${VDEX}">Open Vdex</a><a class="btn alt" href="${VDEX}download.html">Download for Windows, Mac or Linux</a></div>
-<p class="note">Works on iPhone, Android and computers. Free to try for 30 days, then 20 US dollars once for up to 3 of your devices. No subscription, and no account for your work: your information stays on your own device unless you choose to copy it somewhere.</p>
+<div class="btns"><a class="btn" href="${VDEX}">Open Vdex</a><a class="btn" href="${VDEX}buy">Buy a licence</a><a class="btn alt" href="${VDEX}download.html">Download for Windows, Mac or Linux</a></div>
+<p class="note">Works on iPhone, Android and computers. Free to try for 30 days, then ${PRICE} US dollars once plus any tax where you live, for up to 3 of your devices. With tax that is ${TAXED} (<a href="${VDEX}download.html#price">every country's price</a>). No subscription, and no account for your work: your information stays on your own device unless you choose to copy it somewhere.</p>
+<p class="note">You are buying a licence to use Vdex, not ownership of a copy. It can be cancelled in the cases the <a href="${VDEX}terms.html#paid">terms</a> describe. At checkout you can pay in US dollars, or in your own currency at Stripe's exchange rate (2 to 4% more).</p>
 <div class="shots"><img src="shot-01-bookings.jpg" alt="Bookings: the calendar of shoots"><img src="shot-03-call-sheet.jpg" alt="A call sheet filled in from the booking"></div>
 <h2>What it does</h2>
 <ul>

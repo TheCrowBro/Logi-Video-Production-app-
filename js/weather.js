@@ -14,9 +14,12 @@ export function locationFor(b) {
   try { const l = JSON.parse(localStorage.getItem('logi-loc')); if (l && Number.isFinite(Number(l.lat))) return { lat: +l.lat, lon: +l.lon }; } catch { /* none */ }
   return null;
 }
+const cacheKey = (lat, lon, iso) => `${lat.toFixed(2)},${lon.toFixed(2)},${iso},${imperial() ? 'i' : 'm'}`;
+const readCache = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
+// The forecast already fetched for this place and day, if it is still fresh: drawn straight away, with no flash.
+export function cachedForecast(lat, lon, iso) { const hit = readCache()[cacheKey(lat, lon, iso)]; return hit && Date.now() - hit.at < 3 * 3600e3 ? hit.v : undefined; }
 export async function forecast(lat, lon, iso) {
-  const key = `${lat.toFixed(2)},${lon.toFixed(2)},${iso},${imperial() ? 'i' : 'm'}`;
-  let cache = {}; try { cache = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { /* none */ }
+  const key = cacheKey(lat, lon, iso), cache = readCache();
   const hit = cache[key]; if (hit && Date.now() - hit.at < 3 * 3600e3) return hit.v;
   const units = imperial() ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '';
   const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max&timezone=auto&start_date=${iso}&end_date=${iso}${units}`);
@@ -31,6 +34,29 @@ export async function forecast(lat, lon, iso) {
   return v;
 }
 export const summary = w => (w ? `${w.emoji} ${w.text}, ${w.tmin}–${w.tmax}${w.tUnit}${w.rain != null ? `, ${w.rain}% chance of rain` : ''}, wind to ${w.wind} ${w.wUnit}${w.gust > w.wind + 15 ? ` (gusts ${w.gust})` : ''}` : '');
+// The day's weather as a card on the booking: a big symbol, the high and low, rain and wind, with the sun times under
+// it. Without a location there is nothing to show; beyond the forecast's reach only the sun times show.
+export function forecastCard(loc, iso, { sun = '', when = '' } = {}) {
+  if (!loc) return null;
+  const sunEl = sun ? h('div', { class: 'sunline muted small' }, sun) : null;
+  const ico = h('div', { class: 'wx-ico', 'aria-hidden': 'true' }, canForecast(iso) ? '🌤' : '☀');
+  const main = h('div', { class: 'wx-main' }, canForecast(iso) ? h('div', { class: 'wxline muted small' }, 'Checking the forecast…') : h('div', { class: 'muted small' }, `${when ? when + ': ' : ''}the forecast comes within 16 days of the day.`), sunEl);
+  const el = h('div', { class: 'card wx-card box-dark', role: 'group', 'aria-label': 'Weather and sun' }, ico, main);
+  const fill = w => {
+    if (!w) { main.replaceChildren(...nodes(h('div', { class: 'muted small' }, 'No forecast for this day yet.'), sunEl)); return; }
+    ico.textContent = w.emoji;
+    main.replaceChildren(...nodes(
+      h('div', { class: 'wx-head' }, h('b', { class: 'wx-text' }, w.text), h('span', { class: 'wx-temp' }, `${w.tmin}–${w.tmax}${w.tUnit}`)),
+      h('div', { class: 'wxline small' }, [w.rain != null && `🌧 ${w.rain}% chance of rain`, `💨 wind to ${w.wind} ${w.wUnit}${w.gust > w.wind + 15 ? ` (gusts ${w.gust})` : ''}`].filter(Boolean).join(' · ')),
+      sunEl));
+  };
+  if (canForecast(iso)) {
+    const now = cachedForecast(loc.lat, loc.lon, iso); // the page is redrawn on every change: a known forecast must not flash
+    if (now !== undefined) fill(now);
+    else forecast(loc.lat, loc.lon, iso).then(fill).catch(() => main.replaceChildren(...nodes(h('div', { class: 'muted small' }, 'The forecast could not be fetched.'), sunEl)));
+  }
+  return el;
+}
 // A line that fills itself in once the forecast arrives; optionally with a button that hands the text on.
 export function forecastLine(loc, iso, { onUse, label = 'Add to call sheet' } = {}) {
   if (!loc || !canForecast(iso)) return null;

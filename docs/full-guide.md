@@ -6,7 +6,7 @@ This is the long version. The short one is the [README](../README.md).
 
 - **No subscription, and no server for your work.** A 30-day free trial, then a one-time licence (you sign in with its email address on the website). Your data stays on your device and only goes where *you* send it (your own Google Drive, iCloud, Dropbox, OneDrive or server).
 - **Works offline** once installed, which matters on location.
-- **Locks with a PIN, or your fingerprint or face,** and keeps everything it stores encrypted whenever it is locked, in the background or closed. Helps you keep your data safe: automatic daily backups in your cloud storage, encrypted backup files, and a reminder when there's no recent copy.
+- **Locks with a PIN, or your fingerprint or face,** and keeps your work and your sign-ins encrypted whenever it is locked, in the background or closed. Helps you keep your data safe: automatic daily backups in your cloud storage, encrypted backup files, and a reminder when there's no recent copy.
 - **Phone and computer share one database** once you link a cloud storage.
 - **On a computer, one click installs it:** there is an installer for Windows, Mac and Linux, or use it in any browser.
 
@@ -28,7 +28,9 @@ The two phone guides cover the same ground in the same order, so a crew with bot
 
 ### Install it on your iPhone
 
-Vdex is a web app, so there is nothing to find in the App Store. You install it from Safari:
+There are two ways. **The Vdex app on the App Store** (search for Vdex, or follow the link on vdex.crowmade.app) is the same Vdex with what only an app can do on an iPhone: break alerts that arrive with the app closed, a "Vdex bookings" calendar in the Calendar app, backups and spreadsheets saved through the Files app, scripts and shot lists handed to it from Mail or Files, printing through the phone's print sheet, and the licence bought in the app. Its Install button does not show, because it is installed already.
+
+Or, with no app at all, install the website from Safari:
 
 1. Open the Vdex address in **Safari**. Other iPhone browsers can't add it to the Home Screen properly.
 2. Tap **Share**, the square with an arrow at the bottom of the screen.
@@ -43,7 +45,7 @@ Why install it rather than keep it in a Safari tab:
 - **Notifications only work in the installed app.** Safari tabs can't show them. Camera, microphone and location work in the installed app on iOS 16.4 or later.
 - **It opens full-screen and works offline.**
 
-**One thing to know:** the installed app and the Safari tab are two separate copies with separate data. If you entered bookings in Safari before installing, export a backup there (with a licence; Settings → *Backups & data* → **Export backup** (with a licence)) and import it in the installed app, or link the same cloud storage on both and they merge.
+**One thing to know:** the installed app and the Safari tab are two separate copies with separate data. If you entered bookings in Safari before installing, export a backup there (with a licence; Settings → *Storage, sync & backups* → **Export backup** (with a licence)) and import it in the installed app, or link the same cloud storage on both and they merge.
 
 ### Let Vdex use the camera, microphone and location
 
@@ -57,13 +59,13 @@ iPhone asks the first time a tool needs something. Tap **Allow**.
 | Motion & Orientation | Aiming at the sun or Polaris, and the tilt range finder |
 | Notifications | "Break's up" alerts from the shoot-day clock |
 
-If you tapped **Don't Allow** by mistake: the camera and microphone are asked for again next time. For location, open iPhone **Settings → Privacy & Security → Location Services → Safari Websites** (installed web apps usually follow that setting). For notifications, open **Settings → Notifications**, find Vdex and switch it on, then turn the toggle on again inside Vdex (Settings → *Hours & breaks*).
+If you tapped **Don't Allow** by mistake: the camera and microphone are asked for again next time. For location, open iPhone **Settings → Privacy & Security → Location Services → Safari Websites** (installed web apps usually follow that setting). For notifications, open **Settings → Notifications**, find Vdex and switch it on, then turn the toggle on again inside Vdex (Settings → *Work & billing* → *Hours & breaks*).
 
 ### The first time you open it
 
-1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
-2. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
-3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage and sync) and **🔒** once a PIN is set.
+1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
+2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
+3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage, sync and backups) and **🔒** once a PIN is set.
 
 ### What's on the Rolodex
 
@@ -93,17 +95,18 @@ Vdex warns when the same piece of kit is needed on two overlapping jobs.
 
 ### Your own project templates
 
-If you keep doing the same kind of job, make it a template once: Settings → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
+If you keep doing the same kind of job, make it a template once: Settings → *Work & billing* → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
 
 Then on the Bookings page tap **📐 From template** instead of + New: the booking form arrives filled in, you add the title and date, and on saving the deliverables, shots and call sheet lines are added too. Open any booking that went well and tap **📐 Save as template** to turn it into one; **↻ Apply template items** on a booking adds anything from its template that is still missing. Everything can still be changed on the booking itself.
 
 ### Run a shoot day
 
-- On the day, a **clock bar** appears under the Rolodex with the booking's name. **● Start work** starts the clock; **■ Stop work** logs the hours.
+- On the day, open the booking: its **Hours** box has the clock. **● Start work** starts it (while it runs, a slim strip under the Rolodex shows the time and the same buttons on every page); **■ Stop work** logs the hours.
 - **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar keeps a running total against the break length approved for that production and warns when it's used up.
-- **Notifications on an iPhone.** Turn them on under Settings → *Hours & breaks* (installed app only). Vdex counts the break only while it is on screen: the moment you switch to another app or lock the phone, iPhone pauses Vdex, so a "break's up" alert can't go off in the background. It shows the moment you reopen Vdex instead. For a reliable alarm on a long break, leave Vdex open with *Keep the screen on during breaks* switched on, or set a timer in the Clock app as well.
-- **📋 Call sheets.** Bookings → **📋 Call sheets** lists every upcoming shoot and whether its sheet has gone out; the booking page has the same button for one shoot. Each sheet is built in the app from what Vdex already knows (venue address, access and parking, nearest hospital, crew with their call times and phones, kit, hires, sunrise and sunset). Tap **✏️ Edit sheet** and change things directly on the document: general call, lunch, wrap, a schedule line by line, each person's call time, who is on set from the client, weather, dress code, the emergency contact, special instructions, and which sections to include; **Done** saves a new version. Then **🖨 Print** uses the iPhone's own print dialog (AirPrint, or save as PDF from there), **📄 Save PDF** makes a PDF file for the share sheet, **✉ Email crew** opens a message addressed to everyone on the shoot, **📤 Share** uses the share sheet, and **💾 Web page** makes a file that opens on any phone. The list shows ✅ once it has gone out and ⚠ if you changed it afterwards.
-- The **shot list** on the booking page is there to tick off as you cover it.
+- **Notifications on an iPhone.** Turn them on under Settings → *Work & billing* → *Hours & breaks* (installed app only). Vdex counts the break only while it is on screen: the moment you switch to another app or lock the phone, iPhone pauses Vdex, so a "break's up" alert can't go off in the background. It shows the moment you reopen Vdex instead. For a reliable alarm on a long break, leave Vdex open with *Keep the screen on during breaks* switched on, or set a timer in the Clock app as well.
+- **📋 Call sheets.** Bookings → **📋 Call sheets** lists every upcoming shoot and whether its sheet has gone out; the booking page has the same button for one shoot. Each sheet is built in the app from what Vdex already knows (venue address, access and parking, nearest hospital, crew and hired people with their call times and phones, kit, rentals, sunrise and sunset). Tap **✏️ Edit sheet** and change things directly on the document: general call, lunch, wrap, a schedule line by line, each person's call time, who is on set from the client, weather, dress code, the emergency contact, special instructions, and which sections to include; **Done** saves a new version. Then **🖨 Print** uses the iPhone's own print dialog (AirPrint, or save as PDF from there), **📄 Save PDF** makes a PDF file for the share sheet, **✉ Email crew** opens a message addressed to everyone on the shoot, **📤 Share** uses the share sheet, and **💾 Web page** makes a file that opens on any phone. The list shows ✅ once it has gone out and ⚠ if you changed it afterwards.
+- **On the booking page**, under the summary: **Call sheet**, **Stripboard & shot list** and **Share with crew** in three boxes, the **Hours** box, the day's weather and sun, then one fold-down box for the **workflow, budget, quote and invoice**. Closed, its line shows the budget, the quote, the invoice and the stage at a glance; open it for the checklists (each stage has a **Check all** box; when every stage is done Vdex asks whether to archive the project) and the money. **People** holds the client's contacts, your crew and anyone you hired for the job (they go on the call sheet and the crew link like crew, and their cost into the budget); rented items are under **Equipment**. Lists longer than five fold behind **Show all**. **Edit days** on the booking (Edit → Edit days) show on the calendar in their own colour and go to your calendar feed; hours clocked on them count as editing.
+- The **Stripboard & shot list** box on the booking page shows where the board stands and holds the shot list to tick off as you cover it. **Import shot list…** takes a text, CSV or Word file (or pasted text), one shot per line: scene headings such as *INT. KITCHEN - DAY* or *Scene 12* above the shots group them by scene and put any scene the board does not have yet on the stripboard, marked for a check (a shot list has no page counts, and often no time of day).
 
 ### Take timecode notes
 
@@ -114,19 +117,19 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 5. **Adding the script on an iPhone.** Tap **Script → Word document** and pick a `.docx` from the Files app (iCloud Drive, Google Drive and Dropbox all show up in Files). For a Google Doc, open it in the Docs app, tap ⋮ → *Share & export → Send a copy → Word* and save it to Files first, or select all, copy, and paste the text into Vdex. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
 6. **Export** shares the notes as text or a spreadsheet, to Mail, AirDrop, Files or anywhere else in the share sheet.
 
-**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job, from choosing the frame rate to exporting for the editor, with a **Walk me through it** button that runs *Timecode, start to finish*: about 25 steps on a practice log Vdex makes for you (synced, with notes and a sample script, so there is nothing to set up and no camera needed; delete it from ⚙ when you are done). The **?** at the top gives the short tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps.
+**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job, from choosing the frame rate to exporting for the editor, with a **Walk me through it** button that runs *Timecode, start to finish*: about 25 steps on a practice log Vdex makes for you (synced, with notes and a sample script, so there is nothing to set up and no camera needed; delete it from ⚙ when you are done). The **?** at the top gives the short tour of the logs or of an open log, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps. Quotes and invoices have the same: **🎓 New to quoting? Start here** on a booking's Money page (or the **📖 Quotes & invoices guide** under ? → Other pages…) is a read-through of the whole job, with a **Walk me through it** that runs *Quotes & invoices, start to finish* on a practice job Vdex makes: it sets the rates, quotes the job, sends and accepts the quote, invoices it from the quote and records a payment, with its own Q-PRACTICE and INV-PRACTICE numbers so your numbering is untouched. The last card removes the practice job.
 
 **iPhone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
 ### Stripboard: plan the shoot scene by scene
 
-Open a booking and tap **🎬 Stripboard**. Tap **📄 Scenes from a script** and pick the script (a Word .docx, a Fountain or a plain text file, or paste the text): every scene heading (INT. or EXT., the set, then DAY or NIGHT) becomes a strip, with the characters who speak or are named in the action as its cast and an estimated page count in eighths. **＋ Scene** adds one by hand. The page counts are estimates from a standard screenplay layout: check them against your script.
+Open a booking and tap **🎬 Stripboard & shot list**. Tap **📄 Scenes from a script** and pick the script (a Word .docx, a Fountain or a plain text file, or paste the text): every scene heading (INT. or EXT., the set, then DAY or NIGHT) becomes a strip, with the characters who speak or are named in the action as its cast and an estimated page count in eighths. **＋ Scene** adds one by hand. The page counts are estimates from a standard screenplay layout: check them against your script.
 
 Each strip is coloured as on a paper board: **white** interior day, **yellow** exterior day, **blue** interior night, **green** exterior night. It shows the scene number, the time of day, the set, what happens, the cast numbers (from **👥 Cast**, where you can renumber or rename people) and the pages. New strips wait under **Not scheduled yet**. Drag a strip by its **⠿** handle into a day, or focus the handle and use the up and down arrow keys, or tap the strip and pick its **Shooting day**. Each black **End of day** strip adds up that day's pages and scenes. **⚖ Spread over the days** shares the scenes out evenly by pages in their current order, **↕ Group unscheduled by location** puts scenes at the same set together, **＋ Banner** adds a line such as a company move, **＋ Day** adds a shooting day, and **🖨 Print** makes a one-line-per-scene schedule with the cast list. The call sheet gets a **Scenes** section for each day, and **👥 Share with crew** can include them (never a strip's notes).
 
 ### Quotes and invoices
 
-Every booking has a **Money** block with a quote and an invoice. **From the booking** suggests the lines: shoot days at your day rate, each crew member at their own day rate (set on their card on the Crew page), the equipment package, and the deliverables. **＋ From the price list** adds the lines you tick from your own price list (a filming day, a drone day, colour grading, a music licence, rush delivery…), with day lines counted for each shoot day; edit anything, then **Mark as sent**. The invoice starts from the quote, from the hours the clock bar logged (shoot days, editing hours and overtime at your rates), or from the booking. Quotes and invoices print from the app, save as PDF, and email to the contacts on the booking (give a stakeholder an email address). Marking a quote sent or an invoice paid ticks the matching pipeline items. Bookings → **💰 Money** shows what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, and exports the invoices as a spreadsheet for the accountant. Rates, the price list, tax, numbering, payment terms and bank details live under Settings → **Quotes & invoices**. The price list starts from typical freelance rates for where you work, picked from your currency (the United States, Canada, the UK, Western Europe, or Australia and New Zealand; other currencies start with blank prices): starting points from published rate guides and surveys, not advice. Change any price, add your own lines, or start again from another region's rates under **🏷 Edit the price list**.
+Every booking has a **Money** block with a quote and an invoice. **From the booking** suggests the lines: shoot days at your day rate, each crew member at their own day or hourly rate (set on their card on the Crew page; an hourly rate is quoted for a standard day's hours per shoot day), the equipment package, and the deliverables. **＋ From the price list** adds the lines you tick from your own price list (a filming day, a drone day, colour grading, a music licence, rush delivery…), with day lines counted for each shoot day; edit anything, then **Mark as sent**. The invoice starts from the quote, from the hours the clock logged (shoot days, editing hours and overtime at your rates), or from the booking. Quotes and invoices print from the app, save as PDF, and email to the contacts on the booking (give a stakeholder an email address). Marking a quote sent or an invoice paid ticks the matching pipeline items. Bookings → **💰 Money** shows what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, and exports the invoices as a spreadsheet for the accountant. Rates, the price list, tax, numbering, payment terms and bank details live under Settings → *Work & billing* → **Quotes & invoices**. The price list starts from typical freelance rates for where you work, picked from your currency (the United States, Canada, the UK, Western Europe, or Australia and New Zealand; other currencies start with blank prices): starting points from published rate guides and surveys, not advice. Change any price, add your own lines, or start again from another region's rates under **🏷 Edit the price list**.
 
 ### Weather on the shoot day
 
@@ -143,8 +146,8 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 - Every booking has a **stage**: Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. The strip on the booking page shows where it is; tap a stage to move it.
 - Each stage has a **checklist** that depends on the job type. Tick things off, add your own items, and when a stage is complete a **Next** button moves the project on. Items with an arrow open the tool they're about (call sheet, kit, media log, hours…).
 - **🗂 Pipeline** on the Bookings page shows every project by stage, with its progress and next deadline.
-- Change the checklists for each job type under Settings → *Workflow templates*.
-- **Budget** on the booking page: what the job will cost you, one line at a time, each in a category you pick from a list (crew, cast and talent, equipment hire, locations and permits, travel, accommodation, catering, art and wardrobe, hair and make-up, post-production, music and licences, insurance and more). Put in the estimate, then the actual cost once you know it. **Fill from booking** adds your crew at their day rates, your hires and your licences. If the job has a quote, the budget shows what is left for you after costs. Only you see the budget: it never goes into a quote, an invoice or a crew link. **Export CSV** saves it for a spreadsheet.
+- Change the checklists for each job type under Settings → *Work & billing* → *Workflow templates*.
+- **Budget** on the booking page: what the job will cost you, one line at a time, each in a category you pick from a list (crew, cast and talent, equipment hire, locations and permits, travel, accommodation, catering, art and wardrobe, hair and make-up, post-production, music and licences, insurance and more). Put in the estimate, then the actual cost once you know it. **Fill from booking** adds your crew and the people you hired at their day or hourly rates, your rentals and your licences. If the job has a quote, the budget shows what is left for you after costs. Only you see the budget: it never goes into a quote, an invoice or a crew link. **Export CSV** saves it for a spreadsheet.
 - **👥 Share with crew** on the booking page makes a link to a read-only page for your cast and crew: the dates, call times, schedule, location, who is on, the scenes for each day from the stripboard, the shot list, the kit and the deliverables, whichever you tick. Prices, rates, budgets, quotes, invoices and your booking notes are never included. The whole page is inside the link, so there is no server and nothing is stored online. Crew can add the shoot to their calendar or print it. If plans change, send a new link: an old one keeps showing what it had.
 
 ### After the shoot
@@ -152,15 +155,15 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 - **Media & backups** on the booking page: one row per card; tick as it's copied to drive 1, drive 2, offsite, and verified. A card can only be marked *cleared* once it's on two drives.
 - **Deliverables**: what the client gets, with due dates (they appear in your calendar), status and links.
 - **Music & stock licences**: keep the licence numbers with the project.
-- **✂ Start edit session** runs the clock for post days. **📊 Hours & statistics** shows totals, hours per week, hours by project and overtime, and shares a spreadsheet for invoicing.
+- **✂ Start edit session** runs the clock for post days: on any day that isn't a shoot day, the Hours box near the top of the booking offers it in place of **Start work**, and the hours count as editing. **📊 Hours & statistics** shows totals, hours per week, hours by project and overtime, and shares a spreadsheet for invoicing.
 
 ### Your data on an iPhone
 
 **Where it lives.** Inside the installed app on this phone. Nothing is uploaded unless you link a storage of your own.
 
-**Backups.** Settings → *Backups & data* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones.
+**Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones. In the App Store app, Export and Import open the Files app itself (iCloud Drive, On My iPhone, Dropbox and so on).
 
-**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
+**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. (In the App Store app, the sign-in opens in the phone's own sign-in window and comes back to Vdex by itself.) Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
 | On an iPhone you can link | Notes |
 |---|---|
@@ -174,9 +177,10 @@ All of these work on your iPhone and on your computer, so pick one and link it e
 
 ### Calendar on an iPhone
 
-1. **Add once.** On any booking, **📆 Add to calendar** → **Apple Calendar** saves a calendar file; open it and tap **Add All**. The Google Calendar and Outlook options open those apps or sites ready-filled. **📤 Share** and **✉ Email** send the details to anyone.
+1. **Add once.** On any booking, **📆 Add to calendar** → **Apple Calendar** saves a calendar file; open it and tap **Add All**. The Google Calendar and Outlook options open those apps or sites ready-filled. **📤 Share calendar event** and **✉ Email** send the details to anyone. To delete a booking, press and hold its card in a list (or its header on its own page) for three seconds and confirm, or tap **Edit**, then **Delete**.
 2. **Live feed.** With Google Drive, Dropbox or OneDrive linked (iCloud keeps Vdex's copy private and gives no link; with Nextcloud, share the feed file from your server), Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. Then on the iPhone: **Settings → Calendar** (on iOS 18, **Settings → Apps → Calendar**) → **Accounts → Add Account → Other → Add Subscribed Calendar**, paste the link. On a Mac, Calendar → *File → New Calendar Subscription* does the same and reaches the iPhone through iCloud.
 3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [the connection guides](connections.md).
+4. **The phone's own calendar** (App Store app only). Bookings → **📆 Calendar & email** → *Two-way sync* → **This phone's calendar** → **Connect**, and allow calendar access when the phone asks. Vdex makes a "Vdex bookings" calendar in the Calendar app (in your iCloud calendars too, if the phone's calendars are in iCloud) and keeps it in step both ways, with no sign-in. On a booking, **📆 Add to calendar** → **This phone's calendar** opens the phone's own new-event screen, filled in, for a one-off copy.
 
 Deliverable due dates ride along as all-day events.
 
@@ -192,7 +196,7 @@ Set your location first (Field → **Use GPS**, or Settings → *Field tool defa
 
 ### Make it yours
 
-Tap **Aa** (or Settings → *Display & accessibility*):
+Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 - **Colour theme** — the classics (Brass, Noir, Forest, Ocean, Plum, Mono) and a set in the colours of camera brands (Sony, Canon, Nikon, Fujifilm, Lumix, Blackmagic, RED, ARRI, Leica, GoPro, DJI), each in light and dark, or following your iPhone. The brand themes borrow the colours only; Vdex isn't affiliated with any of them.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
@@ -202,8 +206,8 @@ Tap **Aa** (or Settings → *Display & accessibility*):
 
 ### Lock it: PIN, Face ID and Touch ID
 
-1. Settings → **Security** → **Set a PIN…** (4 to 8 digits; 6 is a good length).
-2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On an iPhone that is Face ID or Touch ID, and it works in Safari and in the installed app on iOS 16.4 or later. If the switch doesn't appear, your iPhone or browser doesn't offer it to web apps, and the PIN is the way in.
+1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
+2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On an iPhone that is Face ID or Touch ID, and it works in Safari and in the installed app on iOS 16.4 or later (not yet in the App Store app, which opens with the PIN). If the switch doesn't appear, your iPhone or browser doesn't offer it to web apps, and the PIN is the way in.
 3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
 
 What the lock does: the screen can't be used until the PIN or Face ID opens it, and everything Vdex stores on the phone (bookings, contacts, kit serials, insurance details, cloud sign-ins) is kept **encrypted** (AES-256) whenever Vdex is locked, in the background or closed. The PIN is never stored, only a key derived from it, so after five wrong tries the lock makes you wait, and you can choose to have the phone's Vdex data **erased after 10 wrong PINs** (only sensible with a cloud storage linked or a recent backup).
@@ -214,8 +218,8 @@ What the lock does: the screen can't be used until the PIN or Face ID opens it, 
 
 A stolen, lost or broken phone should cost you a phone, not your business records. Keep at least one copy somewhere else:
 
-- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
-- **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
+- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Storage, sync & backups* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
+- **Export a backup** now and then (Settings → *Storage, sync & backups*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
 - **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
 - **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
@@ -223,16 +227,16 @@ A stolen, lost or broken phone should cost you a phone, not your business record
 ### iPhone questions and answers
 
 **I installed it and my bookings vanished.**
-They're still in Safari: the installed app and the Safari tab are separate copies. In Safari, Settings → *Backups & data* → **Export backup** (with a licence), then **Import backup** in the installed app.
+They're still in Safari: the installed app and the Safari tab are separate copies. In Safari, Settings → *Storage, sync & backups* → **Export backup** (with a licence), then **Import backup** in the installed app.
 
 **My data disappeared after a few weeks.**
 Safari clears website data it hasn't seen for a while. Use the installed app, link a cloud storage, and export a backup now and then (with a licence).
 
 **The Install button only shows instructions.**
-That's how iPhones work: web apps are added through Safari's Share button, not a download.
+That's how iPhones work: web apps are added through Safari's Share button, not a download. The other way is the Vdex app on the App Store, which needs no installing step.
 
 **I can't turn notifications on.**
-Only the installed app can show them, on iOS 16.4 or later. Open Vdex from the Home Screen icon and try again.
+Only the installed app can show them, on iOS 16.4 or later. Open Vdex from the Home Screen icon and try again. In the App Store app, allow them when the phone asks; if you refused once, iPhone **Settings → Vdex → Notifications**.
 
 **The camera, microphone or GPS won't start.**
 They need the installed app or a secure (https) address, iOS 16.4 or later, and your permission when asked. If you refused once, see *Let Vdex use the camera…* above.
@@ -244,7 +248,7 @@ That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Si
 Put both on the same Wi‑Fi or on the iPhone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
 
 **Will I get a break notification if the phone is locked?**
-Not while it's locked or in another app: iPhone pauses web apps straight away. The alert appears when you reopen Vdex. Keep Vdex on screen with *Keep the screen on during breaks*, or use the Clock app's timer too.
+In the App Store app, yes: the phone itself keeps the time, so the alert arrives with Vdex closed or the phone locked, with **Back to work** and **5 more minutes** on it. In the Safari-installed app, not while it's locked or in another app: iPhone pauses web apps straight away, and the alert appears when you reopen Vdex. Keep Vdex on screen with *Keep the screen on during breaks*, or use the Clock app's timer too.
 
 **Can clients log in to review or approve?**
 No. Vdex is your side of the job: you record their feedback and send them the documents.
@@ -253,10 +257,10 @@ No. Vdex is your side of the job: you record their feedback and send them the do
 Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
 
 **Does it update by itself?**
-Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *About* shows the version and has **Check for updates**.
+Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *General* → *About & Licence* shows the version and has **Check for updates**. The App Store app shows the same website, so it is updated the same way; the App Store only updates the app around it now and then.
 
 **Can I start over?**
-Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
+Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN (Vdex asks for a new one at the next start), and leaves the cloud copy alone.
 
 **I forgot my PIN.**
 It can't be recovered. Tap *Forgot PIN?* on the lock screen to erase this phone's Vdex data, then link your storage or import a backup.
@@ -270,7 +274,7 @@ On the phone, yes once a PIN is set: whenever Vdex is locked, in the background 
 
 Vdex has no payment processor in the middle, and no fees. Instead, every invoice carries the ways you already get paid, and a link the client can open.
 
-1. **Tell Vdex how you get paid**, once: Settings → Quotes & invoices → Getting paid → **+ Add a way to pay**, as many as you like: PayPal, Venmo, Cash App, Zelle, a Stripe or Square payment link, Wise, Revolut, Monzo, Interac e-Transfer, UPI, a bank account, any other payment page, or plain instructions (cheque, cash, crypto…). Edit or remove them any time, and pick the currency for the links.
+1. **Tell Vdex how you get paid**, once: Settings → *Work & billing* → *Quotes & invoices* → Getting paid → **+ Add a way to pay**, as many as you like: PayPal, Venmo, Cash App, Zelle, a Stripe or Square payment link, Wise, Revolut, Monzo, Interac e-Transfer, UPI, a bank account, any other payment page, or plain instructions (cheque, cash, crypto…). Edit or remove them any time, and pick the currency for the links.
 2. **Every invoice then carries Pay buttons** for the balance due, your bank details, a QR code that European banking apps scan to fill in the transfer, and the invoice number as the reference. They are on the printed invoice, in the PDF, in the email and on the client's page.
 3. **Send the client a link.** On the invoice (or the quote), tap **Link for the client**. The whole document is packed inside the link, so nothing is stored online. Copy it, share it, email it, or let the client scan the QR code. It opens as a web page with the Pay buttons, Print and Save PDF.
 4. **Record payments** as they arrive with **Record a payment**: the amount proposed is the balance, so a full payment is one tap. Part payments show as "part paid" with the balance; when the balance reaches zero the invoice is marked paid and the pipeline is ticked. The Pay buttons always ask for what is still owed.
@@ -307,9 +311,9 @@ If you tapped **Don't allow** by mistake: long-press the Vdex icon → **App inf
 
 ### The first time you open it
 
-1. **Take the tour.** It starts by itself. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
-2. **Want to see it full of data first?** Settings → *Backups & data* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
-3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage and sync) and **🔒** once a PIN is set.
+1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
+2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
+3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage, sync and backups) and **🔒** once a PIN is set.
 
 ### What's on the Rolodex
 
@@ -339,17 +343,18 @@ Vdex warns when the same piece of kit is needed on two overlapping jobs.
 
 ### Your own project templates
 
-If you keep doing the same kind of job, make it a template once: Settings → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
+If you keep doing the same kind of job, make it a template once: Settings → *Work & billing* → **Project templates** → **+ New template**. A template is your own job type. It has a name and an icon, starts its checklists from one of the built-in types (edit them under *Workflow templates* afterwards), and holds what a new booking of that kind should begin with: usual start, finish and break, kits, equipment, crew, deliverables with their due dates counted from the shoot (say, the hero film 14 days after), a shot list, and the call sheet's schedule, dress code and instructions.
 
 Then on the Bookings page tap **📐 From template** instead of + New: the booking form arrives filled in, you add the title and date, and on saving the deliverables, shots and call sheet lines are added too. Open any booking that went well and tap **📐 Save as template** to turn it into one; **↻ Apply template items** on a booking adds anything from its template that is still missing. Everything can still be changed on the booking itself.
 
 ### Run a shoot day
 
-- On the day, a **clock bar** appears under the Rolodex with the booking's name. **● Start work** starts the clock; **■ Stop work** logs the hours.
+- On the day, open the booking: its **Hours** box has the clock. **● Start work** starts it (while it runs, a slim strip under the Rolodex shows the time and the same buttons on every page); **■ Stop work** logs the hours.
 - **☕ Break** asks how long (15 min, 30 min, 1 hour, 2 hours), pauses the clock and counts the break down. **▶ Back to work** ends it when you're actually back. The bar keeps a running total against the break length approved for that production and warns when it's used up.
-- **Notifications on Android.** Turn them on under Settings → *Hours & breaks*. When a break is up, Android shows a notification with **▶ Back to work** and **5 more min** buttons, even while you're in another app, plus a two-minute warning. Android keeps Vdex counting in the background for a few minutes and may then pause it to save battery, in which case the alert arrives when you open Vdex again. For long breaks, switch on *Keep the screen on during breaks*, or stop Android pausing Chrome (phone **Settings → Apps → Chrome → Battery → Unrestricted**).
-- **📋 Call sheets.** Bookings → **📋 Call sheets** lists every upcoming shoot and whether its sheet has gone out; the booking page has the same button for one shoot. Each sheet is built in the app from what Vdex already knows (venue address, access and parking, nearest hospital, crew with their call times and phones, kit, hires, sunrise and sunset). Tap **✏️ Edit sheet** and change things directly on the document: general call, lunch, wrap, a schedule line by line, each person's call time, who is on set from the client, weather, dress code, the emergency contact, special instructions, and which sections to include; **Done** saves a new version. Then **🖨 Print** uses Android's print dialog (or save as PDF from there), **📄 Save PDF** makes a PDF file for the share sheet, **✉ Email crew** opens a message addressed to everyone on the shoot, **📤 Share** uses the Android share sheet (WhatsApp, Gmail, Messages…), and **💾 Web page** makes a file that opens on any phone. The list shows ✅ once it has gone out and ⚠ if you changed it afterwards.
-- The **shot list** on the booking page is there to tick off as you cover it.
+- **Notifications on Android.** Turn them on under Settings → *Work & billing* → *Hours & breaks*. When a break is up, Android shows a notification with **▶ Back to work** and **5 more min** buttons, even while you're in another app, plus a two-minute warning. Android keeps Vdex counting in the background for a few minutes and may then pause it to save battery, in which case the alert arrives when you open Vdex again. For long breaks, switch on *Keep the screen on during breaks*, or stop Android pausing Chrome (phone **Settings → Apps → Chrome → Battery → Unrestricted**).
+- **📋 Call sheets.** Bookings → **📋 Call sheets** lists every upcoming shoot and whether its sheet has gone out; the booking page has the same button for one shoot. Each sheet is built in the app from what Vdex already knows (venue address, access and parking, nearest hospital, crew and hired people with their call times and phones, kit, rentals, sunrise and sunset). Tap **✏️ Edit sheet** and change things directly on the document: general call, lunch, wrap, a schedule line by line, each person's call time, who is on set from the client, weather, dress code, the emergency contact, special instructions, and which sections to include; **Done** saves a new version. Then **🖨 Print** uses Android's print dialog (or save as PDF from there), **📄 Save PDF** makes a PDF file for the share sheet, **✉ Email crew** opens a message addressed to everyone on the shoot, **📤 Share** uses the Android share sheet (WhatsApp, Gmail, Messages…), and **💾 Web page** makes a file that opens on any phone. The list shows ✅ once it has gone out and ⚠ if you changed it afterwards.
+- **On the booking page**, under the summary: **Call sheet**, **Stripboard & shot list** and **Share with crew** in three boxes, the **Hours** box, the day's weather and sun, then one fold-down box for the **workflow, budget, quote and invoice**. Closed, its line shows the budget, the quote, the invoice and the stage at a glance; open it for the checklists (each stage has a **Check all** box; when every stage is done Vdex asks whether to archive the project) and the money. **People** holds the client's contacts, your crew and anyone you hired for the job (they go on the call sheet and the crew link like crew, and their cost into the budget); rented items are under **Equipment**. Lists longer than five fold behind **Show all**. **Edit days** on the booking (Edit → Edit days) show on the calendar in their own colour and go to your calendar feed; hours clocked on them count as editing.
+- The **Stripboard & shot list** box on the booking page shows where the board stands and holds the shot list to tick off as you cover it. **Import shot list…** takes a text, CSV or Word file (or pasted text), one shot per line: scene headings such as *INT. KITCHEN - DAY* or *Scene 12* above the shots group them by scene and put any scene the board does not have yet on the stripboard, marked for a check (a shot list has no page counts, and often no time of day).
 
 ### Take timecode notes
 
@@ -360,19 +365,19 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 5. **Adding the script on Android.** Share it straight into Vdex: in the Google Docs app tap ⋮ → *Share & export → Send a copy → Word*, then choose **Vdex** in the share sheet. Any `.docx` can be shared to Vdex the same way, or picked with **Script → Word document**. You can also paste the text. Then tap a line, or press and hold to select words, and **Mark** to pin a stamp to that part of the script.
 6. **Export** shares the notes as text or a spreadsheet, to Gmail, Drive or anywhere else in the share sheet.
 
-**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job and a **Walk me through it** button that runs *Timecode, start to finish* on a practice log (no camera needed; delete it from ⚙ when done). The **?** at the top gives the short tour, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps.
+**Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job and a **Walk me through it** button that runs *Timecode, start to finish* on a practice log (no camera needed; delete it from ⚙ when done). The **?** at the top gives the short tour, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps. Quotes and invoices have the same: **🎓 New to quoting? Start here** on a booking's Money page (or the **📖 Quotes & invoices guide** under ? → Other pages…) is a read-through of the whole job, with a **Walk me through it** that runs *Quotes & invoices, start to finish* on a practice job Vdex makes: it sets the rates, quotes the job, sends and accepts the quote, invoices it from the quote and records a payment, with its own Q-PRACTICE and INV-PRACTICE numbers so your numbering is untouched. The last card removes the practice job.
 
 **Phone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
 ### Stripboard: plan the shoot scene by scene
 
-Open a booking and tap **🎬 Stripboard**. Tap **📄 Scenes from a script** and pick the script (a Word .docx, a Fountain or a plain text file, or paste the text): every scene heading (INT. or EXT., the set, then DAY or NIGHT) becomes a strip, with the characters who speak or are named in the action as its cast and an estimated page count in eighths. **＋ Scene** adds one by hand. The page counts are estimates from a standard screenplay layout: check them against your script.
+Open a booking and tap **🎬 Stripboard & shot list**. Tap **📄 Scenes from a script** and pick the script (a Word .docx, a Fountain or a plain text file, or paste the text): every scene heading (INT. or EXT., the set, then DAY or NIGHT) becomes a strip, with the characters who speak or are named in the action as its cast and an estimated page count in eighths. **＋ Scene** adds one by hand. The page counts are estimates from a standard screenplay layout: check them against your script.
 
 Each strip is coloured as on a paper board: **white** interior day, **yellow** exterior day, **blue** interior night, **green** exterior night. It shows the scene number, the time of day, the set, what happens, the cast numbers (from **👥 Cast**, where you can renumber or rename people) and the pages. New strips wait under **Not scheduled yet**. Drag a strip by its **⠿** handle into a day, or focus the handle and use the up and down arrow keys, or tap the strip and pick its **Shooting day**. Each black **End of day** strip adds up that day's pages and scenes. **⚖ Spread over the days** shares the scenes out evenly by pages in their current order, **↕ Group unscheduled by location** puts scenes at the same set together, **＋ Banner** adds a line such as a company move, **＋ Day** adds a shooting day, and **🖨 Print** makes a one-line-per-scene schedule with the cast list. The call sheet gets a **Scenes** section for each day, and **👥 Share with crew** can include them (never a strip's notes).
 
 ### Quotes and invoices
 
-Every booking has a **Money** block with a quote and an invoice. **From the booking** suggests the lines: shoot days at your day rate, each crew member at their own day rate (set on their card on the Crew page), the equipment package, and the deliverables. **＋ From the price list** adds the lines you tick from your own price list (a filming day, a drone day, colour grading, a music licence, rush delivery…), with day lines counted for each shoot day; edit anything, then **Mark as sent**. The invoice starts from the quote, from the hours the clock bar logged (shoot days, editing hours and overtime at your rates), or from the booking. Quotes and invoices print from the app, save as PDF, and email to the contacts on the booking (give a stakeholder an email address). Marking a quote sent or an invoice paid ticks the matching pipeline items. Bookings → **💰 Money** shows what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, and exports the invoices as a spreadsheet for the accountant. Rates, the price list, tax, numbering, payment terms and bank details live under Settings → **Quotes & invoices**. The price list starts from typical freelance rates for where you work, picked from your currency (the United States, Canada, the UK, Western Europe, or Australia and New Zealand; other currencies start with blank prices): starting points from published rate guides and surveys, not advice. Change any price, add your own lines, or start again from another region's rates under **🏷 Edit the price list**.
+Every booking has a **Money** block with a quote and an invoice. **From the booking** suggests the lines: shoot days at your day rate, each crew member at their own day or hourly rate (set on their card on the Crew page; an hourly rate is quoted for a standard day's hours per shoot day), the equipment package, and the deliverables. **＋ From the price list** adds the lines you tick from your own price list (a filming day, a drone day, colour grading, a music licence, rush delivery…), with day lines counted for each shoot day; edit anything, then **Mark as sent**. The invoice starts from the quote, from the hours the clock logged (shoot days, editing hours and overtime at your rates), or from the booking. Quotes and invoices print from the app, save as PDF, and email to the contacts on the booking (give a stakeholder an email address). Marking a quote sent or an invoice paid ticks the matching pipeline items. Bookings → **💰 Money** shows what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, and exports the invoices as a spreadsheet for the accountant. Rates, the price list, tax, numbering, payment terms and bank details live under Settings → *Work & billing* → **Quotes & invoices**. The price list starts from typical freelance rates for where you work, picked from your currency (the United States, Canada, the UK, Western Europe, or Australia and New Zealand; other currencies start with blank prices): starting points from published rate guides and surveys, not advice. Change any price, add your own lines, or start again from another region's rates under **🏷 Edit the price list**.
 
 ### Weather on the shoot day
 
@@ -389,8 +394,8 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 - Every booking has a **stage**: Enquiry → Quoted → Confirmed → Prepped → Shot → In post → Delivered → Archived. The strip on the booking page shows where it is; tap a stage to move it.
 - Each stage has a **checklist** that depends on the job type. Tick things off, add your own items, and when a stage is complete a **Next** button moves the project on. Items with an arrow open the tool they're about (call sheet, kit, media log, hours…).
 - **🗂 Pipeline** on the Bookings page shows every project by stage, with its progress and next deadline.
-- Change the checklists for each job type under Settings → *Workflow templates*.
-- **Budget** on the booking page: what the job will cost you, one line at a time, each in a category you pick from a list (crew, cast and talent, equipment hire, locations and permits, travel, accommodation, catering, art and wardrobe, hair and make-up, post-production, music and licences, insurance and more). Put in the estimate, then the actual cost once you know it. **Fill from booking** adds your crew at their day rates, your hires and your licences. If the job has a quote, the budget shows what is left for you after costs. Only you see the budget: it never goes into a quote, an invoice or a crew link. **Export CSV** saves it for a spreadsheet.
+- Change the checklists for each job type under Settings → *Work & billing* → *Workflow templates*.
+- **Budget** on the booking page: what the job will cost you, one line at a time, each in a category you pick from a list (crew, cast and talent, equipment hire, locations and permits, travel, accommodation, catering, art and wardrobe, hair and make-up, post-production, music and licences, insurance and more). Put in the estimate, then the actual cost once you know it. **Fill from booking** adds your crew and the people you hired at their day or hourly rates, your rentals and your licences. If the job has a quote, the budget shows what is left for you after costs. Only you see the budget: it never goes into a quote, an invoice or a crew link. **Export CSV** saves it for a spreadsheet.
 - **👥 Share with crew** on the booking page makes a link to a read-only page for your cast and crew: the dates, call times, schedule, location, who is on, the scenes for each day from the stripboard, the shot list, the kit and the deliverables, whichever you tick. Prices, rates, budgets, quotes, invoices and your booking notes are never included. The whole page is inside the link, so there is no server and nothing is stored online. Crew can add the shoot to their calendar or print it. If plans change, send a new link: an old one keeps showing what it had.
 
 ### After the shoot
@@ -398,15 +403,15 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 - **Media & backups** on the booking page: one row per card; tick as it's copied to drive 1, drive 2, offsite, and verified. A card can only be marked *cleared* once it's on two drives.
 - **Deliverables**: what the client gets, with due dates (they appear in your calendar), status and links.
 - **Music & stock licences**: keep the licence numbers with the project.
-- **✂ Start edit session** runs the clock for post days. **📊 Hours & statistics** shows totals, hours per week, hours by project and overtime, and shares a spreadsheet for invoicing.
+- **✂ Start edit session** runs the clock for post days: on any day that isn't a shoot day, the Hours box near the top of the booking offers it in place of **Start work**, and the hours count as editing. **📊 Hours & statistics** shows totals, hours per week, hours by project and overtime, and shares a spreadsheet for invoicing.
 
 ### Your data on Android
 
 **Where it lives.** In Chrome's storage for the Vdex site, which the installed app shares. Nothing is uploaded unless you link a storage of your own. Clearing Chrome's browsing or site data removes it, so keep a backup.
 
-**Backups.** Settings → *Backups & data* → **Export backup** (with a licence) opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
+**Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
 
-**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage & sync*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
+**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
 | On Android you can link | Notes |
 |---|---|
@@ -420,7 +425,7 @@ The *file in a synced folder* option you may see on a computer doesn't appear on
 
 ### Calendar on Android
 
-1. **Add once.** On any booking, **📆 Add to calendar** → **Google Calendar** opens the Google Calendar app ready-filled; **Outlook** does the same for Outlook. The Apple option saves a calendar file for any app that imports one. **📤 Share** and **✉ Email** send the details to anyone.
+1. **Add once.** On any booking, **📆 Add to calendar** → **Google Calendar** opens the Google Calendar app ready-filled; **Outlook** does the same for Outlook. The Apple option saves a calendar file for any app that imports one. **📤 Share calendar event** and **✉ Email** send the details to anyone. To delete a booking, press and hold its card in a list (or its header on its own page) for three seconds and confirm, or tap **Edit**, then **Delete**.
 2. **Live feed.** With Google Drive, Dropbox or OneDrive linked (iCloud keeps Vdex's copy private and gives no link; with Nextcloud, share the feed file from your server), Vdex keeps a calendar file up to date that your calendar can subscribe to once. Bookings → **📆 Calendar & email** → *Live feed*: tick *Publish the feed*, tap **Get the subscription link** and copy it. The Google Calendar app can't add subscriptions itself, so open **calendar.google.com** in a browser → *Other calendars → + → From URL* and paste the link; it then shows up in the app and in Samsung Calendar. Outlook: **outlook.com → Add calendar → Subscribe from web**.
 3. **Two-way sync.** Vdex keeps a "Vdex bookings" calendar in your Google or Microsoft account. Bookings go up, and if you move or rename one in the calendar it comes back into Vdex. Needs the [the connection guides](connections.md).
 
@@ -438,7 +443,7 @@ Set your location first (Field → **Use GPS**, or Settings → *Field tool defa
 
 ### Make it yours
 
-Tap **Aa** (or Settings → *Display & accessibility*):
+Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 - **Colour theme** — the classics (Brass, Noir, Forest, Ocean, Plum, Mono) and a set in the colours of camera brands (Sony, Canon, Nikon, Fujifilm, Lumix, Blackmagic, RED, ARRI, Leica, GoPro, DJI), each in light and dark, or following your phone. The brand themes borrow the colours only; Vdex isn't affiliated with any of them.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
@@ -448,7 +453,7 @@ Tap **Aa** (or Settings → *Display & accessibility*):
 
 ### Lock it: PIN, fingerprint and face
 
-1. Settings → **Security** → **Set a PIN…** (4 to 8 digits; 6 is a good length).
+1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
 2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On Android that is the fingerprint, face or screen-lock check Chrome already uses. If the switch doesn't appear, your phone or browser doesn't offer it to web apps, and the PIN is the way in.
 3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
 
@@ -460,8 +465,8 @@ What the lock does: the screen can't be used until the PIN or your fingerprint o
 
 A stolen, lost or broken phone should cost you a phone, not your business records. Keep at least one copy somewhere else:
 
-- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Backups & data* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
-- **Export a backup** now and then (Settings → *Backups & data*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
+- **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Storage, sync & backups* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
+- **Export a backup** now and then (Settings → *Storage, sync & backups*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
 - **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
 - **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
@@ -499,10 +504,10 @@ No. Vdex is your side of the job: you record their feedback and send them the do
 Import your last backup. If a cloud storage is linked, the deletion has already synced, so a backup is the way back.
 
 **Does it update by itself?**
-Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *About* shows the version and has **Check for updates**.
+Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *General* → *About & Licence* shows the version and has **Check for updates**.
 
 **Can I start over?**
-Settings → *Backups & data* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN, and leaves the cloud copy alone.
+Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN (Vdex asks for a new one at the next start), and leaves the cloud copy alone.
 
 **I forgot my PIN.**
 It can't be recovered. Tap *Forgot PIN?* on the lock screen to erase this phone's Vdex data, then link your storage or import a backup.
@@ -524,7 +529,7 @@ Open https://vdex.crowmade.app/download.html, download the file for your compute
 | **Mac** | `Vdex.dmg` | Open it and drag Vdex into Applications. If macOS says it cannot check the app, go to **System Settings → Privacy & Security**, scroll down and click **Open Anyway**. |
 | **Linux** | `Vdex.AppImage` | Make it executable (right-click → Properties → *Allow executing as program*, or `chmod +x`), then double-click it. |
 
-**The licence.** Vdex is free to try for 30 days, on the website, on each computer and in the Android app. After that it needs a licence: **Buy a licence** in Settings → *About* (20 US dollars once, for up to 3 of your devices). On the website and in the Android app, press **Sign in** and use the email address you bought with: Vdex emails you a 6-digit code to type in. In the desktop app, paste the code from your email under **Enter licence code**. Keeping a copy in cloud storage, and saving backup and spreadsheet files, come with the licence (during the trial too); a storage linked before is paused until then. PDFs, printing and links for clients and crew always work. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens and prints, but nothing can be changed. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
+**The licence.** Vdex is free to try for 30 days, on the website, on each computer and in the Android and iPhone apps. After that it needs a licence: **Buy a licence** in Settings → *General* → *About & Licence* (20 US dollars once plus the tax where you live, for up to 3 of your devices; in the UK, the EU and Australia the button shows the whole price with tax, and the download page lists them all; in the iPhone app the purchase goes through the App Store at the price it shows and works on every iPhone and iPad of your Apple Account without using any of the 3 places, **Restore purchases** brings it back after a reinstall or on another iPhone or iPad, **Add your email** puts an email address on it for signing in on the website and in the Android app, and **Copy the code for the desktop app** gives the code for a computer). **Delete my licence records**, under About & Licence while you are signed in, removes what the licence server keeps about you; your licence stays, and signing in again or restoring the purchase brings it back. On the website and in the Android and iPhone apps, press **Sign in** and use the email address you bought with: Vdex emails you a 6-digit code to type in. In the desktop app, paste the code from your email under **Enter licence code**. Keeping a copy in cloud storage, and saving backup and spreadsheet files and a calendar file of all your bookings, come with the licence (during the trial too); a storage linked before is paused until then. PDFs, printing and links for clients and crew never need a licence. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens, prints and can be shared, but nothing can be changed, imported or added, so no new quotes or invoices. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
 
 The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **☁ → A file in a synced folder**, which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Google Drive or iCloud (or Dropbox, OneDrive or WebDAV), and link the same one everywhere.
 
@@ -534,8 +539,8 @@ The installed app opens in its own window, works offline, and keeps its data on 
 - There is no GPS in a computer, so set your location by hand: Field → **Enter**, or Settings → *Field tool defaults*. The sun, Polaris and call-sheet times then work as usual.
 - Break notifications pop up like any other app's. They have no buttons; clicking one brings Vdex to the front.
 - Backups, call sheets and exports save through a normal Save dialog instead of a share sheet.
-- The PIN lock works the same way (Settings → *Security*), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
-- **Updates:** the desktop app checks download.crowmade.app for a new version when it starts and every few hours. Windows, Linux and a signed Mac download it in the background and install it on the next restart (Settings → *About* shows progress and has **Restart to update**). An unsigned Mac shows a notice with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
+- The PIN lock works the same way (every computer has a PIN too; Settings → *Security* changes it), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
+- **Updates:** the desktop app checks download.crowmade.app for a new version when it starts and every few hours. Windows, Linux and a signed Mac download it in the background and install it on the next restart (Settings → *General* → *About & Licence* shows progress and has **Restart to update**). On an unsigned Mac, Settings → *General* → *About & Licence* shows the new version with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
 - To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 - Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.
 

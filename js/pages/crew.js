@@ -1,25 +1,29 @@
-import { h, telUrl, safeUrl, empty, fmtShort, todayISO } from '../util.js';
+import { h, telUrl, safeUrl, empty, fmtShort, todayISO, personRate, rateText, hasUnit, keepTypedRate, typedRateHint } from '../util.js';
 import { db, upsert, remove, crewBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
 
-export const ROLES = ['Director', 'Producer', 'DOP', 'Camera Operator', '1st AC', '2nd AC', 'Gaffer', 'Grip', 'Sound Recordist', 'Boom Operator', 'Drone Pilot', 'Editor', 'Colourist', 'Motion Designer', 'MUA', 'Stylist', 'Runner', 'Location Manager', 'Other'];
+import { ROLES } from '../workflow.js';
+export { ROLES };
 const S = { q: '', role: '' };
 
+// An older card holds the rate as it was typed ("$450/day", "£55 an hour"): the form shows the amount and the unit it
+// reads and saves them as a number and a unit; the typed text is shown under the box, and what it cannot read ("TBC",
+// "1,200 per week") stays as it is until an amount replaces it (keepTypedRate in util.js).
+const rateValues = c => { const r = personRate(c); return { ...c, rate: r.amount === '' ? '' : r.amount, rateUnit: hasUnit(c) ? c.rateUnit : r.hourly ? 'hour' : 'day' }; };
 function edit(c = {}) {
   openForm({
     title: c.id ? 'Edit crew member' : 'Add trusted crew',
-    values: c,
+    values: rateValues(c),
     fields: [
       { key: 'name', label: 'Name', required: true },
       { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' },
       { key: 'phone', label: 'Phone', type: 'tel' },
       { key: 'email', label: 'Email', type: 'email' },
-      { key: 'rate', label: 'Day rate', type: 'number', min: 0, hint: 'Used for the suggested lines on quotes.' },
+      { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: typedRateHint(c) + 'Prices this person’s line on quotes, invoices and the budget: a day rate per shoot day, or an hourly rate for a standard day’s hours (Settings → Work & billing → Hours & breaks).' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] },
       { key: 'link', label: 'Link to their work', type: 'url', placeholder: 'https://… showreel / portfolio' },
-      { key: 'rate', label: 'Day / hourly rate' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
-    onSave: v => upsert('crew', v),
+    onSave: v => upsert('crew', keepTypedRate(c, v)),
     onDelete: c.id ? () => remove('crew', c.id) : null,
   });
 }
@@ -50,10 +54,10 @@ export const crew = {
 function card(c) {
   const link = safeUrl(c.link);
   const next = crewBookings(c.id).filter(b => endOf(b) >= todayISO()).slice(0, 2);
-  return h('div', { class: 'card crew-card' },
+  return h('div', { class: 'card crew-card', 'data-id': c.id },
     h('div', { class: 'card-row' },
       h('div', { class: 'avatar', 'aria-hidden': 'true' }, (c.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()),
-      h('div', { class: 'grow' }, h('strong', null, c.name), h('div', { class: 'muted' }, [c.role, c.rate].filter(Boolean).join(' · '))),
+      h('div', { class: 'grow' }, h('strong', null, c.name), h('div', { class: 'muted' }, [c.role, rateText(c, db.profile.currency || '$')].filter(Boolean).join(' · '))),
       h('button', { class: 'icon-btn', 'aria-label': 'Edit ' + c.name, onclick: () => edit(c) }, '✎')),
     h('div', { class: 'actions' },
       link && h('a', { class: 'btn ghost small', href: link, target: '_blank', rel: 'noopener noreferrer' }, '▶ View work'),

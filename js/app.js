@@ -11,11 +11,14 @@ import * as lock from './lock.js';
 import * as backup from './backup.js';
 import { initUpdates } from './update.js';
 import { termsGate } from './terms.js';
+import * as native from './native.js';
 
 applyPrefs();
 await lock.gate(); // with a PIN set, nothing below runs until the lock screen is passed
 lock.init();
 await termsGate(); // nor until the terms of service and privacy policy are accepted on this device
+await lock.ensurePin(); // and everyone uses Vdex with a PIN: a device without one sets it up here, before anything else
+{ const why = lock.notice(); if (why) setTimeout(() => toast(why), 500); } // a word no gate has shown yet (the device was erased, a PIN was set elsewhere)
 const lockBtn = document.getElementById('lockBtn');
 const paintLock = () => { if (lockBtn) lockBtn.hidden = !lock.enabled(); };
 paintLock(); lock.onChange(paintLock);
@@ -66,17 +69,21 @@ function show(i, dir = 0) {
 // Re-render the active page when data changes (field tools keep their own live state).
 // Redraws are coalesced: a burst of changes in one go (an import, a template applied, a merge) draws the page once.
 let redrawQueued = false;
+// What identifies a control across a redraw: its kind, its id or label, and the text around it (a checklist box is
+// known by its line). The same control in the new page gets the focus back, so ticking by keyboard stays in place.
+const focusKey = el => (el && el !== document.body && page.contains(el) ? [el.tagName, el.type || '', el.id || el.getAttribute('aria-label') || el.name || '', ((el.closest('label') || el).textContent || '').trim().slice(0, 80)].join('|') : null);
 function redraw() {
   redrawQueued = false;
   const p = current >= 0 && tabs[current] && tabs[current].page;
   if (!p || p.static) return; // a section still loading draws itself fresh when it arrives
-  const y = window.scrollY;
+  const y = window.scrollY, key = focusKey(document.activeElement);
   const holder = page.firstElementChild;
   if (!holder) return;
   cleanup && cleanup();
   holder.replaceChildren();
   cleanup = p.render(holder) || null;
   window.scrollTo(0, y);
+  if (key) { const again = [...holder.querySelectorAll('button, input, select, textarea, a[href], summary, [tabindex]')].find(el => focusKey(el) === key); if (again) again.focus({ preventScroll: true }); }
 }
 store.subscribe(reason => {
   paintCloud();
@@ -87,12 +94,32 @@ store.subscribe(reason => {
 
 let start = 0;
 try { start = Math.min(tabs.length - 1, Math.max(0, Number(localStorage.getItem('logi-tab')) || 0)); } catch { /* ignore */ }
-const rolodex = createRolodex(document.getElementById('rolodex'), tabs, { start, onSelect: (i, dir) => show(i, dir) });
+const nav = document.getElementById('rolodex');
+const rolodex = createRolodex(nav, tabs, { start, onSelect: (i, dir) => { showNav(); show(i, dir); } });
+// The Rolodex bar: hidden by a slide while the page scrolls down, back the moment it scrolls up, and always there near
+// the top, when a section changes, when something in it takes the focus, and when a tour starts.
+function showNav() { nav.classList.remove('tucked'); }
+window.logiShowNav = showNav;
+{
+  let lastY = window.scrollY, ticking = false;
+  window.addEventListener('scroll', () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => {
+      ticking = false;
+      const y = window.scrollY, dy = y - lastY; lastY = y;
+      if (y <= nav.offsetHeight || dy < -6) showNav();
+      else if (dy > 6 && !document.querySelector('.sheet-back')) nav.classList.add('tucked');
+    });
+  }, { passive: true });
+  nav.addEventListener('focusin', showNav);
+}
 show(start);
 window.logiGo = i => { rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); return showing; }; // lets pages jump between sections; resolves once the section is drawn
 window.logiPage = () => (tabs[current] ? tabs[current].id : null); // which section is open (the page tutorials use it)
 
-// A file shared to the app (Android share sheet) is parked by the service worker; hand it to TC Notes.
+// A file handed to Vdex: the iPhone app gets it from the phone ("Copy to Vdex"); on Android the share sheet's file is
+// parked by the service worker. Either way js/share-in.js asks what it is.
+if (native.isApp) native.files.onShared(file => import('./share-in.js').then(m => m.arrived(file)));
 if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in window) {
   history.replaceState(null, '', location.pathname);
   caches.open('logi-share').then(async c => {
@@ -100,7 +127,7 @@ if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in win
     const name = decodeURIComponent(r.headers.get('X-Name') || 'shared.docx');
     const file = new File([await r.blob()], name, { type: r.headers.get('Content-Type') || '' });
     await c.delete('shared-file');
-    import('./pages/tcnotes.js').then(m => m.receiveSharedFile(file));
+    import('./share-in.js').then(m => m.arrived(file));
   }).catch(() => {});
 }
 
@@ -120,7 +147,7 @@ cloudBtn.addEventListener('click', () => openStorage());
 
 function openStorage() {
   const panel = storagePanel();
-  sheet('Storage & sync', h('div', null, panel.el, h('hr'), backupPanel()), { onClose: panel.destroy });
+  sheet('Storage, sync & backups', h('div', null, panel.el, h('h3', { class: 'ss-sub' }, 'Backups'), backupPanel()), { onClose: panel.destroy });
 }
 
 store.initCloud();
@@ -128,7 +155,8 @@ backup.nudgeIfStale();
 const idle = window.requestIdleCallback ? fn => requestIdleCallback(fn, { timeout: 2500 }) : fn => setTimeout(fn, 1200);
 idle(() => { import('./pages/gear.js').then(m => m.serviceNudge()); import('./money.js').then(m => m.moneyNudge()); });
 // Google's sign-in window has to open straight from a tap, so have its library ready before anyone taps "Sign in again".
-if (localStorage.getItem('logi-provider') === 'gdrive' || store.db.calSync?.provider === 'google') import('./providers.js').then(p => p.signIn.available('google') && p.loadGIS()).catch(() => {}); // service and overdue-invoice reminders, once the first paint is out of the way
-if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: a short walkthrough
+let provider = null; try { provider = localStorage.getItem('logi-provider'); } catch { /* blocked storage */ }
+if (provider === 'gdrive' || store.db.calSync?.provider === 'google') import('./providers.js').then(p => p.signIn.available('google') && p.loadGIS()).catch(() => {}); // service and overdue-invoice reminders, once the first paint is out of the way
+if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: the set-up walkthrough (your details, calendar, sample people)
 initUpdates(); // service worker, offline copy, and the "new version" bar
 idle(() => import('./licence.js').then(m => m.initLicence()).catch(() => {})); // the trial and licence (desktop app, website and Play app)

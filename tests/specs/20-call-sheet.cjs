@@ -35,7 +35,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const rows = doc.locator('.cs-sched-edit .row-edit');
   await rows.nth(0).locator('input[type=time]').fill('07:00'); await rows.nth(0).locator('input[type=text]').fill('Crew call, unload at rear gate');
   await rows.nth(1).locator('input[type=time]').fill('09:30'); await rows.nth(1).locator('input[type=text]').fill('First interview — brewhouse');
-  await doc.locator('input[aria-label="Sam Okafor call time"], input[aria-label$="call time"]').first().fill('06:30');
+  await doc.locator('input[aria-label="Sam Rivera call time"], input[aria-label$="call time"]').first().fill('06:30');
   await doc.locator('textarea[aria-label^="Who is coming"]').fill('Client: Priya (marketing) from 10:00');
   await doc.locator('input[aria-label^="e.g. 14"]').fill('14°C, showers from 3pm');
   await doc.locator('input[aria-label^="Emergency contact"]').fill('Sam · 0400 000 000');

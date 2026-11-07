@@ -58,6 +58,15 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('any other address is the static website', (await (await get('/index.html')).text()) === 'static file /index.html');
     const buy = await get('/buy');
     ok('/buy goes to the Stripe payment link', buy.status === 302 && buy.headers.get('location') === 'https://buy.stripe.com/test_vdex');
+    { // the price with tax in the country the request comes from (js/tax.js), for the Buy buttons
+      const at = async country => { const r = await mf.dispatchFetch(SITE + '/licence/price', { cf: { country } }); return { cc: r.headers.get('cache-control') || '', body: await r.json() }; };
+      const gb = (await at('GB')).body, au = (await at('AU')).body, de = (await at('DE')).body, fi = (await at('FI')).body, hu = (await at('HU')).body, lu = (await at('LU')).body;
+      ok('/licence/price: 24.00 USD with 20% VAT in the UK, 22.00 with 10% GST in Australia', gb.taxed && gb.taxed.total === '24.00' && gb.taxed.tax === 'VAT' && gb.taxed.rate === 20 && gb.taxed.place === 'the UK' && au.taxed && au.taxed.total === '22.00' && au.taxed.tax === 'GST' && au.taxed.rate === 10, JSON.stringify([gb, au]));
+      ok('…and each EU country\'s VAT: 23.80 in Germany, 25.10 in Finland (25.5%), 25.40 in Hungary, 23.40 in Luxembourg', de.taxed.total === '23.80' && fi.taxed.total === '25.10' && fi.taxed.rate === 25.5 && hu.taxed.total === '25.40' && lu.taxed.total === '23.40', JSON.stringify([de, fi, hu, lu]));
+      const us = await at('US'), odd = (await at('<b>')).body;
+      ok('…the price before tax anywhere else (any tax is added at checkout), and for a country it cannot read', us.body.taxed === null && us.body.country === 'US' && us.body.price === '20.00' && us.body.currency === 'USD' && odd.taxed === null && odd.country === '', JSON.stringify([us.body, odd]));
+      ok('…and no answer is kept by a cache, since each is for one country', /no-store/.test(us.cc), us.cc);
+    }
 
     /* ---------------------------- after paying ---------------------------- */
     const sid = 'cs_test_a1B2c3D4e5F6g7H8i9J0';
@@ -67,6 +76,12 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const v = code && (await codes.verifyCode(code, { keys: KEYS }));
     ok('the thank-you page shows a code made by the shop key, for the buyer, for 3 computers', th.status === 200 && v && v.status === 'valid' && v.licence.kid === 2 && v.licence.name === 'Pat Buyer' && v.licence.email === 'pat@example.com' && v.licence.seats === 3 && !v.licence.comp && v.licence.issued === '2026-11-02');
     ok('reloading the page shows the same code', (await (await get('/licence/thanks?session_id=' + sid)).text()).includes(code));
+    { // a new payment link (a new price) beside the old one: purchases through either still get their code
+      const both = new Miniflare(opts({ ...env, STRIPE_PAYMENT_LINK: 'plink_newprice, plink_vdex' }));
+      const again = await (await both.dispatchFetch(SITE + '/licence/thanks?session_id=' + sid, { redirect: 'manual' })).text();
+      ok('with a second payment link added, a purchase through the first still shows the same code', again.includes(code));
+      await both.dispose();
+    }
     const csp = th.headers.get('content-security-policy') || '', nonce = (csp.match(/'nonce-([^']+)'/) || [])[1];
     ok('the page carries its own strict security headers and is never cached', !!nonce && html.includes(`<script nonce="${nonce}">`) && /default-src 'none'/.test(csp) && /frame-ancestors 'none'/.test(csp) && th.headers.get('cache-control') === 'no-store' && th.headers.get('x-robots-tag') === 'noindex');
     const xsid = 'cs_test_Z9y8X7w6V5u4T3s2R1q0';
@@ -238,6 +253,113 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     await mf2.dispose();
     mf2 = new Miniflare(opts({ ...env, LICENCE_SHOP_KEY: codes.b64u.enc(stranger.pkcs8) }));
     ok('a shop key that is not the one built into Vdex keeps the shop closed instead of selling codes no app accepts', (await post('/licence/activate', { code, install: id(1) }, mf2)).status === 503 && (await mf2.dispatchFetch(SITE + '/licence/thanks?session_id=' + sid)).status === 404);
+
+    /* ------------------------------ the App Store ------------------------------ */
+    // The iPhone app's purchase: a certificate chain of our own stands in for Apple's (the Worker is told its root).
+    const { execSync } = require('child_process');
+    const wd = fs.mkdtempSync(path.join(os.tmpdir(), 'vdex-apple-')), run = cmd => execSync(cmd, { cwd: wd, stdio: ['ignore', 'pipe', 'pipe'] });
+    fs.writeFileSync(path.join(wd, 'inter.ext'), 'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n1.2.840.113635.100.6.2.1=DER:05:00\n');
+    fs.writeFileSync(path.join(wd, 'plain-ca.ext'), 'basicConstraints=critical,CA:TRUE\nkeyUsage=critical,keyCertSign,cRLSign\n');
+    fs.writeFileSync(path.join(wd, 'leaf.ext'), 'basicConstraints=CA:FALSE\n1.2.840.113635.100.6.11.1=DER:05:00\n');
+    fs.writeFileSync(path.join(wd, 'other.ext'), 'basicConstraints=CA:FALSE\n');
+    run('openssl ecparam -name secp384r1 -genkey -noout -out root.key && openssl req -new -x509 -key root.key -sha384 -days 3650 -subj "/CN=Test Root CA/O=Vdex tests" -out root.pem && openssl x509 -in root.pem -outform der -out root.der');
+    run('openssl ecparam -name prime256v1 -genkey -noout -out inter.key && openssl req -new -key inter.key -subj "/CN=Test WWDR/O=Vdex tests" -out inter.csr && openssl x509 -req -in inter.csr -CA root.pem -CAkey root.key -CAcreateserial -sha384 -days 3650 -extfile inter.ext -out inter.pem');
+    run('openssl ecparam -name prime256v1 -genkey -noout -out leaf.key && openssl req -new -key leaf.key -subj "/CN=Test App Store/O=Vdex tests" -out leaf.csr && openssl x509 -req -in leaf.csr -CA inter.pem -CAkey inter.key -CAcreateserial -sha256 -days 3650 -extfile leaf.ext -out leaf.pem');
+    run('openssl ecparam -name prime256v1 -genkey -noout -out other.key && openssl req -new -key other.key -subj "/CN=Not the App Store/O=Vdex tests" -out other.csr && openssl x509 -req -in other.csr -CA inter.pem -CAkey inter.key -CAcreateserial -sha256 -days 3650 -extfile other.ext -out other.pem');
+    // a forged App Store leaf issued by that end-entity certificate (as a developer's own Apple certificate could try), and an intermediate without Apple's marker
+    run('openssl ecparam -name prime256v1 -genkey -noout -out forged.key && openssl req -new -key forged.key -subj "/CN=Forged App Store/O=Vdex tests" -out forged.csr && openssl x509 -req -in forged.csr -CA other.pem -CAkey other.key -CAcreateserial -sha256 -days 3650 -extfile leaf.ext -out forged.pem');
+    run('openssl ecparam -name prime256v1 -genkey -noout -out plain-ca.key && openssl req -new -key plain-ca.key -subj "/CN=Some CA/O=Vdex tests" -out plain-ca.csr && openssl x509 -req -in plain-ca.csr -CA root.pem -CAkey root.key -CAcreateserial -sha384 -days 3650 -extfile plain-ca.ext -out plain-ca.pem');
+    run('openssl ecparam -name prime256v1 -genkey -noout -out under-plain.key && openssl req -new -key under-plain.key -subj "/CN=App Store under some CA/O=Vdex tests" -out under-plain.csr && openssl x509 -req -in under-plain.csr -CA plain-ca.pem -CAkey plain-ca.key -CAcreateserial -sha256 -days 3650 -extfile leaf.ext -out under-plain.pem');
+    const der = f => Buffer.from(fs.readFileSync(path.join(wd, f), 'utf8').replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''), 'base64');
+    const bu = buf => Buffer.from(buf).toString('base64url');
+    const jws = (payload, { leaf = 'leaf', chain = ['leaf.pem', 'inter.pem', 'root.pem'] } = {}) => {
+      const header = bu(JSON.stringify({ alg: 'ES256', x5c: chain.map(f => der(f).toString('base64')) })), body = bu(JSON.stringify(payload));
+      const sig = crypto.sign('sha256', Buffer.from(header + '.' + body), { key: fs.readFileSync(path.join(wd, leaf + '.key'), 'utf8'), dsaEncoding: 'ieee-p1363' });
+      return `${header}.${body}.${bu(sig)}`;
+    };
+    const txn = (over = {}) => ({ transactionId: '2000000123456789', originalTransactionId: '2000000123456789', bundleId: 'app.crowmade.vdex', productId: 'app.crowmade.vdex.licence', purchaseDate: Date.parse('2026-11-05T10:00:00Z'), originalPurchaseDate: Date.parse('2026-11-05T10:00:00Z'), quantity: 1, type: 'Non-Consumable', inAppOwnershipType: 'PURCHASED', signedDate: Date.now(), environment: 'Production', transactionReason: 'PURCHASE', storefront: 'USA', price: 19990, currency: 'USD', ...over });
+    const aenv = { ...env, WEB_SIGN_IN: 'on', APPLE_BUNDLE_ID: 'app.crowmade.vdex', APPLE_ROOT_CA: fs.readFileSync(path.join(wd, 'root.der')).toString('base64') };
+    ok('App Store purchases are off until the app is named', (await (await get('/licence/apple/status')).json()).on === false);
+    await mf2.dispose(); mf2 = new Miniflare(opts(aenv));
+    const apost = async (p, body) => { const r = await post(p, body, mf2); return { status: r.status, body: await r.json().catch(() => ({})) }; };
+    ok('…and on when it is', (await (await mf2.dispatchFetch(SITE + '/licence/apple/status')).json()).on === true);
+    const iphone = id(21), claimed = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' }), cb = claimed.body;
+    ok('a purchase signed by the App Store becomes a licence and a sign-in, and the phone takes none of the 3 places', claimed.status === 200 && cb.ok && cb.appleDevices === true && !!cb.token && !!cb.licence && cb.licence.seats === 3 && cb.used === undefined, JSON.stringify(claimed).slice(0, 200));
+    ok('…and a desktop code for the same licence, with no email in it yet', typeof cb.code === 'string' && (await codes.verifyCode(cb.code, { keys: KEYS })).licence.ref === cb.licence.ref && (await codes.verifyCode(cb.code, { keys: KEYS })).licence.email === '', String(cb.code).slice(0, 30));
+    const reclaim = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });
+    ok('claiming the same purchase again (a reinstall, Restore purchases) is the same licence', reclaim.body.ok && reclaim.body.licence.ref === cb.licence.ref, JSON.stringify(reclaim).slice(0, 160));
+    const ipad = await apost('/licence/apple/claim', { jws: jws(txn()), install: id(22), os: 'iPad' });
+    const placesNow = await (await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'look', ref: cb.licence.ref, at: Date.now() }), mf2)).json();
+    ok('an iPad on the same Apple Account is licensed too, and neither it nor the iPhone takes a place', ipad.body.ok && ipad.body.licence.ref === cb.licence.ref && placesNow.ok && placesNow.computers.length === 0, JSON.stringify([ipad.body, placesNow]).slice(0, 200));
+    const chk = await apost('/licence/web/check', { token: cb.token });
+    ok('the sign-in works like the website’s: the daily check says licensed, with no email behind it', chk.body.ok && chk.body.licence.ref === cb.licence.ref && chk.body.licence.email === '', JSON.stringify(chk).slice(0, 160));
+    const seat2 = await apost('/licence/web/activate', { token: cb.token, install: iphone, os: 'iPhone' });
+    ok('…and an older app’s weekly check of its place is still answered', seat2.body.ok && seat2.body.used === 1, JSON.stringify(seat2).slice(0, 160));
+    const refusals = [
+      ['a signature that is not the App Store’s', jws(txn(), { leaf: 'other', chain: ['other.pem', 'inter.pem', 'root.pem'] })],
+      ['a tampered transaction', jws(txn()).replace(/\.[^.]+$/, '.' + bu(crypto.randomBytes(64)))],
+      ['another app’s purchase', jws(txn({ bundleId: 'com.example.other' }))],
+      ['another product', jws(txn({ productId: 'app.crowmade.vdex.tips' }))],
+      ['a sandbox purchase, unless allowed', jws(txn({ environment: 'Sandbox' }))],
+      ['a revoked purchase', jws(txn({ revocationDate: Date.now(), revocationReason: 0 }))],
+      ['a forged App Store leaf issued by a certificate that is not an authority', jws(txn(), { leaf: 'forged', chain: ['forged.pem', 'other.pem', 'inter.pem', 'root.pem'] })],
+      ['…even with the end-entity passed off as the intermediate', jws(txn(), { leaf: 'forged', chain: ['forged.pem', 'other.pem', 'root.pem'] })],
+      ['a chain whose intermediate is not Apple’s', jws(txn(), { leaf: 'under-plain', chain: ['under-plain.pem', 'plain-ca.pem', 'root.pem'] })],
+      ['a chain with a stranger’s root in the root’s place', jws(txn(), { chain: ['leaf.pem', 'inter.pem', 'plain-ca.pem'] })],
+    ];
+    for (const [what, bad] of refusals) { const r = await apost('/licence/apple/claim', { jws: bad, install: id(23), os: 'iPhone' }); ok(`refused: ${what}`, r.status === 400 || r.status === 403, String(r.status) + ' ' + JSON.stringify(r.body).slice(0, 100)); }
+    const noRoot = await apost('/licence/apple/claim', { jws: jws(txn({ originalTransactionId: '2000000999' }), { chain: ['leaf.pem', 'inter.pem'] }), install: id(24), os: 'iPhone' });
+    ok('a chain sent without its root still verifies against the pinned root', noRoot.status === 200, JSON.stringify(noRoot).slice(0, 160));
+    // The buyer adds an email address: then the website and the Android app sign in with it, and the desktop code carries it
+    const mailsBefore = mails().length;
+    const es = await apost('/licence/apple/email', { token: cb.token, email: 'app@example.com' }), ecode = lastCode('app@example.com');
+    ok('an App Store buyer adding an email address gets a 6-digit code there', es.status === 200 && es.body.ok && !!ecode && mails().length === mailsBefore + 1, JSON.stringify(es.body));
+    ok('…only with a sign-in: without one nothing is sent', (await apost('/licence/apple/email', { token: 'x.y.z', email: 'app@example.com' })).status === 401 && mails().length === mailsBefore + 1);
+    ok('a wrong code does not link it', (await apost('/licence/apple/email/verify', { token: cb.token, email: 'app@example.com', code: '000000' })).status === 400);
+    const linked = await apost('/licence/apple/email/verify', { token: cb.token, email: 'app@example.com', code: ecode });
+    const linkedCode = linked.body.code && (await codes.verifyCode(linked.body.code, { keys: KEYS }));
+    ok('the right code links the address: the licence shows it, and the desktop code now carries it', linked.status === 200 && linked.body.ok && linked.body.licence.email === 'app@example.com' && linkedCode && linkedCode.licence.ref === cb.licence.ref && linkedCode.licence.email === 'app@example.com', JSON.stringify(linked.body).slice(0, 160));
+    ok('…the phone’s daily check shows the email too', (await apost('/licence/web/check', { token: cb.token })).body.licence.email === 'app@example.com');
+    const ws = await apost('/licence/web/start', { email: 'app@example.com' }), wcode = lastCode('app@example.com');
+    const wv = await apost('/licence/web/verify', { email: 'app@example.com', code: wcode });
+    ok('…the website signs in with that email, to the same licence', ws.status === 200 && wv.status === 200 && wv.body.licence.ref === cb.licence.ref, JSON.stringify(wv.body).slice(0, 120));
+    ok('…and a website sign-in, which is not the purchase’s own, cannot add addresses to it', (await apost('/licence/apple/email', { token: wv.body.token, email: 'other@example.com' })).status === 401 && !lastCode('other@example.com'));
+    const desk = await apost('/licence/activate', { code: linked.body.code, install: id(26), os: 'Windows' });
+    ok('…and the desktop app activates with the code on the same licence, taking one of its places', desk.status === 200 && desk.body.ok && desk.body.used === 2, JSON.stringify(desk.body).slice(0, 120));
+    const again = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });
+    ok('claiming again after the link (a reinstall) shows the email, and its code carries it', again.status === 200 && again.body.licence.email === 'app@example.com' && (await codes.verifyCode(again.body.code, { keys: KEYS })).licence.email === 'app@example.com', JSON.stringify(again.body).slice(0, 140));
+    const onDemand = await apost('/licence/apple/code', { token: cb.token });
+    ok('the desktop code comes on demand for the purchase’s sign-in, and for nobody else', onDemand.status === 200 && onDemand.body.code === again.body.code && (await apost('/licence/apple/code', { token: wv.body.token })).status === 401 && (await apost('/licence/apple/code', { token: 'x.y.z' })).status === 401);
+    const sends = []; for (let i = 0; i < 2; i++) sends.push((await apost('/licence/apple/email', { token: cb.token, email: `more${i}@example.com` })).status);
+    ok('one purchase may send three codes a day (app@example.com was the first), and no more: the fourth is refused without an email', sends.every(s => s === 200) && (await apost('/licence/apple/email', { token: cb.token, email: 'more3@example.com' })).status === 503 && !lastCode('more3@example.com'), sends.join());
+    ok('a code of the wrong length is refused outright', (await apost('/licence/apple/email/verify', { token: cb.token, email: 'app@example.com', code: '12345' })).status === 400);
+    // a refund through Apple cancels it; a reversed refund restores it
+    const notice = (type, over = {}) => jws({ notificationType: type, subtype: '', notificationUUID: 'n-' + type, version: '2.0', signedDate: Date.now(), data: { bundleId: 'app.crowmade.vdex', environment: 'Production', signedTransactionInfo: jws(txn(over)) } });
+    ok('an unsigned notice is refused', (await apost('/licence/apple/notify', { signedPayload: 'x.y.z' })).status === 400);
+    const refunded = await apost('/licence/apple/notify', { signedPayload: notice('REFUND') });
+    const after = await apost('/licence/web/check', { token: cb.token });
+    ok('a refund notice from Apple cancels the licence: the phone’s next check says so, and the purchase cannot be claimed again', refunded.body.cancelled === 1 && after.body.error === 'cancelled' && (await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' })).status === 403, JSON.stringify([refunded, after]).slice(0, 200));
+    ok('…nor can an email be added to it, nor its code fetched', (await apost('/licence/apple/email', { token: cb.token, email: 'late@example.com' })).status === 403 && (await apost('/licence/apple/code', { token: cb.token })).status === 403);
+    const reversed = await apost('/licence/apple/notify', { signedPayload: notice('REFUND_REVERSED') });
+    ok('a refund that Apple reverses brings it back', reversed.body.restored === 1 && (await apost('/licence/web/check', { token: cb.token })).body.ok === true);
+    ok('other notices are acknowledged and ignored', (await apost('/licence/apple/notify', { signedPayload: notice('DID_RENEW') })).body.ignored === 'DID_RENEW');
+    // Delete my licence records
+    const forgot = await apost('/licence/web/forget', { token: cb.token });
+    const lookAfter = await (await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'look', ref: cb.licence.ref, at: Date.now() }), mf2)).json();
+    ok('Delete my licence records forgets the purchase link, the email and the devices list', forgot.status === 200 && forgot.body.ok && lookAfter.ok && lookAfter.computers.length === 0, JSON.stringify([forgot.body, lookAfter]).slice(0, 200));
+    ok('…every sign-in made before it stops working: the phone’s own, and a website sign-in with the linked email', (await apost('/licence/web/check', { token: cb.token })).status === 401 && (await apost('/licence/web/check', { token: wv.body.token })).body.error === 'signed-out');
+    ok('…and it cannot be repeated with the old sign-in', (await apost('/licence/web/forget', { token: cb.token })).status === 401);
+    const restored = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });
+    ok('…while the licence itself stays: restoring the purchase makes the records afresh, with a sign-in that works', restored.status === 200 && restored.body.licence.ref === cb.licence.ref && (await apost('/licence/web/check', { token: restored.body.token })).body.ok === true, JSON.stringify(restored.body).slice(0, 120));
+    await mf2.dispose(); mf2 = new Miniflare(opts({ ...aenv, APPLE_ALLOW_SANDBOX: 'on' }));
+    const real = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });
+    const sand = await apost('/licence/apple/claim', { jws: jws(txn({ environment: 'Sandbox' })), install: id(25), os: 'iPhone' });
+    ok('a sandbox purchase is taken when the owner allows it (for testing): a licence of its own, apart from the real purchase with the same number', sand.status === 200 && sand.body.ok && real.status === 200 && sand.body.licence.ref !== real.body.licence.ref, JSON.stringify([sand.body.licence, real.body.licence]).slice(0, 160));
+    ok('…for 30 days, with no desktop code and no email', /^\d{4}-\d\d-\d\d$/.test(sand.body.licence.expires) && !sand.body.code && (await apost('/licence/apple/email', { token: sand.body.token, email: 'sand@example.com' })).status === 403 && (await apost('/licence/apple/code', { token: sand.body.token })).status === 403);
+    ok('…and its daily check and its place work like any other', (await apost('/licence/web/check', { token: sand.body.token })).body.ok === true && (await apost('/licence/web/activate', { token: sand.body.token, install: id(25), os: 'iPhone' })).body.ok === true);
+    const sandRefund = await apost('/licence/apple/notify', { signedPayload: notice('REFUND', { environment: 'Sandbox' }) });
+    ok('a sandbox refund cancels the sandbox licence and leaves the real one alone', sandRefund.body.cancelled === 1 && (await apost('/licence/web/check', { token: sand.body.token })).body.error === 'cancelled' && (await apost('/licence/web/check', { token: real.body.token })).body.ok === true);
+    fs.rmSync(wd, { recursive: true, force: true });
 
     /* ------------------------------ the config ------------------------------ */
     const wr = JSON.parse(fs.readFileSync(path.join(ROOT, 'cloudflare/wrangler.jsonc'), 'utf8').replace(/^\s*\/\/.*$/gm, ''));

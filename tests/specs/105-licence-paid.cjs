@@ -4,7 +4,7 @@
 // licence check switched on, faked) and in the desktop app (a stand-in bridge), and that nothing changes while
 // licences are switched off.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openSetting } = require('../helpers.cjs');
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -39,7 +39,7 @@ const DAY = 86400e3;
   };
   const backups = async page => {
     await page.evaluate(() => window.logiGo('settings')); await sleep(400);
-    await page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => /Backups/.test(x.querySelector('.ss-title').textContent)); d.open = true; d.scrollIntoView(); });
+    await openSetting(page, 'Storage, sync & backups');
     await sleep(200);
   };
   const closeSheets = async page => { while (await page.locator('.sheet').count()) { await page.keyboard.press('Escape'); await sleep(150); } };
@@ -55,7 +55,7 @@ const DAY = 86400e3;
     // The website in its trial: no backups, spreadsheets or cloud storage.
     ({ ctx, page, downloads } = await open({ web: trialWeb, storage: trialStore }));
     await backups(page);
-    ok('Backups & data says backups come with a licence, rather than warning there is no copy', /Backup files and cloud storage come with a Vdex licence/.test(await page.evaluate(() => [...document.querySelectorAll('details.settings-section')].find(x => x.querySelector('.ss-title').textContent === 'Backups & data').innerText)));
+    ok('Storage, sync & backups says backups come with a licence, rather than warning there is no copy', /Backup files and cloud storage come with a Vdex licence/.test(await page.evaluate(() => [...document.querySelectorAll('details.settings-section')].find(x => x.querySelector('.ss-title').textContent === 'Storage, sync & backups').innerText)));
     await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(400);
     const sheetText = await page.locator('.licence-needed').innerText().catch(() => '');
     ok('saving a backup during the trial explains it comes with a licence, offers Buy and Sign in, and saves nothing', /Saving backups and spreadsheet files comes with a Vdex licence/.test(sheetText) && /Everything else works during your free trial/.test(sheetText) && /Buy a licence/.test(sheetText) && /Sign in/.test(sheetText) && !downloads.length);
@@ -84,13 +84,13 @@ const DAY = 86400e3;
     await page.getByRole('button', { name: /Share bookings \(\.ics\)/ }).click(); await sleep(300);
     ok('saving every booking as a calendar file is refused too (Add to calendar for one booking is not)', (await page.locator('.licence-needed').count()) === 1 && !downloads.length);
     await closeSheets(page);
-    // Signing in while the explanation is open: it closes, and Backups & data changes in place.
+    // Signing in while the explanation is open: it closes, and Storage, sync & backups changes in place.
     await backups(page);
     await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(300);
     await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.token = { kid: 2, data: '{}', sig: 'x' }; s.licence = { email: 'jo@example.com', ref: '2:1', seats: 3 }; s.checked = s.tried = Date.now(); localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(() => !document.querySelector('.licence-needed'), null, { timeout: 5000 }).catch(() => {});
-    const after = await page.evaluate(() => [...document.querySelectorAll('details.settings-section')].find(x => x.querySelector('.ss-title').textContent === 'Backups & data').innerText);
-    ok('once signed in, the "comes with a licence" offer closes and Backups & data no longer says it needs one', (await page.locator('.licence-needed').count()) === 0 && !/come with a Vdex licence|backups with a licence/.test(after), after.slice(0, 160).replace(/\n/g, ' | '));
+    const after = await page.evaluate(() => [...document.querySelectorAll('details.settings-section')].find(x => x.querySelector('.ss-title').textContent === 'Storage, sync & backups').innerText);
+    ok('once signed in, the "comes with a licence" offer closes and Storage, sync & backups no longer says it needs one', (await page.locator('.licence-needed').count()) === 0 && !/come with a Vdex licence|backups with a licence/.test(after), after.slice(0, 160).replace(/\n/g, ' | '));
     await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); delete s.token; delete s.licence; localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); });
     await page.waitForFunction(() => import('./js/store.js').then(s => !s.isPaid()), null, { timeout: 5000 }).catch(() => {});
     const pdfOk = await page.evaluate(async () => (await import('./js/store.js')).isPaid() === false && typeof (await import('./js/callsheet.js')).callSheetHtml === 'function');

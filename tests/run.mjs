@@ -11,6 +11,9 @@ const here = dirname(fileURLToPath(import.meta.url)), repo = resolve(here, '..')
 const only = process.argv.slice(2);
 const root = scratchCopy(repo);
 const out = join(repo, 'tests', 'output'); rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true });
+// An interrupted run (Ctrl-C, a killed process) must not leave its 40 MB scratch copy behind in the temp folder.
+const clean = () => { try { rmSync(root, { recursive: true, force: true }); } catch { /* already gone */ } };
+process.on('SIGINT', () => { clean(); process.exit(130); }); process.on('SIGTERM', () => { clean(); process.exit(143); });
 const server = await serve(root);
 const url = `http://localhost:${server.address().port}/`;
 let failed = 0, passed = 0;
