@@ -4,7 +4,7 @@ This is the step-by-step for putting Vdex in the Google Play store, written for 
 
 **Do this on a computer if you can.** Google's Play Console works in a phone browser, but it is a lot of forms, and a bigger screen helps.
 
-**First, the website's own address.** The Android app opens https://vdex.crowmade.app, so set that address up before anything else: follow [cloudflare.md](cloudflare.md). Until it loads, the app shows an error.
+**The website is ready.** The Android app opens https://vdex.crowmade.app, which is live, so the app works as soon as it is installed.
 
 ## What you will paste or upload
 
@@ -24,7 +24,7 @@ This is the step-by-step for putting Vdex in the Google Play store, written for 
 1. Go to https://play.google.com/console/signup and sign in with the Google account that will own the app.
 2. Choose **Yourself** (a personal account) unless you have a registered company, which Google asks a D-U-N-S number for.
 3. Pay the one-time registration fee (US $25) and complete the identity check. Google asks for an ID document and may take a few days to confirm it.
-4. Google also asks for a contact email that will be shown publicly on the store page, and a phone number for its own use.
+4. Google also asks for a contact email that will be shown publicly on the store page (use `support@crowmade.app`), and a phone number for its own use.
 
 ## Step 1b. Your developer details (one time)
 
@@ -46,7 +46,7 @@ Until the passphrase is in GitHub, the builds are signed with a temporary key, a
 
 The app is no longer on a public download page on GitHub: it is distributed through Google Play. Each build's `.aab` stays in its run's **Artifacts** for 3 days. While the code on GitHub is public, anyone signed in to GitHub could still download it, which matters little: it cannot be installed on a phone as it is, and it only opens the website. Once the code is private, only you can.
 
-If the passphrase is ever lost, say so: a new key can be made, and Google has a process for registering a replacement upload key that takes a couple of days.
+**Can't find the passphrase?** Say so before uploading anything. Until the first upload to Google Play, a new key costs nothing: I make one in a few minutes and send you its passphrase. After the first upload, losing it means Google's process for registering a replacement upload key, which takes a couple of days.
 
 ## Step 3. Create the app in the Play Console
 
@@ -80,7 +80,7 @@ Left menu → **Monitor and manage** → **Policy and programmes** → **App con
 |---|---|
 | Privacy policy | The privacy policy address from the table above. |
 | Ads | **No, my app does not contain ads.** |
-| App access | **All or some functionality is restricted.** Instructions for Google: "Everything except cloud storage and saving backup or spreadsheet files works without signing in for 30 days from the first time the app is opened. Those, and everything after 30 days, need a Vdex licence: press Sign in (Settings → General → About & Licence) and type the email address below; Vdex emails a 6-digit code to it." Then give the login of an email account you made for Google's reviewers (for example a new Gmail address and its password) that has a free licence: make it in the generator page with that email address (it is linked by itself). The PIN lock is optional and only set by the user. |
+| App access | **All or some functionality is restricted.** Instructions for Google: "Everything except cloud storage and saving backup or spreadsheet files works without signing in for 30 days from the first time the app is opened. Those, and everything after 30 days, need a Vdex licence: press Sign in (Settings → General → About & Licence) and type the email address below; Vdex emails a 6-digit code to it." Then give the login of an email account you made for Google's reviewers (for example a new Gmail address and its password) that has a free licence: make it in the generator page with that email address (it is linked by itself). Add: "When Vdex first opens it asks you to choose a PIN of 4 to 8 digits (any you like). It locks the information on the device; it is not an account." |
 | Content rating | Start the questionnaire, enter your email, choose **Utility, Productivity, Communication, or Other**, and answer **No** to every question (no violence, no sexual content, no bad language, no drugs, no gambling, no user-to-user interaction, no location sharing with other users, no purchases). The rating comes out as "Everyone". |
 | Target audience and content | Age group: **18 and over** only. Designed for children: **No**. |
 | News apps | **No.** |
@@ -93,7 +93,7 @@ Left menu → **Monitor and manage** → **Policy and programmes** → **App con
 
 ## Step 6. Upload the app to a closed test
 
-Google requires new personal accounts to run a closed test with at least 12 testers for 14 days before an app can go public. Your coworkers are the testers.
+Google requires new personal accounts to run a closed test with at least 12 testers for 14 days before an app can go public. The testers are friends or coworkers with an Android phone and a Google account.
 
 1. Left menu → **Test and release** → **Testing** → **Closed testing** → **Create track**. Name it `Coworkers`.
 2. **Testers** tab → **Create email list** → name it, paste the Google account emails of at least 12 coworkers (more is safer, in case some do not install), save, tick the list.
@@ -141,7 +141,7 @@ Shoots, crew, kit, call sheets, timecode notes and invoices, all on your phone.
 Vdex is the videographer's deck: everything about your shoots in one place, on your phone and your computer, with no subscription and no ads. Free to try for 30 days, then sign in with your Vdex licence.
 
 BOOKINGS
-A calendar of your shoots. Each one holds the client, the contacts, the address, the crew and the kit you're taking, a pipeline from enquiry to paid, and the hours you worked.
+A calendar of your shoots, kept in two-way sync with your Google Calendar if you like. Each one holds the client, the contacts, the address, the crew and the kit you're taking, a pipeline from enquiry to paid, and the hours you worked.
 
 CALL SHEETS
 Built in the app from the booking, with the schedule, the weather and the sunset time, the crew list and the venue notes. Edit it on the spot, then email it to the crew or print it.
@@ -159,7 +159,7 @@ ON SET
 Sunrise and sunset, a white balance reader, a sound level meter and a range finder. Timecode notes stamped with the camera's clock, synced from the audio feed, exported for the editor.
 
 YOURS, PRIVATELY
-Vdex keeps everything on your device, behind a PIN, and opens with your fingerprint or face. With a licence, link your own Google Drive or iCloud (or Dropbox or OneDrive) to share between devices and keep a daily backup. Pick a colour theme to match your camera brand.
+Vdex keeps everything on your device, behind a PIN, and opens with your fingerprint or face. With a licence, link your own Google Drive to share between your phone and computer and keep a daily backup. Pick a colour theme to match your camera brand.
 
 Works offline. Tap ? on any page for a walkthrough.
 ```
@@ -172,13 +172,13 @@ Google asks what the app does with people's information. Two things leave the ph
 |---|---|
 | Does your app collect or share any of the required user data types? | **Yes** |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** |
-| Do you provide a way for users to request that their data is deleted? | **Yes**: by email, at the address in the privacy policy. |
+| Do you provide a way for users to request that their data is deleted? | **Yes**: in the app (Settings → General → About & Licence → **Delete my licence records**), or by email to `support@crowmade.app`. If Google asks for a web address for this, give https://vdex.crowmade.app/privacy.html (section 7 explains it). |
 | Data types: **Personal info → Email address** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **No**. Required or optional: **Required** (to keep using the app after the 30-day trial). Purposes: **App functionality**, **Account management**. |
 | Data types: **Device or other IDs** | Collected: **Yes** (a random number made for the installation, to count the licence's devices). Shared: **No**. Processed ephemerally: **No**. Required. Purpose: **App functionality**. |
 | Data types: **Location → Approximate location** and **Precise location** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **Yes**. Required or optional: **Optional** (users can choose whether to use it). Purpose: **App functionality**. |
 | Every other data type (financial info, messages, photos, files, contacts, app activity…) | **Not collected.** |
 
-Why "not collected" for the rest: everything a user types into Vdex about their work stays on the device. When a user links their own Google Drive, iCloud, Dropbox or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer. Update these answers before switching website sign-in on (docs/selling-desktop.md, part 9). The privacy policy explains all of it.
+Why "not collected" for the rest: everything a user types into Vdex about their work stays on the device. When a user links their own Google Drive, iCloud, Dropbox or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer; the same goes for the bookings Vdex keeps in the user's own Google Calendar. The privacy policy explains all of it.
 
 If a Google reviewer asks for changes to this section, send me what they wrote and I will adjust the wording.
 
@@ -191,6 +191,8 @@ If a Google reviewer asks for changes to this section, send me what they wrote a
 - **The dashboard does not offer "Apply for production access":** the 14 days have not completed with 12 testers opted in the whole time. Add more testers and wait.
 
 ## The screenshot files
+
+They are made from the app itself, with its sample data, by `node tools/store-screenshots.mjs` (last remade on 7 November 2026, after the new layout); run it again after a visible change and upload the new files.
 
 Phone (1080 × 1920): `phone-01-bookings.jpg`, `phone-02-booking.jpg`, `phone-03-call-sheet.jpg`, `phone-04-equipment.jpg`, `phone-05-crew.jpg`, `phone-06-field.jpg`, `phone-07-timecode.jpg`, `phone-08-money.jpg`.
 

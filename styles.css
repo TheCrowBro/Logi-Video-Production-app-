@@ -571,6 +571,10 @@ body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
 .cs-paper .money-totals { margin: 8px 0 0 auto; max-width: 320px; } .cs-paper .money-totals .cs-kv { grid-template-columns: 1fr auto; text-align: right; } .cs-paper .money-totals .total b { font-size: 1rem; }
 .cs-paper th.num, .cs-paper td.num { text-align: right; white-space: nowrap; }
 .money-pills { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+/* The money overview on a phone: the four totals two by two, and a booking's quote and invoice under its name when they do not fit beside it. */
+.money-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 560px) { .money-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.money-row { flex-wrap: wrap; } .money-row > div:first-child { flex: 1 1 11rem; } .money-row .money-pills { flex: 0 1 auto; max-width: 100%; }
 .stat.bad b { color: var(--danger); }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; } @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
 .wxline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 4px 0 8px; }

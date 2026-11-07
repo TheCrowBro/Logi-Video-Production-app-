@@ -23,6 +23,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.waitForSelector('.cs-page .cs-doc');
   ok('a row opens the call sheet as a page inside Bookings', (await page.locator('.sheet').count()) === 0 && (await page.locator('.cs-page h1').innerText()) === 'Call sheet');
   const title = await page.locator('.cs-doc h2').innerText();
+  const docText = await page.locator('.cs-doc').innerText();
+  ok('the venue rules read as one line: a space after a rule that ends a sentence, never ".;"', /without a release\. Keep the fire exit/.test(docText) && !/\.;/.test(docText), (docText.match(/Venue rules[^\n]*\n?[^\n]*/) || [''])[0]);
 
   // Edit on the document itself
   await page.getByRole('button', { name: 'Edit sheet' }).click(); await page.waitForSelector('.cs-paper.editing');

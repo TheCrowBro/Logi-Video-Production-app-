@@ -94,6 +94,17 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.getByRole('button', { name: 'Money' }).click(); await page.waitForSelector('.sheet .stats');
   const stats = await page.locator('.sheet .stats').innerText();
   ok('Money overview sums paid this year', /paid in 2026/.test(stats) && !/NaN/.test(stats), stats.replace(/\n/g, ' | '));
+  // A 360-pixel phone with a big job on the books: every total and badge stays on screen.
+  await page.keyboard.press('Escape'); await sleep(200);
+  await page.evaluate(() => import('./js/store.js').then(s => { const doc = (n, status, extra) => ({ number: n, date: '2026-09-01', lines: [{ id: n + 'l', desc: 'Shoot days', qty: 12, price: 1850 }], taxRate: 0, taxLabel: 'Tax', notes: '', status, deposit: '', ...extra }); s.upsert('bookings', { id: 'wide-money', title: 'Feature documentary, second unit', client: 'Northern Lights Productions', date: '2026-10-01', status: 'Delivered', checks: {}, quote: doc('Q-9001', 'Sent', { until: '2026-12-01' }), invoice: doc('INV-9001', 'Sent', { due: '2026-10-16', payments: [] }) }); }));
+  await page.setViewportSize({ width: 360, height: 900 }); await sleep(300);
+  await page.getByRole('button', { name: 'Money' }).click(); await page.waitForSelector('.sheet .stats'); await sleep(300);
+  const narrow = await page.evaluate(() => { const box = document.querySelector('.sheet .sheet-body').getBoundingClientRect(), all = [...document.querySelectorAll('.sheet .stat, .sheet .money-pills .pill')]; return { n: all.length, wide: /22,200/.test(document.querySelector('.sheet').innerText), out: all.filter(e => e.getBoundingClientRect().right > box.right + 0.5).map(e => e.textContent) }; });
+  ok('on a 360-pixel phone, with five-figure amounts, the four totals and the quote and invoice badges all stay on screen', narrow.n >= 7 && narrow.wide && narrow.out.length === 0, JSON.stringify(narrow));
+  await page.keyboard.press('Escape'); await sleep(200);
+  await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 'wide-money')));
+  await page.setViewportSize({ width: 420, height: 900 }); await sleep(200);
+  await page.getByRole('button', { name: 'Money' }).click(); await page.waitForSelector('.sheet .stats');
   const [csv] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Invoices \(CSV\)/ }).click()]);
   ok('invoice CSV export', /INV-0001/.test(fs.readFileSync(await csv.path(), 'utf8')));
   await page.keyboard.press('Escape'); await sleep(200);

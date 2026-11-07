@@ -365,9 +365,9 @@ export function openMoney(onOpen) {
     saveOrShare('﻿' + rows.join('\r\n'), `vdex-invoices-${today}.csv`, 'text/csv').then(ok => ok && toast('Invoices exported'));
   };
   const body = h('div', { class: 'stack' },
-    h('div', { class: 'stats' }, stat(fmtMoney(outstanding), 'invoiced, unpaid'), stat(fmtMoney(overdue), 'overdue', overdue ? 'bad' : ''), stat(fmtMoney(quotedOpen), 'quoted, awaiting'), stat(fmtMoney(paidYear), `paid in ${year}`)),
+    h('div', { class: 'stats money-stats' }, stat(fmtMoney(outstanding), 'invoiced, unpaid'), stat(fmtMoney(overdue), 'overdue', overdue ? 'bad' : ''), stat(fmtMoney(quotedOpen), 'quoted, awaiting'), stat(fmtMoney(paidYear), `paid in ${year}`)),
     list.length ? h('div', { class: 'list' }, ...list.map(b => h('button', { class: 'card tap', type: 'button', onclick: () => { close(); onOpen(b); } },
-      h('div', { class: 'card-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [b.client, fmtShort(b.date)].filter(Boolean).join(' · '))),
+      h('div', { class: 'card-row money-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [b.client, fmtShort(b.date)].filter(Boolean).join(' · '))),
         h('div', { class: 'money-pills' }, b.quote && h('span', { class: 'pill ' + (b.quote.status === 'Accepted' ? 'st-confirmed' : b.quote.status === 'Declined' ? 'st-cancelled' : 'st-enquiry') }, `Q ${b.quote.status} ${fmtMoney(totals(b.quote).total)}`),
           b.invoice && h('span', { class: 'pill ' + (b.invoice.status === 'Paid' ? 'st-confirmed' : isOverdue(b) ? 'st-cancelled' : 'st-enquiry') }, `Inv ${isOverdue(b) ? 'Overdue' : b.invoice.status}${b.invoice.status !== 'Paid' && totals(b.invoice).received > 0 ? ' (part paid)' : ''} ${fmtMoney(totals(b.invoice).total)}`))))))
       : h('p', { class: 'muted' }, 'No quotes or invoices yet. Open a booking and create one under Money.'),

@@ -12,6 +12,8 @@ import { forecastLine } from './weather.js';
 import { boardPlan, ieOf, dnOf, fmtEighths, castNumbers } from './board.js';
 
 const INCLUDE = { kit: true, rules: true, sun: true, contacts: true, notes: true, scenes: true };
+// A venue's rules, one per line, on one line: a space after a rule that ends a sentence, "; " after one that doesn't.
+const ruleLine = text => String(text || '').split('\n').map(x => x.trim()).filter(Boolean).reduce((all, x) => (all ? all + (/[.!?;:]$/.test(all) ? ' ' : '; ') + x : x), '');
 const BLANK = { generalCall: '', lunch: '', wrap: '', schedule: [], attendees: '', weather: '', dress: '', emergency: '', notes: '', version: 0, editedAt: 0, sentAt: 0 };
 export const sheetOf = b => { const cs = { ...BLANK, ...(b.callSheet || {}) }; cs.include = { ...INCLUDE, ...(cs.include || {}) }; cs.schedule = Array.isArray(cs.schedule) ? cs.schedule.map(r => ({ ...r })) : []; return cs; };
 const hasContent = cs => !!(cs.generalCall || cs.lunch || cs.wrap || cs.schedule.length || cs.attendees || cs.weather || cs.dress || cs.emergency || cs.notes);
@@ -62,7 +64,7 @@ export function callSheetText(b) {
     '',
     'LOCATION',
     v && line('Venue', v.name), line('Address', d.address), v && line('Access', v.access), v && line('Parking', v.parking), v && line('Power', v.power), v && line('Nearest hospital', v.hospital),
-    inc.rules && v && (v.rules || '').trim() && 'Venue rules: ' + v.rules.replace(/\n/g, '; '),
+    inc.rules && v && (v.rules || '').trim() && 'Venue rules: ' + ruleLine(v.rules),
     d.breaks && line('Breaks', d.breaks),
     '',
     sched.length && 'SCHEDULE', ...sched, sched.length && '',
@@ -117,7 +119,7 @@ export function renderDoc(b, { cs = sheetOf(b), crewCall = b.crewCall || {}, edi
     edit && h('div', { class: 'cs-include' }, h('span', { class: 'cs-hint' }, 'Include:'), toggle('scenes', 'Scenes'), toggle('sun', 'Sun'), toggle('rules', 'Venue rules'), toggle('contacts', 'Contacts'), toggle('kit', 'Kit'), toggle('notes', 'Booking notes')),
     h('div', { class: 'cs-times' }, timeBox('General call', d.generalCall, 'generalCall'), timeBox('Lunch', cs.lunch, 'lunch'), timeBox('Wrap', d.wrap, 'wrap'), include('sun') && d.sun && timeBox('Sunrise', fmtTime(d.sun.sunrise)), include('sun') && d.sun && timeBox('Sunset', fmtTime(d.sun.sunset))),
     sec('Location', v && kv('Venue', v.name), kv('Address', d.address), v && kv('Access', v.access), v && kv('Parking', v.parking), v && kv('Power', v.power), v && kv('Nearest hospital', v.hospital),
-      include('rules') && v && (v.rules || '').trim() && kv('Venue rules', v.rules.replace(/\n/g, '; ')),
+      include('rules') && v && (v.rules || '').trim() && kv('Venue rules', ruleLine(v.rules)),
       d.address && h('div', { class: 'cs-kv' }, h('span', null, 'Map'), h('a', { href: mapsUrl(d.address), target: '_blank', rel: 'noopener noreferrer' }, mapsUrl(d.address)))),
     edit ? sec('Schedule', scheduleEditor()) : d.schedule.length ? sec('Schedule', ...d.days.map(day => { const rows = scheduleRows(day); return rows.length && [multi && h('div', { class: 'cs-day' }, fmtLong(day)), table(['Time', 'What'], rows)]; })) : null,
     include('scenes') && (sd => sd.days.length ? sec('Scenes', ...sd.days.map(dd => [needsDayLabel(sd, multi) && h('div', { class: 'cs-day' }, sceneDayLabel(dd)), table(['Sc', 'I/E', 'Set', 'Time', 'Cast', 'Pages'], dd.scenes.map(x => sceneRow(x, sd.cast)))]),
@@ -153,7 +155,7 @@ export async function callSheetPdf(b) {
   blocks.push({ type: 'title', text: b.title }, { type: 'subtitle', text: [b.client, dateLabel(b), cs.version ? `Version ${cs.version}` : 'Draft'].filter(Boolean).join('   ·   ') });
   blocks.push({ type: 'times', items: [['General call', d.generalCall], ['Lunch', cs.lunch], ['Wrap', d.wrap], inc.sun && d.sun && ['Sunrise', fmtTime(d.sun.sunrise)], inc.sun && d.sun && ['Sunset', fmtTime(d.sun.sunset)]].filter(Boolean) });
   blocks.push({ type: 'heading', text: 'Location' });
-  if (v) kv('Venue', v.name); kv('Address', d.address); if (v) { kv('Access', v.access); kv('Parking', v.parking); kv('Power', v.power); kv('Nearest hospital', v.hospital); if (inc.rules && (v.rules || '').trim()) kv('Venue rules', v.rules.replace(/\n/g, '; ')); }
+  if (v) kv('Venue', v.name); kv('Address', d.address); if (v) { kv('Access', v.access); kv('Parking', v.parking); kv('Power', v.power); kv('Nearest hospital', v.hospital); if (inc.rules && (v.rules || '').trim()) kv('Venue rules', ruleLine(v.rules)); }
   if (d.address) kv('Map', mapsUrl(d.address));
   if (d.schedule.length) {
     blocks.push({ type: 'heading', text: 'Schedule' });
