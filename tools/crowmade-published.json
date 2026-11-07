@@ -1,11 +1,11 @@
 {
-  "commit": "f65a1c38c7dadd4f23cf6cedd1c7b6ed8959135d",
-  "at": "2026-11-07T09:54:27.720Z",
+  "commit": "1001d9c6b7d3b4fc1d4bcc569a2b3df24000560f",
+  "at": "2026-11-07T10:24:00.241Z",
   "files": {
     "_redirects": "7fd4912648bf10b2e32d8926c10d7d733a2ce4f58e99adb02c77a5282aba28b5",
-    "index.html": "d35056c0f93c0fb38aafbf8e683a9695e8e36d833436197c4e12ff1f7e4d919e",
+    "index.html": "9c3e75e468d089b5b05a78b5356a3688813058a1f84d11d63f28b1690133d797",
     "valheim/icon.png": "8cdffe683d960fdac12094a7546127a149fae82edd6eec50412bdd2387da52af",
-    "valheim/index.html": "a487d588f26894e2e5df7ae37b1af322daa6682f5c04c2c6a7fd24562f4770b5",
+    "valheim/index.html": "0fb07e27db541e4ff8a83903553f923a3aa4a1c5db4589f4c77fad5bdb1f5af6",
     "valheim/shot-home.jpg": "b556734cbcd5d7609d276bce88342268972d39e4f66d832084dab90fd98130d4",
     "valheim/shot-players.jpg": "226eee2563dd6273adcb4d54aa06a8a004e9564f7f674a821fbd4f2217bcb520",
     "valheim/shot-stats.jpg": "f19e9d1a9103f843e1b145bd34cf2d214fbe4e52a840b40889c34e0959462ec1",
