@@ -48,6 +48,40 @@ const OUT = process.env.S || '/tmp';
     ok('the crowmade.app Vdex page has a Buy button to vdex.crowmade.app/buy', /<a class="btn" href="https:\/\/vdex\.crowmade\.app\/buy">Buy a licence<\/a>/.test(committed));
     ok('…beside the price before tax and the totals with tax from js/tax.js, and a link to every country\'s price', committed.includes('20 US dollars once plus any tax where you live') && committed.includes(`With tax that is ${r.want.GB.total} US dollars in the UK, ${r.want.AU.total} in Australia, and ${Math.min(...eu).toFixed(2)} to ${Math.max(...eu).toFixed(2)} in the EU`) && committed.includes('href="https://vdex.crowmade.app/download.html#price"'));
     ok('…and says it is a licence, not a copy, with the terms linked (California\'s rule), and how the checkout takes payment', /You are buying a licence to use Vdex, not ownership of a copy\. It can be cancelled in the cases the <a href="https:\/\/vdex\.crowmade\.app\/terms\.html#paid">terms<\/a> describe\./.test(committed) && /pay in US dollars, or in your own currency at Stripe's exchange rate \(2 to 4% more\)/.test(committed));
+
+    // Publishing crowmade.app (tools/deploy-crowmade.sh): other sessions publish it too, so the guard refuses to undo their
+    // newer work or remove their pages, and lets this branch publish its own change. A copy of the site stands in for the live one.
+    const { spawn } = require('child_process'), { pathToFileURL } = require('url');
+    const { serve } = await import(pathToFileURL(path.join(__dirname, '..', 'lib.mjs')).href);
+    const liveDir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'crowmade-live-'));
+    fs.cpSync(path.join(ROOT, 'crowmade'), liveDir, { recursive: true });
+    const srv = await serve(liveDir);
+    // Asynchronous: the stand-in site is served from this process, so a synchronous child would wait on it forever.
+    const guard = () => new Promise(done => {
+      const c = spawn(process.execPath, ['tools/crowmade-guard.mjs'], { cwd: ROOT, env: { ...process.env, CROWMADE_LIVE: `http://127.0.0.1:${srv.address().port}` } });
+      let stdout = '', stderr = ''; c.stdout.on('data', d => { stdout += d; }); c.stderr.on('data', d => { stderr += d; });
+      const t = setTimeout(() => c.kill(), 30e3); c.on('close', status => { clearTimeout(t); done({ status, stdout, stderr }); });
+    });
+    try {
+      let g = await guard();
+      ok('the crowmade.app guard lets this branch publish when the live site is what it last published (tools/crowmade-published.json)', g.status === 0 && /nothing would be removed or undone/.test(g.stdout), g.stderr + g.stdout);
+      const own = path.join(ROOT, 'crowmade/vdex/index.html'), ownWas = fs.readFileSync(own, 'utf8');
+      fs.writeFileSync(own, ownWas.replace('Buy a licence', 'Buy a licence today'));
+      g = await guard();
+      ok('…and with a change of its own to a page', g.status === 0, g.stderr);
+      fs.writeFileSync(own, ownWas);
+      const val = path.join(liveDir, 'valheim/index.html'), valWas = fs.readFileSync(val);
+      fs.appendFileSync(val, '<!-- published by another session -->');
+      g = await guard();
+      ok('…but refuses when another session has published newer work since, naming the page and how to bring it in', g.status === 1 && /Changed on crowmade\.app since this branch last published it/.test(g.stderr) && /\/valheim\//.test(g.stderr) && /git fetch origin/.test(g.stderr), g.stderr);
+      fs.writeFileSync(val, valWas);
+      fs.mkdirSync(path.join(liveDir, 'extra')); fs.writeFileSync(path.join(liveDir, 'extra/index.html'), '<!doctype html><p>Another app</p>');
+      fs.appendFileSync(path.join(liveDir, 'index.html'), '<a href="/extra/">Another app</a>');
+      g = await guard();
+      ok('…or when a page is live that this copy lacks (publishing would remove it)', g.status === 1 && /would be removed:\s+\/extra\//.test(g.stderr), g.stderr);
+    } finally { srv.close(); fs.rmSync(liveDir, { recursive: true, force: true }); }
+    const deploy = fs.readFileSync(path.join(ROOT, 'tools/deploy-crowmade.sh'), 'utf8');
+    ok('the publish script publishes only committed, pushed work, runs the guard first and records what went live', /git status --porcelain/.test(deploy) && /git branch -r --contains HEAD/.test(deploy) && deploy.indexOf('node tools/crowmade-guard.mjs\n') < deploy.indexOf('pages deploy') && /crowmade-guard\.mjs --record/.test(deploy));
   } finally {
     await browser.close();
   }
