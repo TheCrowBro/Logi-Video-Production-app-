@@ -35,6 +35,19 @@ const OUT = process.env.S || '/tmp';
     const cols = await wide.evaluate(() => getComputedStyle(document.querySelectorAll('.prices')[1]).gridTemplateColumns.split(' ').length);
     ok('on a wide screen the EU list sits in columns; on a phone it fits the width', cols >= 3 && (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)), `${cols} columns`);
     ok('no page errors', errors.length === 0, errors.join(' | '));
+
+    // The Vdex page on crowmade.app (crowmade/vdex/index.html, written by tools/build-crowmade.mjs): a Buy button, and the
+    // same totals beside it.
+    const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');
+    const ROOT = process.env.VDEX_ROOT || path.resolve(__dirname, '../..');
+    const vdexPage = () => fs.readFileSync(path.join(ROOT, 'crowmade/vdex/index.html'), 'utf8');
+    const committed = vdexPage();
+    execFileSync(process.execPath, ['tools/build-crowmade.mjs'], { cwd: ROOT, stdio: 'pipe' });
+    ok('crowmade/ is what tools/build-crowmade.mjs writes (rebuilt after every change to it or to js/tax.js)', vdexPage() === committed);
+    const eu = r.codes.filter(c => c !== 'GB' && c !== 'AU').map(c => Number(r.want[c].total));
+    ok('the crowmade.app Vdex page has a Buy button to vdex.crowmade.app/buy', /<a class="btn" href="https:\/\/vdex\.crowmade\.app\/buy">Buy a licence<\/a>/.test(committed));
+    ok('…beside the price before tax and the totals with tax from js/tax.js, and a link to every country\'s price', committed.includes('20 US dollars once plus any tax where you live') && committed.includes(`With tax that is ${r.want.GB.total} US dollars in the UK, ${r.want.AU.total} in Australia, and ${Math.min(...eu).toFixed(2)} to ${Math.max(...eu).toFixed(2)} in the EU`) && committed.includes('href="https://vdex.crowmade.app/download.html#price"'));
+    ok('…and says it is a licence, not a copy, with the terms linked (California\'s rule), and how the checkout takes payment', /You are buying a licence to use Vdex, not ownership of a copy\. It can be cancelled in the cases the <a href="https:\/\/vdex\.crowmade\.app\/terms\.html#paid">terms<\/a> describe\./.test(committed) && /pay in US dollars, or in your own currency at Stripe's exchange rate \(2 to 4% more\)/.test(committed));
   } finally {
     await browser.close();
   }
