@@ -7,6 +7,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 } });
   await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+  // Sign-in switched off, whatever js/cloud-config.js holds, so the calendar card shows its greyed state (spec 95 covers it on).
+  await ctx.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: "export const CLOUD_APPS = { icloud: { container: '', apiToken: '', desktopToken: '' }, dropbox: '', google: '', microsoft: '', googleCalendar: true };" }));
   await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
   await ctx.addInitScript(acceptTerms());
   const page = await ctx.newPage();

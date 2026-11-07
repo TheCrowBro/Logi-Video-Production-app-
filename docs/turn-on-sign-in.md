@@ -162,7 +162,7 @@ Send only the ones you have; the rest stay grey. They go into `js/cloud-config.j
 
 | What you see | What it means |
 |---|---|
-| The Connect button for a service is still grey | That service's code isn't in yet (iCloud needs the container and a token: the website token on the website, the desktop token in the desktop app), or the website hasn't updated. Wait five minutes and reopen Vdex. Still grey after ten? Open the repository's **Actions** tab: if *Deploy to GitHub Pages* shows a red cross for your change, open it and choose **Re-run failed jobs**, or send its link to whoever maintains Vdex. In the desktop app, the codes arrive with its next update. |
+| The Connect button for a service is still grey | That service's code isn't in yet (iCloud needs the container and a token: the website token on the website, the desktop token in the desktop app), or the website hasn't updated. Wait five minutes and reopen Vdex. Still grey after ten? Open the repository's **Actions** tab: if *Publish the website* shows a red cross for your change, open it and choose **Re-run failed jobs**, or send its link to whoever maintains Vdex. In the desktop app, the codes arrive with its next update. |
 | iCloud: Vdex says *iCloud said: Cannot create new type VdexFile in production schema* | Step 6 of the Apple section (Deploy Schema Changes) hasn't been done. |
 | iCloud: Vdex says *iCloud didn’t accept Vdex’s app details* | A token was copied wrongly, belongs to the Development environment, or the website's address isn't under its Allowed Origins (step 7 or 8). |
 | iCloud: after signing in at Apple, people land somewhere else or aren't connected | The URL Redirect address in step 7 is wrong. It must be the website address from the table, with the slash at the end. |
