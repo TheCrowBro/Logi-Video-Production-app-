@@ -6,6 +6,7 @@
 # touched. A Pages deployment replaces the whole site, so tools/crowmade-guard.mjs first checks nothing live would be removed.
 # In a Claude cloud session the Cloudflare token is added by the proxy; elsewhere set CLOUDFLARE_API_TOKEN.
 set -euo pipefail
+echo "Reminder (CLAUDE.md): check the other sessions and repositories for changes to the site's content before publishing."
 cd "$(dirname "$0")/.."
 node tools/build-crowmade.mjs
 node tools/crowmade-guard.mjs
