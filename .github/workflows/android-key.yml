@@ -1,0 +1,38 @@
+# Makes a NEW Android upload key, locked with the ANDROID_KEY_PASSPHRASE repository secret that the owner typed in
+# GitHub, so the passphrase never travels anywhere else. Run by hand, once, and only before the first upload to Google
+# Play (after it, a lost key needs Google's slower replacement process). It replaces android/upload-key.keystore.enc.
+name: Make a new Android key
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type REPLACE to replace the Android upload key with a new one
+        required: true
+permissions:
+  contents: write
+jobs:
+  make:
+    if: github.event.inputs.confirm == 'REPLACE'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Make the key and lock it with the secret
+        env:
+          P: ${{ secrets.ANDROID_KEY_PASSPHRASE }}
+        run: |
+          [ "${#P}" -ge 12 ] || { echo "::error::Add the ANDROID_KEY_PASSPHRASE secret first: at least 12 characters, with no spaces at the start or end."; exit 1; }
+          cd android
+          rm -f upload-key.keystore
+          keytool -genkeypair -keystore upload-key.keystore -storetype PKCS12 -alias vdex -keyalg RSA -keysize 2048 -validity 10000 -storepass "$P" -keypass "$P" -dname "CN=Vdex, O=Crowmade, C=US"
+          openssl enc -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -salt -in upload-key.keystore -out upload-key.keystore.enc -pass env:P
+          openssl enc -d -aes-256-cbc -md sha256 -pbkdf2 -iter 600000 -in upload-key.keystore.enc -out check.keystore -pass env:P
+          cmp upload-key.keystore check.keystore
+          FP=$(keytool -list -v -keystore check.keystore -storepass "$P" | grep 'SHA256:' | head -1 | sed 's/.*SHA256: //')
+          rm -f upload-key.keystore check.keystore
+          echo "New upload key made and checked. Certificate SHA-256: $FP" | tee -a "$GITHUB_STEP_SUMMARY"
+      - name: Save the locked key in the repository
+        run: |
+          git config user.name "github-actions[bot]"; git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add android/upload-key.keystore.enc
+          git commit -m "Android: a new upload key, locked with the ANDROID_KEY_PASSPHRASE secret"
+          git push

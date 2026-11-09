@@ -46,7 +46,7 @@ Until the passphrase is in GitHub, the builds are signed with a temporary key, a
 
 The app is no longer on a public download page on GitHub: it is distributed through Google Play. Each build's `.aab` stays in its run's **Artifacts** for 3 days. While the code on GitHub is public, anyone signed in to GitHub could still download it, which matters little: it cannot be installed on a phone as it is, and it only opens the website. Once the code is private, only you can.
 
-**Can't find the passphrase?** Say so before uploading anything. Until the first upload to Google Play, a new key costs nothing: I make one in a few minutes and send you its passphrase. After the first upload, losing it means Google's process for registering a replacement upload key, which takes a couple of days.
+**Can't find the passphrase?** Before the first upload, make a new key: add the `ANDROID_KEY_PASSPHRASE` secret with a passphrase you choose (12 or more characters; write it in a password manager), then Actions → **Make a new Android key** → Run workflow → type `REPLACE`. It makes and locks the key itself, and the passphrase never leaves GitHub. (Or say so here.) Until the first upload to Google Play, a new key costs nothing: I make one in a few minutes and send you its passphrase. After the first upload, losing it means Google's process for registering a replacement upload key, which takes a couple of days.
 
 ## Step 3. Create the app in the Play Console
 
