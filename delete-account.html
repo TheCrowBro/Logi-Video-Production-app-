@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="dark light">
+<title>Delete your Vdex licence records</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+  :root { --bg: #14110f; --card: #25201b; --line: #3a332b; --text: #f1e6cf; --muted: #a09584; --accent: #e0a43a; color-scheme: dark; }
+  @media (prefers-color-scheme: light) { :root { --bg: #efe8da; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; color-scheme: light; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; -webkit-text-size-adjust: 100%; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; }
+  header img { width: 56px; height: 56px; border-radius: 14px; flex: none; }
+  h1 { font-size: 1.7rem; line-height: 1.2; margin: 0; }
+  .meta { color: var(--muted); margin: 0 0 24px; font-size: 0.95rem; }
+  h2 { font-size: 1.25rem; margin: 36px 0 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 1.05rem; margin: 22px 0 6px; }
+  p, li { max-width: 68ch; }
+  ul { padding-left: 1.2em; }
+  li { margin: 6px 0; }
+  a { color: var(--accent); }
+  .summary { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; margin: 0 0 8px; }
+  .summary h2 { border: 0; margin: 0 0 8px; padding: 0; font-size: 1.1rem; }
+  .summary ul { margin: 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.95rem; margin: 12px 0; }
+  th, td { text-align: left; vertical-align: top; padding: 8px 10px 8px 0; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; }
+  @media (max-width: 560px) { table, thead, tbody, tr, th, td { display: block; } thead { display: none; } tr { padding: 10px 0; border-bottom: 1px solid var(--line); } td { border: 0; padding: 2px 0; } td[data-h]::before { content: attr(data-h) ": "; color: var(--muted); } }
+  .back { display: inline-block; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <img src="icons/icon.svg" alt="">
+    <h1>Delete your Vdex licence records</h1>
+  </header>
+  <p class="meta">For Vdex, made by Crowmade (Laurence Simmonds, known online as TheCrowBro). Vdex has no account for your work: everything you type stays on your own device. The only thing we hold about you is the licence record below, and this page is how to have it deleted.</p>
+
+  <h2>How to ask</h2>
+  <ol>
+    <li><strong>In the app (quickest):</strong> open Vdex, go to Settings → General → About &amp; Licence, and tap <strong>Delete my licence records</strong> while you are signed in. It is done at once and you are signed out.</li>
+    <li><strong>By email:</strong> write to <!--email_off--><a href="mailto:support@crowmade.app">support@crowmade.app</a><!--/email_off--> from the email address your licence belongs to, with the subject "Delete my licence records". We delete the record within 30 days and reply when it is done.</li>
+  </ol>
+
+  <h2>What is deleted</h2>
+  <ul>
+    <li>The email address (or App Store purchase) your licence is linked to for signing in.</li>
+    <li>The list of devices on your licence, with each one's random installation number.</li>
+    <li>Every earlier sign-in: they stop working, and you can sign in again afresh if you want.</li>
+  </ul>
+
+  <h2>What is kept, and for how long</h2>
+  <ul>
+    <li>A record that a licence was cancelled (for example after a refund), so it cannot be used again, and the count of recent device moves. These hold no name and no email address.</li>
+    <li>A scrambled marker, kept for up to 400 days, that makes older sign-ins stay invalid. It cannot be turned back into your email address.</li>
+    <li>Stripe (Link is the seller), Apple and Google keep their own records of a purchase, under their own policies. We cannot delete those; ask them.</li>
+  </ul>
+
+  <h2>Your work on your own devices</h2>
+  <p>The bookings, crew, kit and everything else you typed into Vdex never reach us. They live on your device, and in the cloud storage you linked yourself. To remove them, use Settings → Storage, sync &amp; backups → Erase all data, or uninstall Vdex; and delete the backup in your own Google Drive or other storage.</p>
+
+  <p>More detail is in the <a href="privacy.html">privacy policy</a>.</p>
+  <a class="back" href="./">← Back to Vdex</a>
+</main>
+</body>
+</html>

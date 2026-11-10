@@ -17,7 +17,7 @@ try {
   execFileSync(process.execPath, ['tools/stage-site.mjs', out], { cwd: ROOT, stdio: 'pipe' });
   const files = walk(path.join(ROOT, out)).map(f => path.relative(path.join(ROOT, out), f).split(path.sep).join('/'));
   const tops = [...new Set(files.map(f => f.split('/')[0]))].sort();
-  ok('only the website is published: pages, styles, manifest, worker, js, vendor, icons and .well-known', JSON.stringify(tops) === JSON.stringify(['.well-known', 'crew.html', 'download.html', 'icons', 'index.html', 'invoice.html', 'js', 'manifest.webmanifest', 'privacy.html', 'signin-google.html', 'styles.css', 'sw.js', 'terms.html', 'vendor']), tops.join(', '));
+  ok('only the website is published: pages, styles, manifest, worker, js, vendor, icons and .well-known', JSON.stringify(tops) === JSON.stringify(['.well-known', 'crew.html', 'delete-account.html', 'download.html', 'icons', 'index.html', 'invoice.html', 'js', 'manifest.webmanifest', 'privacy.html', 'signin-google.html', 'styles.css', 'sw.js', 'terms.html', 'vendor']), tops.join(', '));
   ok('no Android, iPhone, desktop, docs, store, test or tool files, no signing key, and never the licence generator or keys', !files.some(f => /^(android|apple|desktop|docs|store|tests|tools|cloudflare|\.github)\/|keystore|licence-(generator|key|codes)|package(-lock)?\.json$|\.md$/.test(f) && f !== 'vendor/LICENSES.md'), files.filter(f => /keystore|^android|^apple|^docs|licence-/.test(f)).join(', '));
   const shell = [...read('sw.js').match(/const SHELL = \[([\s\S]*?)\];/)[1].matchAll(/'([^']+)'/g)].map(m => m[1]).filter(f => f !== './');
   ok('every file the offline copy asks for is published', shell.every(f => files.includes(f)), shell.filter(f => !files.includes(f)).join(', '));
@@ -41,7 +41,7 @@ try {
   execFileSync(process.execPath, ['tools/stage-site.mjs', cf, '--cloudflare'], { cwd: ROOT, stdio: 'pipe' });
   const headers = fs.readFileSync(path.join(ROOT, cf, '_headers'), 'utf8'), redirects = fs.readFileSync(path.join(ROOT, cf, '_redirects'), 'utf8');
   const block = p => { const m = headers.split(/\n(?=\S)/).find(b => b.split('\n')[0] === p); return m || ''; };
-  const pages = ['index.html', 'privacy.html', 'terms.html', 'invoice.html', 'crew.html'];
+  const pages = ['index.html', 'privacy.html', 'terms.html', 'invoice.html', 'crew.html', 'delete-account.html'];
   const match = pages.every(f => { const meta = read(f).match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)"/)[1].trim().replace(/;$/, ''); return block('/' + f).includes(`Content-Security-Policy: ${meta}; frame-ancestors 'none'`); });
   ok('each page\'s security header is its own meta policy plus frame-ancestors', match);
   ok('"/" gets the start page\'s policy, and pages, worker and manifest are never cached stale', block('/').includes('Content-Security-Policy') && /Cache-Control: no-cache/.test(block('/sw.js')) && /no-cache/.test(block('/manifest.webmanifest')) && /no-cache/.test(block('/index.html')));
