@@ -108,7 +108,7 @@ export default {
       h('div', { class: 'stats sd-stats' + (hourly ? '' : ' two') },
         stat(tick('today', b.id), 'today'),
         stat(tick('total', b.id), planText),
-        hourly && stat(tick('fee', b.id), `at ${fmtMoney(Number(b.rate), sym)}/hour`)),
+        hourly && stat(tick('fee', b.id), `at ${fmtMoney(Number(b.rate), sym)}/hour, to the ¼ hour`)),
       plan > 0 && h('div', { class: 'progress sd-progress' + (bookingMs(b.id) > plan * H ? ' over' : ''), role: 'img', 'aria-label': `${fmtHm(bookingMs(b.id))} logged of ${fmtHm(plan * H)} planned` }, h('i', { 'data-sd-tick': 'bar', 'data-sd-for': b.id, style: `width:${Math.min(100, (bookingMs(b.id) / (plan * H)) * 100)}%` })),
       b.kind === 'session' && Number(b.rate) > 0 && !hourly && h('p', { class: 'muted small' }, `Billed ${fmtMoney(Number(b.rate), sym)} ${rateUnitLabel(b.rateUnit) || 'flat'}, so the hours here are for your records.`),
       b.kind === 'session' && !(Number(b.rate) > 0) && h('p', { class: 'muted small' }, 'Set an hourly rate on the booking and the hours here turn into the amount to bill.'),
@@ -121,7 +121,7 @@ export default {
   },
   tutorial: [
     { title: 'Session clock', text: 'Start it when the session starts. Take a break pauses it; Back starts it again; Stop ends the shift. While it runs, a strip under the Rolodex shows it on every page.', target: ['#blk-clock .sd-clock', '.sd-clock'] },
-    { title: 'Hours', text: 'Today’s time, all the hours logged against the hours planned (start to finish on the booking), and at an hourly rate what they come to. The invoice bills these hours.', target: ['#blk-clock .sd-stats', '.sd-stats'] },
+    { title: 'Hours', text: 'Today’s time, all the hours logged against the hours planned (start to finish on the booking), and at an hourly rate what they come to. The invoice bills these hours, to the nearest quarter hour, and so does the amount here.', target: ['#blk-clock .sd-stats', '.sd-stats'] },
     { title: 'Shifts', text: 'Every shift with its breaks. Tap one to fix its times (or delete it), or add hours by hand when the clock was not running.', target: ['#blk-clock .sd-shifts-head', '.sd-shifts-head'] },
   ],
 };

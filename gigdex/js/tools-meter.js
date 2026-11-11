@@ -21,7 +21,9 @@ let current = null;
 registerState('meter', () => (current ? current() : { listening: false }));
 
 export function meter(panel) {
-  let mic = null, timer = 0, alive = true, starting = false;
+  // wanted: the person still wants the meter on while the browser starts the microphone (a Stop tapped meanwhile, or
+  // Gigdex going to the background, leaves it off when it arrives). micWeight: the weighting the live microphone uses.
+  let mic = null, timer = 0, alive = true, starting = false, wanted = false, micWeight = null;
   let cal = readCal(), weight = pref.get(WEIGHT_KEY, 'A') === 'Z' ? 'Z' : 'A';
   let fast = null, max = null, lastT = 0, samples = [], startedAt = 0, warned = false;
   const buf = new Float32Array(4096);
@@ -72,7 +74,7 @@ export function meter(panel) {
   const warnBox = h('div', { class: 'warn tl-over', role: 'alert', hidden: true });
   const nearEl = h('p', { class: 'tl-near small', hidden: true });
   const err = h('div', { class: 'warn', role: 'alert', hidden: true });
-  const startBtn = h('button', { type: 'button', class: 'btn primary', id: 'tl-meter-start', onclick: () => (mic || starting ? stopListening() : start()) }, '🎤 Start meter');
+  const startBtn = h('button', { type: 'button', class: 'btn primary', id: 'tl-meter-start', onclick: () => (mic || (starting && wanted) ? stopListening(true) : start()) }, '🎤 Start meter');
   const resetBtn = h('button', { type: 'button', class: 'btn ghost', id: 'tl-meter-reset', onclick: () => { fast = null; max = null; samples = []; startedAt = mic ? performance.now() : 0; warned = false; paint(); } }, 'Reset');
   const weightBtns = [['A', 'dB(A)', 'A-weighted, like venue limits'], ['Z', 'Flat', 'Unweighted (flat)']].map(([k, l, aria]) => h('button', { type: 'button', 'data-w': k, 'aria-pressed': 'false', 'aria-label': aria, onclick: () => setWeight(k) }, l));
 
@@ -94,22 +96,33 @@ export function meter(panel) {
       h('button', { type: 'button', class: 'btn ghost small', onclick: () => setCal(DEFAULT_CAL) }, `Back to ${DEFAULT_CAL}`)));
 
   /* ---------- measuring ---------- */
-  const filters = () => (weight === 'A' ? c => aWeighting(c) : null);
+  const filters = w => (w === 'A' ? c => aWeighting(c) : null);
+  // The microphone can take a while to start (the browser may ask first). When it arrives it is used only if the person
+  // still wants it, and only with the weighting chosen now: one changed meanwhile starts it again with the right filters.
   async function start() {
-    if (mic || starting || !alive) return;
-    starting = true; err.hidden = true; paintButtons();
+    if (mic || !alive) return;
+    wanted = true; err.hidden = true;
+    if (starting) { paintButtons(); paint(); return; } // the start under way picks it up
+    starting = true; paintButtons(); paint();
     try {
-      const m = await micAnalyser({ fftSize: 4096, filters: filters() });
-      if (!alive) { m.stop(); return; }
-      mic = m; lastT = performance.now();
-      if (!startedAt) startedAt = lastT;
-      timer = setInterval(tick, 100);
-    } catch (e) { if (e.code !== 'cancelled') { err.textContent = e.message; err.hidden = false; } }
+      for (;;) {
+        const w = weight;
+        const m = await micAnalyser({ fftSize: 4096, filters: filters(w) });
+        if (!alive || !wanted) { m.stop(); return; }
+        if (w !== weight) { m.stop(); continue; }
+        mic = m; micWeight = w; lastT = performance.now();
+        if (!startedAt) startedAt = lastT;
+        timer = setInterval(tick, 100);
+        return;
+      }
+    } catch (e) { wanted = false; if (e.code !== 'cancelled') { err.textContent = e.message; err.hidden = false; } }
     finally { starting = false; paintButtons(); paint(); }
   }
-  function stopListening() {
+  // byHand: the person (or the page going away) stopped it, so a microphone still on its way is let go too.
+  function stopListening(byHand = false) {
+    if (byHand) wanted = false;
     clearInterval(timer); timer = 0;
-    if (mic) { mic.stop(); mic = null; }
+    if (mic) { mic.stop(); mic = null; micWeight = null; }
     paintButtons(); paint();
   }
   async function setWeight(k) {
@@ -121,7 +134,7 @@ export function meter(panel) {
   }
   function tick() {
     if (!mic) return;
-    if (!micLive(mic.stream)) { stopListening(); err.textContent = 'The microphone stopped (unplugged, or taken by another app). Tap Start meter to carry on.'; err.hidden = false; return; }
+    if (!micLive(mic.stream)) { stopListening(true); err.textContent = 'The microphone stopped (unplugged, or taken by another app). Tap Start meter to carry on.'; err.hidden = false; return; }
     mic.analyser.getFloatTimeDomainData(buf);
     const raw = dbfs(rmsOf(buf)), e = 10 ** (raw / 10), now = performance.now();
     fast = fast == null ? e : fast + (e - fast) * (1 - Math.exp(-(now - lastT) / 125)); // "fast" time weighting
@@ -147,7 +160,7 @@ export function meter(panel) {
     if (fast == null) {
       big.textContent = '—'; nowEl.textContent = '—'; maxEl.textContent = max == null ? '—' : `${shown(max).toFixed(0)}`;
       bar.firstChild.style.width = '0%'; bar.dataset.zone = 'ok';
-      label.textContent = mic ? 'Listening…' : starting ? 'Starting the microphone…' : 'Tap Start meter and keep the microphone uncovered.';
+      label.textContent = mic ? 'Listening…' : starting && wanted ? 'Starting the microphone…' : 'Tap Start meter and keep the microphone uncovered.';
     } else {
       const now = shown(10 * Math.log10(Math.max(fast, 1e-12)));
       big.textContent = now.toFixed(0); nowEl.textContent = now.toFixed(0); maxEl.textContent = shown(max).toFixed(0);
@@ -170,7 +183,7 @@ export function meter(panel) {
     nearEl.textContent = lim && avg != null ? `Close to the limit: ${(lim.db - avg).toFixed(0)} dB to spare.` : '';
   }
   function paintButtons() {
-    startBtn.textContent = starting ? 'Starting…' : mic ? '■ Stop' : '🎤 Start meter';
+    startBtn.textContent = starting && wanted ? 'Starting…' : mic ? '■ Stop' : '🎤 Start meter';
     startBtn.classList.toggle('ghost', !!mic); startBtn.classList.toggle('primary', !mic);
     display.classList.toggle('on', !!mic);
   }
@@ -194,11 +207,11 @@ export function meter(panel) {
     h('p', { class: 'muted small tl-foot' }, 'An estimate from your phone’s microphone, not a calibrated sound level meter: use it to keep an eye on the room, not to settle an argument with the council. Nothing is recorded.'));
   drawLimit(); paintWeight(); paintButtons(); paint();
 
-  current = () => ({ listening: !!mic, now: fast == null ? null : Math.round(shown(10 * Math.log10(fast))), max: max == null ? null : Math.round(shown(max)), avg: avgRaw() == null ? null : Math.round(shown(avgRaw())), limit: (limitNow() || {}).db || null, weight, cal });
+  current = () => ({ listening: !!mic, starting, wanted, micWeight, now: fast == null ? null : Math.round(shown(10 * Math.log10(fast))), max: max == null ? null : Math.round(shown(max)), avg: avgRaw() == null ? null : Math.round(shown(avgRaw())), limit: (limitNow() || {}).db || null, weight, cal });
 
   return {
-    stop() { alive = false; stopListening(); current = null; },
-    hidden() { if (mic) { stopListening(); label.textContent = 'Paused while Gigdex was in the background. Tap Start meter to carry on.'; } },
+    stop() { alive = false; stopListening(true); current = null; },
+    hidden() { if (mic || (starting && wanted)) { stopListening(true); label.textContent = 'Paused while Gigdex was in the background. Tap Start meter to carry on.'; } },
     data() { drawLimit(); },
   };
 }

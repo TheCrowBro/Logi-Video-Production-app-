@@ -55,10 +55,15 @@ export function metronome(panel, ctx) {
   bpmIn.addEventListener('change', () => { const v = num(bpmIn.value); setBpm(Number.isFinite(v) ? v : M.bpm); });
   range.addEventListener('input', () => setBpm(Number(range.value), 'range'));
   const tapBtn = h('button', { type: 'button', class: 'btn ghost', id: 'tl-metro-tap', 'aria-label': 'Tap the tempo' }, '👆 Tap');
-  let tappedAt = 0;
-  const tap = t => { tappedAt = performance.now(); const s = tapper.tap(t); if (s.bpm) setBpm(s.bpm); else toast('Keep tapping…'); };
-  tapBtn.addEventListener('pointerdown', e => { if (e.button === 0) tap(e.timeStamp || performance.now()); });
-  tapBtn.addEventListener('click', () => { if (performance.now() - tappedAt > 350) tap(performance.now()); });
+  // A finger or mouse taps on pointerdown (the moment it lands), so only the one click that follows it is skipped; Enter
+  // taps on keydown, as on the Tempo pad; a screen reader's tap has neither, and taps on its click. Every tap counts,
+  // however fast they come.
+  let pointerAt = -Infinity;
+  const tap = t => { const s = tapper.tap(t); if (s.bpm) setBpm(s.bpm); else toast('Keep tapping…'); };
+  tapBtn.addEventListener('pointerdown', e => { if (e.button === 0) { pointerAt = performance.now(); tap(e.timeStamp || pointerAt); } });
+  tapBtn.addEventListener('pointercancel', () => { pointerAt = -Infinity; });
+  tapBtn.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); if (!e.repeat) tap(performance.now()); } });
+  tapBtn.addEventListener('click', () => { const followsPointer = performance.now() - pointerAt < 1000; pointerAt = -Infinity; if (!followsPointer) tap(performance.now()); });
 
   function setBpm(v, from, song = '') {
     if (!Number.isFinite(v)) return;
