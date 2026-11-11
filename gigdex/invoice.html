@@ -5,10 +5,48 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>Gigdex</title>
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<title>Invoice</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<style>
+  body { margin: 0; background: #ece8f2; color: #1f1830; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 14px 14px 8px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 4px 0 12px; }
+  .bar .who { font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+  .bar .who small { display: block; font-weight: 400; color: #5d556f; }
+  .acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tag { display: inline-block; padding: 5px 11px; border-radius: 999px; font-size: 13px; font-weight: 700; background: #fff; border: 1.5px solid #b9b2c8; color: #1f1830; }
+  .tag.paid { color: #1f7a3f; border-color: #1f7a3f; } .tag.over { color: #b3261e; border-color: #b3261e; } .tag.void { color: #666; }
+  .btn { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border-radius: 10px; border: 1.5px solid #3b3350; background: #fff; color: #1f1830; font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; box-sizing: border-box; }
+  .btn.primary { background: #1a4e8a; border-color: #1a4e8a; color: #fff; }
+  .btn:focus-visible, a:focus-visible { outline: 3px solid #4aa3ff; outline-offset: 2px; }
+  .paper { background: #fff; color: #111; border-radius: 12px; box-shadow: 0 4px 24px rgba(0,0,0,.08); overflow: hidden; }
+  .paper .cs-doc { padding: 22px 18px; }
+  .paper .pay-btn { min-height: 44px; box-sizing: border-box; display: inline-flex; align-items: center; }
+  .paper .qr-box { width: 112px; height: 112px; flex: none; }
+  .paper .mn-void-stamp { color: #666; border-color: #888; }
+  .paper table { table-layout: auto; } .paper td:first-child { overflow-wrap: anywhere; }
+  .msg { background: #fff; color: #111; border-radius: 12px; padding: 24px; }
+  .msg h2 { margin-top: 0; }
+  .foot { text-align: center; color: #5d556f; font-size: 12.5px; margin: 18px auto 32px; max-width: 640px; }
+  .foot a { color: inherit; }
+  @media (max-width: 480px) { .paper .money-parties { grid-template-columns: 1fr; } .paper .cs-kv { grid-template-columns: 1fr auto; } .paper .cs-doc { padding: 18px 14px; } }
+  @media (prefers-color-scheme: dark) {
+    body { background: #16131d; color: #ece8f5; }
+    .bar .who small, .foot { color: #a8a0bb; }
+    .tag { background: #231d33; color: #ece8f5; border-color: #4a4260; } .tag.paid { color: #6fd08f; border-color: #6fd08f; } .tag.over { color: #ff8a7a; border-color: #ff8a7a; } .tag.void { color: #aaa; }
+    .btn { background: #231d33; color: #ece8f5; border-color: #6a6185; } .btn.primary { background: #5b9bd5; border-color: #5b9bd5; color: #0b1622; }
+  }
+  @media print { body { background: #fff; } .bar, .foot { display: none; } .wrap { padding: 0; } .paper { box-shadow: none; border-radius: 0; } }
+</style>
 </head>
 <body>
-<main id="doc"><p>Opening…</p></main>
-<!-- STUB: the invoice agent replaces this page (docs/developers.md → Share pages). -->
+<div class="wrap">
+  <header class="bar" id="bar"></header>
+  <main id="doc"><div class="msg">Opening the document…</div></main>
+  <p class="foot">This document travels inside the link itself: nothing was stored online. It was written by the person or business named on it, and made with <a href="./">Gigdex</a>, which does not check documents or handle payments. If anything looks unexpected, confirm the amount and the payment details with the sender, using contact details you already trust, before you pay.</p>
+</div>
+<script type="module" src="js/invoice-page.js"></script>
 </body>
 </html>

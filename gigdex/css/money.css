@@ -1,1 +1,124 @@
-/* money: styles owned by the money feature (docs/developers.md). Prefix classes to avoid clashes. */
+/* money: quotes, invoices, costs, the price list, billing settings and the Money page. Theme tokens only. */
+
+/* ---------- the Quote & invoice box ---------- */
+.mn-block { display: grid; gap: 4px; min-width: 0; }
+.mn-tabs { margin-bottom: 8px; }
+.mn-tabs .mn-tab-st { font-weight: 500; opacity: .85; }
+.mn-make, .mn-doc { gap: 10px; min-width: 0; }
+.mn-lead { margin: 0; }
+.mn-suggest, .mn-doc-lines { list-style: none; margin: 0; padding: 0; display: grid; }
+.mn-suggest li, .mn-doc-lines li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .92rem; }
+.mn-suggest li > span, .mn-doc-lines li > span { min-width: 0; overflow-wrap: anywhere; }
+.mn-suggest li > b, .mn-doc-lines li > b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mn-suggest-pay, .mn-doc-tax { color: var(--muted); }
+.mn-doc-head { display: grid; gap: 2px; }
+.mn-doc-id { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.mn-doc-id strong { font-size: 1.05rem; overflow-wrap: anywhere; }
+.mn-doc-stats, .mn-cost-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.mn-doc-stats .stat b, .mn-cost-stats .stat b { font-size: clamp(.9rem, 3.8vw, 1.15rem); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.mn-payments h4 { margin: 4px 0 2px; }
+.mn-payment { padding: 4px 0; border-bottom: 1px solid var(--line); }
+.mn-doc-actions { margin-top: 2px; }
+.mn-send { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.mn-send .btn { width: 100%; min-width: 0; justify-content: center; text-align: center; white-space: normal; }
+@media (min-width: 560px) { .mn-send { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.mn-make .actions .btn, .mn-costs .actions .btn, .mn-doc .mn-doc-actions .btn { flex: 1 1 9rem; justify-content: center; }
+.pill.mn-over { color: var(--danger); border-color: var(--danger); text-decoration: none; }
+
+/* ---------- the editor sheet ---------- */
+.mn-editor { gap: 12px; }
+.mn-editor .grid2 .field, .mn-billing .grid2 .field { min-width: 0; }
+.mn-ed-head { margin: 4px 0 0; }
+.mn-lines { display: grid; gap: 8px; }
+.mn-line { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.mn-line-top { display: grid; grid-template-columns: minmax(0, 1fr) var(--hit); gap: 4px; align-items: center; }
+.mn-line-nums { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.1fr) minmax(0, 1.2fr) auto; gap: 6px; align-items: end; }
+.mn-lf { display: grid; gap: 2px; min-width: 0; }
+.mn-lf > span { font-size: .72rem; color: var(--muted); font-weight: 600; }
+.mn-line-amt { min-width: 4.4rem; text-align: right; align-self: stretch; align-content: space-between; }
+.mn-line-amt b { font-variant-numeric: tabular-nums; white-space: nowrap; line-height: var(--hit); }
+.mn-ed-add { margin-top: 0; } .mn-ed-add .btn { width: auto; flex: 1 1 10rem; }
+.mn-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+.mn-pair .field { min-width: 0; } .mn-pair .field > label { overflow-wrap: anywhere; }
+.mn-ed-totals { display: grid; gap: 4px; margin-left: auto; width: min(100%, 320px); padding: 8px 12px; border-radius: 12px; background: var(--bg2); border: 1px solid var(--line); }
+.mn-ed-totals > div { display: flex; justify-content: space-between; gap: 12px; font-variant-numeric: tabular-nums; }
+.mn-ed-totals > div > span { color: var(--muted); }
+.mn-ed-totals .mn-strong b { font-size: 1.1rem; }
+@media (max-width: 360px) { .mn-line-nums { grid-template-columns: repeat(3, minmax(0, 1fr)); } .mn-line-amt { grid-column: 1 / -1; display: flex; justify-content: space-between; } .mn-line-amt b { line-height: 1.4; } }
+
+/* ---------- documents on screen, the link sheet ---------- */
+.cs-paper.mn-paper { max-height: none; }
+.cs-paper .qr-box { width: 112px; height: 112px; flex: none; }
+.cs-paper .qr-box svg { width: 100%; height: 100%; display: block; background: #fff; }
+.cs-paper .mn-void-stamp, .mn-void-stamp { color: var(--paper-ink); border-color: currentColor; opacity: .7; }
+.cs-paper td:first-child { overflow-wrap: anywhere; }
+.mn-center { text-align: center; }
+.mn-share .share-qr { min-height: 40px; }
+
+/* ---------- the price list ---------- */
+.mn-prices .price-item { margin-bottom: 0; }
+.mn-prices-empty { margin: 0; }
+.mn-ideas p { margin: 4px 0 6px; }
+.mn-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mn-chips .chip { max-width: 100%; white-space: normal; text-align: left; }
+
+/* ---------- billing settings ---------- */
+.mn-billing { gap: 10px; }
+.mn-bl-head { margin: 12px 0 0; }
+.mn-bl-sub { margin: 4px 0 0; font-size: .8rem; color: var(--text); }
+.mn-billing > p { margin: 0; }
+
+/* ---------- the Costs box ---------- */
+.mn-costs { gap: 10px; min-width: 0; }
+.mn-cost-list { display: grid; }
+.mn-cost { all: unset; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; min-height: var(--hit); padding: 8px 4px; border-bottom: 1px solid var(--line); cursor: pointer; color: var(--text); }
+.mn-cost:hover { background: var(--bg2); }
+.mn-cost:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 8px; }
+.mn-cost-text { display: grid; gap: 1px; min-width: 0; overflow-wrap: anywhere; }
+.mn-cost-cat { font-size: .72rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); font-weight: 700; }
+.mn-cost > b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* ---------- the Money page ---------- */
+.mn-year { margin: 0; align-items: center; }
+.mn-year button { min-width: var(--hit); font-size: 1.2rem; padding: 4px 10px; }
+.mn-year-now { font-weight: 800; font-variant-numeric: tabular-nums; padding: 0 6px; min-width: 3.4rem; text-align: center; }
+.mn-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 6px; }
+.mn-stats .stat b { font-size: clamp(1rem, 5vw, 1.3rem); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+@media (min-width: 560px) { .mn-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.mn-note { margin: 0 0 6px; }
+.mn-sec { min-width: 0; }
+.mn-sec .list { grid-template-columns: minmax(0, 1fr); }
+.mn-row .card-row > div:first-child, .mn-act .card-row > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.mn-amt { display: grid; justify-items: end; gap: 3px; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mn-amt b { font-size: 1.05rem; }
+.mn-late { color: var(--danger); }
+.mn-dep .actions { margin-top: 6px; }
+.mn-link { all: unset; box-sizing: border-box; display: grid; gap: 2px; min-width: 0; min-height: var(--hit); cursor: pointer; overflow-wrap: anywhere; color: var(--text); }
+.mn-link:hover strong { color: var(--accent); }
+.mn-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; border-radius: 8px; }
+.mn-act-sub { margin-top: 4px; }
+.mn-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px; vertical-align: 1px; border: 1px solid var(--line); }
+.mn-pay-card { display: grid; gap: 0; }
+.mn-payout { padding: 6px 0; border-bottom: 1px solid var(--line); } .mn-payout:last-child { border-bottom: 0; }
+.mn-payout b { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* income by month: one row a month, the value written beside each bar */
+.mn-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: .8rem; color: var(--muted); margin: 0 0 6px; }
+.mn-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.mn-key { display: inline-block; width: 14px; height: 10px; border-radius: 2px; }
+.mn-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.mn-bar-row { display: grid; grid-template-columns: 2.6rem minmax(0, 1fr) 6.8rem; gap: 10px; align-items: center; font-size: .85rem; min-height: 24px; }
+.mn-bar-m { color: var(--muted); }
+.mn-track { display: flex; gap: 2px; height: 12px; background: var(--bg2); border-radius: 0 4px 4px 0; overflow: hidden; }
+.mn-seg { display: block; height: 100%; min-width: 2px; }
+.mn-seg:last-child { border-radius: 0 4px 4px 0; }
+.mn-seg.earned, .mn-key.earned { background: var(--accent); }
+.mn-seg.booked, .mn-key.booked { background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--accent) 55%, transparent) 0 3px, color-mix(in srgb, var(--accent) 22%, transparent) 3px 6px); }
+.mn-bar-v { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.mn-bar-v small { display: block; font-size: .74rem; line-height: 1.2; }
+@media (forced-colors: active) { .mn-seg.earned, .mn-key.earned { background: CanvasText; } .mn-seg.booked, .mn-key.booked { background: GrayText; } }
+
+@media (min-width: 1000px) {
+  .mn-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 28px; align-items: start; }
+  .mn-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
