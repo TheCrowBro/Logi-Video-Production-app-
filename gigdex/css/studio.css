@@ -1,1 +1,155 @@
-/* studio: styles owned by the studio feature (docs/developers.md). Prefix classes to avoid clashes. */
+/* studio: the session clock (strip and booking box), the Studio log (take logs) and the studio session boxes (songs,
+   take log, deliverables). Owned by the studio feature (docs/developers.md); every class starts .sd-. Theme tokens only. */
+
+/* ------------------------------ the strip under the Rolodex ------------------------------ */
+.clock.sd-strip { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px; grid-template-columns: none; }
+.sd-strip-title { all: unset; box-sizing: border-box; flex: 1 1 auto; min-width: 0; min-height: var(--hit); display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 700; font-size: .95rem; border-radius: 8px; }
+span.sd-strip-title { cursor: default; }
+.sd-strip-title:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sd-strip-text { display: flex; align-items: baseline; min-width: 0; overflow: hidden; }
+.sd-strip-kind, .sd-strip-sep { flex: none; white-space: pre; }
+.sd-strip-name { min-width: 0; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sd-strip-time { flex: none; font-weight: 800; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.clock.sd-strip.working .sd-strip-time { color: var(--ok); } .clock.sd-strip.on-break .sd-strip-time { color: var(--accent); }
+.sd-strip-btns { flex: none; display: flex; gap: 6px; }
+.sd-strip-btns .btn { padding: 6px 10px; min-width: 0; }
+@media (max-width: 559px) {
+  .sd-strip-text { flex-direction: column; align-items: flex-start; line-height: 1.2; }
+  .sd-strip-sep { display: none; }
+  .sd-strip-kind { font-size: .68rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+}
+@media (max-width: 479px) { .sd-strip-btns .sd-btn-label { display: none; } .sd-strip-btns .btn { width: var(--hit); min-height: var(--hit); padding: 0; font-size: 1.05rem; } }
+
+/* ------------------------------ the clock box on a booking ------------------------------ */
+.sd-clock-box { display: grid; gap: 10px; }
+.clock.sd-clock { gap: 8px; }
+.sd-clock-face { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.sd-clock-big { font-size: 2.1rem; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: .02em; line-height: 1.1; }
+.clock.sd-clock.working .sd-clock-big { color: var(--ok); } .clock.sd-clock.on-break .sd-clock-big { color: var(--muted); }
+.clock.sd-clock.on-break .clock-title { color: var(--accent); }
+.sd-clock-sub { font-variant-numeric: tabular-nums; }
+.sd-clock-other { margin: 0; }
+.sd-clock .clock-btns .btn { min-height: calc(var(--hit) + 6px); font-size: 1rem; }
+.sd-stats { margin: 0; }
+.sd-stats.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sd-stats .stat b { font-variant-numeric: tabular-nums; font-size: clamp(.95rem, 4.2vw, 1.15rem); overflow-wrap: anywhere; }
+.sd-stats .stat span { line-height: 1.25; }
+.sd-progress { margin: 0; }
+.sd-progress.over i { background: var(--danger); }
+.sd-shifts-head h4 { margin: 4px 0 0; }
+.sd-shifts { display: grid; gap: 6px; }
+.sd-shifts .card { margin: 0; padding: 8px 12px; }
+.sd-shift.running { border-color: var(--ok); }
+
+/* ------------------------------ Studio log: list ------------------------------ */
+.sd-page .page-head h1 { min-width: 0; }
+.sd-today { margin-bottom: 14px; gap: 10px; }
+.sd-today .card-row + .card-row { border-top: 1px solid var(--line); padding-top: 8px; }
+.sd-month h3 { margin-top: 14px; }
+.sd-log .card-row { align-items: flex-start; }
+.sd-log strong { overflow-wrap: anywhere; }
+.sd-log-pills { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex: none; }
+.sd-log-booking { overflow-wrap: anywhere; }
+.sd-open { font-size: .8rem; color: var(--accent); font-weight: 700; }
+
+/* ------------------------------ Studio log: one log ------------------------------ */
+.sd-log-view .page-head { margin-bottom: 6px; }
+.sd-head-actions { margin: 0; flex-wrap: nowrap; align-items: center; }
+.sd-title { margin: 0 0 12px; display: grid; gap: 4px; }
+.sd-title h1 { overflow-wrap: anywhere; }
+.sd-link { all: unset; cursor: pointer; color: var(--accent); font-weight: 600; border-radius: 4px; overflow-wrap: anywhere; }
+.sd-link:hover { text-decoration: underline; } .sd-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sd-title .sd-link { display: inline; min-height: 0; }
+
+.sd-deck { display: grid; gap: 10px; padding: 14px; border-left: 4px solid var(--accent); }
+.sd-timer-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: var(--hit); }
+.sd-timer-row .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--danger); animation: recBlink 1.3s ease-in-out infinite; flex: none; }
+.sd-timer { font-size: 2.4rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: .02em; }
+.sd-song-row { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; }
+.sd-song-row select { font-weight: 600; }
+.btn.sd-take-btn { width: 100%; min-height: 84px; flex-direction: column; gap: 2px; border-radius: 16px; box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 30%, transparent); }
+.sd-take-plus { font-size: 1.7rem; font-weight: 800; letter-spacing: .02em; line-height: 1.1; }
+.sd-take-btn small { font-weight: 600; font-size: .85rem; opacity: .85; max-width: 100%; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sd-take-after { text-align: center; min-height: 1.2em; margin-top: -4px; font-variant-numeric: tabular-nums; }
+.sd-composer { display: grid; gap: 6px; }
+.sd-compose { resize: vertical; }
+.sd-composer .card-row { align-items: flex-start; }
+.sd-stamp { flex: 1; min-width: 0; padding-top: 4px; }
+.sd-stamp b { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.sd-filter { margin: 16px 0 8px; }
+.sd-filter .seg { margin: 0; }
+.sd-takes { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.sd-take { margin: 0; display: grid; gap: 8px; padding: 10px 12px; border-left: 4px solid var(--line); }
+.sd-take.r-keep { border-left-color: var(--ok); } .sd-take.r-maybe { border-left-color: var(--blue); } .sd-take.r-no { border-left-color: var(--danger); }
+.sd-take.r-no .sd-take-meta, .sd-take.r-no .sd-take-no { opacity: .6; }
+.sd-take-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+.sd-take-no { display: grid; justify-items: center; min-width: 3.2rem; padding: 4px 6px; border-radius: 10px; background: var(--bg2); line-height: 1; }
+.sd-take-no small { font-size: .6rem; letter-spacing: .14em; color: var(--muted); font-weight: 700; }
+.sd-take-no b { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.sd-take-meta { display: grid; gap: 2px; min-width: 0; }
+.sd-take-song { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.sd-take-meta .small { font-variant-numeric: tabular-nums; }
+.sd-rate { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.sd-rate button { min-height: var(--hit); border: 1px solid var(--line); background: var(--bg2); color: var(--text); border-radius: 10px; font: inherit; font-weight: 600; font-size: .9rem; cursor: pointer; transition: background-color .15s ease, border-color .15s ease, transform .12s ease; }
+.sd-rate button:active { transform: scale(.96); }
+.sd-rate button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sd-rate .sd-rate-keep.on { background: color-mix(in srgb, var(--ok) 24%, var(--card)); border-color: var(--ok); color: var(--text); }
+.sd-rate .sd-rate-maybe.on { background: color-mix(in srgb, var(--blue) 24%, var(--card)); border-color: var(--blue); color: var(--text); }
+.sd-rate .sd-rate-no.on { background: color-mix(in srgb, var(--danger) 22%, var(--card)); border-color: var(--danger); color: var(--text); }
+.sd-rate .on span { font-weight: 800; }
+.sd-take-note { display: grid; gap: 3px; font-size: .92rem; overflow-wrap: anywhere; }
+.sd-note-line { display: flex; gap: 8px; align-items: baseline; }
+.sd-stamp-badge { flex: none; font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--accent); background: var(--bg2); }
+.sd-none { text-align: center; padding: 16px 8px; }
+.sd-session-notes { margin-top: 14px; display: grid; gap: 6px; }
+.sd-export-preview { margin: 0; max-height: 40vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; color: var(--text); }
+
+/* ------------------------------ session boxes: songs, take log, deliverables ------------------------------ */
+.sd-songs { display: grid; gap: 0; }
+.sd-song { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.sd-song:last-child { border-bottom: 0; }
+.sd-song-main { all: unset; box-sizing: border-box; min-width: 0; min-height: var(--hit); display: grid; align-content: center; gap: 1px; cursor: pointer; border-radius: 8px; }
+.sd-song-main:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.sd-song-main:hover .sd-song-title { color: var(--accent); }
+.sd-song-title { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--text); font-weight: 700; }
+select.sd-status { width: auto; max-width: 9.5rem; min-height: 40px; padding: 4px 26px 4px 10px; border-radius: 999px; font-size: .82rem; font-weight: 700; color: var(--muted); }
+select.sd-status.sd-st-recording, select.sd-status.sd-st-demo { color: var(--accent); border-color: var(--accent); }
+select.sd-status.sd-st-mixing { color: var(--blue); border-color: var(--blue); }
+select.sd-status.sd-st-mastered, select.sd-status.sd-st-released { color: var(--ok); border-color: var(--ok); }
+.sd-worksongs .actions, .sd-takes-box .actions { margin-top: 8px; }
+.sd-takes-logs { display: grid; gap: 8px; }
+.sd-takes-logs .card { margin: 0; }
+
+.sd-deliver { display: grid; gap: 8px; }
+.sd-dl-progress { display: grid; gap: 4px; } .sd-dl-progress .progress { margin: 0; }
+.sd-dl { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; column-gap: 6px; }
+.sd-dl .check { min-width: 0; }
+@media (max-width: 559px) {
+  .sd-dl { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: 'check edit' 'due due'; }
+  .sd-dl .check { grid-area: check; } .sd-dl .icon-btn { grid-area: edit; }
+  .sd-dl .sd-due { grid-area: due; justify-self: start; margin: -6px 0 6px 42px; }
+}
+.sd-dl .check span { overflow-wrap: anywhere; }
+.sd-dl.done .check span { color: var(--muted); text-decoration: line-through; }
+.sd-due { font-size: .78rem; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+.sd-due.overdue { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.sd-due.today { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.sd-due.soon { color: var(--blue); border-color: var(--blue); }
+.sd-dl.done .sd-due { border-color: transparent; }
+.sd-dl-add { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px; align-items: center; }
+.sd-dl-add input[type=date] { width: auto; max-width: 11rem; }
+@media (max-width: 480px) { .sd-dl-add { grid-template-columns: minmax(0, 1fr) auto; } .sd-dl-add input[type=text] { grid-column: 1 / -1; } .sd-dl-add input[type=date] { max-width: none; width: 100%; } }
+.sd-presets { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sd-presets .chip { min-height: 36px; padding: 4px 11px; }
+@media (pointer: coarse) { .sd-presets .chip, select.sd-status { min-height: var(--hit); } }
+
+/* laptop: the log's deck beside the takes */
+@media (min-width: 1000px) {
+  .sd-log-view { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); column-gap: 28px; align-items: start; }
+  .sd-log-view > .page-head, .sd-log-view > .sd-title { grid-column: 1 / -1; }
+  .sd-log-view > .sd-deck { grid-column: 1; grid-row: 3 / span 3; position: sticky; top: 120px; }
+  .sd-log-view > .sd-filter { grid-column: 2; margin-top: 0; }
+  .sd-log-view > .sd-takes, .sd-log-view > .sd-none, .sd-log-view > .sd-session-notes { grid-column: 2; }
+  .sd-timer { font-size: 3rem; }
+}
