@@ -1,1 +1,63 @@
-/* settings: styles owned by the settings feature (docs/developers.md). Prefix classes to avoid clashes. */
+/* settings: the Settings page (js/pages/settings.js) and the backups panel and sheets (js/backup.js). Theme tokens only. */
+
+/* sections: twirl-downs on cards, one under the other */
+.se-list { display: grid; gap: 10px; }
+.se-sec { background: var(--card); border-radius: var(--radius); margin-bottom: 0; }
+.se-sec > summary { padding: 12px 14px; }
+.se-sec > summary .twirl-name { font-size: 1.02rem; }
+.se-sec > summary .twirl-sub { overflow-wrap: anywhere; }
+.se-sec[open] > summary { border-bottom: 1px solid var(--line); }
+.se-body { padding: 12px 14px 16px; gap: 10px; }
+.se-body > p, .se-body .stack > p, .se-body .card > p { margin: 0; }
+.se-body h3 { margin: 10px 0 0; }
+.se-sec .card { background: var(--bg2); margin-bottom: 0; }
+.se-sec .twirl { background: var(--bg2); margin-bottom: 0; } /* the colour theme inside Display & accessibility */
+.se-sec .actions { margin-top: 0; }
+@media (min-width: 1000px) { .se-list { max-width: 780px; } }
+
+/* your details */
+.se-kv { margin: 0; }
+.se-kv > div { align-items: baseline; }
+.se-kv > div > span:first-child { flex: none; min-width: 6.5rem; }
+.se-kv .se-val { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.se-kv .se-val a { min-height: 0; display: inline; }
+.se-bio { color: var(--muted); }
+.se-empty { padding: 18px 12px; }
+.se-contact { display: grid; gap: 8px; border-top: 1px solid var(--line); padding-top: 4px; margin-top: 4px; }
+.se-contact > p { margin: 0; }
+.se-qr { width: min(232px, 100%); text-align: center; }
+.se-qr-svg { width: 100%; }
+.se-qr-none { margin: 0; padding: 14px 12px; }
+@media (min-width: 760px) { .se-kv { max-width: 560px; } }
+
+/* about */
+.se-where { display: grid; gap: 4px; }
+.se-where p { margin: 0; }
+
+/* backups panel (Settings → Backups and the ☁ sheet) */
+.se-bk, .se-bk > .stack { display: grid; gap: 10px; }
+.se-bk > .stack > p { margin: 0; }
+.se-bk-status { margin: 0; font-weight: 600; }
+.se-bk-status[data-level=ok] { color: var(--ok); }
+.se-bk-status[data-level=old], .se-bk-status[data-level=none] { background: color-mix(in srgb, var(--danger) 14%, transparent); border: 1px solid var(--danger); border-radius: 10px; padding: 8px 12px; }
+.se-bk-actions { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+.se-bk-actions .btn { width: 100%; }
+@media (min-width: 560px) { .se-bk-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); } .se-bk-actions .se-bk-save { grid-column: 1 / -1; } }
+.se-bk-file { margin: 0; gap: 8px; }
+.se-bk-file > p { margin: 0; }
+.se-bk-file-line { overflow-wrap: anywhere; }
+.se-bk-file-line[data-state=saved] { color: var(--ok); }
+.se-bk-file-line[data-state=needs-permission], .se-bk-file-line[data-state=error] { color: var(--danger); }
+.se-bk-file .actions { margin-top: 0; }
+.se-bk-file .actions .btn, .se-bk-file > .btn { width: auto; flex: 1 1 0; }
+.se-bk-file > .btn { justify-self: start; min-width: 12rem; }
+@media (max-width: 480px) { .se-bk-file > .btn { justify-self: stretch; } }
+
+/* bringing a backup back, and the messages around it */
+.se-imp .card { margin: 0; display: grid; gap: 4px; }
+.se-imp .card p { margin: 0; }
+.se-imp-name { overflow-wrap: anywhere; }
+.se-imp > p { margin: -4px 0 4px; }
+.se-refuse p { margin: 0; }
+.se-pass .check { padding-left: 0; }
+.se-pass > p { margin: 0; }
