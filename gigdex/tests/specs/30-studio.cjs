@@ -309,11 +309,9 @@ const ymdOffset = n => { const d = new Date(Date.now() + n * 864e5); return `${d
   await page.waitForSelector('#clockbar:not([hidden]) .sd-strip');
   ok('a rehearsal clock reads Rehearsal in the strip', /Rehearsal ·/.test(await page.textContent('#clockbar .sd-strip')));
   await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 's-reh')));
-  await page.waitForFunction(() => /Deleted booking/.test(document.querySelector('#clockbar').textContent));
-  ok('the strip copes with a deleted booking', true);
-  await page.click('#clockbar #sd-bar-stop');
   await page.waitForSelector('#clockbar', { state: 'hidden' });
-  ok('…and its clock still stops', await page.evaluate(() => import('./js/clock.js').then(c => c.runningShift() === null)));
+  ok('deleting the booking stops its clock and the strip goes', await page.evaluate(() => import('./js/clock.js').then(c => c.runningShift() === null)));
+  ok('…and its shifts go with it (no record left that no page can list)', await db(page, d => !d.shifts.some(s => s.bookingId === 's-reh' || s.bookingId === '')));
 
   /* ------------------------------ empty database ------------------------------ */
   await page.evaluate(() => import('./js/store.js').then(s => s.eraseAll()));
