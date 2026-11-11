@@ -4,9 +4,11 @@ import { parseMapLink, geocode } from './map.js';
 
 /*
  fields: [{ key, label, type, options, required, placeholder, list, rows, columns, empty, hint }]
- types: text tel email url number date time textarea select checks rows
+ types: text tel email url number date time textarea select checks rows place matrix
+ rows: columns [{ key, label, type, list }]: list gives that column's boxes suggestions; the column names show above the rows.
+ confirmDelete: the question asked before onDelete (a string, or a function returning one); 'Delete this permanently?' by default.
 */
-export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save' }) {
+export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save', confirmDelete = 'Delete this permanently?' }) {
   const readers = [];
   const boxesByKey = {};
   const qtyByKey = {};
@@ -98,17 +100,18 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     } else if (f.type === 'rows') {
       const rows = (val || []).map(r => ({ ...r }));
       const list = h('div', { class: 'rows' });
+      const lists = f.columns.map((c, ci) => (c.list ? h('datalist', { id: `${id}-c${ci}` }, c.list.map(o => h('option', { value: o }))) : null));
       const draw = () => {
         list.replaceChildren(...rows.map((r, ri) => h('div', { class: 'row-edit' },
-          f.columns.map(c => h('input', {
-            type: c.type || 'text', placeholder: c.label, 'aria-label': c.label, value: r[c.key] ?? '',
+          f.columns.map((c, ci) => h('input', {
+            type: c.type || 'text', placeholder: c.label, 'aria-label': c.label, value: r[c.key] ?? '', list: c.list ? `${id}-c${ci}` : null,
             step: c.type === 'number' ? (c.step ?? 'any') : null, inputMode: c.type === 'number' ? 'decimal' : null, // prices like 0.76 or 12.50
             oninput: e => { r[c.key] = e.target.value; },
           })),
           h('button', { type: 'button', class: 'icon-btn', 'aria-label': 'Remove row', onclick: () => { rows.splice(ri, 1); draw(); } }, '✕'))));
       };
       draw();
-      control = h('div', null, list, h('button', { type: 'button', class: 'btn ghost small', onclick: () => { rows.push({}); draw(); } }, '+ Add'));
+      control = h('div', null, f.columns.length > 1 && h('div', { class: 'muted small rows-legend', 'aria-hidden': 'true' }, f.columns.map(c => c.label).join(' · ')), list, ...lists.filter(Boolean), h('button', { type: 'button', class: 'btn ghost small', onclick: () => { rows.push({}); draw(); } }, '+ Add'));
       readers.push(() => [f.key, rows.filter(r => Object.values(r).some(v => String(v || '').trim()))]);
     } else {
       let listEl;
@@ -128,7 +131,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
 
   const { close } = sheet(title, form, { dismissOnBackdrop: false });
   const actions = h('div', { class: 'form-actions' },
-    onDelete && h('button', { type: 'button', class: 'btn danger', onclick: () => { if (confirm('Delete this permanently?')) { close(); onDelete(); } } }, 'Delete'),
+    onDelete && h('button', { type: 'button', class: 'btn danger', onclick: () => { const q = typeof confirmDelete === 'function' ? confirmDelete(values) : confirmDelete; if (confirm(q || 'Delete this permanently?')) { close(); onDelete(); } } }, 'Delete'),
     h('span', { class: 'spacer' }),
     h('button', { type: 'button', class: 'btn ghost', onclick: close }, 'Cancel'),
     h('button', { type: 'submit', class: 'btn primary' }, saveLabel));

@@ -229,9 +229,9 @@ may call it.
 | `pages/bookings.js` `openBooking(id)` | bookings | Go to Bookings and show that booking's page. Returns a promise. |
 | `pages/bookings.js` `newBooking(preset)` | bookings | Open the new-booking form, prefilled (`{ kind, actId, venueId, date, setlistId }`). |
 | `pages/acts.js` `openAct(id)` / `editAct(a, onSaved)` / `printRider(actId)` | acts | View sheet / edit form / print the tech rider. |
-| `pages/people.js` `openPerson(id)` / `editPerson(p, onSaved)` | people | View sheet / edit form. |
+| `pages/people.js` `openPerson(id)` / `editPerson(p, onSaved)` | people | View sheet / edit form (it also edits which acts the person is in: `act.members`). |
 | `pages/songs.js` `openSong(id)` / `editSong(s, onSaved)` | songs | View sheet / edit form. |
-| `js/setlist.js` `openSetlist(id)` / `newSetlist(preset)` / `printSetlist(id)` | songs | Editor sheet / create and return the record / print the big stage copy. |
+| `js/setlist.js` `openSetlist(id, { target, bookingId })` / `newSetlist(preset)` / `printSetlist(id, { bookingId })` / `setlistText(list)` | songs | Editor sheet (target = slot minutes) / create and return the record / print the big stage copy (with the show's date, venue and set time) / plain text. |
 | `pages/sessions.js` `openLog(id)` / `newLog(preset)` | studio | Go to Studio log and open that log / create one (`{ bookingId, songId, title }`) and open it. |
 | `pages/backline.js` `editGear(g, onSaved)` / `editKit(k, onSaved)` | backline | Edit forms. |
 | `pages/venues.js` `openVenue(id)` / `editVenue(v, onSaved)` / `venueWarnings(b)` | venues | View sheet / edit form / warnings for a booking at that venue (curfew before the set ends, noise limit, capacity < tickets…) as strings. |
@@ -253,13 +253,13 @@ may call it.
   `groupBy`, `toast(msg)`, `announce(msg)`, `sheet(title, body, { onClose })` → `{ el, close }`, `mapsUrl`, `telUrl`,
   `safeUrl` (always use it for user-typed links), `empty(msg, action)`, `backBtn(label, fn)`, `hold(el, ms, fn)` /
   `wasHeld(el)` (press and hold), `rateText(c, sym)`, `personRate(c)`.
-* `form.js` `openForm({ title, fields, values, onSave(values), onDelete, saveLabel })`. Field `type`s: `text` (default),
+* `form.js` `openForm({ title, fields, values, onSave(values), onDelete, saveLabel, confirmDelete })`. Field `type`s: `text` (default),
   `tel`, `email`, `url`, `number` (`min`, `step`), `date`, `time`, `textarea` (`rows`), `select` (`options`: values or
   `[value, label]`), `checks` (`options: [{ value, label, group, hint }]`, returns an array), `rows` (`columns: [{ key,
-  label, type }]`, returns an array of objects with string values), `place` (lat/lon with lookup; key `geo`).
+  label, type, list }]`, returns an array of objects with string values), `place` (lat/lon with lookup; key `geo`).
   `list: [...]` gives a text box suggestions. `required`, `placeholder`, `hint`.
 * `map.js`: `hasGeo(geo)`, `miniMap(venue)`, `mapButtons(venue)`, `directionsUrl(venue)`, `geocode(address)`.
-* `qr.js`: `qrSvg(text)` → SVG markup string (put it in with `h('div', { class: 'qr', html: svg })`).
+* `qr.js`: `qrSvg(text)` → a Promise of the SVG markup (UTF-8; put it in with `h('div', { class: 'qr', html: await qrSvg(t) })`).
 * `link-pack.js`: `pack(obj)` → string for a URL fragment; `unpack(str)` → obj.
 * `version.js`: `VERSION`, `shareBase()` (where share pages live: build links as `shareBase() + 'daysheet.html#' + packed`).
 * `print.js`: see above. Documents use the classes in `doc-css.js` (`.cs-doc`, `.cs-head`, `.cs-brand`, `.cs-kicker`,

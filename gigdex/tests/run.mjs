@@ -22,7 +22,7 @@ for (const f of readdirSync(join(here, 'specs')).filter(n => /\.(c?js|mjs)$/.tes
   if (only.length && !only.some(o => f.includes(o))) continue;
   process.stdout.write(`\n=== ${f} ===\n`);
   const code = await new Promise(res => {
-    const child = spawn(process.execPath, [join(here, 'specs', f)], { env: { ...process.env, S: out, GIGDEX_ROOT: root, GIGDEX_URL: url }, stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = spawn(process.execPath, [join(here, 'specs', f)], { env: { ...process.env, LANG: process.env.LANG || 'C.UTF-8', LC_ALL: process.env.LC_ALL || 'C.UTF-8', S: out, GIGDEX_ROOT: root, GIGDEX_URL: url }, stdio: ['ignore', 'pipe', 'inherit'] });
     child.stdout.on('data', d => { const t = String(d); process.stdout.write(t); passed += (t.match(/^PASS /gm) || []).length; failed += (t.match(/^FAIL /gm) || []).length; });
     child.on('close', res);
   });

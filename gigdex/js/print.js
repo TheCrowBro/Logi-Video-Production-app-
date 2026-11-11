@@ -39,8 +39,10 @@ export async function saveFile(text, name, type = 'text/plain') {
   return true;
 }
 
-// A file name from a title: "Day sheet – The Night Owls @ Lantern.html".
-export const fileName = (title, ext) => String(title || 'document').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) + '.' + ext;
+// A file name from a title, in plain ASCII so every device and mail program keeps it: "Day sheet - Zoe @ Lantern.html".
+export const fileName = (title, ext) => (String(title || 'document').normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[\u2010-\u2015\u2212]/g, '-').replace(/[\u2018\u2019\u201a\u2032]/g, "'").replace(/[\u201c\u201d\u201e\u2033]/g, '').replace(/\u266f/g, '#').replace(/\u266d/g, 'b')
+  .replace(/[^\x20-\x7e]/g, '').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'document') + '.' + ext;
 
 // CSV from rows (arrays of cells).
 export const csv = rows => rows.map(r => r.map(c => { const s = c == null ? '' : String(c); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(',')).join('\n');

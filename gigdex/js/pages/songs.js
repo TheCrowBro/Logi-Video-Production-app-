@@ -284,6 +284,7 @@ function splitsHelper(form) {
   field.classList.add('sg-splits-field');
   const sum = h('p', { class: 'sg-split-sum', 'aria-live': 'polite' });
   // Filled boxes lose their placeholder, so the order of the boxes is spelled out above them.
+  field.querySelector('.rows-legend')?.remove(); // the form's own column line: this one fits the two-by-two layout better
   rows.before(h('p', { class: 'sg-split-legend small muted' }, 'Each person: name; role and share %; PRO and IPI; publisher.'));
   field.append(h('datalist', { id: 'sg-split-roles' }, SPLIT_ROLES.map(r => h('option', { value: r }))), sum);
   const sync = () => {
