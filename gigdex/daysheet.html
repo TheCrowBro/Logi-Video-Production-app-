@@ -1,14 +1,24 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="ds-share">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer">
-<title>Gigdex</title>
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#ece8df">
+<title>Day sheet · Gigdex</title>
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="css/daysheet.css">
 </head>
 <body>
-<main id="doc"><p>Opening…</p></main>
-<!-- STUB: the daysheet agent replaces this page (docs/developers.md → Share pages). -->
+<div class="ds-wrap">
+  <header class="ds-bar" id="bar"></header>
+  <main id="doc" class="ds-main"><div class="ds-msg" role="status">Opening the day sheet…</div></main>
+  <p class="ds-foot">This day sheet was made by the person named on it, with <a href="./">Gigdex</a>, a booking deck for bands and producers. It is a copy from when it was sent: if something looks wrong or plans may have changed, check with them. Everything is inside the link itself; nothing was stored online. <a href="privacy.html">Privacy</a></p>
+</div>
+<noscript><p class="ds-msg">This page needs JavaScript to open the day sheet.</p></noscript>
+<script type="module" src="js/daysheet-page.js"></script>
 </body>
 </html>
