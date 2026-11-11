@@ -96,7 +96,8 @@ import { db, update, upsert, patch, remove, byId, subscribe } from '../store.js'
 * `loadSample()` fills a realistic sample (ids start with `s-`: act `s-owls`, show `s-show1`, past show `s-past`,
   session `s-sess1`, setlist `s-clubset`, venue `s-lantern`…). Tests use it.
 * Helpers: `bookingsOn(date)`, `upcoming()`, `activeBookings()`, `covers(b, date)`, `overlaps(a, b)`, `lastDay(b)`,
-  `personBookings(id)`, `gearBookings(id)`, `personClash(b, personId)`, `gearClash(b, gearId)`, `qtyOf(g)`,
+  `personBookings(id)`, `gearBookings(id)`, `personClash(b, personId)`, `gearClash(b, gearId)` (other overlapping bookings
+  when together they need more than are owned), `gearShort(b, gearId)` (this booking alone needs more than are owned), `qtyOf(g)`,
   `usedQty(booking, gearId)` (counts in `booking.gearQty`), `packQty(kit, gearId)` (counts in `kit.qty`; applying a pack
   to a booking copies them into `gearQty`), `totalValue(g)`, `exportJSON()`, `replaceAll(data)`, `mergeIn(data)`, `eraseAll()`.
 

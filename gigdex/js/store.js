@@ -118,8 +118,11 @@ export function remove(list, id) {
     if (list === 'setlists') d.bookings.forEach(b => { if (b.setlistId === id) { b.setlistId = ''; touch(b); } });
     if (list === 'kits') d.bookings.forEach(b => { if ((b.kits || []).includes(id)) { b.kits = without(b.kits, id); touch(b); } });
     if (list === 'bookings') {
+      // Take logs stand on their own in the Studio log; clock shifts only mean something on their booking, so they go
+      // with it (a clock left running on it stops).
       d.logs.forEach(l => { if (l.bookingId === id) { l.bookingId = ''; touch(l); } });
-      d.shifts.forEach(s => { if (s.bookingId === id) { s.bookingId = ''; touch(s); } });
+      d.shifts.filter(x => x.bookingId === id).forEach(x => { d.deleted[x.id] = now; });
+      d.shifts = d.shifts.filter(x => x.bookingId !== id);
     }
   });
 }
@@ -150,6 +153,8 @@ export const packQty = (kit, gearId) => Math.max(1, Math.floor(Number(kit && kit
 export const unitValue = g => Number(g && g.value) || 0;
 export const totalValue = g => unitValue(g) * qtyOf(g);
 // Other live bookings on overlapping days that use the same item, when together they need more than are owned.
+// True when this booking alone needs more of the item than are owned (after 'How many' was lowered, say).
+export const gearShort = (booking, gearId) => { const g = byId('gear', gearId); return !!g && usedQty(booking, gearId) > qtyOf(g); };
 export const gearClash = (booking, gearId) => {
   const g = byId('gear', gearId);
   const others = activeBookings().filter(b => b.id !== booking.id && overlaps(b, booking) && (b.gear || []).includes(gearId));
