@@ -126,6 +126,7 @@ import { db, update, upsert, patch, remove, byId, subscribe } from '../store.js'
   checks: { checkId: true },                       // advance / session checklist (js/blocks/advance.js)
   budget: [{ id, cat, desc, amount }],             // our costs (travel, hotel, hire…)
   quote, invoice,                                  // documents, owned by js/money.js
+  daySheet: { sentAt, sig },                       // when the day sheet was last sent, and a fingerprint of it (daysheet)
   notes, createdAt, updatedAt }
 ```
 Statuses per kind: `model.statusesFor(kind)` (`hold`, `offer`, `confirmed`, `advanced`, `done`, `settled`,
@@ -242,6 +243,10 @@ may call it.
 | `js/clock.js` `clockHours(bookingId)` / `runningShift()` | studio | Hours worked by the clock, breaks taken off (money bills them) / the running shift or null. |
 | `js/backup.js` `openBackupSheet()` / `nudgeIfStale()` / `backupPanel()` | settings | ☁ sheet / an occasional reminder / the panel used in Settings. |
 | `js/tour.js` `sheetTutorial(title, steps)` | core | Register walkthrough steps for a sheet by its title. |
+| `blocks/running.js` `sortedRows(b)` / `runningWarnings(b)` / `dayClock(b)` | show | The running order in the night's order (after-midnight aware) / its warnings / the day's clock. |
+| `blocks/guests.js` `guestCounts(b)`; `blocks/settlement.js` `isSettled(b)` / `settlementDoc(b)` | show | Names, heads and in / whether the night is settled / the printable settlement. |
+| `js/daysheet-doc.js` `cleanDaySheet(data)` / renderer | daysheet | Pure (no store): the whitelist and renderer shared by the app and `daysheet.html`. |
+| `js/ics.js` `bookingIcs(b)` / `allIcs(list)` | bookings | Calendar files (RFC 5545, past-midnight safe, no money). |
 | `js/print.js` `printElement(el, css)` / `docPage(title, el, css)` / `saveFile(text, name, type)` / `fileName(title, ext)` / `csv(rows)` | core | Printing and saving documents. |
 
 `onSaved(record)` is called with the stored record after a form saves.
@@ -253,7 +258,7 @@ may call it.
   `groupBy`, `toast(msg)`, `announce(msg)`, `sheet(title, body, { onClose })` → `{ el, close }`, `mapsUrl`, `telUrl`,
   `safeUrl` (always use it for user-typed links), `empty(msg, action)`, `backBtn(label, fn)`, `hold(el, ms, fn)` /
   `wasHeld(el)` (press and hold), `rateText(c, sym)`, `personRate(c)`.
-* `form.js` `openForm({ title, fields, values, onSave(values), onDelete, saveLabel, confirmDelete })`. Field `type`s: `text` (default),
+* `form.js` `openForm({ title, fields, values, onSave(values), onDelete, saveLabel, confirmDelete, onReady(formEl) })`. Field `type`s: `text` (default),
   `tel`, `email`, `url`, `number` (`min`, `step`), `date`, `time`, `textarea` (`rows`), `select` (`options`: values or
   `[value, label]`), `checks` (`options: [{ value, label, group, hint }]`, returns an array), `rows` (`columns: [{ key,
   label, type, list }]`, returns an array of objects with string values), `place` (lat/lon with lookup; key `geo`).

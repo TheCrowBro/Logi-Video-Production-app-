@@ -60,7 +60,8 @@ function show(i, dir = 0) {
 let redrawQueued = false;
 // What identifies a control across a redraw: its kind, its id or label, and the text around it (a checklist box is
 // known by its line). The same control in the new page gets the focus back, so ticking by keyboard stays in place.
-const focusKey = el => (el && el !== document.body && page.contains(el) ? [el.tagName, el.type || '', el.id || el.getAttribute('aria-label') || el.name || '', ((el.closest('label') || el).textContent || '').trim().slice(0, 80)].join('|') : null);
+// A control with an id is known by its id alone, so one whose words change (a status pill: Hold ▾ → Confirmed ▾) keeps it.
+const focusKey = el => (el && el !== document.body && page.contains(el) ? (el.id ? `${el.tagName}|#${el.id}` : [el.tagName, el.type || '', el.getAttribute('aria-label') || el.name || '', ((el.closest('label') || el).textContent || '').trim().slice(0, 80)].join('|')) : null);
 function redraw() {
   redrawQueued = false;
   const p = current >= 0 && tabs[current] && tabs[current].page;
@@ -74,7 +75,9 @@ function redraw() {
   window.scrollTo(0, y);
   if (key) { const again = [...holder.querySelectorAll('button, input, select, textarea, a[href], summary, [tabindex]')].find(el => focusKey(el) === key); if (again) again.focus({ preventScroll: true }); }
 }
-store.subscribe(() => { if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); } });
+// After the current event, not inside it: a box that saves on change redraws once the browser has moved the focus to
+// the next box (Tab or a tap), so focusKey finds that box again in the new page.
+store.subscribe(() => { if (!redrawQueued) { redrawQueued = true; setTimeout(redraw, 0); } });
 
 let start = 0;
 try { const saved = localStorage.getItem('gigdex-tab'); start = Math.max(0, tabs.findIndex(t => t.id === saved)); } catch { /* ignore */ }

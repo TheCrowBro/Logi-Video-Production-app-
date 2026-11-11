@@ -7,8 +7,10 @@ import { parseMapLink, geocode } from './map.js';
  types: text tel email url number date time textarea select checks rows place matrix
  rows: columns [{ key, label, type, list }]: list gives that column's boxes suggestions; the column names show above the rows.
  confirmDelete: the question asked before onDelete (a string, or a function returning one); 'Delete this permanently?' by default.
+ onReady(formEl): called once the form is on screen, to wire fields to each other (every control carries data-key; its
+   wrapper is the closest .field), e.g. hiding the typed venue boxes while a saved venue is picked.
 */
-export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save', confirmDelete = 'Delete this permanently?' }) {
+export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save', confirmDelete = 'Delete this permanently?', onReady }) {
   const readers = [];
   const boxesByKey = {};
   const qtyByKey = {};
@@ -56,7 +58,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
           } }, '📡 I’m here now')));
       readers.push(() => [f.key, lat.value !== '' && lon.value !== '' ? { lat: Number(lat.value), lon: Number(lon.value) } : null]);
     } else if (f.type === 'select') {
-      control = h('select', { id }, f.options.map(o => {
+      control = h('select', { id, 'data-key': f.key }, f.options.map(o => {
         const [v, l] = Array.isArray(o) ? o : [o, o];
         return h('option', { value: v, selected: v === (val ?? f.options[0]) }, l);
       }));
@@ -143,5 +145,6 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     close();
     onSave(out);
   });
+  if (onReady) { try { onReady(form); } catch (e) { console.error(e); } }
   setTimeout(() => { if (!form.contains(document.activeElement)) form.querySelector('input,textarea,select')?.focus(); }, 50); // never take the cursor from a box someone is already typing in
 }

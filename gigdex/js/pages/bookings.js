@@ -264,7 +264,7 @@ function setStatus(b, s) {
   if (!cur || cur.status === s) return;
   patch('bookings', b.id, { status: s });
   if (s === 'advanced') model.markCheck(b.id, 'show-advance', true); // marking a show advanced ticks that line
-  queueMicrotask(() => { const btn = ROOT && ROOT.querySelector('.bk-status'); if (btn) btn.focus({ preventScroll: true }); }); // after the redraw, whose label changed
+  setTimeout(() => { const btn = ROOT && ROOT.querySelector('.bk-status'); if (btn && document.activeElement !== btn && !document.querySelector('.sheet')) btn.focus({ preventScroll: true }); }, 30); // after the redraw (app.js also restores it by id)
   haptic();
   toast(`Status: ${model.statusLabel(s)}`);
 }
@@ -527,7 +527,7 @@ function hero(b) {
   const el = h('section', { class: 'card hero bk-hero', style: actStyle(b), 'aria-label': 'Booking', title: 'Press and hold to delete this booking' },
     h('div', { class: 'bk-hero-top' },
       h('h2', { class: 'bk-title', tabindex: '-1', 'data-view-head': '' }, h('span', { class: 'bk-title-ico', 'aria-hidden': 'true' }, model.kindIcon(b.kind)), ' ', model.bookingTitle(b)),
-      h('button', { type: 'button', class: 'bk-status', 'aria-label': `Status: ${model.statusLabel(b.status)}. Change it`, 'aria-haspopup': 'dialog', onclick: () => statusPicker(b) },
+      h('button', { type: 'button', id: 'bk-status', class: 'bk-status', 'aria-label': `Status: ${model.statusLabel(b.status)}. Change it`, 'aria-haspopup': 'dialog', onclick: () => statusPicker(b) },
         h('span', { class: 'pill ' + tone(b.status) }, model.statusLabel(b.status), h('span', { 'aria-hidden': 'true' }, ' ▾')))),
     h('div', { class: 'muted bk-when' }, `${model.kindLabel(b.kind)} · ${dateRange(b, fmtLong)}` + (multi(b) ? ` · ${daysBetween(b.date, lastDay(b)) + 1} days` : '')),
     timesStrip(b),

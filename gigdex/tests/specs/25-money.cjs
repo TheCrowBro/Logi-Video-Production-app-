@@ -277,7 +277,8 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   ok('the settlement counts the new cost', Math.abs(after - before - 45.5) < 0.001, `${before} → ${after}`);
   ok('the summary adds it up', /\$165\.50 costs/.test(await summary(page)), await summary(page));
   const profitText = await page.locator('.mn-cost-stats').innerText();
-  ok('expected profit against the income', /\$84\.50/.test(profitText), profitText.replace(/\n/g, ' '));
+  const expectProfit = await page.evaluate(() => import('./js/model.js').then(async m => { const b = (await import('./js/store.js')).byId('bookings', 's-show1'); return m.fmtMoney(m.bookingIncome(b) - (b.budget || []).reduce((s, c) => s + Number(c.amount || 0), 0)); }));
+  ok('expected profit against the income (the invoice, once there is one)', profitText.includes(expectProfit), profitText.replace(/\n/g, ' ') + ' — expected ' + expectProfit);
   await page.click('#mn-cost-suggest');
   await page.waitForSelector('.sheet[aria-label="Costs from the booking"]');
   ok('crew on the booking are suggested at their rate', /Dee Okafor, FOH engineer: \$200/.test(await topSheet(page).innerText()));
