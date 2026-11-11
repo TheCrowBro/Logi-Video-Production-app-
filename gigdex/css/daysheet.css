@@ -19,6 +19,8 @@
 .ds-blk-actions .btn, .ds-actions .btn { width: 100%; min-width: 0; white-space: normal; text-align: center; }
 .ds-blk-actions .btn[aria-disabled=true], .ds-actions .btn[aria-disabled=true] { opacity: .55; cursor: progress; }
 @media (min-width: 700px) { .ds-blk-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.ds-onit { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.ds-onit p { margin: 0; flex: 1 1 14em; }
 
 /* ------------------------------ the Day sheet sheet ------------------------------ */
 .ds-sheet { gap: 10px; }
