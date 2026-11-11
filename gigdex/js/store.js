@@ -115,7 +115,8 @@ export function remove(list, id) {
       d.bookings.forEach(b => { if ((b.songIds || []).includes(id)) { b.songIds = without(b.songIds, id); touch(b); } });
       d.logs.forEach(l => { if (l.songId === id) { l.songId = ''; touch(l); } (l.takes || []).forEach(t => { if (t.songId === id) t.songId = ''; }); });
     }
-    if (list === 'setlists') d.bookings.forEach(b => { if (b.setlistId === id) { b.setlistId = ''; touch(b); } });
+    // A show whose setlist is deleted is no longer 'Setlist ready'.
+    if (list === 'setlists') d.bookings.forEach(b => { if (b.setlistId === id) { b.setlistId = ''; if (b.checks && b.checks['show-setlist']) { b.checks = { ...b.checks }; delete b.checks['show-setlist']; } touch(b); } });
     if (list === 'kits') d.bookings.forEach(b => { if ((b.kits || []).includes(id)) { b.kits = without(b.kits, id); touch(b); } });
     if (list === 'bookings') {
       // Take logs stand on their own in the Studio log; clock shifts only mean something on their booking, so they go
