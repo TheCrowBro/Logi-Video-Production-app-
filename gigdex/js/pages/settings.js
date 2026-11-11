@@ -236,7 +236,7 @@ export function removeSample() {
   for (const list of lists) for (const r of store.db[list].filter(x => x && x.sample)) { store.remove(list, r.id); n++; }
   // The sample's stand-in name, if it is still the one loadSample filled in.
   const p = store.db.profile;
-  if (p.name === 'Sample Producer' && p.business === 'Sample Sound') update(d => { d.profile = { ...d.profile, name: '', business: '', role: d.profile.role === 'Producer' ? '' : d.profile.role, updatedAt: Date.now() }; });
+  if (p.name === 'Sample Producer' && p.business === 'Sample Sound') update(d => { d.profile = { ...d.profile, name: '', business: '', role: d.profile.role === 'Producer' ? '' : d.profile.role, updatedAt: 0 }; }); // a cleared stand-in never wins a merge with a real profile
   return n;
 }
 function askRemove() {

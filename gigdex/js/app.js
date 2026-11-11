@@ -77,7 +77,13 @@ function redraw() {
 }
 // After the current event, not inside it: a box that saves on change redraws once the browser has moved the focus to
 // the next box (Tab or a tap), so focusKey finds that box again in the new page.
-store.subscribe(() => { if (!redrawQueued) { redrawQueued = true; setTimeout(redraw, 0); } });
+// And never while a mouse button or finger is down: the press would land on a button the redraw then replaces, and the
+// click would be lost (type in a box, then click Mark settled). The redraw waits for the release (at most 1.5 s).
+let pressed = false, pressTimer = 0;
+const flush = () => { clearTimeout(pressTimer); if (redrawQueued) setTimeout(redraw, 0); };
+document.addEventListener('pointerdown', () => { pressed = true; clearTimeout(pressTimer); pressTimer = setTimeout(() => { pressed = false; flush(); }, 1500); }, true);
+for (const t of ['pointerup', 'pointercancel']) document.addEventListener(t, () => { if (!pressed) return; pressed = false; setTimeout(flush, 0); }, true); // after the click that follows the release
+store.subscribe(() => { if (redrawQueued) return; redrawQueued = true; if (!pressed) setTimeout(redraw, 0); });
 
 let start = 0;
 try { const saved = localStorage.getItem('gigdex-tab'); start = Math.max(0, tabs.findIndex(t => t.id === saved)); } catch { /* ignore */ }

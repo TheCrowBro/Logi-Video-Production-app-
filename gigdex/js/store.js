@@ -110,8 +110,8 @@ export function remove(list, id) {
     if (list === 'acts') for (const c of ['bookings', 'songs', 'setlists']) d[c].forEach(r => { if (r.actId === id) { r.actId = ''; touch(r); } });
     if (list === 'venues') d.bookings.forEach(b => { if (b.venueId === id) { b.venueId = ''; b.venueName = b.venueName || (gone && gone.name) || ''; b.address = b.address || (gone && gone.address) || ''; touch(b); } });
     if (list === 'songs') {
-      // A setlist keeps the song's title as plain text, so the set still reads right.
-      d.setlists.forEach(s => { let hit = false; (s.items || []).forEach(it => { if (it.songId === id) { it.songId = ''; it.title = it.title || (gone && gone.title) || ''; hit = true; } }); if (hit) touch(s); });
+      // A setlist keeps the song's title and length as its own, so the set still reads and times right.
+      d.setlists.forEach(s => { let hit = false; (s.items || []).forEach(it => { if (it.songId === id) { it.songId = ''; it.fromSong = true; it.title = it.title || (gone && gone.title) || ''; if (!(Number(it.duration) > 0) && gone && Number(gone.duration) > 0) it.duration = Number(gone.duration); hit = true; } }); if (hit) touch(s); });
       d.bookings.forEach(b => { if ((b.songIds || []).includes(id)) { b.songIds = without(b.songIds, id); touch(b); } });
       d.logs.forEach(l => { if (l.songId === id) { l.songId = ''; touch(l); } (l.takes || []).forEach(t => { if (t.songId === id) t.songId = ''; }); });
     }
@@ -175,7 +175,10 @@ export function mergeDb(local, remote) {
   for (const [id, t] of Object.entries(b.deleted || {})) dead[id] = Math.max(dead[id] || 0, t);
   const out = { ...a, deleted: dead };
   for (const c of COLLECTIONS) out[c] = mergeList(a[c], b[c], dead);
-  for (const k of ['profile', 'templates', 'billing', 'priceList']) out[k] = ts(b[k]) > ts(a[k]) ? b[k] : a[k];
+  for (const k of ['templates', 'billing', 'priceList']) out[k] = ts(b[k]) > ts(a[k]) ? b[k] : a[k];
+  // A real profile always beats a blank one or the sample's stand-in, whatever their times; otherwise the newer wins.
+  const standIn = p => !p || !String(p.name || '').trim() || (p.name === SAMPLE_PROFILE.name && p.business === SAMPLE_PROFILE.business);
+  out.profile = standIn(a.profile) !== standIn(b.profile) ? (standIn(a.profile) ? b.profile : a.profile) : ts(b.profile) > ts(a.profile) ? b.profile : a.profile;
   out.updatedAt = Math.max(a.updatedAt || 0, b.updatedAt || 0);
   return out;
 }
@@ -191,6 +194,8 @@ export function eraseAll() {
 }
 
 /* ------------------------------- sample ------------------------------- */
+// The stand-in profile the sample fills in when there is none (Settings → Remove the sample clears it again).
+export const SAMPLE_PROFILE = { name: 'Sample Producer', business: 'Sample Sound', role: 'Producer' };
 // A small band and a producer's week, dated around today, so every page has something to show (and the tests have
 // fixed ids to reach for). Records already present are left alone.
 export function loadSample() {
@@ -295,6 +300,6 @@ export function loadSample() {
   };
   update(d => {
     for (const [list, recs] of Object.entries(S)) for (const r of recs) if (!d[list].some(x => x.id === r.id)) d[list].push({ ...r, sample: true, createdAt: now, updatedAt: now });
-    if (!d.profile.name) d.profile = { ...d.profile, name: 'Sample Producer', business: 'Sample Sound', role: 'Producer', updatedAt: now };
+    if (!d.profile.name) d.profile = { ...d.profile, ...SAMPLE_PROFILE }; // its time is left as it was, so it never wins a merge with a real profile
   });
 }

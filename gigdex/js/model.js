@@ -126,20 +126,24 @@ export function addMinutes(hhmm, min) {
 export const minutesBetween = (a, b) => { if (!a || !b) return null; const [ah, am] = a.split(':').map(Number), [bh, bm] = b.split(':').map(Number); return ((bh * 60 + bm - (ah * 60 + am)) % 1440 + 1440) % 1440; };
 
 /* ------------------------------- setlists ------------------------------- */
-// A setlist's running time: the songs' lengths plus a gap between songs (not after a segue, not after the last).
+// A setlist's running time: the items' lengths plus a gap between them (not after a segue, not after the last).
+// { sec, songs (song items), items (every item but set breaks), missing (songs with no length) }
 export function setlistLength(list) {
-  if (!list || !Array.isArray(list.items)) return { sec: 0, songs: 0, missing: 0 };
+  if (!list || !Array.isArray(list.items)) return { sec: 0, songs: 0, items: 0, missing: 0 };
   const gap = Number.isFinite(Number(list.gap)) ? Number(list.gap) : 20;
   let sec = 0, songs = 0, missing = 0;
   const items = list.items.filter(i => i && !i.isBreak);
   items.forEach((it, i) => {
     const song = it.songId ? byId('songs', it.songId) : null;
     const d = Number(it.duration) || (song && Number(song.duration)) || 0;
-    if (!d) missing++;
-    sec += d; songs++;
+    // A song (from the library, or one kept by title after the song was deleted) counts as a song and, with no length,
+    // as missing; a free item with no length (an intro, a word with the crowd) is just a moment and counts for nothing.
+    const isSong = !!it.songId || !!it.fromSong;
+    if (isSong) { songs++; if (!d) missing++; }
+    sec += d;
     if (i < items.length - 1 && !it.segue) sec += gap;
   });
-  return { sec, songs, missing };
+  return { sec, songs, items: items.length, missing };
 }
 export const itemTitle = it => (it && it.songId && byId('songs', it.songId) ? byId('songs', it.songId).title : (it && it.title) || 'Untitled');
 
@@ -195,10 +199,28 @@ export function settle(b) {
   const ids = (Array.isArray(b && b.people) ? b.people : []).filter(id => byId('people', id));
   const weights = ids.map(id => Math.max(0, num((s.shares || {})[id] ?? 1)));
   const total = weights.reduce((a, c) => a + c, 0);
-  const payouts = ids.map((id, i) => ({ personId: id, weight: weights[i], amount: total ? Math.round((profit * weights[i] / total) * 100) / 100 : 0 }));
+  // Shares to the cent that add up exactly to the profit: each floored to the cent, the cents left over going to the
+  // largest remainders (mirrored for a loss).
+  const cents = Math.round(profit * 100), sign = cents < 0 ? -1 : 1, abs = Math.abs(cents);
+  const raw = ids.map((_, i) => (total ? (abs * weights[i]) / total : 0)), floors = raw.map(Math.floor);
+  let left = total ? abs - floors.reduce((a, c) => a + c, 0) : 0;
+  raw.map((r, i) => [r - floors[i], i]).sort((x, y) => y[0] - x[0]).forEach(([, i]) => { if (left > 0 && weights[i] > 0) { floors[i]++; left--; } });
+  const payouts = ids.map((id, i) => ({ personId: id, weight: weights[i], amount: (sign * floors[i]) / 100 }));
   return { tickets, price, gross, fee, deposit, depositPaid, owedOnNight, received, short, merch, costs, nightCosts, budget, income, profit, payouts };
 }
 
+// Hours the session clock logged on a booking (breaks off, a running shift up to now), as js/clock.js counts them.
+export function clockHoursOf(bookingId, now = Date.now()) {
+  let ms = 0;
+  for (const s of db.shifts || []) {
+    if (!s || s.bookingId !== bookingId || !num(s.start)) continue;
+    const hi = s.end ? num(s.end) : now;
+    let w = Math.max(0, hi - num(s.start));
+    for (const br of Array.isArray(s.breaks) ? s.breaks : []) if (br && num(br.start)) w -= Math.max(0, Math.min(br.end ? num(br.end) : now, hi) - Math.max(num(br.start), num(s.start)));
+    ms += Math.max(0, w);
+  }
+  return Math.round((ms / 36e5) * 100) / 100;
+}
 // Studio time: the rate times the hours, days or songs. hours comes from the session clock when kept.
 export function sessionFee(b, hours) {
   const rate = num(b && b.rate);
@@ -220,6 +242,6 @@ export function bookingIncome(b) {
   const inv = b.invoice;
   if (inv && inv.status !== 'void' && Array.isArray(inv.lines) && inv.lines.length) return Math.round(inv.lines.reduce((t, l) => t + num(l && l.qty) * num(l && l.price), 0) * 100) / 100;
   if (b.kind === 'show') return b.settlement && b.settlement.tickets ? settle(b).fee : dealPays(b.deal || {}, 0);
-  if (b.kind === 'session') return sessionFee(b);
+  if (b.kind === 'session') { const h = clockHoursOf(b.id); return sessionFee(b, b.rateUnit === 'hour' && h > 0 ? Math.round(h * 4) / 4 : undefined); }
   return num(b.fee);
 }
