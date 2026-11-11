@@ -97,7 +97,8 @@ import { db, update, upsert, patch, remove, byId, subscribe } from '../store.js'
   session `s-sess1`, setlist `s-clubset`, venue `s-lantern`…). Tests use it.
 * Helpers: `bookingsOn(date)`, `upcoming()`, `activeBookings()`, `covers(b, date)`, `overlaps(a, b)`, `lastDay(b)`,
   `personBookings(id)`, `gearBookings(id)`, `personClash(b, personId)`, `gearClash(b, gearId)`, `qtyOf(g)`,
-  `usedQty(owner, gearId)`, `totalValue(g)`, `exportJSON()`, `replaceAll(data)`, `mergeIn(data)`, `eraseAll()`.
+  `usedQty(booking, gearId)` (counts in `booking.gearQty`), `packQty(kit, gearId)` (counts in `kit.qty`; applying a pack
+  to a booking copies them into `gearQty`), `totalValue(g)`, `exportJSON()`, `replaceAll(data)`, `mergeIn(data)`, `eraseAll()`.
 
 ### Records
 
@@ -304,6 +305,8 @@ backline, take, comp, stems, split sheet.
 * Spec files by owner: `00-smoke` (core), `10-bookings`, `15-show`, `20-daysheet`, `25-money`, `30-studio`,
   `35-songs`, `40-acts`, `45-people`, `50-backline`, `55-venues`, `60-tools`, `65-insurance`, `70-settings`.
 * Test what a person does: open the section, tap the buttons, fill the forms, check what shows and what is stored.
+* `window.gigdexAudioState()` (from `js/audio.js`) reports live audio (context, microphone tracks, tuner, metronome,
+  meter, timer, wake lock): a spec can check that leaving a page leaves nothing listening.
 * `00-smoke` must keep passing: every section opens with and without the sample, with no console errors.
 
 ## Who owns which files

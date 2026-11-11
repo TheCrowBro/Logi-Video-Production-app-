@@ -11,8 +11,9 @@ async function open({ sample = false, viewport = { width: 420, height: 900 }, ta
   const ctx = await browser.newContext({ viewport, serviceWorkers: 'block', acceptDownloads: true, permissions });
   await ctx.addInitScript(() => { try { localStorage.setItem('gigdex-tour', 'done'); } catch (e) { /* ignore */ } });
   if (init) await ctx.addInitScript(init);
-  await ctx.route('https://tile.openstreetmap.org/**', r => r.fulfill({ status: 404, body: '' }));
-  await ctx.route('https://*.tile.openstreetmap.org/**', r => r.fulfill({ status: 404, body: '' }));
+  const tile = { status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64') }; // a 1×1 map tile: no network, no console error
+  await ctx.route('https://tile.openstreetmap.org/**', r => r.fulfill(tile));
+  await ctx.route('https://*.tile.openstreetmap.org/**', r => r.fulfill(tile));
   await ctx.route('https://nominatim.openstreetmap.org/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
   const page = await ctx.newPage();

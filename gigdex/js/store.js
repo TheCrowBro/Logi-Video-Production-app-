@@ -135,15 +135,18 @@ const firstOf = b => (b.kind === 'show' ? b.loadIn || b.soundcheck || b.doors ||
 // The bookings on a day, earliest first.
 export const bookingsOn = date => db.bookings.filter(b => covers(b, date)).sort((a, b) => firstOf(a).localeCompare(firstOf(b)));
 // Upcoming (today on), soonest first.
-export const upcoming = (from = ymd(new Date())) => activeBookings().filter(b => lastDay(b) >= from).sort((a, b) => (a.date + firstOf(a)).localeCompare(b.date + firstOf(b)));
-export const personBookings = id => activeBookings().filter(b => (b.people || []).includes(id)).sort((a, b) => a.date.localeCompare(b.date));
-export const gearBookings = id => activeBookings().filter(b => (b.gear || []).includes(id)).sort((a, b) => a.date.localeCompare(b.date));
+export const upcoming = (from = ymd(new Date())) => activeBookings().filter(b => b.date && lastDay(b) >= from).sort((a, b) => (a.date + firstOf(a)).localeCompare(b.date + firstOf(b)));
+const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || ''));
+export const personBookings = id => activeBookings().filter(b => (b.people || []).includes(id)).sort(byDate);
+export const gearBookings = id => activeBookings().filter(b => (b.gear || []).includes(id)).sort(byDate);
 // Other live bookings on overlapping days that need the same person.
 export const personClash = (booking, personId) => activeBookings().filter(b => b.id !== booking.id && overlaps(b, booking) && (b.people || []).includes(personId));
 
 /* ------------------------------- gear ------------------------------- */
 export const qtyOf = g => Math.max(1, Math.floor(Number(g && g.qty)) || 1);
 export const usedQty = (owner, gearId) => Math.max(1, Math.floor(Number(owner && owner.gearQty && owner.gearQty[gearId])) || 1);
+// How many of an item a stage pack holds (packs keep counts in kit.qty; bookings in booking.gearQty).
+export const packQty = (kit, gearId) => Math.max(1, Math.floor(Number(kit && kit.qty && kit.qty[gearId])) || 1);
 export const unitValue = g => Number(g && g.value) || 0;
 export const totalValue = g => unitValue(g) * qtyOf(g);
 // Other live bookings on overlapping days that use the same item, when together they need more than are owned.
