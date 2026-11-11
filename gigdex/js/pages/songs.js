@@ -83,7 +83,8 @@ function view(draw) {
         type: 'button', id: 'sg-view-' + v, class: S.view === v || (v === 'songs' && isSongs) ? 'on' : '', 'aria-pressed': String(S.view === v || (v === 'songs' && isSongs)),
         onclick: () => { S.view = v; draw(); },
       }, l, h('span', { class: 'sg-count' }, ' ' + n)))),
-    isSongs && db.songs.length > 3 && h('input', { class: 'search sg-search', type: 'search', id: 'sg-q', placeholder: 'Search songs, keys, writers…', 'aria-label': 'Search songs', value: S.q, autocomplete: 'off', oninput: e => { S.q = e.target.value; draw(); } }),
+    // Kept while a search is on, so a search typed earlier can still be seen and cleared when few songs are left.
+    isSongs && (db.songs.length > 3 || S.q) && h('input', { class: 'search sg-search', type: 'search', id: 'sg-q', placeholder: 'Search songs, keys, writers…', 'aria-label': 'Search songs', value: S.q, autocomplete: 'off', oninput: e => { S.q = e.target.value; draw(); } }),
     chipList.length > 1 && h('div', { class: 'chips sg-acts', role: 'group', 'aria-label': 'Filter by act' }, chip('', 'All'), chipList.map(([k, n]) => chip(k, n))),
     ...(isSongs ? songsList(draw) : setlistsList()),
   ];

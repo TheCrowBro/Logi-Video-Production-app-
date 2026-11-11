@@ -4,7 +4,7 @@
 import { h, announce, toast, fmtShort } from '../util.js';
 import { db, byId, patch } from '../store.js';
 import { setlistLength, fmtDur, fmtMin, actName, markCheck, venueOf, bookingTitle } from '../model.js';
-import { openSetlist, newSetlist, printSetlist, setlistPlan, shortKey, fitNote, tickShows, setClock, plural } from '../setlist.js';
+import { openSetlist, newSetlist, printSetlist, setlistPlan, shortKey, fitNote, tickShows, hasSongs, setClock, plural } from '../setlist.js';
 
 const byName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true });
 const what = b => (b.kind === 'show' ? 'show' : b.kind === 'rehearsal' ? 'rehearsal' : 'booking');
@@ -16,7 +16,8 @@ function attach(b, id) {
   const list = byId('setlists', id);
   if (!list) return;
   patch('bookings', b.id, { setlistId: id });
-  if (b.kind === 'show') tickShows(id);
+  // A setlist with songs is ready; an empty one is not, whatever the old one was.
+  if (b.kind === 'show') { if (hasSongs(list)) tickShows(id); else markCheck(b.id, 'show-setlist', false); }
   announce(`${list.name || 'Setlist'} is now this ${what(b)}’s setlist`);
 }
 function detach(b) {

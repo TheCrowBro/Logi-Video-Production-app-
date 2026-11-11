@@ -2,7 +2,7 @@
 // are; stage packs (saved sets of backline for a kind of gig); and the inventory for an insurer or a customs carnet.
 // The page draws from db every time (it is drawn again after every change), and every change goes through the store.
 import { h, nodes, empty, sheet, toast, fmtShort, fmtLong, todayISO, groupBy } from '../util.js';
-import { db, byId, upsert, patch, remove, subscribe, gearBookings, gearClash, activeBookings, lastDay, qtyOf, usedQty, unitValue, totalValue } from '../store.js';
+import { db, byId, upsert, patch, remove, subscribe, gearBookings, gearClash, gearShort, activeBookings, lastDay, qtyOf, usedQty, unitValue, totalValue } from '../store.js';
 import { GEAR_CATS, PEOPLE_GROUPS, fmtMoney, currency, bookingTitle, kindIcon, statusLabel, statusTone } from '../model.js';
 import { openForm } from '../form.js';
 import { printElement, docPage, saveFile, fileName, csv } from '../print.js';
@@ -153,12 +153,15 @@ function itemCard(g) {
 const row = (label, value) => (value == null || value === '' ? null : [h('dt', null, label), h('dd', null, value)]);
 
 function bookingRow(b, g, close) {
-  const q = usedQty(b, g.id), clash = isAhead(b) ? clashesOf(b, g.id) : [];
+  const q = usedQty(b, g.id), ahead = isAhead(b), short = ahead && gearShort(b, g.id), clash = ahead ? clashesOf(b, g.id) : [];
+  // This booking alone needing more than are owned (How many was lowered after it was picked) comes first.
+  const also = clash.length ? `Also needed at ${clash.map(bookingTitle).join(', ')} the same day` : '';
+  const warn = short ? `⚠ Needs ${q}, and you own ${qtyOf(g)}.${also ? ' ' + also + '.' : ''}` : also ? `⚠ ${also}, and you own ${qtyOf(g)}.` : '';
   return h('button', { type: 'button', class: 'bl-row', id: 'bl-bk-' + b.id, onclick: () => { close(); goBooking(b.id); } },
     h('span', { class: 'bl-row-date' }, dateText(b)),
     h('span', { class: 'pill ' + statusTone(b.status) }, statusLabel(b.status)),
     h('span', { class: 'bl-row-main' }, `${kindIcon(b.kind)} ${bookingTitle(b)}`, q > 1 && h('b', { class: 'bl-qty' }, ` ×${q}`)),
-    clash.length > 0 && h('span', { class: 'bl-row-warn' }, `⚠ Also needed at ${clash.map(bookingTitle).join(', ')} the same day, and you own ${qtyOf(g)}.`));
+    warn && h('span', { class: 'bl-row-warn' }, warn));
 }
 
 // The item's sheet: its details, the stage packs it is in, and the bookings it is on (tap one to open it).
@@ -256,7 +259,9 @@ export function editGear(g = {}, onSaved) {
       if (!name) return toast('Give the item a name first.');
       const stored = upsert('gear', { ...v, name, make: String(v.make || '').trim(), model: String(v.model || '').trim(), serial: String(v.serial || '').trim(),
         location: String(v.location || '').trim(), qty: Math.max(1, num(v.qty, { min: 1, whole: true }) || 1), value: num(v.value), owner: v.owner || '' });
-      toast(cur.id ? 'Saved' : `${name} added`);
+      // Fewer owned now than a booking ahead needs: say so (each such booking is marked on the item's sheet).
+      const short = cur.id && stored.qty < qtyOf(cur) ? aheadOf(stored.id).filter(b => gearShort(b, stored.id)).length : 0;
+      toast(!cur.id ? `${name} added` : short ? `Saved, but ${plural(short, 'booking')} coming up ${short === 1 ? 'needs' : 'need'} more than you own now.` : 'Saved');
       onSaved && onSaved(stored);
     },
     onDelete: cur.id ? () => { remove('gear', cur.id); toast(`${itemName(cur)} deleted`); } : null,
@@ -302,7 +307,7 @@ function packsView(draw) {
     kits.length ? h('div', { class: 'list bl-packs' }, kits.map(packCard))
       : db.gear.length
         ? empty('No stage packs yet. Make one for each kind of gig you play: a club show, a festival fly-in, a studio day.', h('button', { type: 'button', class: 'btn primary', id: 'bl-first-pack', onclick: () => editKit({}) }, 'Make a stage pack'))
-        : empty('Add your backline items first, then group them into stage packs.', h('button', { type: 'button', class: 'btn primary', id: 'bl-first', onclick: () => { S.view = 'items'; editGear({}); } }, 'Add an item')),
+        : empty('Add your backline items first, then group them into stage packs.', h('button', { type: 'button', class: 'btn primary', id: 'bl-first', onclick: () => { S.view = 'items'; draw(); editGear({}); } }, 'Add an item')),
   ];
 }
 
@@ -447,7 +452,7 @@ const PACK_STEPS = [
 const ITEM_SHEET_STEPS = [
   { title: 'The details', text: 'Make, model, serial, value and whose it is. Tap the owner to open their card.', target: ['.bl-kv'] },
   { title: 'Edit or move it', text: 'Edit changes anything, or deletes the item. Move says where it is right now: the van, the rehearsal room, the repair shop.', target: ['.bl-sheet-actions'] },
-  { title: 'Where it is booked', text: 'The shows, sessions and rehearsals it is on. Tap one to open it. A warning shows when the same piece is needed in two places on one day.', target: ['.bl-bookings'] },
+  { title: 'Where it is booked', text: 'The shows, sessions and rehearsals it is on. Tap one to open it. A warning shows when the same piece is needed in two places on one day, or a booking needs more than you own.', target: ['.bl-bookings'] },
 ];
 const FORM_STEPS = [
   { title: 'What it is', text: 'A short name you would call it on stage, and its category for the lists.', target: ['[data-key=name]'] },

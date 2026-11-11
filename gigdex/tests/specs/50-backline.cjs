@@ -22,7 +22,16 @@ const cards = page => page.locator('#page .bl-card').count();
   await page.click('#bl-tab-packs');
   ok('the packs view asks for items first', /items first/.test(await text(page, '#page .empty')));
   ok('the packs tab is selected', (await page.getAttribute('#bl-tab-packs', 'aria-selected')) === 'true');
+  // Add an item from there: the page turns to Items at once, so cancelling the form leaves Items showing.
+  await page.click('#page #bl-first');
+  await page.waitForSelector('.sheet[aria-label="Add item"]');
+  await page.keyboard.press('Escape');
+  await sleep(250);
+  ok('Add an item from the packs view shows Items, even when the form is cancelled', (await page.locator('.sheet').count()) === 0 && (await page.getAttribute('#bl-tab-items', 'aria-selected')) === 'true' && (await page.locator('#page .bl-intro').count()) === 0 && /guitar, amp, mic and DI/.test(await text(page, '#page .empty')));
+  await page.click('#bl-tab-packs');
+  ok('the Stage packs tab still switches back', (await page.getAttribute('#bl-tab-packs', 'aria-selected')) === 'true');
   await page.click('#bl-tab-items');
+  ok('…and Items switches again', (await page.getAttribute('#bl-tab-items', 'aria-selected')) === 'true');
 
   /* ---------------- the sample ---------------- */
   await page.evaluate(() => import('./js/store.js').then(s => s.loadSample()));
@@ -103,6 +112,26 @@ const cards = page => page.locator('#page .bl-card').count();
   await sleep(500);
   ok('tapping the booking closes the sheet and opens Bookings', (await page.locator('.bl-sheet').count()) === 0 && (await page.evaluate(() => window.logiPage())) === 'bookings');
   await go(page, 'backline');
+
+  /* ---------------- fewer owned than one booking needs ---------------- */
+  // The club show needs 3 of the 4 DI boxes, and no other booking that day needs one (so it is no clash).
+  await page.click('#bl-item-s-di');
+  await page.waitForSelector('.bl-sheet');
+  ok('a booking that needs no more than are owned has no warning', /×3/.test(await text(page, '#bl-bk-s-show1')) && (await page.locator('#bl-bk-s-show1 .bl-row-warn').count()) === 0);
+  await page.click('#bl-edit');
+  await page.waitForSelector('.sheet[aria-label="Edit item"]');
+  await page.fill('.sheet[aria-label="Edit item"] [data-key=qty]', '1');
+  await page.click('.sheet[aria-label="Edit item"] button[type=submit]');
+  await sleep(300);
+  ok('lowering How many below what a show needs is stored', (await gear(page, 's-di')).qty === 1);
+  const short = await text(page, '#bl-bk-s-show1 .bl-row-warn');
+  ok('…and the show on the item’s sheet warns that it needs more than are owned', /Needs 3, and you own 1/.test(short) && !/Also needed/.test(short), short);
+  ok('…and the save says so', (await page.locator('.toast', { hasText: '1 booking coming up needs more than you own now' }).count()) >= 1);
+  await store(page, () => window.__s.patch('gear', 's-di', { qty: 4 }));
+  await sleep(250);
+  ok('owning enough again takes the warning away', (await page.locator('#bl-bk-s-show1 .bl-row-warn').count()) === 0);
+  await page.keyboard.press('Escape');
+  await sleep(200);
 
   /* ---------------- stage packs ---------------- */
   await page.click('#bl-tab-packs');
