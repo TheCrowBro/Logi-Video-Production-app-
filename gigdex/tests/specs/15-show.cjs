@@ -250,7 +250,7 @@ const money = (page, n) => page.evaluate(v => import('./js/model.js').then(m => 
   await sh.locator('#sh-b-setLength').fill('50');
   await sh.locator('#sh-build-go').click();
   ok('build from doors only: the opener goes on 30 minutes after doors and we follow', await storeHas(page, 't-bare', b => b.runningOrder.map(r => `${r.time} ${r.act}`).join('|') === '20:00 Doors|20:30 Opener|21:00 Changeover|21:15 Our set|23:00 Curfew'), JSON.stringify((await booking(page, 't-bare')).runningOrder));
-  ok('build from doors only: the show gets the on-stage time', await storeHas(page, 't-bare', b => b.setTime === '21:15' && b.doors === '20:00' && b.setLength === 50));
+  ok('build from doors only: the show gets the on-stage time', await storeHas(page, 't-bare', b => b.setTime === '21:15' && b.doors === '20:00' && b.setLength === 50), JSON.stringify((({ doors, setTime, setLength }) => ({ doors, setTime, setLength }))(await booking(page, 't-bare') || {})));
   // Deleted while a form is open: nothing breaks.
   await page.locator('#sh-deal-edit').click();
   sh = topSheet(page);

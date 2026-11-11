@@ -174,6 +174,8 @@ export function buildRunning(b) {
   };
   const form = h('form', { class: 'sh-build', novalidate: true, onsubmit: e => {
     e.preventDefault();
+    // What the boxes say now, not only what their input events reported: a value typed just before the tap still counts.
+    for (const k of ['doors', 'setTime', 'setLength', 'curfew', 'change']) { const el = form.querySelector('#sh-b-' + k); if (el) f[k] = el.value; }
     const rows = buildRows(f, name);
     if (!rows.length) return toast('Add the doors or your on-stage time first');
     if (existing.length && !confirm(`This replaces the ${plural(existing.length, 'line')} in the running order. Build it?`)) return;
