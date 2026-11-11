@@ -3,7 +3,7 @@
 // booking on the same days is flagged ("Leo is also on Harbour Hall that day"; three SM58s here and two there, four
 // owned).
 import { h, toast, fmtShort, telUrl, sheet } from '../util.js';
-import { db, byId, update, patch, personClash, gearClash, qtyOf, usedQty, lastDay } from '../store.js';
+import { db, byId, update, patch, personClash, gearClash, gearShort, qtyOf, usedQty, lastDay } from '../store.js';
 import * as model from '../model.js';
 import { openForm } from '../form.js';
 import { sheetTutorial } from '../tour.js';
@@ -32,8 +32,11 @@ const placeOf = o => model.venueOf(o).name || model.bookingTitle(o);
 const whenOf = (o, b) => (o.date === b.date && lastDay(o) === lastDay(b) ? 'that day' : `on ${fmtShort(o.date)}`);
 const others = (list, b) => list.map(o => `${placeOf(o)} ${whenOf(o, b)}`).join(' and ');
 export const personClashText = (b, p) => { const o = peopleClash(b, p.id); return o.length ? `${firstName(p.name)} is also on ${others(o, b)}` : ''; };
+// This booking alone needs more than are owned ('How many' lowered after it was planned): flagged like a clash.
+const itemShort = (b, id) => model.isLive(b) && gearShort(b, id);
 export function gearClashText(b, g) {
   const o = itemClash(b, g.id);
+  if (itemShort(b, g.id)) return `${usedQty(b, g.id)} needed, ${qtyOf(g)} owned` + (o.length ? `: also on ${others(o, b)}` : '');
   if (!o.length) return '';
   const need = usedQty(b, g.id) + o.reduce((s, x) => s + usedQty(x, g.id), 0), owned = qtyOf(g);
   return owned > 1 || need > 2 ? `${need} needed, ${owned} owned: also on ${others(o, b)}` : `Also on ${others(o, b)}`;
@@ -158,7 +161,7 @@ export default {
   kinds: ['show', 'session', 'rehearsal', 'other'],
   summary(b) {
     const n = peopleOf(b).length, u = units(b);
-    const clashes = peopleOf(b).filter(p => peopleClash(b, p.id).length).length + gearOf(b).filter(g => itemClash(b, g.id).length).length;
+    const clashes = peopleOf(b).filter(p => peopleClash(b, p.id).length).length + gearOf(b).filter(g => itemClash(b, g.id).length || itemShort(b, g.id)).length;
     if (!n && !u) return '';
     return `${plural(n, 'person', 'people')} · ${plural(u, 'item')}` + (clashes ? ` · ⚠ ${plural(clashes, 'clash', 'clashes')}` : '');
   },
@@ -170,12 +173,12 @@ export default {
     const pc = people.map(p => personClashText(b, p)).filter(Boolean), gc = gear.map(g => gearClashText(b, g) && `${g.name}: ${gearClashText(b, g)}`).filter(Boolean);
     const clashes = [...pc, ...gc];
     // A few clashes are listed; many are summed up (each row below names its own).
-    const many = clashes.length > 3 && [h('strong', null, `⚠ ${plural(clashes.length, 'clash', 'clashes')} with other bookings`),
+    const many = clashes.length > 3 && [h('strong', null, `⚠ ${plural(clashes.length, 'thing', 'things')} to sort out`),
       h('div', null, `${[pc.length && plural(pc.length, 'person', 'people'), gc.length && plural(gc.length, 'item')].filter(Boolean).join(' and ')} are also needed elsewhere at the same time. Each is marked below.`)];
     const cats = new Map();
     [...gear].sort((x, y) => catIndex(x.category) - catIndex(y.category) || byName(x, y)).forEach(g => { const c = g.category || 'Other'; if (!cats.has(c)) cats.set(c, []); cats.get(c).push(g); });
     return h('div', { class: 'bk-lineup' },
-      clashes.length > 0 && h('div', { class: 'warn bk-clashes', role: 'note' }, many || (clashes.length === 1 ? '⚠ ' + clashes[0] : [h('strong', null, `⚠ ${plural(clashes.length, 'clash', 'clashes')} with other bookings`), h('ul', null, clashes.map(c => h('li', null, c)))])),
+      clashes.length > 0 && h('div', { class: 'warn bk-clashes', role: 'note' }, many || (clashes.length === 1 ? '⚠ ' + clashes[0] : [h('strong', null, `⚠ ${plural(clashes.length, 'thing', 'things')} to sort out`), h('ul', null, clashes.map(c => h('li', null, c)))])),
       h('section', { class: 'bk-people', 'aria-label': 'People' },
         h('h4', null, `People (${people.length})`),
         people.length ? h('div', { class: 'bk-rows' }, people.map(p => personRow(b, p))) : h('p', { class: 'muted small' }, act ? 'Nobody on this booking yet.' : 'Nobody on this booking yet. Pick band members, session players and crew from People.'),
