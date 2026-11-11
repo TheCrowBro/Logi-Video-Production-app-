@@ -8,7 +8,7 @@
 // band" on a show's checklist and remembers what was sent on the booking (booking.daySheet = { sentAt, sig }), so the
 // booking can say when the sheet has changed since.
 import { h, toast, sheet, fmtShort, empty, pad } from './util.js';
-import { db, byId, patch, subscribe, usedQty } from './store.js';
+import { db, byId, patch, subscribe, redraw, usedQty } from './store.js';
 import { bookingTitle, actName, venueOf, addMinutes, fmtMin, fmtDur, setlistLength, itemTitle, isChecked, markCheck } from './model.js';
 import { printElement, docPage, saveFile, fileName } from './print.js';
 import { pack } from './link-pack.js';
@@ -26,14 +26,17 @@ const GROUP = { band: 'Band', session: 'Session player', crew: 'Crew', contact: 
 const ids = v => (Array.isArray(v) ? v : []);
 
 /* ------------------------------- what goes on it ------------------------------- */
-// The two things a person may want to leave off. Remembered on this device.
+// The two things a person may want to leave off. Remembered on this device; where it cannot store them (a private
+// window), the choice still holds until the app is closed, so nothing that was taken off goes back on.
 export const PARTS = [
   ['guestNames', 'Guest list names and +1s', false, 'The number on the list is always on it'],
   ['notes', 'Booking notes', true, 'Check they say nothing private first'],
 ];
 const KEY = 'gigdex-daysheet';
-export const choices = () => { let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { /* defaults */ } return Object.fromEntries(PARTS.map(([k, , on]) => [k, typeof saved[k] === 'boolean' ? saved[k] : on])); };
-const remember = inc => { try { localStorage.setItem(KEY, JSON.stringify(inc)); } catch { /* private mode: still works for now */ } };
+let unsaved = null;
+export const choices = () => { let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { /* defaults */ } if (unsaved) saved = unsaved; return Object.fromEntries(PARTS.map(([k, , on]) => [k, typeof saved[k] === 'boolean' ? saved[k] : on])); };
+const remember = inc => { try { localStorage.setItem(KEY, JSON.stringify(inc)); unsaved = null; } catch { unsaved = { ...inc }; } };
+export const sameChoices = (a, c) => PARTS.every(([k]) => !!(a && a[k]) === !!(c && c[k]));
 const ALL = { guestNames: true, notes: true };
 
 /* ------------------------------- the data ------------------------------- */
@@ -207,7 +210,8 @@ export function emailButton(bookingId, getUrl, inc, text, aria) {
     if (a.dataset.mode === 'paste') copy(url).then(okd => toast(okd ? 'The link is long, so it was copied: paste it into the email.' : 'Copy the link from “QR code & link” and paste it into the email.'));
     markSent(bookingId);
   } }, text);
-  a.fill = url => { const b = byId('bookings', bookingId); if (!b || !url) return; const m = emailFor(b, url, inc); a.href = m.href; a.dataset.mode = m.mode; a.removeAttribute('aria-disabled'); a.title = m.to.length ? `To ${m.to.length} ${m.to.length === 1 ? 'person' : 'people'} on the booking` : 'Nobody on the booking has an email address yet'; };
+  // fill(url, choices): the choices the link was made with, when they are not the ones the button was made with.
+  a.fill = (url, use = inc) => { const b = byId('bookings', bookingId); if (!b || !url) return; const m = emailFor(b, url, use); a.href = m.href; a.dataset.mode = m.mode; a.removeAttribute('aria-disabled'); a.title = m.to.length ? `To ${m.to.length} ${m.to.length === 1 ? 'person' : 'people'} on the booking` : 'Nobody on the booking has an email address yet'; };
   return a;
 }
 
@@ -236,8 +240,10 @@ export async function copyDaySheetText(bookingId, inc = choices(), url = '') {
 /* ------------------------------- the sheet ------------------------------- */
 let openOne = null;
 // The day sheet in a sheet: where it stands, the ways to send it, what goes on it, and the preview.
-export function openDaySheet(bookingId) {
+// { parts: true } opens it at "What goes on it".
+export function openDaySheet(bookingId, opts) {
   if (!byId('bookings', bookingId)) { toast(GONE); return null; }
+  const atParts = !!(opts && opts.parts);
   if (openOne) openOne.close();
   const inc = choices();
   const get = () => byId('bookings', bookingId);
@@ -290,7 +296,7 @@ export function openDaySheet(bookingId) {
   const parts = h('details', { class: 'twirl ds-parts' },
     h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, '☑'), h('span', null, h('span', { class: 'twirl-name' }, 'What goes on it'), partsSub)),
     h('div', { class: 'twirl-body' },
-      PARTS.map(([k, label, , hint]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: inc[k], 'aria-label': label, onchange: e => { inc[k] = e.target.checked; remember(inc); drawPartsSub(); refresh(true); } }), h('span', null, label, h('em', null, ' · ' + hint)))),
+      PARTS.map(([k, label, , hint]) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: inc[k], 'aria-label': label, onchange: e => { inc[k] = e.target.checked; remember(inc); drawPartsSub(); refresh(true); redraw(); } }), h('span', null, label, h('em', null, ' · ' + hint)))),
       h('p', { class: 'small muted' }, 'Always on it: the times, where and how to get in, the running order, who is playing and how to reach them, the setlist, backline, hospitality and how many are on the guest list.'),
       h('p', { class: 'small muted' }, 'Never on it: the deal, fees, ticket price, settlement, budget, rates or invoices.')));
   drawPartsSub();
@@ -323,6 +329,7 @@ export function openDaySheet(bookingId) {
   refresh(true);
   const s = sheet('Day sheet', body, { onClose: () => { off(); seq++; if (openOne === s) openOne = null; } });
   openOne = s;
+  if (atParts) { parts.open = true; const sum = parts.querySelector('summary'); sum.focus({ preventScroll: true }); requestAnimationFrame(() => parts.scrollIntoView({ block: 'start' })); }
   return s;
 }
 

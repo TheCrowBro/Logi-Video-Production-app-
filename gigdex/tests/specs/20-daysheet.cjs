@@ -173,6 +173,59 @@ const LINEUP = ['Maya Brooks', 'Leo Grant', 'Priya Shah', 'Jonah Reyes', 'Dee Ok
   ok('the closed box says it changed', (await drawBlock('s-show1')).summary === 'Changed since sent');
   await closeSheet();
 
+  /* ---------------- what goes on it reaches the booking's box ---------------- */
+  // Notes taken off in the sheet must stay off what the box sends, the very first time, on the real booking page.
+  const notesIn = u => page.evaluate(async x => { if (!x) return 'no link'; const m = await import('./js/link-pack.js'); return (await m.unpack(x.split('#')[1])).notes || ''; }, u);
+  const mailOf = async sel => { await page.waitForFunction(s => /^mailto:/.test((document.querySelector(s) || { getAttribute() {} }).getAttribute('href') || ''), sel); const body = new URLSearchParams((await page.locator(sel).getAttribute('href')).split('?')[1]).get('body') || ''; return { body, link: (body.match(/https?:\/\/\S*daysheet\.html#\S+/) || [''])[0] }; };
+  const setChoices = c => page.evaluate(x => localStorage.setItem('gigdex-daysheet', JSON.stringify(x)), c);
+  const shareFrom = async sel => { await page.evaluate(() => navigator.clipboard.writeText('')); await page.locator(sel).click(); await page.waitForFunction(() => navigator.clipboard.readText().then(t => /^http\S*daysheet\.html#\S+$/.test(t)).catch(() => false)); return clip(); };
+  const stubPrint = () => page.evaluate(() => { window.__printedText = null; window.print = () => { window.__printedText = document.getElementById('print-root').textContent; window.dispatchEvent(new Event('afterprint')); }; });
+  const BOX = '#blk-daysheet', boxMail = `${BOX} a.btn[aria-label^="Email the day sheet to the band"]`;
+  await page.evaluate(() => { document.getElementById('ds-test')?.remove(); return import('./js/pages/bookings.js').then(m => m.openBooking('s-show1')); });
+  await page.waitForSelector(BOX);
+  await page.evaluate(s => { document.querySelector(s).open = true; }, BOX);
+  await mailOf(boxMail);
+  ok('the booking’s box says the booking notes are on the sheet', /Your booking notes are on it: check they say nothing private/.test(await page.locator(BOX).innerText()));
+  await page.locator(`${BOX} button[aria-label="Open the day sheet"]`).click(); await doc.waitFor();
+  await sheet.locator('.ds-parts > summary').click();
+  await sheet.getByLabel('Booking notes').uncheck();
+  await page.waitForFunction(() => !/Sample show\./.test(document.querySelector('.ds-preview').textContent));
+  await closeSheet();
+  await page.waitForFunction(s => /notes are left off/.test((document.querySelector(s) || {}).textContent || ''), BOX, { timeout: 5000 }).catch(() => {});
+  ok('notes taken off in the sheet: the booking’s box follows at once and says they are left off', /Your booking notes are left off/.test(await page.locator(BOX).innerText()));
+  const m1 = await mailOf(boxMail);
+  ok('… its Email no longer carries the notes, in the text or the link', !!m1.link && !/Sample show\./.test(m1.body) && (await notesIn(m1.link)) === '', (await notesIn(m1.link)).slice(0, 40));
+  ok('… and the first Share link from the box leaves them off', (await notesIn(await shareFrom(`${BOX} button[aria-label="Share the day sheet link"]`))) === '');
+
+  // A box drawn before the change and never redrawn (another tab, a redraw held off) still sends what is chosen now.
+  const stale = async () => { await setChoices({ guestNames: false, notes: true }); await drawBlock('s-show1'); await mailOf('#ds-test a.btn[aria-label^="Email the day sheet to the band"]'); await setChoices({ guestNames: false, notes: false }); };
+  await stale();
+  ok('a box drawn before the notes were taken off: Share link leaves them off', (await notesIn(await shareFrom('#ds-test button[aria-label="Share the day sheet link"]'))) === '');
+  await stale(); await stubPrint();
+  await page.locator('#ds-test button[aria-label="Print the day sheet"]').click();
+  await page.waitForFunction(() => window.__printedText != null);
+  ok('… Print leaves them off', !/Sample show\./.test(await page.evaluate(() => window.__printedText)) && /DAY SHEET|Day sheet/i.test(await page.evaluate(() => window.__printedText)));
+  await stale();
+  const staleHref = await page.locator('#ds-test a.btn[aria-label^="Email the day sheet to the band"]').getAttribute('href');
+  await page.locator('#ds-test a.btn[aria-label^="Email the day sheet to the band"]').click();
+  await page.waitForFunction(h0 => { const a = document.querySelector('#ds-test a.btn[aria-label^="Email the day sheet to the band"]'); const h1 = a.getAttribute('href') || ''; return /^mailto:/.test(h1) && h1 !== h0; }, staleHref, { timeout: 5000 }).catch(() => {});
+  const m2 = await mailOf('#ds-test a.btn[aria-label^="Email the day sheet to the band"]');
+  ok('… and Email waits for a new link without them', !!m2.link && !/Sample show\./.test(m2.body) && (await notesIn(m2.link)) === '', (await notesIn(m2.link)).slice(0, 40));
+
+  // A private window cannot store the choice: it still holds while the app is open.
+  await setChoices({ guestNames: false, notes: true });
+  await page.evaluate(() => { const set = Storage.prototype.setItem; window.__setItem = set; Storage.prototype.setItem = function (k, v) { if (k === 'gigdex-daysheet') throw new Error('private window'); return set.call(this, k, v); }; });
+  await page.locator('#ds-test button[aria-label="Choose what goes on the day sheet"]').click(); await doc.waitFor();
+  ok('“What goes on it” on the box opens the sheet at those choices', await sheet.locator('.ds-parts').evaluate(d => d.open));
+  await sheet.getByLabel('Booking notes').uncheck();
+  await page.waitForFunction(() => !/Sample show\./.test(document.querySelector('.ds-preview').textContent));
+  const priv = await page.evaluate(() => import('./js/daysheet.js').then(m => ({ notes: m.choices().notes, stored: JSON.parse(localStorage.getItem('gigdex-daysheet')).notes })));
+  ok('where the choice cannot be stored (a private window), notes taken off stay off', priv.notes === false && priv.stored === true, JSON.stringify(priv));
+  await page.evaluate(() => { Storage.prototype.setItem = window.__setItem; });
+  await sheet.getByLabel('Booking notes').check(); await sleep(200);
+  ok('once it can be stored again, the choice is stored', await page.evaluate(() => import('./js/daysheet.js').then(m => m.choices().notes === true && JSON.parse(localStorage.getItem('gigdex-daysheet')).notes === true)));
+  await closeSheet();
+
   /* ---------------- on a phone: the share sheet ---------------- */
   await page.evaluate(() => { window.__shared = null; Object.defineProperty(Navigator.prototype, 'share', { configurable: true, value: function (d) { window.__shared = d; return Promise.resolve(); } }); });
   await drawBlock('s-show2');
