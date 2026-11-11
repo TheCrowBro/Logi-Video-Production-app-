@@ -1,1 +1,183 @@
-/* bookings: styles owned by the bookings feature (docs/developers.md). Prefix classes to avoid clashes. */
+/* bookings: the month calendar, a day, a booking's page and its boxes (js/pages/bookings.js, js/blocks/advance.js,
+   lineup.js, notes.js). Theme tokens only; an act's own colour arrives as --act on the element that shows it. */
+
+/* ------------------------------ month ------------------------------ */
+.bk-head-actions { display: flex; gap: 8px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.page-head .bk-head-actions .btn { min-width: 0; }
+.bk-monthview > .page-head h1, .bk-dayview .cal-title, .bk-title { outline: none; }
+.bk-filters { display: grid; gap: 2px; margin: -2px 0 10px; }
+.bk-filters .chips { margin-bottom: 0; }
+.bk-filters .chip { display: inline-flex; align-items: center; gap: 6px; }
+.bk-swatch { display: inline-block; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--act, var(--muted)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--text) 30%, transparent); }
+
+.bk-cal { touch-action: pan-y; -webkit-user-select: none; user-select: none; }
+.bk-day { min-width: 0; }
+.bk-day .more { line-height: 1.2; }
+/* status tones for the calendar's lines and dots */
+.bk-dot, .bk-mini { --tone: var(--muted); }
+.bk-dot.st-offer, .bk-mini.st-offer { --tone: var(--accent); }
+.bk-dot.st-confirmed, .bk-mini.st-confirmed, .bk-dot.st-settled, .bk-mini.st-settled { --tone: var(--ok); }
+.bk-dot.st-advanced, .bk-mini.st-advanced { --tone: var(--blue); }
+.bk-dot.st-cancelled, .bk-mini.st-cancelled { --tone: var(--danger); }
+/* phones: a dot per booking (hollow while on hold or an offer), a bar for a booking over several days */
+.bk-minis { display: none; }
+.bk-dots { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; margin-top: auto; }
+.bk-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--act, var(--tone)); border: 1.5px solid var(--act, var(--tone)); }
+.bk-dot.st-hold, .bk-dot.st-offer { background: transparent; }
+.bk-dot.st-cancelled { opacity: .35; }
+.bk-dot.st-done { opacity: .7; }
+.bk-dot.bk-bar { order: -1; height: 6px; border-radius: 3px; flex: 0 0 100%; }
+.bk-dot.bk-bar.bk-seg-start { flex-basis: calc(100% + 5px); margin-right: -5px; border-radius: 3px 0 0 3px; }
+.bk-dot.bk-bar.bk-seg-mid { flex-basis: calc(100% + 10px); margin: 0 -5px; border-radius: 0; }
+.bk-dot.bk-bar.bk-seg-end { flex-basis: calc(100% + 5px); margin-left: -5px; border-radius: 0 3px 3px 0; }
+/* wider screens: a line per booking with its kind and name */
+@media (min-width: 560px) {
+  .bk-minis { display: grid; gap: 2px; min-width: 0; }
+  .bk-dots { display: none; }
+}
+.bk-mini { display: block; min-width: 0; font-size: .7rem; line-height: 1.4; padding: 0 4px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text);
+  background: color-mix(in srgb, var(--tone) 18%, var(--bg2)); border-left: 3px solid var(--act, var(--tone)); }
+.bk-mini.st-hold, .bk-mini.st-offer { background: var(--bg2); outline: 1px dashed var(--tone); outline-offset: -1px; }
+.bk-mini.st-cancelled { text-decoration: line-through; opacity: .55; }
+.bk-mini.st-done, .bk-mini.st-settled { opacity: .8; }
+.bk-mini.bk-seg-start { margin-right: -5px; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.bk-mini.bk-seg-mid { margin: 0 -5px; border-radius: 0; border-left-width: 0; padding-left: 7px; }
+.bk-mini.bk-seg-end { margin-left: -5px; border-top-left-radius: 0; border-bottom-left-radius: 0; border-left-width: 0; padding-left: 7px; }
+.bk-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .75rem; margin-top: 8px; padding: 0 2px; }
+.bk-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* the agenda under the calendar, and the cards on a day */
+.bk-agenda-head { margin-top: 4px; }
+.bk-agenda > .actions { margin-top: 0; }
+.bk-card { display: flex; align-items: center; gap: 12px; border-left: 4px solid var(--act, var(--line)); }
+.bk-date { flex: none; width: 3.2rem; display: grid; justify-items: center; gap: 1px; padding: 5px 0; border-radius: 10px; background: var(--bg2); color: var(--muted); font-size: .66rem; line-height: 1.1; text-transform: uppercase; letter-spacing: .06em; }
+.bk-date b { font-size: 1.35rem; color: var(--text); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.bk-card-main { flex: 1; min-width: 0; display: grid; gap: 3px; }
+.bk-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.bk-card-title { min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
+.bk-card-top .pill { flex: none; margin-top: 2px; }
+.bk-card-sub { display: block; overflow-wrap: anywhere; }
+
+/* ------------------------------ a day ------------------------------ */
+.bk-dayview .cal-nav { margin-bottom: 12px; }
+.bk-dayview .cal-title { font-size: 1.05rem; }
+.page-head .bk-new-day { min-width: 0; }
+
+/* ------------------------------ the booking ------------------------------ */
+.bk-hero { border-left-color: var(--act, var(--accent)); gap: 10px; }
+.bk-hero-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.bk-title { font-size: 1.3rem; min-width: 0; overflow-wrap: anywhere; padding-top: 8px; }
+.bk-title-ico { font-size: 1.15rem; }
+.bk-status { flex: none; display: inline-flex; align-items: center; justify-content: flex-end; min-height: var(--hit); min-width: var(--hit); padding: 0; border: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.bk-status .pill { font-size: .82rem; padding: 5px 11px; }
+.bk-status:hover .pill { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
+.bk-when { overflow-wrap: anywhere; }
+.bk-times { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
+.bk-time { display: grid; gap: 1px; align-content: start; padding: 6px 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg2); }
+.bk-time > span { font-size: .66rem; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.bk-time b { font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+.bk-time small { font-size: .72rem; }
+.bk-next { margin-left: 3px; color: var(--accent); font-weight: 800; vertical-align: super; font-size: .68rem; }
+.bk-time.late { border-color: var(--danger); } .bk-late { color: var(--danger); font-weight: 600; }
+.bk-notimes { margin: 0; }
+.bk-venue { display: grid; gap: 2px; }
+.bk-venue-line { display: flex; align-items: flex-start; gap: 4px; }
+.bk-venue-text { flex: 1; min-width: 0; display: grid; overflow-wrap: anywhere; }
+.bk-venue-line .btn { flex: none; }
+.bk-venue .actions { margin-top: 4px; }
+.bk-hero .warn { margin: 0; }
+.bk-act-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.bk-act { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.bk-client { cursor: default; }
+.bk-contact { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-top: 10px; border-top: 1px solid var(--line); }
+.bk-contact-who { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.bk-contact-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.bk-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 0 0 14px; }
+.bk-actions .btn { flex-direction: column; justify-content: center; gap: 2px; min-height: 60px; padding: 6px 4px; font-size: .82rem; line-height: 1.15; text-align: center; white-space: normal; background: var(--bg2); }
+.bk-actions .btn > span { font-size: 1.2rem; line-height: 1; }
+.bk-actions .bk-delete { color: var(--danger); }
+.bk-actions .bk-delete:hover { border-color: var(--danger); }
+
+/* the boxes (blocks) */
+.bk-blocks { display: grid; gap: 8px; align-items: start; }
+.blk { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); scroll-margin-top: 12px; min-width: 0; }
+.blk > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 12px; min-height: calc(var(--hit) + 8px); }
+.blk > summary::-webkit-details-marker { display: none; }
+.blk > summary::after { content: '›'; content: '›' / ''; color: var(--muted); font-size: 1.3rem; transition: transform .15s ease; }
+.blk[open] > summary::after { transform: rotate(90deg); }
+.blk[open] > summary { border-bottom: 1px solid var(--line); }
+.blk > summary:focus-visible { outline: 3px solid var(--focus); border-radius: var(--radius); }
+.blk-ico { font-size: 1.25rem; width: 1.7rem; text-align: center; }
+.blk-text { display: grid; min-width: 0; }
+.blk-title { font-weight: 700; overflow-wrap: anywhere; }
+.blk-sum { color: var(--muted); font-size: .82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.blk-body { padding: 10px 12px 12px; display: grid; gap: 8px; min-width: 0; }
+.blk-body > .warn { margin: 0; }
+
+/* sheets: the kind of booking, its status */
+.bk-kinds { display: grid; gap: 8px; }
+.bk-kinds .card { margin: 0; }
+.bk-kind { display: flex; align-items: center; gap: 12px; }
+.bk-kind-ico { flex: none; width: 2.2rem; font-size: 1.7rem; text-align: center; }
+.bk-kind-text { display: grid; gap: 2px; min-width: 0; }
+@media (min-width: 560px) { .bk-kinds { grid-template-columns: 1fr 1fr; } }
+.bk-status-list { display: grid; gap: 6px; }
+.bk-status-opt { display: grid; grid-template-columns: 8.2rem minmax(0, 1fr) 1.2rem; align-items: center; gap: 10px; width: 100%; min-height: var(--hit); padding: 9px 12px; text-align: left; border: 1px solid var(--line); border-radius: 12px; background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+.bk-status-opt:hover { border-color: var(--accent); }
+.bk-status-opt.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent); }
+.bk-status-opt .pill { justify-self: start; font-size: .8rem; }
+.bk-tick { color: var(--accent); font-weight: 800; }
+.bk-venue-note { display: block; margin-top: 2px; }
+.bk-del-when { display: block; }
+
+/* ------------------------------ advance checklist ------------------------------ */
+.bk-advance { display: grid; gap: 8px; }
+.bk-progress .progress { margin: 6px 0 0; }
+.bk-advance .check-item .icon-btn { font-size: 1rem; }
+.bk-adv-add { margin-top: 2px; } .bk-adv-add input { flex: 1; }
+.bk-adv-hint { margin: 0; }
+.bk-email { display: grid; gap: 4px; margin-top: 4px; padding-top: 10px; border-top: 1px solid var(--line); }
+.bk-email h4 { margin: 0; } .bk-email p { margin: 0; }
+.bk-email .actions { margin-top: 4px; }
+.bk-mail-preview { margin: 6px 0 0; }
+.bk-mail-text { margin: 0; padding: 10px; max-height: 360px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: .82rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; color: var(--text); }
+
+/* ------------------------------ line-up & gear ------------------------------ */
+.bk-lineup { display: grid; gap: 12px; }
+.bk-lineup h4 { margin: 0 0 2px; }
+.bk-lineup .actions { margin-top: 6px; }
+.bk-clashes { margin: 0; } .bk-clashes ul { margin: 4px 0 0; padding-left: 18px; }
+.bk-rows { display: grid; }
+.bk-person, .bk-gear-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); min-height: var(--hit); }
+.bk-rows > :last-child { border-bottom: 0; }
+.bk-av { width: 36px; height: 36px; font-size: .82rem; }
+.bk-person.clash .bk-av { background: var(--danger); }
+.bk-row-main { flex: 1; min-width: 0; display: grid; gap: 1px; overflow-wrap: anywhere; }
+.bk-link { all: unset; box-sizing: border-box; cursor: pointer; font-weight: 700; color: var(--text); min-height: 28px; display: inline-flex; align-items: center; overflow-wrap: anywhere; }
+.bk-link:hover { color: var(--accent); text-decoration: underline; }
+.bk-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.bk-quick { display: inline-grid; place-items: center; text-decoration: none; }
+.bk-clash { color: var(--danger); font-weight: 600; }
+.bk-gear-cat + .bk-gear-cat { margin-top: 4px; }
+.bk-cat { text-transform: uppercase; letter-spacing: .07em; font-size: .68rem; margin-top: 4px; }
+.bk-gear-name { font-weight: 600; }
+
+/* ------------------------------ notes ------------------------------ */
+.bk-notes-wrap { display: grid; gap: 4px; }
+.bk-notes { min-height: 128px; resize: vertical; }
+.bk-notes-state { margin: 0; }
+
+/* ------------------------------ laptops: the calendar beside what is coming up; the boxes two by two ------------------------------ */
+@media (min-width: 1000px) {
+  .bk-monthview { display: grid; grid-template-columns: minmax(0, 1fr) 380px; grid-template-rows: auto auto auto 1fr; column-gap: 28px; align-items: start; }
+  .bk-monthview > .page-head { grid-column: 1 / -1; grid-row: 1; }
+  .bk-monthview > .bk-filters { grid-column: 1 / -1; grid-row: 2; }
+  .bk-monthview > .bk-cal-panel { grid-column: 1; grid-row: 3 / span 2; }
+  .bk-monthview > .bk-agenda-head { grid-column: 2; grid-row: 3; margin-top: 0; }
+  .bk-monthview > .bk-agenda, .bk-monthview > .empty { grid-column: 2; grid-row: 4; }
+  .bk-monthview .bk-agenda .list { grid-template-columns: 1fr; }
+  .bk-monthview .bk-day { min-height: 104px; }
+  .bk-actions { max-width: 620px; }
+  .bk-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bk-blocks > .blk[open] { grid-column: 1 / -1; } /* closed boxes two by two; an open one takes the whole width, never leaving a gap beside it */
+}
