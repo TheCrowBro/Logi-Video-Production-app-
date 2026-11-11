@@ -75,10 +75,13 @@ export function setClock(b, sec) {
   return { on: b.setTime, off, curfew, late: room != null && room > 0 && mins > room };
 }
 
+// Whether a setlist has anything to play (set breaks alone do not count).
+export const hasSongs = list => !!list && (list.items || []).some(isSong);
+
 // Ticks "Setlist ready" on the shows that use this setlist, once it has something in it. Quiet (model.markCheck).
 export function tickShows(setlistId) {
   const list = byId('setlists', setlistId);
-  if (!list || !(list.items || []).some(isSong)) return;
+  if (!hasSongs(list)) return;
   db.bookings.filter(b => b.kind === 'show' && b.setlistId === setlistId && b.status !== 'cancelled').map(b => b.id).forEach(id => markCheck(id, 'show-setlist', true));
 }
 
@@ -520,6 +523,8 @@ function deleteSetlist(id, ctx) {
   const n = db.bookings.filter(b => b.setlistId === id).length;
   if (!confirm(`Delete the setlist “${list.name || 'Untitled'}”?${n ? ` It comes off ${plural(n, 'booking')} too.` : ''} Your songs stay in the library.`)) return;
   ctx.close();
+  // The shows it was on have no setlist now, so "Setlist ready" comes off them (as when it is taken off one show).
+  db.bookings.filter(b => b.kind === 'show' && b.setlistId === id).map(b => b.id).forEach(bid => markCheck(bid, 'show-setlist', false));
   remove('setlists', id);
   toast('Setlist deleted');
 }

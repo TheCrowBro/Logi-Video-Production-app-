@@ -308,6 +308,18 @@ const { open, ok, sleep } = require('../helpers.cjs');
   await sheetNamed('Add songs').locator('#sgp-add').click(); await sleep(300);
   ok('adding songs to it ticks “Setlist ready” on the show', !!((await booking('s-show1')).checks || {})['show-setlist']);
   await closeAll();
+  // Switching to an empty setlist, or deleting the show's setlist, leaves the show with nothing ready: the tick comes off.
+  const emptyId = await store(s => s.upsert('setlists', { name: 'Empty set', actId: 's-owls', gap: 20, items: [] }).id); await sleep(250);
+  await blk.locator('select').selectOption(emptyId); await sleep(300);
+  b = await booking('s-show1');
+  ok('switching the show to an empty setlist unticks “Setlist ready”', b.setlistId === emptyId && !(b.checks || {})['show-setlist'], JSON.stringify(b.checks));
+  await blk.locator('select').selectOption(nl.id); await sleep(300);
+  ok('switching back to one with songs ticks it again', !!((await booking('s-show1')).checks || {})['show-setlist']);
+  await blk.locator('button:has-text("Edit")').click(); await waitSheet('Edit setlist');
+  await sheetNamed('Edit setlist').locator('[data-fk="sl-del"]').click(); await sleep(400);
+  b = await booking('s-show1');
+  ok('deleting the show’s setlist unticks “Setlist ready” too', !(await list(nl.id)) && b.setlistId === '' && !(b.checks || {})['show-setlist'], JSON.stringify(b.checks));
+  await closeAll();
 
   /* ------------------------------- a rehearsal, and a bare show ------------------------------- */
   await page.evaluate(() => window.__drawBlk('s-reh')); await sleep(200);
@@ -334,6 +346,14 @@ const { open, ok, sleep } = require('../helpers.cjs');
   await page.evaluate(() => import('./js/pages/songs.js').then(m => m.openSong('no-such-song'))); await sleep(200);
   ok('opening a song that is gone just says so', (await page.locator('.sheet').count()) === 0);
   await page.evaluate(() => document.getElementById('sg-test-host').remove());
+
+  /* ------------------------------- a search left on with few songs ------------------------------- */
+  await page.click('#sg-view-songs'); await sleep(200);
+  await page.fill('#sg-q', 'ferry'); await sleep(250);
+  await store(s => s.db.songs.map(x => x.id).filter(id => !['s-song8', 's-song2', 's-sable1'].includes(id)).forEach(id => s.remove('songs', id))); await sleep(300);
+  ok('with 3 songs left, the search typed earlier still shows its box', (await page.locator('#sg-q').count()) === 1 && (await page.inputValue('#sg-q')) === 'ferry' && (await page.locator('.sg-song').count()) === 1);
+  if (await page.locator('#sg-q').count()) { await page.fill('#sg-q', ''); await sleep(250); }
+  ok('clearing it shows all 3 songs, and the box goes as there are so few', (await page.locator('.sg-song').count()) === 3 && (await page.locator('#sg-q').count()) === 0);
 
   /* ------------------------------- empty states ------------------------------- */
   await store(s => s.eraseAll()); await sleep(300);
