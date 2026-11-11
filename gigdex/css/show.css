@@ -33,7 +33,7 @@
 .sh-deposit.paid { border-color: var(--ok); } .sh-deposit.late { border-color: var(--danger); }
 .sh-deposit > p { margin: 0; }
 .sh-deposit .card-row { flex-wrap: wrap; }
-.sh-deposit .btn.primary { background: var(--ok); color: var(--bg); }
+.sh-deposit .btn.primary { background: var(--ok); color: #fff; }
 
 /* running order */
 .sh-ro { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }

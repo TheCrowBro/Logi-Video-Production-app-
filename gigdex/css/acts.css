@@ -141,3 +141,6 @@
   .ac-epk-wrap { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 28px; align-items: start; }
   .ac-epk-wrap .ac-qr-card { position: sticky; top: 16px; margin-top: 22px; }
 }
+
+/* The input list editor on a phone: mic/DI and stand share a row, the note gets a full line of its own. */
+@media (max-width: 700px) { .ac-in-l2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .ac-in-l2 > :last-child { grid-column: 1 / -1; } }

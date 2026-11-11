@@ -9,6 +9,7 @@ import { docOf, docTotals, isOverdue, isPaid } from '../money.js';
 import { dateText } from '../money-doc.js';
 import { csv, saveFile } from '../print.js';
 import { openBooking, newBooking } from './bookings.js';
+import { isSettled } from '../blocks/settlement.js';
 
 let year = null;          // the year on show (null: this year)
 let showAllSettled = false;
@@ -22,7 +23,9 @@ const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const isDone = b => b.status === 'done' || b.status === 'settled';
 const isAhead = b => b.status === 'confirmed' || b.status === 'advanced';
 const costsOf = b => (b.kind === 'show' ? settle(b).costs : (Array.isArray(b.budget) ? b.budget : []).reduce((t, c) => t + num(c && c.amount), 0));
-const hasSettlement = b => b.kind === 'show' && b.status !== 'cancelled' && !!b.settlement && (num(b.settlement.tickets) > 0 || b.status === 'settled' || (b.settlement.received !== '' && b.settlement.received != null));
+// A show whose night has been counted (tickets, or money received) or that is marked settled. One counted but not yet
+// marked settled is still listed, tagged 'not marked settled', so its figures are not mistaken for final.
+const hasSettlement = b => b.kind === 'show' && b.status !== 'cancelled' && !!b.settlement && (num(b.settlement.tickets) > 0 || isSettled(b) || (b.settlement.received !== '' && b.settlement.received != null));
 const invDate = (b, inv) => inv.issued || b.date || '';
 const tap = (b, ...kids) => h('button', { class: 'card tap mn-row', type: 'button', 'data-fk': 'mn-b-' + b.id, onclick: () => openBooking(b.id) }, ...kids);
 // Text a spreadsheet must not run as a formula.
@@ -166,7 +169,7 @@ function render(root) {
     section('mn-settled', 'Settled shows', settled.length ? [h('div', { class: 'list' }, ...settledShown.map(b => {
       const s = settle(b);
       return tap(b, h('div', { class: 'card-row' },
-        h('div', null, h('strong', null, bookingTitle(b)), h('div', { class: 'muted small' }, [b.date && fmtShort(b.date), `fee ${fmtMoney(s.fee)}`, s.merch > 0 && `merch ${fmtMoney(s.merch)}`, `costs ${fmtMoney(s.costs)}`].filter(Boolean).join(' · '))),
+        h('div', null, h('strong', null, bookingTitle(b)), !isSettled(b) && h('span', { class: 'pill mn-unsettled' }, 'not marked settled'), h('div', { class: 'muted small' }, [b.date && fmtShort(b.date), `fee ${fmtMoney(s.fee)}`, s.merch > 0 && `merch ${fmtMoney(s.merch)}`, `costs ${fmtMoney(s.costs)}`, !isSettled(b) && s.short > 0 && `${fmtMoney(s.short)} still owed`].filter(Boolean).join(' · '))),
         h('div', { class: 'mn-amt' }, h('b', { class: s.profit < 0 ? 'mn-late' : '' }, fmtMoney(s.profit)), h('span', { class: 'muted small' }, 'profit'))));
     })), settled.length > 5 && h('button', { class: 'btn ghost small', type: 'button', id: 'mn-settled-more', onclick: () => { showAllSettled = !showAllSettled; root.replaceChildren(); render(root); root.querySelector('#mn-settled-more')?.focus(); } }, showAllSettled ? 'Show fewer' : `Show all ${settled.length}`)]
       : h('p', { class: 'muted small' }, `No shows settled in ${Y} yet. Settle a show on the night in its Settlement box.`)),
@@ -192,6 +195,7 @@ export const money = {
   id: 'money', label: 'Money', icon: '💰',
   render,
   tutorial: [
+    { title: 'Money', text: 'Your year in money: what you earned, what is owed, deposits due, settled shows and each person’s share. It fills in as you add bookings, settle shows and send invoices.', target: ['#page .page-head'] },
     { title: 'Your year', text: 'What you earned from bookings done or settled, what is booked ahead, what you invoiced, what came in, and what is still owed.', target: ['.mn-stats'] },
     { title: 'Pick a year', text: 'Step back through earlier years, or ahead to bookings next year.', target: ['.mn-year'] },
     { title: 'Deposits due', text: 'Shows with a deposit not in yet. Tap Received when it lands.', target: ['.mn-deposits'] },

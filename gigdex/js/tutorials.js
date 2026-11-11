@@ -9,14 +9,23 @@ import { runTour, startTour, sheetSteps } from './tour.js';
 const pages = () => (window.gigdexPages ? window.gigdexPages() : []); // [{ id, label, icon, page? }] from app.js
 const topSheet = () => { const all = document.querySelectorAll('.sheet[aria-label]'); return all[all.length - 1] || null; };
 const resolve = steps => (typeof steps === 'function' ? steps() : steps) || [];
+window.addEventListener('gigdex-tour-empty', () => toast('Nothing to point at on this page yet. Add something first, then tap ? again.'));
+// A walkthrough for a panel that has none of its own: what it is, its boxes, and how to save or close it.
+function genericSheet(top, title) {
+  const form = top.querySelector('form');
+  if (form) return [
+    { title, text: 'Fill in what you know. Boxes marked * are needed; everything else can wait.', target: ['.field input', '.field select', '.field textarea'] },
+    { title: 'Save', text: 'Saves it and closes the panel. Cancel or ✕ closes without saving.', target: ['.form-actions .btn.primary'] },
+  ];
+  return [{ title, text: 'Everything here applies straight away. ✕ (or Escape) closes the panel.', target: null }];
+}
 
 export function openTutorial() {
   const top = topSheet();
   if (top) {
     const title = top.getAttribute('aria-label');
     const steps = resolve(sheetSteps(title));
-    if (steps.length) return runTour(steps, { root: topSheet });
-    return toast('No walkthrough for this panel yet. Close it and tap ? on the page.');
+    return runTour(steps.length ? steps : genericSheet(top, title), { root: topSheet });
   }
   const id = window.logiPage && window.logiPage();
   const tab = pages().find(t => t.id === id);

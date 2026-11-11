@@ -225,3 +225,6 @@ body.tl-full-on { overflow: hidden; }
   .tl-round { width: 50px; height: 50px; }
   .tl-dt-cell b { font-size: .88rem; }
 }
+
+/* Extra-large text: tool names wrap instead of being clipped (Metronome). */
+html[data-text=xlarge] .tl-tab-name { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }

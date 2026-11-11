@@ -389,6 +389,7 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   ok('the deposits list empties', (await page.locator('.mn-deposits').count()) === 0);
   const settledText = await page.locator('.mn-settled').innerText();
   ok('settled shows with their profit', /The Night Owls @ The Lantern Rooms/.test(settledText) && /profit/.test(settledText), settledText.replace(/\n/g, ' '));
+  ok('a show counted but not marked settled says so in Settled shows', /not marked settled/.test(settledText), settledText.replace(/\n/g, ' '));
   ok('payouts per person from settled shows', /Maya Brooks/.test(await page.locator('.mn-payouts').innerText()) && /from 1 show/.test(await page.locator('.mn-payouts').innerText()));
   ok('income by month has twelve rows with their values in words', (await page.locator('.mn-bar-row').count()) === 12 && (await page.locator('.mn-bar-v .sr-only').count()) === 12);
   ok('totals per act', /The Night Owls/.test(await page.locator('.mn-acts').innerText()) && /Sable/.test(await page.locator('.mn-acts').innerText()));

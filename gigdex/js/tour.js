@@ -78,7 +78,7 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   const willShow = s => !s.target || !!s.go || !!s.before || !!find(s);
   const step = async n => {
     if (n < 0) return;
-    if (n >= STEPS.length) return stop();
+    if (n >= STEPS.length) { if (!seen.size && !STEPS.some(x => !x.target)) { stop(); window.dispatchEvent(new CustomEvent('gigdex-tour-empty')); return; } return stop(); }
     i = n; const s = STEPS[n];
     if (s.go) { window.logiGo?.(s.go); await new Promise(r => setTimeout(r, 650)); }
     if (s.before) { try { await s.before(); } catch { /* the step still shows */ } await new Promise(r => setTimeout(r, 250)); }

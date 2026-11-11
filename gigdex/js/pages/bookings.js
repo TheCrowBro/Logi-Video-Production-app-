@@ -2,7 +2,7 @@
 // one day, and a booking's own page (its header, then one fold-down box per block from js/blocks/index.js).
 // Adapted from Vdex's bookings page: the month grid, the day list, press and hold to delete, duplicate.
 import { h, nodes, ymd, todayISO, parseISO, fmtLong, fmtShort, daysUntil, toast, announce, sheet, empty, backBtn, hold, wasHeld, telUrl } from '../util.js';
-import { db, byId, update, upsert, remove, bookingsOn, upcoming, covers, lastDay } from '../store.js';
+import { db, byId, update, upsert, remove, bookingsOn, upcoming, covers, lastDay, usedQty } from '../store.js';
 import * as model from '../model.js';
 import { openForm } from '../form.js';
 import { mapButtons } from '../map.js';
@@ -501,7 +501,7 @@ function dayView() {
 
 function dayCard(b) {
   const people = (b.people || []).filter(id => byId('people', id)).length;
-  const items = (b.gear || []).filter(id => byId('gear', id)).length;
+  const items = (b.gear || []).filter(id => byId('gear', id)).reduce((s, id) => s + usedQty(b, id), 0); // pieces, as the Line-up box counts them
   const card = h('button', { type: 'button', class: 'card tap bk-card bk-card-day', style: actStyle(b), 'data-id': b.id, title: 'Tap to open; press and hold to delete',
     onclick: () => { if (!wasHeld(card)) go({ view: 'booking', id: b.id }); } },
     h('span', { class: 'bk-card-main' },

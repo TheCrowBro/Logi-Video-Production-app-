@@ -122,3 +122,6 @@
   .mn-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 28px; align-items: start; }
   .mn-stats { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
+
+/* A show counted but not marked settled yet, in Settled shows. */
+.pill.mn-unsettled { margin-left: 6px; color: var(--muted); border-color: var(--line); font-size: .7rem; vertical-align: middle; }

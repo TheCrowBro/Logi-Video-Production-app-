@@ -181,3 +181,9 @@
   .bk-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bk-blocks > .blk[open] { grid-column: 1 / -1; } /* closed boxes two by two; an open one takes the whole width, never leaving a gap beside it */
 }
+
+/* The legend shows the dot shapes (filled, hollow, faded); a day's dots take the act's colour, so the legend's are neutral. */
+.bk-legend .bk-dot { --act: var(--text); }
+/* Extra-large text on a small phone: the month title gives way so the › button stays on screen. */
+.bk-monthview .cal-title { min-width: 0; overflow-wrap: anywhere; }
+html[data-text=xlarge] .bk-monthview .cal-title { font-size: 1rem; }
