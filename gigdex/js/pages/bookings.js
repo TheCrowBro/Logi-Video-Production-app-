@@ -2,7 +2,7 @@
 // one day, and a booking's own page (its header, then one fold-down box per block from js/blocks/index.js).
 // Adapted from Vdex's bookings page: the month grid, the day list, press and hold to delete, duplicate.
 import { h, nodes, ymd, todayISO, parseISO, fmtLong, fmtShort, daysUntil, toast, announce, sheet, empty, backBtn, hold, wasHeld, telUrl } from '../util.js';
-import { db, byId, upsert, patch, remove, bookingsOn, upcoming, covers, lastDay } from '../store.js';
+import { db, byId, update, upsert, remove, bookingsOn, upcoming, covers, lastDay } from '../store.js';
 import * as model from '../model.js';
 import { openForm } from '../form.js';
 import { mapButtons } from '../map.js';
@@ -194,6 +194,8 @@ function editBooking(b) {
     values, fields: fieldsFor(kind), saveLabel: isNew ? 'Add' : 'Save',
     onSave: v => {
       const rec = tidy(v, kind);
+      const before = (b.id && byId('bookings', b.id)) || b;
+      if (rec.status !== before.status) withStatus(rec, rec.status, settledNow(before)); // a status picked here does what the status pill does
       const stored = upsert('bookings', rec);
       haptic();
       if (isNew) { toast(`${model.kindLabel(kind)} added`); openBooking(stored.id); } else toast('Saved');
@@ -259,11 +261,29 @@ function wireForm(kind) {
 }
 
 /* ------------------------------- status, duplicate, delete ------------------------------- */
+const settledNow = x => !!(x && (x.status === 'settled' || (x.settlement && x.settlement.settledAt)));
+// A new status on a booking record (x), with what goes with it: marking a show advanced ticks that line, and a show's
+// settlement follows Paid / settled both ways, as Mark settled and Reopen do on the Settlement box (settledAt and the
+// "Settled on the night" tick).
+function withStatus(x, s, wasSettled) {
+  x.status = s;
+  if (x.kind !== 'show') return x;
+  const st = x.settlement && typeof x.settlement === 'object' ? { ...x.settlement } : null;
+  if (s === 'advanced') x.checks = { ...(x.checks || {}), 'show-advance': true };
+  if (s === 'settled') {
+    x.settlement = { ...(st || {}), settledAt: (st && st.settledAt) || Date.now() };
+    x.checks = { ...(x.checks || {}), 'show-settled': true };
+  } else if (wasSettled) {
+    if (st) { delete st.settledAt; x.settlement = st; }
+    x.checks = { ...(x.checks || {}) }; delete x.checks['show-settled'];
+  }
+  return x;
+}
 function setStatus(b, s) {
   const cur = byId('bookings', b.id);
   if (!cur || cur.status === s) return;
-  patch('bookings', b.id, { status: s });
-  if (s === 'advanced') model.markCheck(b.id, 'show-advance', true); // marking a show advanced ticks that line
+  const was = settledNow(cur);
+  update(d => { const x = d.bookings.find(r => r.id === b.id); if (!x) return; withStatus(x, s, was); x.updatedAt = Date.now(); });
   setTimeout(() => { const btn = ROOT && ROOT.querySelector('.bk-status'); if (btn && document.activeElement !== btn && !document.querySelector('.sheet')) btn.focus({ preventScroll: true }); }, 30); // after the redraw (app.js also restores it by id)
   haptic();
   toast(`Status: ${model.statusLabel(s)}`);
@@ -278,11 +298,11 @@ function statusPicker(b) {
 }
 
 // A copy for another date: same act, venue, times, people and gear, but none of the money or the night (no
-// settlement, quote, invoice, ticks or guests marked in), and on hold.
+// settlement, quote, invoice, ticks, guests marked in or day sheet sent), and on hold.
 export function copyOf(b, date) {
   const off = isoOk(b.date) && isoOk(date) ? daysBetween(b.date, date) : 0;
   const c = JSON.parse(JSON.stringify(b));
-  for (const k of ['id', 'createdAt', 'updatedAt', 'sample', 'settlement', 'quote', 'invoice']) delete c[k];
+  for (const k of ['id', 'createdAt', 'updatedAt', 'sample', 'settlement', 'quote', 'invoice', 'daySheet']) delete c[k];
   c.status = 'hold'; c.checks = {}; c.date = date;
   if (c.endDate) c.endDate = addDays(c.endDate, off);
   if (Array.isArray(c.guestList)) c.guestList = c.guestList.map(g => ({ ...g, in: false }));
@@ -324,7 +344,7 @@ function deleteSheet(b) {
     h('p', null, h('strong', null, model.bookingTitle(b)), h('span', { class: 'muted small bk-del-when' }, [dateRange(b, fmtShort), model.kindLabel(b.kind)].join(' · '))),
     h('p', { class: 'small muted' }, b.kind === 'show'
       ? 'Its deal, running order, guest list, settlement, checklist ticks, quote and invoice go with it. Your act, venue, people and setlist stay. This cannot be undone.'
-      : 'Its checklist ticks, notes, quote and invoice go with it. Take logs and clocked hours stay, unlinked. This cannot be undone.'),
+      : 'Its checklist ticks, notes, clocked hours, quote and invoice go with it. Take logs stay in the Studio log, unlinked. This cannot be undone.'),
     h('div', { class: 'actions' },
       h('button', { type: 'button', class: 'btn danger', onclick: () => { close(); if (remove('bookings', b.id) !== false) { toast('Booking deleted'); haptic(30); announce('Booking deleted'); } } }, '🗑 Delete booking'),
       h('button', { type: 'button', class: 'btn ghost', onclick: () => close() }, 'Keep it'))));
@@ -407,7 +427,7 @@ function dayCell(iso, all, today) {
   // A booking over several days shows on each: its line runs on from the day before, and the name shows on the first
   // day and at the start of each week row.
   const seg = b => (!multi(b) ? '' : iso === b.date ? ' bk-seg-start' : iso === lastDay(b) ? ' bk-seg-end' : ' bk-seg-mid');
-  const named = b => !multi(b) || iso === b.date || dow === 0;
+  const named = b => !multi(b) || iso === b.date || dow === 0 || iso.endsWith('-01'); // and on the 1st, for one that began last month
   // The line leads with where (the act is its colour): a typed title, else the venue, else the act or client.
   const short = b => b.title || model.venueOf(b).name || model.bookingTitle(b);
   const mini = b => h('span', { class: `bk-mini ${tone(b.status)}${seg(b)}`, style: actStyle(b) }, named(b) ? `${model.kindIcon(b.kind)} ${short(b)}` : ' ');

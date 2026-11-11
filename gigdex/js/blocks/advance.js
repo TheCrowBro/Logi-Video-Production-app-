@@ -7,6 +7,7 @@ import { db, update } from '../store.js';
 import * as model from '../model.js';
 import { openForm } from '../form.js';
 import { sheetTutorial } from '../tour.js';
+import { setDepositPaid } from './deal.js';
 
 const PLURAL = { show: 'show', session: 'studio session', rehearsal: 'rehearsal', other: 'booking' };
 const PREVIEW = new Set(); // bookings whose email preview is open (survives redraws)
@@ -14,6 +15,13 @@ const PREVIEW = new Set(); // bookings whose email preview is open (survives red
 function progressOf(b) {
   const lines = model.checklistFor(b.kind);
   return { lines, done: lines.filter(l => model.isChecked(b, l.id)).length };
+}
+
+// Tick or untick a line. "Deposit received" on a show goes through the deal, so the deal box, the settlement, the
+// invoice and the Money page all see the deposit as paid (or not) too.
+function tick(b, id, on) {
+  if (id === 'show-deposit' && b.kind === 'show') setDepositPaid(b, on);
+  else model.markCheck(b.id, id, on);
 }
 
 function addLine(kind, text) {
@@ -165,7 +173,7 @@ export default {
         ? h('div', { class: 'checklist' }, lines.map(l => {
           const on = model.isChecked(b, l.id);
           return h('div', { class: 'check-item' + (on ? ' done' : '') + (l.own ? ' own' : ''), 'data-line': l.id },
-            h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: on, onchange: e => model.markCheck(b.id, l.id, e.target.checked) }), h('span', null, l.t)),
+            h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: on, onchange: e => tick(b, l.id, e.target.checked) }), h('span', null, l.t)),
             l.own && h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Rename “${l.t}”`, onclick: () => renameLine(kind, l) }, '✎'),
             l.own && h('button', { type: 'button', class: 'icon-btn', 'aria-label': `Remove “${l.t}”`, onclick: () => deleteLine(kind, l) }, '✕'));
         }))

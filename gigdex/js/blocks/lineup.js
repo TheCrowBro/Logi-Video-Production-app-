@@ -22,13 +22,18 @@ const peopleOf = b => (b.people || []).map(id => byId('people', id)).filter(Bool
 const gearOf = b => (b.gear || []).map(id => byId('gear', id)).filter(Boolean);
 const units = b => gearOf(b).reduce((s, g) => s + usedQty(b, g.id), 0);
 
+// The other live bookings that need this person or item at the same time. A cancelled booking needs nobody and
+// nothing, so it has no clashes (it is out of clashes, as its status says).
+const peopleClash = (b, id) => (model.isLive(b) ? personClash(b, id) : []);
+const itemClash = (b, id) => (model.isLive(b) ? gearClash(b, id) : []);
+
 // Where and when another booking is, in a few words: "Harbour Hall that day", "Greenfield Festival on Sat 12 Dec".
 const placeOf = o => model.venueOf(o).name || model.bookingTitle(o);
 const whenOf = (o, b) => (o.date === b.date && lastDay(o) === lastDay(b) ? 'that day' : `on ${fmtShort(o.date)}`);
 const others = (list, b) => list.map(o => `${placeOf(o)} ${whenOf(o, b)}`).join(' and ');
-export const personClashText = (b, p) => { const o = personClash(b, p.id); return o.length ? `${firstName(p.name)} is also on ${others(o, b)}` : ''; };
+export const personClashText = (b, p) => { const o = peopleClash(b, p.id); return o.length ? `${firstName(p.name)} is also on ${others(o, b)}` : ''; };
 export function gearClashText(b, g) {
-  const o = gearClash(b, g.id);
+  const o = itemClash(b, g.id);
   if (!o.length) return '';
   const need = usedQty(b, g.id) + o.reduce((s, x) => s + usedQty(x, g.id), 0), owned = qtyOf(g);
   return owned > 1 || need > 2 ? `${need} needed, ${owned} owned: also on ${others(o, b)}` : `Also on ${others(o, b)}`;
@@ -43,7 +48,7 @@ function pickPeople(b) {
     values: { people: (b.people || []).filter(id => byId('people', id)) },
     fields: [{
       key: 'people', label: 'People', type: 'checks', empty: 'No people yet. Add band members, session players and crew on the People page.',
-      options: people.map(p => ({ value: p.id, label: p.name || 'Unnamed', group: groupLabel(p.group) || 'Other', hint: [p.role || p.instrument, personClash(b, p.id).length && 'booked elsewhere then'].filter(Boolean).join(' · ') })),
+      options: people.map(p => ({ value: p.id, label: p.name || 'Unnamed', group: groupLabel(p.group) || 'Other', hint: [p.role || p.instrument, peopleClash(b, p.id).length && 'booked elsewhere then'].filter(Boolean).join(' · ') })),
     }],
     onSave: v => { setPeople(b, v.people || []); toast(`${plural((v.people || []).length, 'person', 'people')} on this booking`); },
   });
@@ -153,7 +158,7 @@ export default {
   kinds: ['show', 'session', 'rehearsal', 'other'],
   summary(b) {
     const n = peopleOf(b).length, u = units(b);
-    const clashes = peopleOf(b).filter(p => personClash(b, p.id).length).length + gearOf(b).filter(g => gearClash(b, g.id).length).length;
+    const clashes = peopleOf(b).filter(p => peopleClash(b, p.id).length).length + gearOf(b).filter(g => itemClash(b, g.id).length).length;
     if (!n && !u) return '';
     return `${plural(n, 'person', 'people')} · ${plural(u, 'item')}` + (clashes ? ` · ⚠ ${plural(clashes, 'clash', 'clashes')}` : '');
   },

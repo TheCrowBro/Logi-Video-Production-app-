@@ -61,8 +61,9 @@ export function eventWhen(b) {
     end = okTime(b.end) || (start ? addMinutes(start, 60) : '');
   }
   if (!start) return { allDay: true, start: first, end: nextDay(last) };
-  // An end at or before the start on the same day is after midnight: the next day.
-  const endDay = last === first && end <= start ? nextDay(last) : last;
+  // An end at or before the start is after midnight: the day after the last day (on a festival weekend too, so a
+  // curfew at 00:30 ends the last night, not the one before it).
+  const endDay = end <= start ? nextDay(last) : last;
   return { allDay: false, start: local(first, start), end: local(endDay, end) };
 }
 
