@@ -12,7 +12,7 @@ import { haptic } from '../a11y.js';
 import { blocksFor } from '../blocks/index.js';
 import { bookingIcs, allIcs, runOfDay } from '../ics.js';
 import { openAct } from './acts.js';
-import { venueWarnings, openVenue } from './venues.js';
+import { venueChecks, openVenue } from './venues.js';
 
 /* ------------------------------- words ------------------------------- */
 const NOUN = { show: 'show', session: 'studio session', rehearsal: 'rehearsal', other: 'diary entry' };
@@ -523,7 +523,7 @@ function hero(b) {
   const c = b.contact || {};
   const digits = c.phone ? telUrl(c.phone).slice(4) : '';
   let warns = [];
-  try { warns = (venueWarnings(b) || []).map(w => (typeof w === 'string' ? w : w && w.text)).filter(Boolean); } catch (e) { console.warn('venue warnings', e); }
+  try { warns = (venueChecks(b) || []).filter(w => w && w.text); } catch (e) { console.warn('venue warnings', e); } // [{ level: 'warn'|'info', text }]
   const el = h('section', { class: 'card hero bk-hero', style: actStyle(b), 'aria-label': 'Booking', title: 'Press and hold to delete this booking' },
     h('div', { class: 'bk-hero-top' },
       h('h2', { class: 'bk-title', tabindex: '-1', 'data-view-head': '' }, h('span', { class: 'bk-title-ico', 'aria-hidden': 'true' }, model.kindIcon(b.kind)), ' ', model.bookingTitle(b)),
@@ -538,7 +538,7 @@ function hero(b) {
         b.venueId && byId('venues', b.venueId) && h('button', { type: 'button', class: 'btn ghost small', onclick: () => openVenue(b.venueId), 'aria-label': `Venue details: ${where.name}` }, 'Details')),
       mapButtons(where))
       : b.kind !== 'other' && h('p', { class: 'muted small' }, 'No venue yet. Edit to add one.'),
-    warns.map(w => h('div', { class: 'warn' }, '⚠ ' + w)),
+    warns.map(w => (w.level === 'info' ? h('div', { class: 'muted small bk-venue-info' }, 'ℹ︎ ' + w.text) : h('div', { class: 'warn' }, '⚠ ' + w.text))),
     (act || b.client) && h('div', { class: 'bk-act-row' },
       act ? h('button', { type: 'button', class: 'chip bk-act', style: actStyle(b), onclick: () => openAct(act.id), 'aria-label': `Act: ${act.name}. Open it` }, h('span', { class: 'bk-swatch', 'aria-hidden': 'true' }), act.name || 'Unnamed act')
         : h('span', { class: 'chip bk-act bk-client' }, '🎙 ' + b.client)),
