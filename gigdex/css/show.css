@@ -1,1 +1,139 @@
-/* show: styles owned by the show feature (docs/developers.md). Prefix classes to avoid clashes. */
+/* show: the Deal & fee, Running order, Guest list and Settlement boxes on a show's page (js/blocks/deal.js, running.js,
+   guests.js, settlement.js) and their sheets (js/show-common.js). Theme tokens only; every class starts .sh- */
+.sh-block { display: grid; gap: 10px; min-width: 0; overflow-wrap: anywhere; }
+.sh-block > p, .sh-block > .warn, .sh-block > .empty { margin: 0; }
+.sh-block .actions { margin-top: 2px; }
+.sh-block .stats { margin-bottom: 0; }
+.sh-block h4, .sh-build-preview h4 { margin: 0; font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; }
+.sh-bad { color: var(--danger); font-weight: 600; }
+.sh-good { color: var(--ok); font-weight: 600; }
+
+/* tables (what it pays, merch) */
+.sh-table-wrap { overflow-x: auto; }
+.sh-table { width: 100%; border-collapse: collapse; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.sh-table th, .sh-table td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.sh-table thead th { font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.sh-table tbody th { font-weight: 600; }
+.sh-table .num { text-align: right; white-space: nowrap; }
+.sh-table tfoot th, .sh-table tfoot td { font-weight: 800; border-bottom: 0; }
+
+/* deal */
+.sh-deal-head { display: grid; gap: 2px; }
+.sh-deal-line { font-size: 1.25rem; font-weight: 800; line-height: 1.25; }
+.sh-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(5.5rem, 1fr)); gap: 6px; }
+.sh-fact { background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; display: grid; }
+.sh-fact span { font-size: .72rem; color: var(--muted); } .sh-fact b { font-variant-numeric: tabular-nums; }
+.sh-pays { display: grid; gap: 4px; }
+.sh-pays .sh-table tr.sh-best th, .sh-pays .sh-table tr.sh-best td { font-weight: 700; }
+.sh-table tr.sh-night th, .sh-table tr.sh-night td { background: color-mix(in srgb, var(--accent) 12%, transparent); border-bottom-color: var(--accent); }
+.sh-pays-which { display: block; font-size: .7rem; color: var(--muted); font-weight: 500; }
+.sh-pays-note { margin: 2px 0 0; }
+.sh-breakeven { margin: 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg2); border-radius: 0 10px 10px 0; font-size: .92rem; }
+.sh-deposit { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: var(--bg2); display: grid; gap: 8px; }
+.sh-deposit.paid { border-color: var(--ok); } .sh-deposit.late { border-color: var(--danger); }
+.sh-deposit > p { margin: 0; }
+.sh-deposit .card-row { flex-wrap: wrap; }
+.sh-deposit .btn.primary { background: var(--ok); color: var(--bg); }
+
+/* running order */
+.sh-ro { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.sh-ro-row { display: grid; grid-template-columns: 4.4rem minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 8px 10px; border-radius: 10px; background: var(--bg2); border: 1px solid transparent; }
+.sh-ro-row.marker { background: transparent; border: 1px dashed var(--line); padding-top: 5px; padding-bottom: 5px; color: var(--muted); }
+.sh-ro-row.ours { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg2)); }
+.sh-ro-row.late .sh-ro-time b, .sh-ro-row.late .sh-ro-time span { color: var(--danger); }
+.sh-ro-time { display: grid; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.sh-ro-time span { font-size: .8rem; color: var(--muted); }
+.sh-ro-what { display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: baseline; min-width: 0; }
+.sh-ro-name { font-weight: 600; overflow-wrap: anywhere; }
+.sh-ro-row.marker .sh-ro-name { font-weight: 500; }
+.pill.sh-you { color: var(--accent); border-color: var(--accent); }
+.sh-ro-tag { font-size: .72rem; color: var(--blue); }
+.sh-ro-len { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sh-drift { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.sh-build { display: grid; gap: 14px; }
+.sh-build > p { margin: 0; }
+.sh-build .form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sh-build-group { border: 1px solid var(--line); border-radius: 12px; padding: 4px 12px 12px; display: grid; gap: 8px; }
+.sh-build-group > p { margin: 0; }
+.sh-build-acts { display: grid; gap: 8px; }
+.sh-build-act { display: grid; grid-template-columns: minmax(0, 1fr) 5.5rem var(--hit); gap: 8px; align-items: end; }
+.sh-build-group > .btn { justify-self: start; }
+.sh-build-preview { display: grid; gap: 8px; padding: 10px; border-radius: 12px; background: var(--bg2); }
+.sh-build-preview > p { margin: 0; }
+.sh-build-preview .sh-ro-row { background: var(--card); }
+.sh-build-preview .sh-ro-row.marker { background: transparent; }
+
+/* a sheet of rows with a label over each box (running order, merch counts, costs) */
+.sh-rows-form { display: grid; gap: 10px; }
+.sh-rows-form > p { margin: 0; }
+.sh-rows-form > .actions { margin-top: 0; }
+.sh-rows { display: grid; gap: 8px; }
+.sh-rows-empty { margin: 0; }
+.sh-row { display: grid; grid-template-columns: minmax(0, 1fr) var(--hit); gap: 4px 6px; align-items: start; padding: 8px 4px 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); }
+.sh-cells { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.sh-cell { display: grid; gap: 3px; flex: 1 1 6rem; min-width: 0; align-content: start; }
+.sh-cell > label { font-size: .75rem; color: var(--muted); font-weight: 600; }
+.sh-cell.wide { flex-basis: 100%; }
+.sh-cell.sh-cell-check { display: flex; align-items: center; flex: 0 0 auto; align-self: end; padding: 0 4px; gap: 8px; min-height: var(--hit); }
+.sh-cell-check span { font-size: .9rem; }
+.sh-row-note { grid-column: 1 / -1; }
+.sh-row-note:empty { display: none; }
+.sh-rows-ro .sh-k-time { flex: 0 0 8.8rem; }
+.sh-rows-ro .sh-k-act { flex: 1 1 9rem; }
+.sh-rows-ro .sh-k-length { flex: 0 0 6rem; }
+.sh-rows-merch .sh-k-start, .sh-rows-merch .sh-k-end, .sh-rows-merch .sh-k-comps, .sh-rows-merch .sh-k-price { flex: 1 1 4.2rem; }
+.sh-rows-costs .sh-k-desc { flex: 1 1 10rem; } .sh-rows-costs .sh-k-amount { flex: 0 0 7.5rem; }
+.sh-copy-area { font: .85rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+
+/* guest list */
+.sh-g-capline { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sh-g-capline label { font-size: .88rem; color: var(--muted); }
+.sh-g-capline input { width: 6.5rem; flex: none; }
+.sh-g-add { display: grid; grid-template-columns: 5rem minmax(0, 1fr) auto; gap: 8px; align-items: end; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); }
+.sh-g-add .sh-k-name { grid-column: 1 / -1; }
+.sh-g-add input { background: var(--card); }
+.sh-g-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.sh-g-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 2px; align-items: center; padding: 2px 0 2px 2px; border-bottom: 1px solid var(--line); }
+.sh-g-row:last-child { border-bottom: 0; }
+.sh-g-in.check { padding: 0 8px 0 4px; }
+.sh-g-who { min-width: 0; }
+.sh-g-name { overflow-wrap: anywhere; }
+.pill.sh-g-plus { margin-left: 6px; }
+.sh-g-tick { color: var(--ok); font-size: .8rem; font-weight: 700; }
+.sh-g-row.in .sh-g-name { color: var(--ok); }
+.sh-g-none:empty { display: none; }
+.sh-g-none { padding: 8px 0; }
+@media (min-width: 560px) {
+  .sh-g-add { grid-template-columns: minmax(0, 2fr) 5rem minmax(0, 2fr) auto; }
+  .sh-g-add .sh-k-name { grid-column: auto; }
+}
+
+/* settlement */
+.sh-sec { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sh-sec > p, .sh-sec > .warn, .sh-sec .actions { margin: 0; }
+.sh-sec > .warn { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sh-st-inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.sh-st-inputs .sh-k-sh-st-merchtotal { grid-column: span 2; }
+.sh-lines { display: grid; font-variant-numeric: tabular-nums; }
+.sh-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 5px 0; border-bottom: 1px dashed var(--line); font-size: .92rem; }
+.sh-line > span { min-width: 0; overflow-wrap: anywhere; } .sh-line > b { white-space: nowrap; font-weight: 600; }
+.sh-line.muted > b { font-weight: 500; }
+.sh-line.strong { border-bottom: 0; font-size: 1rem; } .sh-line.strong > b { font-weight: 800; }
+.sh-line.sh-from-budget > span::after { content: ' · budget'; color: var(--muted); font-size: .8rem; }
+.sh-badrow th, .sh-badrow td { color: var(--danger); }
+.sh-st-totals .stat b { font-size: clamp(.95rem, 4vw, 1.15rem); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.sh-st-totals .stat.sh-profit b { color: var(--ok); }
+.sh-pay { display: grid; }
+.sh-pay-row { display: grid; grid-template-columns: minmax(0, 1fr) 4.8rem minmax(5.5rem, auto); gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.sh-pay-row:last-child { border-bottom: 0; }
+.sh-pay-who { display: grid; min-width: 0; overflow-wrap: anywhere; }
+.sh-pay-share { display: grid; gap: 2px; }
+.sh-pay-share label { font-size: .7rem; }
+.sh-pay-share input { text-align: center; padding-left: 4px; padding-right: 4px; }
+.sh-pay-amt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-size: 1.02rem; }
+.sh-st-notes { display: grid; gap: 4px; }
+.sh-st-notes > label { font-size: .8rem; color: var(--muted); font-weight: 600; }
+.sh-st-notes textarea { resize: vertical; }
+.sh-st-status { padding: 8px 10px; border: 1px solid var(--ok); border-radius: 12px; background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.sh-st-actions { align-items: center; }
+@media (max-width: 380px) { .sh-st-inputs { grid-template-columns: repeat(2, minmax(0, 1fr)); } .sh-pay-row { grid-template-columns: minmax(0, 1fr) 4.2rem auto; } }
