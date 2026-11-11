@@ -407,7 +407,7 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   ok('the invoices CSV downloads', dl.suggestedFilename() === `gigdex-invoices-${expect.Y}.csv` && /^﻿?Number,Date,Due/.test(csvText) && /GIG-0007/.test(csvText) && /420\.00/.test(csvText), csvText.slice(0, 200));
   const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#mn-csv-shows')]);
   const csv2 = fs.readFileSync(await dl2.path(), 'utf8');
-  ok('the shows CSV downloads with the settlement', /Date,Act,Venue/.test(csv2) && /The Lantern Rooms/.test(csv2) && /yes/.test(csv2), csv2.split('\n').slice(0, 3).join(' / '));
+  ok('the shows CSV downloads with the settlement (Settled says no for a night counted but not marked settled)', /Date,Act,Venue/.test(csv2) && /The Lantern Rooms,Done,[^\n]*,214,[^\n]*,1338\.00,no/.test(csv2), csv2.split('\n').slice(0, 3).join(' / '));
   // The year switcher: only years with bookings (and this one).
   ok('no earlier year to go to without bookings in it', await page.locator('#mn-year-prev').isDisabled());
   await page.evaluate(y => import('./js/store.js').then(s => s.upsert('bookings', { id: 't-last-year', kind: 'other', status: 'done', date: `${y}-06-14`, title: 'Wedding', fee: 900 })), Number(expect.Y) - 1);
@@ -435,6 +435,16 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   ok('the Money page has a walkthrough', toured, toured ? '' : await page.locator('.tour-card').innerText().catch(() => 'no card'));
   await page.keyboard.press('Escape');
 
+  // A session's income counts its players at their own rates, as its invoice will (s-sess1: 8 h × $45 + Marcus $180).
+  const inc = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/model.js')]).then(([s, m]) => { s.loadSample(); return m.bookingIncome(s.byId('bookings', 's-sess1')); }));
+  ok('a session’s income includes its session players, as the invoice does', inc === 540, String(inc));
+  // An invoice whose payments already cover it is saved as paid, not just sent (and ticks Paid in full).
+  const covered = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, mo]) => {
+    s.upsert('bookings', { id: 't-covered', kind: 'other', status: 'done', title: 'Covered', date: '2026-02-02', fee: 100 });
+    mo.saveDoc('t-covered', 'invoice', { number: 'T-1', status: 'sent', issued: '2026-02-02', lines: [{ id: 'l', desc: 'Fee', qty: 1, price: 100 }], payments: [{ id: 'p', date: '2026-02-02', amount: 100, method: 'cash' }] });
+    const b = s.byId('bookings', 't-covered'); return b.invoice.status;
+  }));
+  ok('an invoice its payments already cover is saved as paid', covered === 'paid', covered);
   ok('no errors in the console', errors.length === 0, errors.slice(0, 5).join(' | '));
   await browser.close();
 

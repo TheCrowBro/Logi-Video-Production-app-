@@ -107,7 +107,7 @@ function render(root) {
   const actRows = [...acts.values()].sort((a, b) => b.earned - a.earned || b.booked - a.booked || a.name.localeCompare(b.name));
   // Payouts per person from the year's settled shows.
   const payouts = new Map();
-  for (const b of settled) for (const p of settle(b).payouts) { const cur = payouts.get(p.personId) || { amount: 0, shows: 0 }; cur.amount += p.amount; cur.shows += 1; payouts.set(p.personId, cur); }
+  for (const b of settled) for (const p of settle(b).payouts) { const cur = payouts.get(p.personId) || { amount: 0, shows: 0, open: 0 }; cur.amount += p.amount; cur.shows += 1; if (!isSettled(b)) cur.open += 1; payouts.set(p.personId, cur); }
   const payRows = [...payouts].map(([id, v]) => ({ id, name: (db.people.find(p => p.id === id) || {}).name || 'Someone removed', ...v })).sort((a, b) => b.amount - a.amount);
 
   const exportInvoices = async () => {
@@ -125,7 +125,7 @@ function render(root) {
     const rows = [['Date', 'Act', 'Venue', 'Status', 'Deal', 'Tickets', 'Ticket price', 'Gross', 'Fee', 'Merch', 'Costs', 'Profit', 'Received on the night', 'Settled']];
     for (const b of shows) {
       const s = settle(b), has = hasSettlement(b);
-      rows.push([b.date || '', tx(actName(b.actId)), tx(venueOf(b).name), statusLabel(b.status), tx(dealSummary(b.deal)), has ? s.tickets : '', money2(s.price), has ? money2(s.gross) : '', money2(has ? s.fee : bookingIncome(b)), has ? money2(s.merch) : '', money2(s.costs), has ? money2(s.profit) : '', s.received == null ? '' : money2(s.received), has ? 'yes' : 'no']);
+      rows.push([b.date || '', tx(actName(b.actId)), tx(venueOf(b).name), statusLabel(b.status), tx(dealSummary(b.deal)), has ? s.tickets : '', money2(s.price), has ? money2(s.gross) : '', money2(has ? s.fee : bookingIncome(b)), has ? money2(s.merch) : '', money2(s.costs), has ? money2(s.profit) : '', s.received == null ? '' : money2(s.received), isSettled(b) ? 'yes' : 'no']);
     }
     if (await saveFile('﻿' + csv(rows), `gigdex-shows-${Y}.csv`, 'text/csv')) toast(`${plural(shows.length, 'show')} exported`);
   };
@@ -166,7 +166,7 @@ function render(root) {
           h('span', { class: 'mn-bar-v' }, h('span', { class: 'sr-only' }, `${monthLong(m.i)}: `), m.earned || m.booked ? fmtMoney(m.earned) : '—', m.booked > 0 && h('small', { class: 'muted' }, `+ ${fmtMoney(m.booked)} ahead`))))),
       ] : h('p', { class: 'muted small' }, `Nothing earned or booked in ${Y} yet.`)),
 
-    section('mn-settled', 'Settled shows', settled.length ? [h('div', { class: 'list' }, ...settledShown.map(b => {
+    section('mn-settled', 'Settlements', settled.length ? [h('div', { class: 'list' }, ...settledShown.map(b => {
       const s = settle(b);
       return tap(b, h('div', { class: 'card-row' },
         h('div', null, h('strong', null, bookingTitle(b)), !isSettled(b) && h('span', { class: 'pill mn-unsettled' }, 'not marked settled'), h('div', { class: 'muted small' }, [b.date && fmtShort(b.date), `fee ${fmtMoney(s.fee)}`, s.merch > 0 && `merch ${fmtMoney(s.merch)}`, `costs ${fmtMoney(s.costs)}`, !isSettled(b) && s.short > 0 && `${fmtMoney(s.short)} still owed`].filter(Boolean).join(' · '))),
@@ -181,8 +181,8 @@ function render(root) {
       h('div', { class: 'muted small mn-act-sub' }, [a.merch > 0 && `merch ${fmtMoney(a.merch)}`, `costs ${fmtMoney(a.costs)}`, `profit ${fmtMoney(r2(a.earned + a.merch - a.costs))}`, a.booked > 0 && `${fmtMoney(a.booked)} booked ahead`].filter(Boolean).join(' · ')))))
       : h('p', { class: 'muted small' }, `No bookings in ${Y}.`)),
 
-    section('mn-payouts', 'Payouts per person', payRows.length ? [h('div', { class: 'card mn-pay-card' }, ...payRows.map(p => h('div', { class: 'card-row mn-payout' }, h('div', null, h('strong', null, p.name), h('div', { class: 'muted small' }, `from ${plural(p.shows, 'show')}`)), h('b', null, fmtMoney(r2(p.amount)))))),
-      h('p', { class: 'small muted' }, 'Each settled show’s profit, shared between the people on it by their shares (set in the show’s settlement).')]
+    section('mn-payouts', 'Payouts per person', payRows.length ? [h('div', { class: 'card mn-pay-card' }, ...payRows.map(p => h('div', { class: 'card-row mn-payout' }, h('div', null, h('strong', null, p.name), h('div', { class: 'muted small' }, `from ${plural(p.shows, 'show')}` + (p.open ? ` · ${p.open === p.shows ? (p.shows === 1 ? 'not' : 'none') : p.open + ' not'} marked settled yet` : ''))), h('b', null, fmtMoney(r2(p.amount)))))),
+      h('p', { class: 'small muted' }, 'Each show’s profit, shared between the people on it by their shares (set in the show’s settlement). A show not marked settled yet is counted as it stands.')]
       : h('p', { class: 'muted small' }, `No payouts in ${Y}: they come from settled shows with people on them.`)),
 
     section('mn-export', 'For the accountant', h('div', { class: 'actions' },

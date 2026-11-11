@@ -11,7 +11,7 @@ import { openSetlist, newSetlist, liveSheet, plural, shortKey, tickShows } from 
 import { openBooking } from './bookings.js';
 
 // View state survives redraws: which view, which act's chip, the search.
-const S = { view: 'songs', act: '', q: '', lyrics: false };
+const S = { view: 'songs', act: '', q: '', lyrics: false, qBox: false }; // qBox: the search box was showing (kept until the view changes, so clearing it never pulls it away mid-typing)
 const NO_ACT = '-';
 export const TUNINGS = ['Standard', 'Drop D', 'E♭ standard', 'D standard', 'Drop C', 'Open G', 'Open D', 'DADGAD'];
 
@@ -81,10 +81,10 @@ function view(draw) {
     h('div', { class: 'seg sg-views', role: 'group', 'aria-label': 'Show songs or setlists' },
       [['songs', 'Songs', db.songs.length], ['setlists', 'Setlists', db.setlists.length]].map(([v, l, n]) => h('button', {
         type: 'button', id: 'sg-view-' + v, class: S.view === v || (v === 'songs' && isSongs) ? 'on' : '', 'aria-pressed': String(S.view === v || (v === 'songs' && isSongs)),
-        onclick: () => { S.view = v; draw(); },
+        onclick: () => { S.view = v; S.qBox = false; draw(); },
       }, l, h('span', { class: 'sg-count' }, ' ' + n)))),
     // Kept while a search is on, so a search typed earlier can still be seen and cleared when few songs are left.
-    isSongs && (db.songs.length > 3 || S.q) && h('input', { class: 'search sg-search', type: 'search', id: 'sg-q', placeholder: 'Search songs, keys, writers…', 'aria-label': 'Search songs', value: S.q, autocomplete: 'off', oninput: e => { S.q = e.target.value; draw(); } }),
+    isSongs && (db.songs.length > 3 || S.q || S.qBox) && (S.qBox = true) && h('input', { class: 'search sg-search', type: 'search', id: 'sg-q', placeholder: 'Search songs, keys, writers…', 'aria-label': 'Search songs', value: S.q, autocomplete: 'off', oninput: e => { S.q = e.target.value; draw(); } }),
     chipList.length > 1 && h('div', { class: 'chips sg-acts', role: 'group', 'aria-label': 'Filter by act' }, chip('', 'All'), chipList.map(([k, n]) => chip(k, n))),
     ...(isSongs ? songsList(draw) : setlistsList()),
   ];

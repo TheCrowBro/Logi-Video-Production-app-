@@ -232,8 +232,9 @@ function loadSample() {
 export function removeSample() {
   const order = ['bookings', 'logs', 'shifts', 'setlists', 'songs', 'kits', 'gear', 'insurance', 'acts', 'people', 'venues'];
   const lists = [...order.filter(c => store.COLLECTIONS.includes(c)), ...store.COLLECTIONS.filter(c => !order.includes(c))];
-  let n = 0;
-  for (const list of lists) for (const r of store.db[list].filter(x => x && x.sample)) { store.remove(list, r.id); n++; }
+  const before = sampleCount();
+  for (const list of lists) for (const r of store.db[list].filter(x => x && x.sample)) if (store.byId(list, r.id)) store.remove(list, r.id);
+  const n = before - sampleCount(); // some go with others (a booking's clock shifts), so count what is gone
   // The sample's stand-in name, if it is still the one loadSample filled in.
   const p = store.db.profile;
   if (p.name === 'Sample Producer' && p.business === 'Sample Sound') update(d => { d.profile = { ...d.profile, name: '', business: '', role: d.profile.role === 'Producer' ? '' : d.profile.role, updatedAt: 0 }; }); // a cleared stand-in never wins a merge with a real profile

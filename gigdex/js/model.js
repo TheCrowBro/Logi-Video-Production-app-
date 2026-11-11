@@ -234,6 +234,31 @@ export function sessionFee(b, hours) {
 export const sessionHoursPlanned = b => { const m = minutesBetween(b && b.start, b && b.end); return m == null ? 0 : m / 60; };
 export const daysSpan = b => (b && b.date ? Math.round((Date.parse(lastDate(b)) - Date.parse(b.date)) / 864e5) + 1 : 1);
 
+// The hours a session is expected to bill, as its invoice will (js/money.js): the clock's hours once it has run, to the
+// quarter hour and at least one; the planned hours on every day before that. A session still to come (not done, its
+// last day not past) or with its clock running never counts for less than its plan, so a few minutes on the clock
+// don't empty 'booked ahead'; once it is over, the clock's hours are what it earned.
+export function sessionHoursEstimate(b) {
+  const planned = sessionHoursPlanned(b) * Math.max(1, daysSpan(b));
+  const h = clockHoursOf(b.id);
+  if (!(h > 0)) return planned;
+  const q = Math.round(h * 4) / 4 || 1;
+  const today = new Date(), iso = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+  const finished = (b.status === 'done' || b.status === 'settled' || lastDate(b) < iso) && !(db.shifts || []).some(s => s && s.bookingId === b.id && !s.end);
+  return finished ? q : Math.max(q, planned);
+}
+// The session players and engineers on a session at their own rates, as the invoice adds them: by the hour (the
+// session's hours), the day (every day), the show (once) or the song (each song worked on).
+export function playersFee(b, hours) {
+  if (!b || b.kind !== 'session') return 0;
+  let t = 0;
+  for (const id of Array.isArray(b.people) ? b.people : []) {
+    const p = byId('people', id); if (!p || !(num(p.rate) > 0)) continue;
+    const qty = p.rateUnit === 'hour' ? (num(hours) || 1) : p.rateUnit === 'show' ? 1 : p.rateUnit === 'song' ? Math.max(1, (b.songIds || []).length) : Math.max(1, daysSpan(b));
+    t += num(p.rate) * qty;
+  }
+  return t;
+}
 // What a booking brings in (before costs and tax), for the money page and the calendar: what its invoice bills when it
 // has one (not void), else a show's deal (at the counted door when settled, else at the guarantee) or a session's fee;
 // nothing for a cancelled booking.
@@ -242,6 +267,6 @@ export function bookingIncome(b) {
   const inv = b.invoice;
   if (inv && inv.status !== 'void' && Array.isArray(inv.lines) && inv.lines.length) return Math.round(inv.lines.reduce((t, l) => t + num(l && l.qty) * num(l && l.price), 0) * 100) / 100;
   if (b.kind === 'show') return b.settlement && b.settlement.tickets ? settle(b).fee : dealPays(b.deal || {}, 0);
-  if (b.kind === 'session') { const h = clockHoursOf(b.id); return sessionFee(b, b.rateUnit === 'hour' && h > 0 ? Math.round(h * 4) / 4 : undefined); }
+  if (b.kind === 'session') { const hours = sessionHoursEstimate(b); return sessionFee(b, b.rateUnit === 'hour' ? hours : undefined) + playersFee(b, hours); }
   return num(b.fee);
 }

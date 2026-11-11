@@ -227,4 +227,4 @@ body.tl-full-on { overflow: hidden; }
 }
 
 /* Extra-large text: tool names wrap instead of being clipped (Metronome). */
-html[data-text=xlarge] .tl-tab-name { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
+html[data-text=xlarge] .tl-tab-name { white-space: normal; hyphens: auto; -webkit-hyphens: auto; text-overflow: clip; font-size: .6rem; }

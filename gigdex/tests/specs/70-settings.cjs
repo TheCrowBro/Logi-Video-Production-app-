@@ -315,6 +315,18 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   d = await data(page);
   ok('erase empties the database', ['bookings', 'acts', 'people', 'gear', 'songs', 'venues', 'setlists'].every(c => d[c].length === 0) && d.profile.name === '' && d.profile.currency === '$');
   ok('and forgets the backup times', (await run(page, () => localStorage.getItem('gigdex-backup-at'))) === null);
+  // A merge keeps a newer profile that has no personal name but is filled in (a band or business name, currency…);
+  // only an empty profile or the sample's stand-in gives way to the file's whatever their times.
+  const merged = await page.evaluate(() => import('./js/store.js').then(st => {
+    const local = { ...st.db, profile: { name: '', business: 'Real Sound', currency: '£', email: 'new@x.test', updatedAt: Date.now() } };
+    const file = { app: 'gigdex', profile: { name: 'Old Name', business: 'Old Biz', currency: '$', email: 'old@x.test', updatedAt: Date.now() - 365 * 864e5 } };
+    const a = st.mergeDb(local, file).profile;
+    const b = st.mergeDb({ ...st.db, profile: { name: 'Sample Producer', business: 'Sample Sound', updatedAt: Date.now() } }, file).profile;
+    const c = st.mergeDb({ ...st.db, profile: { name: '', currency: '$', updatedAt: Date.now() } }, file).profile;
+    return { a: a.business + ' ' + a.currency, b: b.name, c: c.name };
+  }));
+  ok('a merge keeps the newer filled-in profile without a name', merged.a === 'Real Sound £', JSON.stringify(merged));
+  ok('…but the sample’s stand-in and an empty profile give way to the file’s', merged.b === 'Old Name' && merged.c === 'Old Name', JSON.stringify(merged));
   ok('no errors in the console (new device)', errors.length === 0, errors.slice(0, 5).join(' | '));
   await browser.close();
 

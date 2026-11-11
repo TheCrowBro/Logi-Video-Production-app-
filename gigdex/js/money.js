@@ -81,6 +81,8 @@ export function saveDoc(bookingId, kind, next) {
   const prev = docOf(b, kind) || {}, now = Date.now(), doc = { ...next, updatedAt: now };
   if (doc.status !== 'draft' && !doc.sentAt) doc.sentAt = now;
   if (kind === 'quote' && doc.status === 'accepted' && !doc.acceptedAt) doc.acceptedAt = now;
+  // An invoice whose payments already cover it (the deposit and the night's takings came in) is paid, not just sent.
+  if (kind === 'invoice' && doc.status === 'sent' && Array.isArray(doc.payments) && doc.payments.length && calc({ ...doc, status: 'sent' }).total > 0 && calc({ ...doc, status: 'sent' }).due <= 0.005) doc.status = 'paid';
   if (kind === 'invoice') { if (doc.status === 'paid') doc.paidAt = doc.paidAt || now; else doc.paidAt = null; }
   update(d => { const x = d.bookings.find(r => r.id === bookingId); if (!x) return; x[kind] = doc; x.updatedAt = now; });
   const ids = CHECKS[b.kind];

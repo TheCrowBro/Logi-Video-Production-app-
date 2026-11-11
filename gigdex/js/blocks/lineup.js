@@ -2,7 +2,7 @@
 // gear goes (from Backline and its stage packs, with quantities). Someone or something also needed by another live
 // booking on the same days is flagged ("Leo is also on Harbour Hall that day"; three SM58s here and two there, four
 // owned).
-import { h, toast, fmtShort, telUrl, sheet } from '../util.js';
+import { h, toast, fmtShort, telUrl, sheet, todayISO } from '../util.js';
 import { db, byId, update, patch, personClash, gearClash, gearShort, qtyOf, usedQty, lastDay } from '../store.js';
 import * as model from '../model.js';
 import { openForm } from '../form.js';
@@ -33,7 +33,7 @@ const whenOf = (o, b) => (o.date === b.date && lastDay(o) === lastDay(b) ? 'that
 const others = (list, b) => list.map(o => `${placeOf(o)} ${whenOf(o, b)}`).join(' and ');
 export const personClashText = (b, p) => { const o = peopleClash(b, p.id); return o.length ? `${firstName(p.name)} is also on ${others(o, b)}` : ''; };
 // This booking alone needs more than are owned ('How many' lowered after it was planned): flagged like a clash.
-const itemShort = (b, id) => model.isLive(b) && gearShort(b, id);
+const itemShort = (b, id) => model.isLive(b) && model.lastDate(b) >= todayISO() && gearShort(b, id); // only bookings still to come, as Backline flags them
 export function gearClashText(b, g) {
   const o = itemClash(b, g.id);
   if (itemShort(b, g.id)) return `${usedQty(b, g.id)} needed, ${qtyOf(g)} owned` + (o.length ? `: also on ${others(o, b)}` : '');

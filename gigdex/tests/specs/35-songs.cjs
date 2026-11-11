@@ -353,7 +353,7 @@ const { open, ok, sleep } = require('../helpers.cjs');
   await store(s => s.db.songs.map(x => x.id).filter(id => !['s-song8', 's-song2', 's-sable1'].includes(id)).forEach(id => s.remove('songs', id))); await sleep(300);
   ok('with 3 songs left, the search typed earlier still shows its box', (await page.locator('#sg-q').count()) === 1 && (await page.inputValue('#sg-q')) === 'ferry' && (await page.locator('.sg-song').count()) === 1);
   if (await page.locator('#sg-q').count()) { await page.fill('#sg-q', ''); await sleep(250); }
-  ok('clearing it shows all 3 songs, and the box goes as there are so few', (await page.locator('.sg-song').count()) === 3 && (await page.locator('#sg-q').count()) === 0);
+  ok('clearing it shows all 3 songs, and the box stays with the focus in it (it goes when the view changes)', (await page.locator('.sg-song').count()) === 3 && (await page.locator('#sg-q').count()) === 1 && (await page.evaluate(() => document.activeElement && document.activeElement.id)) === 'sg-q');
 
   /* ------------------------------- empty states ------------------------------- */
   await store(s => s.eraseAll()); await sleep(300);

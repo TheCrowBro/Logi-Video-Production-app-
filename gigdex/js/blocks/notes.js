@@ -36,7 +36,7 @@ export default {
     ta.addEventListener('blur', () => { if (DRAFT.has(b.id)) save(b.id, ta.value); });
     const fresh = savedAt.id === b.id && Date.now() - savedAt.t < 4000;
     return h('div', { class: 'bk-notes-wrap' }, ta,
-      h('p', { class: 'muted small bk-notes-state', 'aria-live': 'polite' }, fresh ? '✓ Saved' : 'Saved when you leave the box.'));
+      h('p', { class: 'muted small bk-notes-state', 'aria-live': 'polite' }, fresh ? '✓ Saved' : 'Saved when you leave the box. They go on the day sheet the band sees, unless you leave notes off it there.'));
   },
-  tutorial: [{ title: 'Notes', text: 'Anything else about this booking. It saves when you leave the box.', target: ['#blk-notes textarea'] }],
+  tutorial: [{ title: 'Notes', text: 'Anything else about this booking. It saves when you leave the box. Notes go on the band’s day sheet unless you leave them off in its “What goes on it”, so keep private things (money, contracts) out or switch them off there.', target: ['#blk-notes textarea'] }],
 };
