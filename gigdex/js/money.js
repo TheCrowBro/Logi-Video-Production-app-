@@ -10,8 +10,8 @@
 import { h, sheet, toast, uid, todayISO, parseISO, ymd, fmtLong } from './util.js';
 import { db, byId, update } from './store.js';
 import { openForm } from './form.js';
-import { bookingTitle, actName, venueOf, fmtMoney, currency, settle, dealPays, sessionHoursPlanned, daysSpan, markCheck, lastDate } from './model.js';
-import { clockHours } from './clock.js';
+import { bookingTitle, actName, venueOf, fmtMoney, currency, settle, dealPays, daysSpan, markCheck, lastDate } from './model.js';
+import { clockHours, plannedHours } from './clock.js';
 import { sheetTutorial } from './tour.js';
 import { printElement, docPage, saveFile, fileName } from './print.js';
 import { shareBase } from './version.js';
@@ -27,6 +27,7 @@ const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const pad4 = n => String(n).padStart(4, '0');
 const addDays = (iso, n) => { const d = parseISO(iso); return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + (Number(n) || 0))); };
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const isISO = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 /* ------------------------------- billing settings ------------------------------- */
 const DEF = {
@@ -55,10 +56,12 @@ export const isPaid = doc => !!doc && isPaidDoc({ ...doc, kind: 'invoice' });
 const usedNumbers = (d = db, except = null) => new Set(d.bookings.flatMap(b => ['quote', 'invoice'].filter(k => !(except && b.id === except[0] && k === except[1])).map(k => b[k] && b[k].number)).filter(Boolean).map(String));
 const prefixOf = (bl, kind) => String((kind === 'quote' ? bl.quotePrefix : bl.invoicePrefix) ?? '');
 const counterKey = kind => (kind === 'quote' ? 'nextQuote' : 'nextInvoice');
-// The number the next document of a kind will get (without taking it).
+// The number the next document of a kind will get (without taking it): the counter's, or, when the counter is
+// missing or blank, one past the highest number with this prefix still on a document.
 export function nextNumber(kind, d = db) {
   const bl = { ...DEF, ...(d.billing || {}) }, prefix = prefixOf(bl, kind), used = usedNumbers(d);
-  let n = Math.max(1, Math.floor(Number(bl[counterKey(kind)])) || 1);
+  const stored = Math.floor(Number(bl[counterKey(kind)]));
+  let n = stored >= 1 ? stored : 1 + Math.max(0, ...[...used].filter(u => u.startsWith(prefix) && /^\d+$/.test(u.slice(prefix.length))).map(u => Number(u.slice(prefix.length))));
   while (used.has(prefix + pad4(n))) n++;
   return { number: prefix + pad4(n), n };
 }
@@ -91,11 +94,11 @@ export function saveDoc(bookingId, kind, next) {
 
 /* ------------------------------- suggested lines ------------------------------- */
 // The hours a session is billed for: the session clock's when it ran, else the planned start to finish (past
-// midnight too), to the quarter hour.
+// midnight too) on every day of the booking, to the quarter hour.
 export function bookingHours(b) {
   let c = 0; try { c = Number(clockHours(b.id)) || 0; } catch { c = 0; }
   if (c > 0) return { hours: Math.round(c * 4) / 4, from: 'clock' };
-  const p = sessionHoursPlanned(b);
+  const p = plannedHours(b);
   return { hours: Math.round(p * 4) / 4, from: p > 0 ? 'planned' : '' };
 }
 // "16 Nov 2026", or "16 Nov 2026 to 17 Nov 2026" for more than a day.
@@ -119,19 +122,27 @@ export function suggestLines(b, kind) {
   let notes = '', hint = '';
   const act = actName(b.actId) || b.client || '', venue = venueOf(b).name || '', when = whenShort(b), at = venue ? ` at ${venue}` : '';
   if (b.kind === 'show') {
-    const deal = b.deal || {}, s = b.settlement || {};
+    const deal = b.deal || {}, s = b.settlement || {}, night = settle(b), today = todayISO();
     const settled = num(s.tickets) > 0 || !!s.settledAt;
-    const fee = settled ? settle(b).fee : dealPays(deal, 0);
+    const fee = settled ? night.fee : dealPays(deal, 0);
     line(`Performance${act ? ': ' + act : ''}${at}${when ? ', ' + when : ''}`, 1, 'show', fee);
     if (settled) hint = 'The fee is what the settlement says the deal paid.';
     else if (!(fee > 0)) hint = deal.type === 'door' ? 'A door deal has no fee until the night is settled: type the amount in.' : deal.type === 'none' ? 'The deal says no fee (a showcase or charity show).' : 'There is no fee in the deal yet: type the amount in.';
     const dep = num(deal.deposit);
-    if (dep > 0 && deal.depositPaid && kind === 'invoice') payments.push({ id: uid(), date: deal.depositDue && deal.depositDue <= todayISO() ? deal.depositDue : todayISO(), amount: r2(dep), method: 'Deposit received' });
+    // A deposit already received comes off the invoice. When it came in is not kept, so it is dated by the latest it
+    // can have arrived: its due date, the show or today, whichever is earliest (so it counts in the right year).
+    if (dep > 0 && deal.depositPaid && kind === 'invoice') payments.push({ id: uid(), date: [deal.depositDue, b.date, today].filter(isISO).sort()[0], amount: r2(dep), method: 'Deposit received' });
+    // So does what the promoter handed over on the night (the settlement's "received", on top of the deposit), so the
+    // invoice asks only for what the settlement says is still owed.
+    if (night.received > 0 && kind === 'invoice') {
+      payments.push({ id: uid(), date: isISO(b.date) && b.date <= today ? b.date : today, amount: r2(night.received), method: 'Received on the night' });
+      hint = (hint ? hint + ' ' : '') + 'What was handed over on the night comes off.';
+    }
     if (dep > 0 && !deal.depositPaid && kind === 'quote') notes = `Deposit: ${fmtDoc(dep, currency())}${deal.depositDue ? ' by ' + dateText(deal.depositDue) : ''}, to confirm the date.`;
   } else if (b.kind === 'session') {
     const rate = num(b.rate);
     switch (b.rateUnit) {
-      case 'hour': { const { hours, from } = bookingHours(b); line(`Studio time${at}${when ? ', ' + when : ''}`, hours || 1, 'hour', rate); hint = from === 'clock' ? 'Hours from the session clock.' : from === 'planned' ? 'Hours from the planned start and finish.' : 'No times on the booking: check the hours.'; break; }
+      case 'hour': { const { hours, from } = bookingHours(b); line(`Studio time${at}${when ? ', ' + when : ''}`, hours || 1, 'hour', rate); hint = from === 'clock' ? 'Hours from the session clock.' : from === 'planned' ? `Hours from the planned start and finish${daysSpan(b) > 1 ? `, on each of the ${daysSpan(b)} days` : ''}.` : 'No times on the booking: check the hours.'; break; }
       case 'day': { const n = daysSpan(b); line(`Studio ${n === 1 ? 'day' : 'days'}${at}${when ? ', ' + when : ''}`, n, 'day', rate); break; }
       case 'song': { const songs = songsOf(b); if (songs.length) songs.forEach(s => line(`Production: ${s.title || 'Untitled'}`, 1, 'song', rate)); else line(`Production${at}${when ? ', ' + when : ''}`, 1, 'song', rate); break; }
       default: line(`Studio session${at}${when ? ', ' + when : ''}`, 1, 'session', rate);
@@ -176,10 +187,13 @@ export function setStatus(bookingId, kind, status) {
   if (status === 'void' && !confirm(`Void invoice ${doc.number}? It stays on record with its number, but nothing is owed on it.`)) return;
   if (saveDoc(bookingId, kind, { ...doc, status })) toast(`${KINDS[kind].label} ${doc.number}: ${statusLabel(kind, status).toLowerCase()}`);
 }
+// Deleting an invoice that was sent also unticks "Invoice sent" and "Paid in full": the booking has no invoice now.
 export function deleteDoc(bookingId, kind) {
-  const doc = docOf(byId('bookings', bookingId), kind); if (!doc) return false;
+  const b = byId('bookings', bookingId), doc = docOf(b, kind); if (!doc) return false;
   if (!confirm(`Delete ${KINDS[kind].label.toLowerCase()} ${doc.number}? This cannot be undone, and the number is not used again.`)) return false;
   update(d => { const x = d.bookings.find(r => r.id === bookingId); if (x) { delete x[kind]; x.updatedAt = Date.now(); } });
+  const ids = CHECKS[b.kind];
+  if (kind === 'invoice' && ids && doc.status !== 'draft') { markCheck(bookingId, ids.sent, false); markCheck(bookingId, ids.paid, false); }
   toast(`${KINDS[kind].label} ${doc.number} deleted`);
   return true;
 }
@@ -337,8 +351,9 @@ export function openEditor(bookingId, kind) {
   const unitList = h('datalist', { id: 'mn-units' }, UNITS.map(u => h('option', { value: u })));
   const drawTotals = () => {
     const t = calc({ lines: w.lines, taxRate: taxRate.value, payments: doc.payments, status: 'sent' }), kv = (k, v, cls = '') => h('div', { class: cls }, h('span', null, k), h('b', null, v));
-    totals.replaceChildren(kv('Subtotal', fmtMoney(t.net)), t.rate > 0 && kv(`${taxName.value.trim() || 'Tax'} ${t.rate}%`, fmtMoney(t.tax)), kv('Total', fmtMoney(t.total), 'mn-strong'),
-      kind === 'invoice' && t.received > 0 && kv('Paid so far', fmtMoney(t.received)), kind === 'invoice' && t.received > 0 && kv('Still due', fmtMoney(t.due), 'mn-strong'));
+    // replaceChildren() would write a false out as the word "false", so the rows left out are filtered first.
+    totals.replaceChildren(...[kv('Subtotal', fmtMoney(t.net)), t.rate > 0 && kv(`${taxName.value.trim() || 'Tax'} ${t.rate}%`, fmtMoney(t.tax)), kv('Total', fmtMoney(t.total), 'mn-strong'),
+      kind === 'invoice' && t.received > 0 && kv('Paid so far', fmtMoney(t.received)), kind === 'invoice' && t.received > 0 && kv('Still due', fmtMoney(t.due), 'mn-strong')].filter(Boolean));
   };
   const lineRow = (l, i) => {
     const n = i + 1, amount = h('b', { 'aria-live': 'off' }, fmtMoney(r2(num(l.qty) * num(l.price))));
@@ -375,9 +390,14 @@ export function openEditor(bookingId, kind) {
     }).filter(l => l.desc || (l.price !== '' && l.price !== 0));
     const rate = Math.max(0, Math.min(100, num(taxRate.value)));
     const next = { ...cur, number: nb, status: status.value, issued: issued.value, due: due.value, lines, taxRate: rate, taxName: taxName.value.trim() || 'Tax', notes: notes.value.trim() };
-    if (kind === 'invoice' && next.status !== 'paid' && next.status !== 'void' && cur.payments.length && calc({ ...next, status: 'sent' }).due <= 0.005) next.status = 'paid';
+    // Payments that cover the total make it paid; and an invoice the payments had paid in full opens again when the
+    // edit raises the total above them (one marked paid by hand without the payments to match stays paid).
+    const open = kind === 'invoice' ? calc({ ...next, status: 'sent' }).due : 0;
+    if (kind === 'invoice' && next.status !== 'paid' && next.status !== 'void' && cur.payments.length && open <= 0.005) next.status = 'paid';
+    const reopened = kind === 'invoice' && cur.status === 'paid' && next.status === 'paid' && cur.payments.length && open > 0.005 && calc({ ...cur, status: 'sent' }).due <= 0.005;
+    if (reopened) next.status = 'sent';
     close();
-    if (saveDoc(bookingId, kind, next)) toast(`${K.label} ${nb} saved`);
+    if (saveDoc(bookingId, kind, next)) toast(reopened ? `${K.label} ${nb} saved. It is not paid in full any more: ${fmtMoney(open)} still due.` : `${K.label} ${nb} saved`);
   };
   const box = h('form', { class: 'stack mn-editor', novalidate: true, onsubmit: e => { e.preventDefault(); save(); } },
     h('div', { class: 'mn-pair' }, field('mn-ed-number', `${K.label} number`, number), field('mn-ed-status', 'Status', status), field('mn-ed-issued', 'Date', issued), field('mn-ed-due', K.dueLabel, due)),
@@ -480,7 +500,8 @@ export function pickFromPriceList(b, onPick) {
 // Numbering, tax, terms and payment details: one panel for Settings. Every box saves as it changes.
 export function billingPanel() {
   const bl = billing(), sym = currency();
-  const input = (key, label, type = 'text', { hint, whole, ...attrs } = {}) => {
+  // need: a number box that cannot be left blank (the numbering counters: a blank would start them again at 1).
+  const input = (key, label, type = 'text', { hint, whole, need, ...attrs } = {}) => {
     const id = 'mn-bl-' + key;
     const el = type === 'textarea'
       ? h('textarea', { id, rows: 2, placeholder: attrs.placeholder || '', onchange: e => setBilling({ [key]: e.target.value.trim() }) }, bl[key] ?? '')
@@ -491,7 +512,7 @@ export function billingPanel() {
           return setBilling({ [key]: v });
         }
         const v = e.target.value === '' ? '' : Number(e.target.value);
-        if (v !== '' && (!Number.isFinite(v) || (attrs.min != null && v < attrs.min) || (attrs.max != null && v > attrs.max))) {
+        if (v === '' ? need : (!Number.isFinite(v) || (attrs.min != null && v < attrs.min) || (attrs.max != null && v > attrs.max))) {
           toast(`${label}: enter a number${attrs.min != null ? ' from ' + attrs.min : ''}${attrs.max != null ? ' to ' + attrs.max : ' or more'}.`);
           e.target.value = billing()[key] ?? ''; return;
         }
@@ -506,8 +527,8 @@ export function billingPanel() {
     h('p', { class: 'small muted' }, 'Your name, business, address, phone and email on quotes and invoices come from your profile.'),
     h('h4', { class: 'mn-bl-head' }, 'Numbering'),
     h('div', { class: 'mn-pair' },
-      input('quotePrefix', 'Quote prefix', 'text', { placeholder: 'Q-' }), input('nextQuote', 'Next quote number', 'number', { min: 1, step: 1, whole: true }),
-      input('invoicePrefix', 'Invoice prefix', 'text', { placeholder: 'INV-' }), input('nextInvoice', 'Next invoice number', 'number', { min: 1, step: 1, whole: true })),
+      input('quotePrefix', 'Quote prefix', 'text', { placeholder: 'Q-' }), input('nextQuote', 'Next quote number', 'number', { min: 1, step: 1, whole: true, need: true }),
+      input('invoicePrefix', 'Invoice prefix', 'text', { placeholder: 'INV-' }), input('nextInvoice', 'Next invoice number', 'number', { min: 1, step: 1, whole: true, need: true })),
     h('p', { class: 'small muted', id: 'mn-bl-next' }, `The next quote is ${nextNumber('quote').number} and the next invoice ${nextNumber('invoice').number}. Each number is used once: deleting a document never gives its number out again.`),
     h('h4', { class: 'mn-bl-head' }, 'Tax and terms'),
     h('div', { class: 'mn-pair' },

@@ -68,8 +68,10 @@ function render(root) {
   const earned = sum(done, bookingIncome), booked = sum(ahead, bookingIncome);
   const invoiced = sum(sentInv, x => docTotals(x.inv).total);
   const paid = sum(invoices, x => paidInYear(x.inv, Y));
-  const unpaid = sum(yearInv.filter(x => x.inv.status === 'sent'), x => docTotals(x.inv).due);
-  const overdue = sum(yearInv.filter(x => isOverdue(x.b)), x => docTotals(x.inv).due);
+  // What is owed now, whatever year the invoice is from (the same invoices as the list below): last December's
+  // unpaid invoice is still owed in January.
+  const unpaid = sum(invoices.filter(x => x.inv.status === 'sent'), x => docTotals(x.inv).due);
+  const overdue = sum(invoices.filter(x => isOverdue(x.b)), x => docTotals(x.inv).due);
   const stat = (v, l, cls = '', id = '') => h('div', { class: 'stat ' + cls, id: id || null }, h('b', null, v), h('span', null, l));
 
   // Deposits still to come in: shows ahead with a deposit not yet received (every year: it is a to-do list).
@@ -89,13 +91,14 @@ function render(root) {
   // Income by month: earned (done or settled) and booked ahead (confirmed or advanced).
   const months = MONTHS.map((_, i) => { const m = `${Y}-${String(i + 1).padStart(2, '0')}`; return { i, earned: sum(done.filter(b => (b.date || '').startsWith(m)), bookingIncome), booked: sum(ahead.filter(b => (b.date || '').startsWith(m)), bookingIncome) }; });
   const top = Math.max(0, ...months.map(m => m.earned + m.booked));
-  // Per act.
+  // Per act. A show's merch is income too (its costs, such as merch stock, are counted), so the act's profit agrees
+  // with the settled shows and the payouts.
   const acts = new Map();
   for (const b of yearB) {
     const key = b.actId && actName(b.actId) ? b.actId : '';
-    const a = acts.get(key) || { id: key, name: key ? actName(key) : 'No act', color: key ? (db.acts.find(x => x.id === key) || {}).color : '', kinds: {}, earned: 0, booked: 0, costs: 0 };
+    const a = acts.get(key) || { id: key, name: key ? actName(key) : 'No act', color: key ? (db.acts.find(x => x.id === key) || {}).color : '', kinds: {}, earned: 0, merch: 0, booked: 0, costs: 0 };
     a.kinds[b.kind] = (a.kinds[b.kind] || 0) + 1;
-    if (isDone(b)) { a.earned += bookingIncome(b); a.costs += costsOf(b); } else if (isAhead(b)) a.booked += bookingIncome(b);
+    if (isDone(b)) { a.earned += bookingIncome(b); a.merch += b.kind === 'show' ? settle(b).merch : 0; a.costs += costsOf(b); } else if (isAhead(b)) a.booked += bookingIncome(b);
     acts.set(key, a);
   }
   const actRows = [...acts.values()].sort((a, b) => b.earned - a.earned || b.booked - a.booked || a.name.localeCompare(b.name));
@@ -172,7 +175,7 @@ function render(root) {
       h('div', null, h('strong', null, a.color && h('i', { class: 'mn-dot', style: `background:${/^#[0-9a-f]{3,8}$/i.test(a.color) ? a.color : 'transparent'}`, 'aria-hidden': 'true' }), a.name),
         h('div', { class: 'muted small' }, Object.entries(a.kinds).map(([k, n]) => `${n} ${kindLabel(k).toLowerCase()}${n === 1 ? '' : 's'}`).join(' · '))),
       h('div', { class: 'mn-amt' }, h('b', null, fmtMoney(a.earned)), h('span', { class: 'muted small' }, 'earned'))),
-      h('div', { class: 'muted small mn-act-sub' }, [`costs ${fmtMoney(a.costs)}`, `profit ${fmtMoney(r2(a.earned - a.costs))}`, a.booked > 0 && `${fmtMoney(a.booked)} booked ahead`].filter(Boolean).join(' · ')))))
+      h('div', { class: 'muted small mn-act-sub' }, [a.merch > 0 && `merch ${fmtMoney(a.merch)}`, `costs ${fmtMoney(a.costs)}`, `profit ${fmtMoney(r2(a.earned + a.merch - a.costs))}`, a.booked > 0 && `${fmtMoney(a.booked)} booked ahead`].filter(Boolean).join(' · ')))))
       : h('p', { class: 'muted small' }, `No bookings in ${Y}.`)),
 
     section('mn-payouts', 'Payouts per person', payRows.length ? [h('div', { class: 'card mn-pay-card' }, ...payRows.map(p => h('div', { class: 'card-row mn-payout' }, h('div', null, h('strong', null, p.name), h('div', { class: 'muted small' }, `from ${plural(p.shows, 'show')}`)), h('b', null, fmtMoney(r2(p.amount)))))),

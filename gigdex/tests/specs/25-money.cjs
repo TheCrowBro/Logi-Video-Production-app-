@@ -56,6 +56,12 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   ok('billing settings are saved', d.billing.invoicePrefix === 'GIG-' && d.billing.nextInvoice === 7 && d.billing.taxName === 'VAT' && d.billing.dueDays === 30 && d.billing.paypal === 'https://paypal.me/nightowls/' && d.billing.payNote === 'Thanks for having us!', JSON.stringify(d.billing));
   ok('a tax rate over 100% is refused', d.billing.taxRate === 20, String(d.billing.taxRate));
   ok('a payment link that is not https is refused', !d.billing.payLink, d.billing.payLink);
+  // A cleared "Next invoice number" would start the numbers again at 1 and hand out a deleted invoice's number.
+  await setField(page, '#mn-bl-nextInvoice', '');
+  d = await dbNow(page);
+  ok('a blank next invoice number is refused', d.billing.nextInvoice === 7 && (await page.inputValue('#mn-bl-nextInvoice')) === '7', JSON.stringify(d.billing.nextInvoice));
+  const afterBlank = await page.evaluate(() => import('./js/money.js').then(m => m.nextNumber('invoice', { billing: { invoicePrefix: 'Z-', nextInvoice: '' }, bookings: [{ invoice: { number: 'Z-0002' } }] }).number));
+  ok('with no counter, numbering carries on past the highest number in use', afterBlank === 'Z-0003', afterBlank);
   await mount(page, 'billing');
   ok('the next numbers are shown', /GIG-0007/.test(await page.locator('#mn-bl-next').innerText()) && /Q-0001/.test(await page.locator('#mn-bl-next').innerText()));
 
@@ -220,12 +226,16 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   b = await booking(page, 's-show2');
   ok('the invoice is made from the quote', b.invoice && b.invoice.number === 'GIG-0008' && b.invoice.lines.length === 1 && b.invoice.lines[0].price === 800 && b.invoice.lines[0].id !== b.quote.lines[0].id);
   ok('the box switches to the invoice', (await page.getAttribute('#mn-tab-invoice', 'aria-selected')) === 'true');
-  // Deleting it never frees its number.
+  // Deleting it never frees its number, and a sent invoice deleted takes its "Invoice sent" tick with it.
+  await page.click('#mn-sent-invoice'); await sleep(200);
+  ok('the invoice made from the quote is sent', (await booking(page, 's-show2')).checks['show-invoice'] === true);
   await page.click('#mn-edit-invoice');
   await page.waitForSelector('.sheet[aria-label="Edit the invoice"]');
   await page.locator('.sheet[aria-label="Edit the invoice"] .btn.danger').click();
   await sleep(250);
-  ok('an invoice can be deleted', !(await booking(page, 's-show2')).invoice);
+  b = await booking(page, 's-show2');
+  ok('an invoice can be deleted', !b.invoice);
+  ok('deleting a sent invoice unticks "Invoice sent" and "Paid in full"', !b.checks['show-invoice'] && !b.checks['show-paid'], JSON.stringify(b.checks));
   await page.click('#mn-make-from-quote');
   await sleep(250);
   ok('its number is not used again', (await booking(page, 's-show2')).invoice.number === 'GIG-0009');
@@ -259,6 +269,44 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   await page.evaluate(() => import('./js/store.js').then(s => s.upsert('bookings', { id: 't-other', kind: 'other', status: 'confirmed', date: '2026-11-21', title: 'Guitar lesson' })));
   await mount(page, 'money', 't-other');
   ok('a booking with no fee says to type it in', /no price yet/.test(await page.locator('.mn-suggest').innerText()) && /no fee/.test(await page.locator('.mn-make').innerText()));
+  // A block of three studio days with no clock: the planned hours of every day, as its fee counts them.
+  await page.evaluate(() => import('./js/store.js').then(s => s.upsert('bookings', { id: 't-block', kind: 'session', status: 'confirmed', date: '2026-12-01', endDate: '2026-12-03', start: '10:00', end: '18:00', venueId: 's-echo', rate: 45, rateUnit: 'hour', people: ['s-marcus'] })));
+  await mount(page, 'money', 't-block');
+  const block = await page.locator('.mn-suggest').innerText();
+  ok('a block of studio days bills the planned hours of every day', /Studio time at Echo Chamber Studios/.test(block) && /24 hours/.test(block) && /\$1,080/.test(block) && /3 days/.test(block) && /\$540/.test(block), block.replace(/\n/g, ' '));
+  // A settled show: the deposit and what the promoter handed over on the night both come off, so the invoice asks
+  // only for what the settlement says is still owed; the deposit is dated no later than the show.
+  await mount(page, 'money', 's-past');
+  const pastText = await page.locator('.mn-suggest').innerText();
+  const past = await page.evaluate(() => Promise.all([import('./js/money.js'), import('./js/model.js'), import('./js/store.js')]).then(([mn, m, s]) => {
+    const b = s.byId('bookings', 's-past'), sg = mn.suggestLines(b, 'invoice');
+    return { date: b.date, short: m.settle(b).short, due: mn.calc({ lines: sg.lines, payments: sg.payments, status: 'sent' }).due, pays: sg.payments.map(p => [p.method, p.amount, p.date]) };
+  }));
+  ok('a settled show\'s invoice takes off what was received on the night', /Received on the night/.test(pastText) && /\$1,338/.test(pastText) && past.short > 0 && Math.abs(past.due - past.short) < 0.005, JSON.stringify(past));
+  ok('the deposit received is dated no later than the show', past.pays.some(p => p[0] === 'Deposit received' && p[1] === 100 && p[2] === past.date), JSON.stringify(past.pays));
+  // An invoice the payments had paid in full opens again when an edit raises its total.
+  await page.evaluate(() => import('./js/store.js').then(s => s.upsert('bookings', { id: 't-paid', kind: 'session', status: 'done', date: '2026-11-02', rate: 500, rateUnit: 'flat', checks: { 'ses-invoice': true, 'ses-paid': true },
+    invoice: { number: 'T-0001', status: 'paid', issued: '2026-11-02', due: '2026-11-16', taxRate: 0, taxName: 'Tax', lines: [{ id: 'l1', desc: 'Studio session', qty: 1, unit: 'session', price: 500 }], payments: [{ id: 'p1', date: '2026-11-03', amount: 500, method: 'Cash' }], sentAt: 1, paidAt: 1 } })));
+  await mount(page, 'money', 't-paid');
+  await page.click('#mn-edit-invoice');
+  await page.waitForSelector('.sheet[aria-label="Edit the invoice"]');
+  const edTotals = await page.locator('.mn-ed-totals').innerText();
+  ok('the editor\'s totals have no stray words', !/false/.test(edTotals) && /Paid so far/.test(edTotals), edTotals.replace(/\n/g, ' '));
+  await page.click('#mn-ed-addline');
+  await page.fill('#mn-l2-desc', 'Extra hour');
+  await page.fill('#mn-l2-price', '200');
+  await page.click('.sheet[aria-label="Edit the invoice"] button[type=submit]');
+  await sleep(250);
+  b = await booking(page, 't-paid');
+  tot = await page.evaluate(() => import('./js/money.js').then(async m => m.docTotals((await import('./js/store.js')).byId('bookings', 't-paid').invoice)));
+  ok('raising a paid invoice\'s total opens it again', b.invoice.status === 'sent' && !b.invoice.paidAt && tot.total === 700 && tot.due === 200 && !b.checks['ses-paid'] && b.checks['ses-invoice'] === true, JSON.stringify({ s: b.invoice.status, tot, c: b.checks }));
+  // One marked paid by hand without the payments to match (a discount agreed, say) stays paid when saved.
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings.find(r => r.id === 't-paid'); x.invoice = { ...x.invoice, status: 'paid', paidAt: 1 }; })));
+  await page.click('#mn-edit-invoice');
+  await page.waitForSelector('.sheet[aria-label="Edit the invoice"]');
+  await page.click('.sheet[aria-label="Edit the invoice"] button[type=submit]');
+  await sleep(250);
+  ok('an invoice marked paid by hand stays paid', (await booking(page, 't-paid')).invoice.status === 'paid');
 
   /* ---------------- costs ---------------- */
   await mount(page, 'budget', 's-show1');
@@ -287,6 +335,16 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   b = await booking(page, 's-show1');
   ok('suggested costs are added', b.budget.some(c => c.cat === 'Crew' && c.amount === 200) && b.budget.length === 3);
   ok('nothing left to suggest', (await page.locator('#mn-cost-suggest').count()) === 0);
+  // Hourly costs on a block of studio days cover every day, as the day rates on the same sheet do.
+  await mount(page, 'budget', 't-block');
+  await page.click('#mn-cost-suggest');
+  await page.waitForSelector('.sheet[aria-label="Costs from the booking"]');
+  const blockCosts = await topSheet(page).innerText();
+  ok('studio hire on a block of days counts every day', /Studio hire: Echo Chamber Studios: \$1,080/.test(blockCosts) && /24 hours × \$45/.test(blockCosts) && /Marcus Bell, Session musician: \$540/.test(blockCosts), blockCosts.replace(/\n/g, ' '));
+  await topSheet(page).locator('.form-actions button', { hasText: 'Cancel' }).click();
+  await sleep(150);
+  await page.evaluate(() => import('./js/store.js').then(s => { s.remove('bookings', 't-block'); s.remove('bookings', 't-paid'); }));
+  await mount(page, 'budget', 's-show1');
   await page.locator('.mn-cost', { hasText: 'Diesel' }).click();
   await page.waitForSelector('.sheet[aria-label="Edit cost"]');
   await topSheet(page).locator('.btn.danger').click();
@@ -334,6 +392,14 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   ok('payouts per person from settled shows', /Maya Brooks/.test(await page.locator('.mn-payouts').innerText()) && /from 1 show/.test(await page.locator('.mn-payouts').innerText()));
   ok('income by month has twelve rows with their values in words', (await page.locator('.mn-bar-row').count()) === 12 && (await page.locator('.mn-bar-v .sr-only').count()) === 12);
   ok('totals per act', /The Night Owls/.test(await page.locator('.mn-acts').innerText()) && /Sable/.test(await page.locator('.mn-acts').innerText()));
+  // An act's profit counts a show's merch, as the settled shows and the payouts do.
+  const owls = await page.locator('.mn-act', { hasText: 'The Night Owls' }).innerText();
+  const owlsWant = await page.evaluate(async () => {
+    const [m, s] = await Promise.all([import('./js/model.js'), import('./js/store.js')]);
+    const Y = new Date().getFullYear() + '', done = s.db.bookings.filter(b => b.actId === 's-owls' && b.kind === 'show' && (b.status === 'done' || b.status === 'settled') && (b.date || '').startsWith(Y));
+    return { profit: m.fmtMoney(done.reduce((t, b) => t + m.settle(b).profit, 0)), merch: done.reduce((t, b) => t + m.settle(b).merch, 0), merchText: m.fmtMoney(done.reduce((t, b) => t + m.settle(b).merch, 0)) };
+  });
+  ok('an act\'s profit counts its merch', owls.includes(`profit ${owlsWant.profit}`) && (!(owlsWant.merch > 0) || owls.includes(`merch ${owlsWant.merchText}`)), owls.replace(/\n/g, ' ') + ' — expected ' + JSON.stringify(owlsWant));
   // The CSV exports download.
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#mn-csv-invoices')]);
   const csvText = fs.readFileSync(await dl.path(), 'utf8');
@@ -352,6 +418,16 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   await page.click('#mn-year-next');
   await sleep(150);
   ok('and forward again', (await page.locator('.mn-year-now').innerText()) === expect.Y);
+  // An invoice from last year that is still owed counts in this year's unpaid and overdue, as in the list below them.
+  await page.evaluate(y => import('./js/store.js').then(s => s.patch('bookings', 't-last-year', { invoice: { number: 'OLD-0001', status: 'sent', issued: `${y}-12-10`, due: `${y}-12-24`, taxRate: 0, taxName: 'Tax', lines: [{ id: 'l1', desc: 'Wedding', qty: 1, unit: 'show', price: 900 }], payments: [], sentAt: 1 } })), Number(expect.Y) - 1);
+  await sleep(250);
+  const owed = await page.evaluate(async () => {
+    const [m, s, mn] = await Promise.all([import('./js/model.js'), import('./js/store.js'), import('./js/money.js')]);
+    const sent = s.db.bookings.filter(b => b.invoice && b.invoice.status === 'sent');
+    return { unpaid: m.fmtMoney(sent.reduce((t, b) => t + mn.docTotals(b.invoice).due, 0)), overdue: m.fmtMoney(sent.filter(b => mn.isOverdue(b)).reduce((t, b) => t + mn.docTotals(b.invoice).due, 0)) };
+  });
+  const owedNow = { unpaid: await page.locator('#mn-stat-unpaid b').innerText(), overdue: await page.locator('#mn-stat-overdue b').innerText(), list: await page.locator('.mn-unpaid').innerText() };
+  ok('last year\'s unpaid invoice counts in this year\'s unpaid and overdue', /OLD-0001/.test(owedNow.list) && owedNow.unpaid === owed.unpaid && owedNow.overdue === owed.overdue, JSON.stringify({ owedNow: { ...owedNow, list: undefined }, owed }));
   // The tutorial runs.
   await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial()));
   const toured = await page.waitForFunction(() => /Your year/.test((document.querySelector('.tour-card') || {}).innerText || ''), null, { timeout: 8000 }).then(() => true).catch(() => false);

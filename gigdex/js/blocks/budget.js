@@ -5,7 +5,8 @@
 import { h, sheet, toast, uid } from '../util.js';
 import { byId, update } from '../store.js';
 import { openForm } from '../form.js';
-import { fmtMoney, bookingIncome, settle, venueOf, daysSpan, minutesBetween, sessionHoursPlanned } from '../model.js';
+import { fmtMoney, bookingIncome, settle, venueOf, daysSpan, minutesBetween } from '../model.js';
+import { plannedHours } from '../clock.js';
 import { sheetTutorial } from '../tour.js';
 
 export const BUDGET_CATS = ['Travel', 'Fuel', 'Van hire', 'Accommodation', 'Per diems', 'Backline hire', 'PA hire', 'Crew', 'Session players', 'Studio', 'Merch stock', 'Marketing', 'Other'];
@@ -41,10 +42,11 @@ function editCost(bookingId, line) {
 }
 
 // Costs the booking already knows about: the crew and hired players on it at their rates, and a room or studio with
-// an hourly or daily rate. Lines already there (same words) are left out.
+// an hourly or daily rate. Lines already there (same words) are left out. A session or rehearsal's hours are its
+// planned start to finish on every day it runs (a block of studio days), as the clock and the invoice count them.
 function hoursOn(b) {
   if (b.kind === 'show') { const start = b.loadIn || b.soundcheck || b.doors || b.setTime, m = minutesBetween(start, b.curfew); return m ? m / 60 : 0; }
-  return sessionHoursPlanned(b);
+  return plannedHours(b);
 }
 export function suggestCosts(b) {
   const out = [], have = new Set(costLines(b).map(c => String(c.desc || '').trim().toLowerCase())), days = daysSpan(b), hours = Math.round(hoursOn(b) * 4) / 4;
