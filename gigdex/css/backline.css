@@ -1,1 +1,81 @@
-/* backline: styles owned by the backline feature (docs/developers.md). Prefix classes to avoid clashes. */
+/* backline: styles owned by the backline feature (docs/developers.md). Backline is .bl-, venues .vn-. Theme tokens only. */
+
+/* ---------- shared: cards that are one big button, label/value lists, booking rows ---------- */
+.bl-card, .vn-card { display: grid; gap: 5px; cursor: pointer; overflow-wrap: anywhere; }
+.bl-card > span, .vn-card > span { display: block; min-width: 0; }
+.bl-card-top, .vn-card-top { display: flex !important; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.bl-card-name, .vn-card-name { min-width: 0; overflow-wrap: anywhere; }
+.bl-card-top .pill, .vn-card-top .pill { flex: none; margin-top: 1px; }
+.bl-kv, .vn-kv { display: grid; grid-template-columns: minmax(6.5rem, max-content) minmax(0, 1fr); gap: 7px 14px; margin: 0; align-items: baseline; }
+.bl-kv dt, .vn-kv dt { color: var(--muted); font-size: .85rem; }
+.bl-kv dd, .vn-kv dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+@media (max-width: 360px) { .bl-kv, .vn-kv { grid-template-columns: minmax(0, 1fr); gap: 2px; } .bl-kv dd, .vn-kv dd { margin-bottom: 6px; } }
+.bl-rows, .vn-rows { display: grid; gap: 8px; }
+.bl-row, .vn-row { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; align-items: center; width: 100%; min-height: var(--hit);
+  padding: 9px 12px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; cursor: pointer; color: var(--text); font: inherit; }
+.bl-row:hover, .vn-row:hover { border-color: var(--accent); }
+.bl-row:focus-visible, .vn-row:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.bl-row-date, .vn-row-date { font-weight: 700; font-size: .9rem; font-variant-numeric: tabular-nums; }
+.bl-row-main, .vn-row-main { grid-column: 1 / -1; min-width: 0; overflow-wrap: anywhere; }
+.bl-row-warn, .vn-row-warn { grid-column: 1 / -1; color: var(--danger); font-size: .85rem; line-height: 1.35; }
+.bl-sheet h3, .vn-sheet h3 { margin: 14px 0 6px; }
+.bl-sheet .actions, .vn-sheet .actions, .bl-inv-sheet .actions { margin-top: 0; gap: 8px; }
+/* Buttons in these sheets share a row (the core .stack makes every button full width, one per line). */
+.bl-sheet .actions .btn, .vn-sheet .actions .btn, .bl-inv-sheet .actions .btn { width: auto; flex: 1 1 auto; justify-content: center; }
+
+/* ---------- backline: the items ---------- */
+.bl-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.bl-stats .stat b { font-size: clamp(.95rem, 4.2vw, 1.15rem); overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.bl-novalue { margin: -2px 0 10px; }
+.bl-owners .bl-n, .vn-kinds .vn-n { opacity: .7; font-variant-numeric: tabular-nums; }
+.chip.on .bl-n, .chip.on .vn-n { opacity: .85; }
+/* On a wide screen the categories flow side by side in columns instead of one row each. */
+@media (min-width: 760px) {
+  .bl-groups { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 0 16px; align-items: start; }
+  .bl-groups .list { grid-template-columns: minmax(0, 1fr); }
+}
+.bl-group > h3 { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.bl-group-sum { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.bl-qty { color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+.bl-sub { overflow-wrap: anywhere; }
+.bl-meta { display: flex !important; flex-wrap: wrap; align-items: center; gap: 5px 10px; margin-top: 2px; }
+.bl-owner { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); font-size: .8rem; max-width: 100%; overflow-wrap: anywhere; }
+.bl-owner.band { color: var(--muted); }
+.bl-loc { overflow-wrap: anywhere; }
+.bl-serial { font-variant-numeric: tabular-nums; }
+.bl-val { margin-left: auto; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bl-link { all: unset; cursor: pointer; color: var(--accent); font-weight: 600; min-height: var(--hit); display: inline-flex; align-items: center; margin: -10px 0; overflow-wrap: anywhere; }
+.bl-link:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+.bl-in-packs { margin: 0; }
+
+/* ---------- backline: stage packs ---------- */
+.bl-intro { margin: -2px 0 12px; }
+.bl-pack .card-row { align-items: flex-start; }
+.bl-pack .card-row > .grow { min-width: 0; overflow-wrap: anywhere; padding-top: 4px; }
+.bl-pack .icon-btn { margin-left: -4px; }
+.bl-pack-line { font-size: .9rem; margin-top: 6px; overflow-wrap: anywhere; }
+.bl-pack-line b { color: var(--muted); font-weight: 600; }
+.bl-pack-notes { margin-top: 8px; border-top: 1px dashed var(--line); padding-top: 6px; }
+
+/* ---------- backline: the inventory preview (the printed copy uses doc-css.js) ---------- */
+.bl-inv-paper { max-height: 52vh; }
+.bl-inv-paper table { min-width: 620px; }
+.bl-inv-paper:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.cs-paper .bl-inv tr.bl-cat td { font-weight: 700; background: color-mix(in srgb, var(--paper-ink) 7%, transparent); }
+.cs-paper .bl-inv td.bl-no { opacity: .6; }
+.bl-inv-actions { margin-top: 2px; }
+
+/* ---------- venues ---------- */
+.vn-kind { flex: none; }
+.vn-addr { overflow-wrap: anywhere; }
+.vn-facts { display: flex !important; flex-wrap: wrap; gap: 5px 8px; margin-top: 2px; }
+.vn-fact { padding: 2px 9px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); font-size: .8rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.vn-next { color: var(--accent); font-weight: 600; overflow-wrap: anywhere; }
+.vn-top { display: grid; gap: 6px; justify-items: start; }
+.vn-address { margin: 0; }
+.vn-map { display: grid; gap: 6px; }
+.vn-map .minimap { margin-bottom: 0; }
+.vn-map .actions { margin-top: 0; }
+.vn-contact-name { margin: 0 0 8px; font-weight: 600; overflow-wrap: anywhere; }
+.vn-notes { margin: 0; overflow-wrap: anywhere; }
+@media (min-width: 560px) { .vn-sheet .actions .btn, .bl-sheet .actions .btn, .bl-inv-sheet .actions .btn { flex: 0 0 auto; } }
