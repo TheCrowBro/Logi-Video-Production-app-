@@ -2,7 +2,7 @@
 // keys, and the pure sums every page agrees on (set lengths, deal and settlement maths, a booking's income). Nothing
 // here touches the page or the store's storage; pass records in, get values out. Pages import from here instead of
 // keeping their own lists, so a show reads the same on the calendar, the day sheet and the money page.
-import { db, byId } from './store.js';
+import { db, byId, update } from './store.js';
 import { pad } from './util.js';
 
 /* ------------------------------- bookings ------------------------------- */
@@ -47,6 +47,36 @@ export function venueOf(b) {
   return v || { id: '', name: (b && b.venueName) || '', address: (b && b.address) || '', geo: null };
 }
 
+/* ------------------------------- checklists ------------------------------- */
+// The built-in checklist lines per kind, each with a stable id: other features tick them by id (the day sheet ticks
+// 'show-daysheet' when it is sent, the invoice 'show-invoice' and 'show-paid'…), so the wording can change freely.
+// The person's own extra lines live in db.templates[kind] as [{ id, t }]. Ticks live in booking.checks[id] = true.
+export const CHECKLISTS = {
+  show: [
+    ['show-offer', 'Offer, date and deal agreed'], ['show-contract', 'Contract or confirmation in writing'], ['show-deposit', 'Deposit received'],
+    ['show-advance', 'Show advanced with the promoter'], ['show-times', 'Load-in, soundcheck and set times confirmed'], ['show-backline', 'PA, backline and input list confirmed'],
+    ['show-hospitality', 'Hospitality, parking and guest list agreed'], ['show-travel', 'Travel and accommodation booked'], ['show-promo', 'Show announced and promoted'],
+    ['show-setlist', 'Setlist ready'], ['show-daysheet', 'Day sheet sent to the band'], ['show-settled', 'Settled on the night'],
+    ['show-invoice', 'Invoice sent'], ['show-paid', 'Paid in full'],
+  ],
+  session: [
+    ['ses-booked', 'Studio and engineer confirmed'], ['ses-prep', 'Demos, lyrics and charts shared'], ['ses-tempo', 'Tempo, key and click agreed'],
+    ['ses-players', 'Session players booked'], ['ses-backup', 'Session files backed up (two copies)'], ['ses-deliver', 'Mixes and stems delivered'],
+    ['ses-splits', 'Split sheet signed'], ['ses-invoice', 'Invoice sent'], ['ses-paid', 'Paid in full'],
+  ],
+  rehearsal: [['reh-room', 'Room booked'], ['reh-setlist', 'Setlist shared with the band'], ['reh-gear', 'Who brings what agreed']],
+  other: [],
+};
+// Every line for a kind: the built-in ones, then the person's own. [{ id, t, own }]
+export const checklistFor = kind => [...(CHECKLISTS[kind] || []).map(([id, t]) => ({ id, t, own: false })), ...((db.templates && Array.isArray(db.templates[kind]) ? db.templates[kind] : []).filter(x => x && x.id).map(x => ({ id: x.id, t: x.t, own: true })))];
+export const isChecked = (b, id) => !!(b && b.checks && b.checks[id]);
+// Tick (or untick) a line on a booking. Quiet: no toast. Returns nothing.
+export function markCheck(bookingId, id, on = true) {
+  const b = byId('bookings', bookingId);
+  if (!b || !!(b.checks && b.checks[id]) === !!on) return;
+  update(d => { const x = d.bookings.find(r => r.id === bookingId); if (!x) return; x.checks = { ...(x.checks || {}) }; if (on) x.checks[id] = true; else delete x.checks[id]; x.updatedAt = Date.now(); });
+}
+
 /* ------------------------------- people & gear ------------------------------- */
 export const PEOPLE_GROUPS = [['band', 'Band members'], ['session', 'Session players'], ['crew', 'Crew'], ['contact', 'Industry contacts']];
 export const ROLES = ['Vocals', 'Guitar', 'Bass', 'Drums', 'Keys', 'Producer', 'Engineer', 'Mix engineer', 'Mastering engineer', 'Session musician',
@@ -56,7 +86,9 @@ export const GEAR_CATS = ['Guitars', 'Basses', 'Amps & cabs', 'Drums & percussio
   'Stands & hardware', 'Cables', 'PA & monitors', 'Lighting', 'Computers & software', 'Cases & transport', 'Other'];
 export const VENUE_KINDS = [['venue', 'Venue'], ['studio', 'Studio'], ['rehearsal', 'Rehearsal room'], ['festival', 'Festival / outdoor'], ['other', 'Other']];
 export const venueKindLabel = k => (VENUE_KINDS.find(x => x[0] === k) || VENUE_KINDS[4])[1];
+// A booking's rate (studio time, a session player's job) and a person's usual rate share these units ('show' only for people).
 export const RATE_UNITS = [['hour', 'per hour'], ['day', 'per day'], ['song', 'per song'], ['flat', 'flat fee']];
+export const PERSON_RATE_UNITS = [['day', 'per day'], ['hour', 'per hour'], ['show', 'per show'], ['song', 'per song']];
 export const rateUnitLabel = u => (RATE_UNITS.find(x => x[0] === u) || ['', ''])[1];
 
 /* ------------------------------- songs ------------------------------- */
