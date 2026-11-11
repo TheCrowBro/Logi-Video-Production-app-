@@ -1,1 +1,94 @@
-/* people: styles owned by the people feature (docs/developers.md). Prefix classes to avoid clashes. */
+/* people: styles owned by the people feature (docs/developers.md): the People page and person sheets (.pp-), and the
+   Insurance page (.ins-). Colours only from the theme tokens. */
+
+/* ---------- People page ---------- */
+.pp-groups, .pp-actfilter { margin-bottom: 2px; flex-wrap: wrap; overflow: visible; padding-bottom: 4px; }
+.pp-n { font-size: .75rem; font-weight: 700; opacity: .7; margin-left: 2px; }
+.chip .pp-dot { margin-right: 6px; vertical-align: 1px; }
+.pp-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+.pp-showing { margin: 4px 0 8px; }
+.pp-groupsec > h3 { margin: 18px 0 8px; }
+.pp-groupsec:first-child > h3 { margin-top: 10px; }
+.pp-hn { letter-spacing: 0; }
+
+.pp-card { padding: 12px 12px 12px 14px; }
+.pp-row { display: flex; align-items: flex-start; gap: 4px; }
+.pp-main { all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; gap: 12px; align-items: flex-start; cursor: pointer; min-height: var(--hit); border-radius: 10px; }
+.pp-main:focus-visible { outline: 3px solid var(--focus); outline-offset: 4px; }
+.pp-main:hover .pp-name { color: var(--accent); }
+.pp-row > .icon-btn { margin: -6px -6px 0 0; }
+.pp-text { display: grid; gap: 3px; min-width: 0; }
+.pp-name { font-weight: 700; overflow-wrap: anywhere; line-height: 1.3; }
+.pp-sub { color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; }
+.pp-acts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.pp-act { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; font-size: .75rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--bg2); border: 1px solid var(--line); }
+.pp-act-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pp-next { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+.pp-card .pp-quick { margin-top: 10px; }
+.pp-foot { margin-top: 6px; }
+
+/* ---------- person sheet ---------- */
+.pp-hero { display: flex; gap: 14px; align-items: center; margin: 2px 0 4px; }
+.pp-hero-text { display: grid; gap: 4px; min-width: 0; justify-items: start; flex: 1; }
+.pp-hero > .pp-edit { flex: none; align-self: flex-start; }
+.pp-hero-sub { font-weight: 600; overflow-wrap: anywhere; }
+.pill.pp-group { color: var(--accent); border-color: var(--accent); }
+.pp-sheet .pp-quick .btn, .pp-tools .btn { flex: 1 1 auto; }
+.pp-tools { margin-top: 8px; }
+.pp-sec > h3 { margin: 20px 0 8px; }
+.pp-sec > p { margin: 0; }
+.pp-actlist { display: flex; flex-wrap: wrap; gap: 6px; }
+.pp-actchip { display: inline-flex; align-items: center; max-width: 100%; }
+.pp-bks { display: grid; gap: 8px; }
+.pp-bk { display: grid; gap: 4px; margin: 0; padding: 10px 12px; }
+.pp-bk-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.pp-bk-when { font-size: .85rem; color: var(--muted); min-width: 0; overflow-wrap: anywhere; }
+.pp-bk-title { font-weight: 600; overflow-wrap: anywhere; }
+.pp-clash { color: var(--danger); font-size: .85rem; font-weight: 600; margin: 0; }
+.pp-past { margin-top: 16px; }
+.pp-past .twirl-body .pp-bk { background: var(--card); }
+.pp-kv { margin: 0; }
+.pp-kv > div { align-items: center; min-height: 28px; }
+.pp-kv > div > span:first-child { flex: none; }
+.pp-kv > div > :last-child { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.pp-gearlist { list-style: none; margin: 0 0 6px; padding: 0; display: grid; }
+.pp-gearlist li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: .95rem; }
+.pp-gearlist li > :last-child { text-align: right; min-width: 0; overflow-wrap: anywhere; }
+.pp-notetext { margin: 0; overflow-wrap: anywhere; }
+.pp-danger { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; justify-content: flex-end; }
+.pp-danger .btn { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; line-height: 30px; }
+
+/* ask if they're free */
+.pp-ask { display: grid; gap: 12px; }
+.pp-ask textarea { min-height: 10rem; line-height: 1.4; }
+.pp-ask .field small { margin-top: 2px; }
+.pp-ask-send { margin-top: 0; }
+.pp-ask-send .btn { flex: 1 1 0; }
+.pp-ask-add { display: flex; }
+
+/* share contact */
+.pp-share { display: grid; gap: 10px; text-align: center; justify-items: center; }
+.pp-share-who { display: grid; gap: 2px; overflow-wrap: anywhere; }
+.pp-qr { width: min(240px, 100%); }
+.pp-share-cap { margin: 0; max-width: 36ch; }
+.pp-share .warn { text-align: left; }
+
+/* ---------- Insurance ---------- */
+.ins-soon { margin: 0 0 8px; color: var(--accent); font-weight: 600; }
+.ins-cover p { margin: 0; }
+.ins-cover .actions { margin-top: 8px; }
+.ins-note { border: 1px solid var(--line); background: var(--bg2); border-radius: 10px; padding: 8px 12px; margin: 8px 0 12px; font-size: .9rem; }
+.ins-ok-note { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); }
+.ins-warn { margin: 8px 0 12px; }
+.ins-row { align-items: flex-start; }
+.ins-ico { font-size: 1.35rem; width: 1.8rem; text-align: center; flex: none; line-height: 1.5; }
+.ins-title { min-width: 0; overflow-wrap: anywhere; }
+.ins-row > .pill { align-self: center; flex: none; }
+.ins-row > .icon-btn { margin: -6px -6px 0 -4px; }
+.pill.ins-due { color: var(--accent); border-color: var(--accent); }
+.pill.ins-ok { color: var(--ok); border-color: var(--ok); }
+.pill.ins-expired { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.ins-card.ins-old { border-style: dashed; }
+.ins-kv > div > b { text-align: right; overflow-wrap: anywhere; }
+.ins-notes { margin-top: 8px; overflow-wrap: anywhere; }
+@media (max-width: 380px) { .ins-stats .stat b { font-size: 1rem; } }
