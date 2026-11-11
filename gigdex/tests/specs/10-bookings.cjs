@@ -215,8 +215,15 @@ const unfold = t => t.replace(/\r\n /g, '');
     const a = m.bookingIcs({ id: 'u1', kind: 'other', status: 'hold', title: 'Back\\slash; semi, comma\nnew line', date: '2026-12-01', endDate: '2026-12-02' });
     const long = 'Ünïcödé “quotes” and 🎸 guitars — '.repeat(6);
     const b = m.bookingIcs({ id: 'u2', kind: 'session', status: 'cancelled', title: long, date: '2026-12-03', start: '22:00', end: '02:00' });
-    return { a, b, long, esc: m.icsEscape(long) };
+    const end = x => (m.bookingIcs(x).replace(/\r\n /g, '').match(/DTEND:(\S+)/) || [])[1];
+    const multi = {
+      fest: end({ id: 'u3', kind: 'show', status: 'hold', title: 'Fest', date: '2026-12-11', endDate: '2026-12-13', loadIn: '12:00', curfew: '00:30' }),
+      block: end({ id: 'u4', kind: 'session', status: 'hold', title: 'Block', date: '2026-12-11', endDate: '2026-12-12', start: '22:00', end: '02:00' }),
+      day: end({ id: 'u5', kind: 'session', status: 'hold', title: 'Days', date: '2026-12-11', endDate: '2026-12-12', start: '10:00', end: '18:00' }),
+    };
+    return { a, b, long, esc: m.icsEscape(long), multi };
   }));
+  ok('a booking over several days that ends after midnight ends the morning after its last day', unit.multi.fest === '20261214T003000' && unit.multi.block === '20261213T020000' && unit.multi.day === '20261212T180000', JSON.stringify(unit.multi));
   ok('escaping: backslash, semicolon, comma and line breaks', unit.a.includes('SUMMARY:Back\\\\slash\\; semi\\, comma\\nnew line\r\n'), unit.a.match(/SUMMARY[^\r]*/)[0]);
   ok('a booking with no times is all day over its days (end date exclusive) and a hold is TENTATIVE', unit.a.includes('DTSTART;VALUE=DATE:20261201\r\n') && unit.a.includes('DTEND;VALUE=DATE:20261203\r\n') && unit.a.includes('STATUS:TENTATIVE'));
   const bl = unit.b.split('\r\n');
@@ -251,6 +258,11 @@ const unfold = t => t.replace(/\r\n /g, '');
   ok('openBooking(id) goes to Bookings and shows that booking, resolving once drawn', opened === true && (await page.evaluate(() => window.logiPage())) === 'bookings' && (await page.locator('.bk-hero').count()) === 1 && /Advanced/.test(await page.locator('.bk-status').innerText()));
   ok('…the original shows the clash too', /Leo is also on The Moth Club that day/.test(await page.locator('#blk-lineup').innerText()));
   ok('openBooking of a booking that is gone resolves false', (await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('nope')))) === false);
+  // a cancelled booking is out of clashes: its own line-up says nothing is needed elsewhere
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), copy.id); await sleep(300);
+  await page.locator('.bk-status').click(); await page.locator('.bk-status-opt[data-status="cancelled"]').click(); await sleep(300);
+  const cancelledLineup = await page.locator('#blk-lineup').innerText();
+  ok('a cancelled booking shows no clashes in its line-up box or its summary', (await rec(page, copy.id)).status === 'cancelled' && !/also on|⚠/.test(cancelledLineup) && (await page.locator('#blk-lineup .bk-clashes, #blk-lineup .clash').count()) === 0, cancelledLineup.slice(0, 160).replace(/\n/g, ' | '));
 
   /* ---- delete: from the page, and by press and hold ---- */
   await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), copy.id); await sleep(300);
@@ -343,6 +355,65 @@ const unfold = t => t.replace(/\r\n /g, '');
   await page.locator('#blk-notes > summary').click(); await sleep(200);
   ok('a box whose drawing fails shows a small error line and the page carries on', /could not be shown \(boom\)/.test(await page.locator('#blk-notes .blk-body').innerText()) && (await page.locator('.bk-hero').count()) === 1);
   await page.evaluate(() => import('./js/blocks/index.js').then(m => { const n = m.BLOCKS.find(x => x.id === 'notes'); n.render = n._render; delete n._render; }));
+
+  /* ---- the status and the settlement stay in step ---- */
+  const past = () => rec(page, 's-past');
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('s-past'))); await sleep(300);
+  await page.evaluate(() => { const d = document.getElementById('blk-settlement'); if (d && !d.open) d.open = true; }); await sleep(200);
+  const pickStatus = async s => { await page.locator('.bk-status').click(); await page.locator(`.bk-status-opt[data-status="${s}"]`).click(); await sleep(300); };
+  let p = await past();
+  const pst = () => JSON.stringify({ s: p.status, at: p.settlement.settledAt, c: p.checks });
+  const reopened = async () => p.status === 'done' && !p.settlement.settledAt && !(p.checks && p.checks['show-settled']) && p.settlement.tickets === 214 && !/· settled/.test(await page.locator('#blk-settlement > summary').innerText()) && (await page.locator('#sh-st-settle').count()) === 1;
+  await pickStatus('settled');
+  p = await past();
+  ok('Paid / settled from the status pill settles the show and ticks “Settled on the night”', p.status === 'settled' && p.settlement.settledAt > 0 && p.checks && p.checks['show-settled'] === true && p.settlement.tickets === 214 && (await page.locator('#sh-st-reopen').count()) === 1, pst());
+  await pickStatus('done');
+  p = await past();
+  ok('…and Done takes both off again', await reopened(), pst());
+  await page.locator('#sh-st-settle').click(); await sleep(300);
+  p = await past();
+  ok('(Mark settled on the Settlement box settles the show)', p.status === 'settled' && p.settlement.settledAt > 0 && p.checks['show-settled'] === true, pst());
+  await pickStatus('done');
+  p = await past();
+  ok('moving a show settled on its Settlement box to Done with the status pill reopens the settlement and unticks the line', await reopened(), pst());
+  if (await page.locator('#sh-st-settle').count()) { await page.locator('#sh-st-settle').click(); await sleep(300); }
+  await page.locator('.bk-edit').click();
+  const eform = sheetNamed(page, 'Edit show'); await eform.waitFor();
+  await eform.locator('select[id$="-status"]').selectOption('done');
+  await eform.locator('button[type="submit"]').click(); await sleep(300);
+  p = await past();
+  ok('a status picked in the edit form does the same', await reopened(), pst());
+
+  /* ---- “Deposit received” in the checklist is the deal's deposit ---- */
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('s-show2'))); await sleep(300);
+  if (!(await page.locator('#blk-advance[open]').count())) { await page.locator('#blk-advance > summary').click(); await sleep(200); }
+  const owed = () => page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/model.js')]).then(([s, m]) => m.settle(s.byId('bookings', 's-show2')).owedOnNight));
+  await page.locator('#blk-advance .check-item[data-line="show-deposit"] input').check(); await sleep(300);
+  let s2 = await rec(page, 's-show2');
+  ok('ticking “Deposit received” marks the deal’s deposit as paid, so the night owes $400 less', s2.checks['show-deposit'] === true && s2.deal.depositPaid === true && (await owed()) === 400, JSON.stringify({ c: s2.checks, d: s2.deal }));
+  await page.locator('#blk-advance .check-item[data-line="show-deposit"] input').uncheck(); await sleep(300);
+  s2 = await rec(page, 's-show2');
+  ok('…and unticking it marks the deposit as not received', !(s2.checks && s2.checks['show-deposit']) && s2.deal.depositPaid === false && (await owed()) === 800, JSON.stringify({ c: s2.checks, d: s2.deal }));
+
+  /* ---- a copy of a session whose day sheet was sent has not been sent ---- */
+  await page.evaluate(() => import('./js/daysheet.js').then(m => m.markSent('s-sess1'))); await sleep(200);
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('s-sess1'))); await sleep(300);
+  await page.locator('.bk-actions button', { hasText: 'Duplicate' }).click();
+  await sheetNamed(page, 'Duplicate booking').waitFor();
+  await page.fill('#bk-dup-date', '2027-01-20');
+  await page.locator('.sheet button[type="submit"]').click();
+  await page.waitForSelector('.bk-page .bk-hero'); await sleep(400);
+  const scopy = await page.evaluate(() => import('./js/store.js').then(s => JSON.parse(JSON.stringify(s.db.bookings.find(b => b.kind === 'session' && b.date === '2027-01-20') || null))));
+  const dsSum = await page.locator('#blk-daysheet > summary').innerText();
+  ok('the copy of a session has no day sheet sent, and its Day sheet box does not say sent or changed', scopy && !scopy.daySheet && (await rec(page, 's-sess1')).daySheet.sentAt > 0 && !/Sent|Changed/i.test(dsSum), JSON.stringify({ ds: scopy && scopy.daySheet, dsSum }));
+
+  /* ---- the month grid names a booking that began last month ---- */
+  const spring = await page.evaluate(() => import('./js/store.js').then(s => s.upsert('bookings', { kind: 'show', status: 'confirmed', title: 'Spring Tour Leg', date: '2027-03-30', endDate: '2027-04-02', setTime: '20:00' }).id));
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), spring); await sleep(300);
+  await page.locator('.bk-page .back-btn').click(); await page.locator('.bk-dayview .back-btn').click(); await page.waitForSelector('.bk-monthview');
+  await page.click('[aria-label="Next month"]'); await sleep(250);
+  const mini = d => page.locator(`.bk-day[data-date="${d}"] .bk-mini`).first().textContent();
+  ok('a booking that began last month is named on the 1st, and runs on as a bar after', /Spring Tour Leg/.test(await mini('2027-04-01')) && !/Spring/.test(await mini('2027-04-02')), `${await mini('2027-04-01')} | ${await mini('2027-04-02')}`);
 
   /* ---- the walkthrough ---- */
   await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('s-show1'))); await sleep(300);
