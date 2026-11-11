@@ -102,12 +102,12 @@ export function docHead(b, kicker) {
   const p = db.profile || {}, v = venueOf(b);
   return [
     h('div', { class: 'cs-head' },
-      h('div', null, h('div', { class: 'cs-brand' }, p.business || p.name || actName(b.actId) || 'Gigdex'), h('div', { class: 'cs-kicker' }, kicker)),
+      h('div', null, h('div', { class: 'cs-brand' }, p.business || p.name || actName(b.actId) || 'Gdex'), h('div', { class: 'cs-kicker' }, kicker)),
       h('div', { class: 'cs-when' }, b.date && h('b', null, fmtLong(b.date)), [v.name, v.address].filter(Boolean).join(', '))),
     h('h2', null, bookingTitle(b)),
   ];
 }
-export const docFoot = () => h('div', { class: 'cs-foot' }, `Made with Gigdex · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
+export const docFoot = () => h('div', { class: 'cs-foot' }, `Made with Gdex · ${new Date().toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}`);
 
 // Print a document, or save it as a web page to send.
 export const printDoc = (el, css = '') => printElement(el, css);

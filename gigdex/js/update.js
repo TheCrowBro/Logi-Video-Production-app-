@@ -16,11 +16,11 @@ export function reloadNow() {
 function showBar() {
   if (S.bar) return;
   S.bar = h('div', { class: 'update-bar', role: 'status' },
-    h('span', null, 'Gigdex has been updated.'),
+    h('span', null, 'Gdex has been updated.'),
     h('button', { class: 'btn primary small', onclick: reloadNow }, 'Reload for the new version'),
     h('button', { class: 'icon-btn', 'aria-label': 'Not now', onclick: () => { S.bar.remove(); S.bar = null; document.body.classList.remove('has-update-bar'); } }, '✕'));
   document.body.append(S.bar); document.body.classList.add('has-update-bar'); // room to scroll the page above the bar
-  announce('A new version of Gigdex is ready. Reload to use it.');
+  announce('A new version of Gdex is ready. Reload to use it.');
 }
 
 // Asks the browser to look for a new service worker now. Resolves once an update, if any, has taken over.
@@ -63,7 +63,7 @@ export function updatePanel() {
     const actions = [];
     const line = st.ready ? 'A new version has been downloaded. Reload to use it.'
       : !st.supported ? 'Updates arrive when the site is reloaded (this browser keeps no offline copy).'
-      : `Up to date${when ? ' · checked ' + when : ''}. New versions are fetched in the background whenever you open Gigdex.`;
+      : `Up to date${when ? ' · checked ' + when : ''}. New versions are fetched in the background whenever you open Gdex.`;
     if (st.ready) actions.push(h('button', { class: 'btn primary', onclick: reloadNow }, '↻ Reload now'));
     if (st.supported && !st.ready) actions.push(h('button', { class: 'btn ghost', disabled: busy, onclick: async () => { busy = true; draw(); try { await checkForUpdates(); } finally { busy = false; draw(); } } }, busy ? 'Checking…' : 'Check for updates'));
     el.replaceChildren(h('p', { class: 'small muted' }, line), actions.length ? h('div', { class: 'actions' }, ...actions) : '');

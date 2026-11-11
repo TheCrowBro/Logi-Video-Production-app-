@@ -9,9 +9,9 @@ const { chromium } = require('playwright');
 // Like helpers.open, in a browser profile kept on disk: a file handle stored in IndexedDB only reads back there (in a
 // throwaway profile, headless Chromium closes the page).
 async function openKept({ sample = false, tab = null, init = null } = {}) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gigdex-profile-'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gdex-profile-'));
   const ctx = await chromium.launchPersistentContext(dir, { viewport: { width: 420, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
-  await ctx.addInitScript(() => { try { localStorage.setItem('gigdex-tour', 'done'); } catch (e) { /* ignore */ } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gdex-tour', 'done'); } catch (e) { /* ignore */ } });
   if (init) await ctx.addInitScript(init);
   const page = ctx.pages()[0] || await ctx.newPage();
   const errors = [];
@@ -120,9 +120,9 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   ok('without File System Access the file card explains', (await page.locator('#page .se-bk-file[data-state=unsupported]').count()) === 1 && /Chrome or Edge/.test(await text(page, '#page .se-bk-file')));
   const bk = await download(page, '#page .se-bk-save');
   const saved = JSON.parse(bk.text);
-  ok('a backup downloads as gigdex-backup-YYYY-MM-DD.json', /^gigdex-backup-\d{4}-\d{2}-\d{2}\.json$/.test(bk.name), bk.name);
-  ok('the backup is a Gigdex file with the records', saved.app === 'gigdex' && saved.bookings.some(b => b.id === 's-show1') && saved.songs.length === 10 && saved.profile.name === 'Maya Brooks');
-  ok('the time of the backup is remembered', Number(await run(page, () => localStorage.getItem('gigdex-backup-at'))) > Date.now() - 60000);
+  ok('a backup downloads as gdex-backup-YYYY-MM-DD.json', /^gdex-backup-\d{4}-\d{2}-\d{2}\.json$/.test(bk.name), bk.name);
+  ok('the backup is a Gdex file with the records', saved.app === 'gdex' && saved.bookings.some(b => b.id === 's-show1') && saved.songs.length === 10 && saved.profile.name === 'Maya Brooks');
+  ok('the time of the backup is remembered', Number(await run(page, () => localStorage.getItem('gdex-backup-at'))) > Date.now() - 60000);
   await sleep(200);
   ok('the panel says when the last backup was', /Last backup just now/.test(await text(page, '#page .se-bk-status')) && (await page.getAttribute('#page .se-bk-status', 'data-level')) === 'ok');
   ok('the section line follows without a redraw', /Last backup just now/.test(await text(page, '#se-backups .se-sub')));
@@ -135,7 +135,7 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   modified.songs.find(s => s.id === 's-song2').updatedAt = later;
   await run(page, () => import('./js/store.js').then(s => { s.upsert('venues', { id: 't-local', kind: 'venue', name: 'Local Only Room' }); s.patch('songs', 's-song1', { title: 'Harbour Lights (live)' }); }));
   await sleep(100);
-  await pick(page, 'gigdex-backup-modified.json', modified);
+  await pick(page, 'gdex-backup-modified.json', modified);
   await page.waitForSelector(sheetOf('Bring back a backup'));
   const impText = await text(page, sheetOf('Bring back a backup'));
   ok('the import sheet says what is in the file and on this device', /In the file:.*11 songs/.test(impText) && /On this device now:.*10 songs/.test(impText) && /6 venues/.test(impText), impText.slice(0, 300));
@@ -160,11 +160,11 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   ok('replace makes this device like the file', !d.venues.some(v => v.id === 't-local') && !d.songs.some(s => s.id === 't-new') && d.songs.find(s => s.id === 's-song1').title === 'Harbour Lights' && d.bookings.length === saved.bookings.length);
   ok('replace keeps the details from the file', d.profile.name === 'Maya Brooks' && d.profile.currency === '£');
 
-  // Files that are not Gigdex backups are refused, and nothing changes.
+  // Files that are not Gdex backups are refused, and nothing changes.
   const before = (await data(page)).bookings.length;
   await pick(page, 'vdex-backup-2026-11-01.json', { version: 3, updatedAt: Date.now(), bookings: [{ id: 'v1', title: 'Wedding shoot' }], gear: [{ id: 'g1', name: 'FX3' }], crew: [{ id: 'c1', name: 'Cam Op' }], venues: [], logs: [], shifts: [], insurance: [] });
   await page.waitForSelector(sheetOf('That file can’t be used'));
-  ok('a Vdex backup is refused with a clear message', /This is a Vdex backup, not a Gigdex one/.test(await text(page, sheetOf('That file can’t be used'))));
+  ok('a Vdex backup is refused with a clear message', /This is a Vdex backup, not a Gdex one/.test(await text(page, sheetOf('That file can’t be used'))));
   await page.click(`${sheetOf('That file can’t be used')} .btn.primary`);
   ok('the Vdex file changed nothing', (await data(page)).bookings.length === before && !(await data(page)).bookings.some(b => b.id === 'v1'));
   await pick(page, 'notes.json', '{ this is not json');
@@ -173,7 +173,7 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   await page.keyboard.press('Escape');
   await pick(page, 'list.json', [1, 2, 3]);
   await page.waitForSelector(sheetOf('That file can’t be used'));
-  ok('JSON that is not a Gigdex backup is refused', /not a Gigdex backup/.test(await text(page, sheetOf('That file can’t be used'))));
+  ok('JSON that is not a Gdex backup is refused', /not a Gdex backup/.test(await text(page, sheetOf('That file can’t be used'))));
   await page.keyboard.press('Escape');
   await sleep(200);
 
@@ -190,8 +190,8 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   await page.fill('#se-pass-2', 'night owls 2026');
   const [ldl] = await Promise.all([page.waitForEvent('download', { timeout: 30000 }), page.click(`${passSheet} button[type=submit]`)]);
   const locked = fs.readFileSync(await ldl.path(), 'utf8');
-  ok('the locked backup is saved as .locked.json', /^gigdex-backup-\d{4}-\d{2}-\d{2}\.locked\.json$/.test(ldl.suggestedFilename()), ldl.suggestedFilename());
-  ok('the locked backup holds nothing readable', JSON.parse(locked).gigdex === 'encrypted-backup' && !/Night Owls|Maya|Lantern/.test(locked));
+  ok('the locked backup is saved as .locked.json', /^gdex-backup-\d{4}-\d{2}-\d{2}\.locked\.json$/.test(ldl.suggestedFilename()), ldl.suggestedFilename());
+  ok('the locked backup holds nothing readable', JSON.parse(locked).gdex === 'encrypted-backup' && !/Night Owls|Maya|Lantern/.test(locked));
   await sleep(300);
   await pick(page, ldl.suggestedFilename(), locked);
   await page.waitForSelector(sheetOf('Locked backup'));
@@ -259,7 +259,7 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
 
   // About
   await openSec(page, 'about');
-  ok('About shows the version and where data is kept', /Gigdex \d+\.\d+\.\d+/.test(await text(page, '#se-about')) && /stays in this browser, on this device/.test(await text(page, '#se-about')) && (await page.locator('#se-about a[href="privacy.html"]').count()) === 1);
+  ok('About shows the version and where data is kept', /Gdex \d+\.\d+\.\d+/.test(await text(page, '#se-about')) && /stays in this browser, on this device/.test(await text(page, '#se-about')) && (await page.locator('#se-about a[href="privacy.html"]').count()) === 1);
 
   // The ☁ button opens the same panel in a sheet
   await page.click('#cloudBtn');
@@ -285,12 +285,12 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   // The reminder
   const nudge = await run(page, () => import('./js/backup.js').then(async b => {
     const s = await import('./js/store.js');
-    ['gigdex-backup-at', 'gigdex-file-at', 'gigdex-backup-nudge'].forEach(k => localStorage.removeItem(k));
+    ['gdex-backup-at', 'gdex-file-at', 'gdex-backup-nudge'].forEach(k => localStorage.removeItem(k));
     s.upsert('bookings', { id: 't-old', kind: 'show', status: 'confirmed', date: '2026-12-05', createdAt: Date.now() - 3 * 864e5 });
     const first = b.nudgeIfStale(), second = b.nudgeIfStale();
-    localStorage.removeItem('gigdex-backup-nudge'); localStorage.setItem('gigdex-backup-at', String(Date.now() - 2 * 864e5));
+    localStorage.removeItem('gdex-backup-nudge'); localStorage.setItem('gdex-backup-at', String(Date.now() - 2 * 864e5));
     const recent = b.nudgeIfStale();
-    localStorage.removeItem('gigdex-backup-nudge'); localStorage.setItem('gigdex-backup-at', String(Date.now() - 20 * 864e5));
+    localStorage.removeItem('gdex-backup-nudge'); localStorage.setItem('gdex-backup-at', String(Date.now() - 20 * 864e5));
     const old = b.nudgeIfStale();
     return { first, second, recent, old, level: b.health().level };
   }));
@@ -314,12 +314,12 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   await sleep(300);
   d = await data(page);
   ok('erase empties the database', ['bookings', 'acts', 'people', 'gear', 'songs', 'venues', 'setlists'].every(c => d[c].length === 0) && d.profile.name === '' && d.profile.currency === '$');
-  ok('and forgets the backup times', (await run(page, () => localStorage.getItem('gigdex-backup-at'))) === null);
+  ok('and forgets the backup times', (await run(page, () => localStorage.getItem('gdex-backup-at'))) === null);
   // A merge keeps a newer profile that has no personal name but is filled in (a band or business name, currency…);
   // only an empty profile or the sample's stand-in gives way to the file's whatever their times.
   const merged = await page.evaluate(() => import('./js/store.js').then(st => {
     const local = { ...st.db, profile: { name: '', business: 'Real Sound', currency: '£', email: 'new@x.test', updatedAt: Date.now() } };
-    const file = { app: 'gigdex', profile: { name: 'Old Name', business: 'Old Biz', currency: '$', email: 'old@x.test', updatedAt: Date.now() - 365 * 864e5 } };
+    const file = { app: 'gdex', profile: { name: 'Old Name', business: 'Old Biz', currency: '$', email: 'old@x.test', updatedAt: Date.now() - 365 * 864e5 } };
     const a = st.mergeDb(local, file).profile;
     const b = st.mergeDb({ ...st.db, profile: { name: 'Sample Producer', business: 'Sample Sound', updatedAt: Date.now() } }, file).profile;
     const c = st.mergeDb({ ...st.db, profile: { name: '', currency: '$', updatedAt: Date.now() } }, file).profile;
@@ -333,19 +333,19 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   /* ------------------------------ a copy kept in a file ------------------------------ */
   // The file picker hands back a file in the browser's private file system, which behaves like one on disk.
   ({ browser, page, errors } = await openKept({ sample: true, tab: 'settings', init: () => {
-    window.showSaveFilePicker = async () => (await navigator.storage.getDirectory()).getFileHandle('gigdex-db.json', { create: true });
+    window.showSaveFilePicker = async () => (await navigator.storage.getDirectory()).getFileHandle('gdex-db.json', { create: true });
   } }));
-  const readCopy = () => page.evaluate(async () => { try { return await (await (await (await navigator.storage.getDirectory()).getFileHandle('gigdex-db.json')).getFile()).text(); } catch { return ''; } });
-  const kept = () => page.evaluate(() => new Promise(res => { const r = indexedDB.open('gigdex', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => { const t = r.result.transaction('kv', 'readonly').objectStore('kv').get('fileHandle'); t.onsuccess = () => { res(!!t.result); r.result.close(); }; t.onerror = () => res(false); }; r.onerror = () => res(false); }));
+  const readCopy = () => page.evaluate(async () => { try { return await (await (await (await navigator.storage.getDirectory()).getFileHandle('gdex-db.json')).getFile()).text(); } catch { return ''; } });
+  const kept = () => page.evaluate(() => new Promise(res => { const r = indexedDB.open('gdex', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => { const t = r.result.transaction('kv', 'readonly').objectStore('kv').get('fileHandle'); t.onsuccess = () => { res(!!t.result); r.result.close(); }; t.onerror = () => res(false); }; r.onerror = () => res(false); }));
   await openSec(page, 'backups');
   ok('the file card offers to choose a file', (await page.locator('#page .se-bk-file[data-state=off] .se-bk-link').count()) === 1);
   await tap(page, '#page .se-bk-link');
   await page.waitForSelector('#page .se-bk-file[data-state=saved]', { timeout: 15000 });
   let copy = await readCopy();
-  ok('choosing a file writes the database to it', copy && JSON.parse(copy).app === 'gigdex' && JSON.parse(copy).bookings.some(b => b.id === 's-show1'));
+  ok('choosing a file writes the database to it', copy && JSON.parse(copy).app === 'gdex' && JSON.parse(copy).bookings.some(b => b.id === 's-show1'));
   ok('the file is remembered for next time', await kept());
   ok('the ☁ button shows the copy is saved', (await page.getAttribute('#cloudBtn', 'data-state')) === 'synced' && (await page.$eval('#cloudLabel', e => e.textContent)) === 'Saved');
-  ok('the section line names the file', /copy in gigdex-db\.json/.test(await text(page, '#se-backups .se-sub')));
+  ok('the section line names the file', /copy in gdex-db\.json/.test(await text(page, '#se-backups .se-sub')));
   await run(page, () => import('./js/store.js').then(s => s.upsert('songs', { id: 't-copy', title: 'Copy Test Song' })));
   await sleep(2600);
   copy = await readCopy();
@@ -354,7 +354,7 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   await page.waitForSelector('#rolodex .drum-btn');
   await go(page, 'settings');
   await page.waitForSelector('#page .se-bk-file[data-state=saved]', { timeout: 15000 });
-  ok('after a reload the file is linked again', /Copy kept in gigdex-db\.json/.test(await text(page, '#page .se-bk-file')));
+  ok('after a reload the file is linked again', /Copy kept in gdex-db\.json/.test(await text(page, '#page .se-bk-file')));
   await tap(page, '#page .se-bk-unlink');
   await page.waitForSelector('#page .se-bk-file[data-state=off]', { timeout: 10000 });
   ok('Stop unlinks the file', !(await kept()) && (await page.getAttribute('#cloudBtn', 'data-state')) === null);
@@ -380,7 +380,7 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
     window.__perm = 'granted'; window.__fail = '';
     window.showSaveFilePicker = async () => {
       const real = await (await navigator.storage.getDirectory()).getFileHandle('wrapped.json', { create: true });
-      return { kind: 'file', name: 'Gigdex in Dropbox.json',
+      return { kind: 'file', name: 'Gdex in Dropbox.json',
         queryPermission: async () => window.__perm, requestPermission: async () => (window.__perm = 'granted'),
         getFile: () => real.getFile(),
         createWritable: async () => { if (window.__fail) { const e = new Error('gone'); e.name = window.__fail; throw e; } return real.createWritable(); } };
@@ -393,7 +393,7 @@ const sheetOf = title => `.sheet[aria-label="${title}"]`;
   ok('a file the browser can’t remember says so', /couldn’t remember the file/.test(await text(page, '#page .se-bk-file')));
   await run(page, () => { window.__perm = 'prompt'; return import('./js/store.js').then(s => s.upsert('songs', { id: 't-perm', title: 'Waiting Song' })); });
   await page.waitForSelector('#page .se-bk-file[data-state=needs-permission]', { timeout: 10000 });
-  ok('when the browser asks again, the panel asks for your OK', /needs your OK to keep writing to Gigdex in Dropbox\.json/.test(await text(page, '#page .se-bk-file')));
+  ok('when the browser asks again, the panel asks for your OK', /needs your OK to keep writing to Gdex in Dropbox\.json/.test(await text(page, '#page .se-bk-file')));
   ok('the ☁ button says Allow', (await page.getAttribute('#cloudBtn', 'data-state')) === 'needs-permission' && (await page.$eval('#cloudLabel', e => e.textContent)) === 'Allow');
   ok('the section line says so too', /needs your OK/.test(await text(page, '#se-backups .se-sub')));
   ok('nothing was written meanwhile', !(await readWrapped()).includes('Waiting Song'));

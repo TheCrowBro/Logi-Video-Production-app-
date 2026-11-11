@@ -493,7 +493,7 @@ html[data-motion=off] .back-btn::after, html[data-motion=bar] .back-btn::after {
 @keyframes hold-fill { to { width: 100%; } }
 .card.tap, .card.hero { touch-action: pan-y; }
 
-/* Gigdex booking statuses (js/model.js STATUSES): the pill, the calendar's mini line and the day dots. */
+/* Gdex booking statuses (js/model.js STATUSES): the pill, the calendar's mini line and the day dots. */
 .pill.st-hold { color: var(--muted); border-color: var(--muted); border-style: dashed; } .pill.st-offer { color: var(--accent); border-color: var(--accent); }
 .pill.st-confirmed { color: var(--ok); border-color: var(--ok); } .pill.st-advanced { color: var(--blue); border-color: var(--blue); }
 .pill.st-done { color: var(--text); border-color: var(--line); } .pill.st-settled { color: var(--ok); border-color: var(--ok); background: color-mix(in srgb, var(--ok) 14%, transparent); }

@@ -1,6 +1,6 @@
 {
-  "name": "gigdex",
-  "productName": "Gigdex",
+  "name": "gdex",
+  "productName": "Gdex",
   "version": "0.1.0",
   "description": "Booking deck for music producers and bands: shows, studio sessions, setlists, backline, settlements and invoices.",
   "private": true,
@@ -9,7 +9,7 @@
     "test": "node tests/run.mjs",
     "stamp": "node tools/stamp-build.mjs",
     "stamp:dev": "node tools/stamp-build.mjs --dev",
-    "serve": "node -e \"import('./tests/lib.mjs').then(async m => { const s = await m.serve('.', 8124); console.log('Gigdex on http://localhost:' + s.address().port + '/'); })\""
+    "serve": "node -e \"import('./tests/lib.mjs').then(async m => { const s = await m.serve('.', 8124); console.log('Gdex on http://localhost:' + s.address().port + '/'); })\""
   },
   "devDependencies": {
     "playwright": "^1.63.0"

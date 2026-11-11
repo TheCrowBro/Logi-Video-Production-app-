@@ -55,7 +55,7 @@ export function reverbTimes(bpm) {
 }
 
 /* ------------------------------- the tool ------------------------------- */
-const KEY = 'gigdex-tempo';
+const KEY = 'gdex-tempo';
 export const TEMPO_MIN = 20, TEMPO_MAX = 400;
 const S = { bpm: (() => { const v = Number((pref.get(KEY, {}) || {}).bpm); return Number.isFinite(v) && v >= TEMPO_MIN && v <= TEMPO_MAX ? v : 120; })() };
 const tapper = createTapper();

@@ -248,7 +248,7 @@ const sheetFor = (page, title) => page.locator(`.sheet[aria-label="${title}"]`);
   await page.click('#pp-g-band');
   const [dl2] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.click('#pp-export')]);
   const many = fs.readFileSync(await dl2.path(), 'utf8');
-  ok('the filtered people save as one contacts file', (many.match(/BEGIN:VCARD/g) || []).length === 4 && dl2.suggestedFilename() === 'Gigdex contacts - Band members.vcf', dl2.suggestedFilename());
+  ok('the filtered people save as one contacts file', (many.match(/BEGIN:VCARD/g) || []).length === 4 && dl2.suggestedFilename() === 'Gdex contacts - Band members.vcf', dl2.suggestedFilename());
   ok('with every band member in it', ['FN:Maya Brooks', 'FN:Priya Shah', 'FN:Jonah Reyes', 'FN:Sable'].every(l => many.includes(l)));
   await page.click('#pp-g-all');
 

@@ -1,23 +1,21 @@
-# Gigdex: how it is built
+# Gdex: how it is built
 
-Gigdex is the booking deck for **music producers and their bands**: shows, studio sessions and rehearsals; acts, people,
+Gdex is the booking deck for **music producers and their bands**: shows, studio sessions and rehearsals; acts, people,
 backline and venues; songs, setlists and split sheets; day sheets, settlements, quotes and invoices; and the tools a
 musician needs on the night (tuner, metronome, delay times, sound level meter, set timer).
 
-It is a sibling of Vdex (the videographer app at the root of this repository). It began as a copy of Vdex's shell
-(the Rolodex, sheets, forms, themes, offline service worker) with everything rebuilt for music. **Gigdex is
-self-contained in `gigdex/`.** It never imports, links to or edits anything outside this folder, and nothing outside
-this folder knows it exists, so Vdex's build, tests and publishing are untouched. The folder can be moved to a
-repository of its own as it is.
+It is a sibling of Vdex, the videographer app (repository TheCrowBro/Logi-Video-Production-app-). It began as a copy
+of Vdex's shell (the Rolodex, sheets, forms, themes, offline service worker) with everything rebuilt for music. It was
+built in a folder of the Vdex repository and moved here with its history. It shares no code with Vdex at run time and
+keeps its own storage, cache and files.
 
 It is a plain web app: ES modules, no framework, no build step, no external libraries or CDNs (only
 `vendor/qrcode.js`). It works offline once opened, installs to a home screen, and keeps all data in the browser's
-`localStorage` under keys that start with `gigdex-`. Nothing is sent to any server.
+`localStorage` under keys that start with `gdex-`. Nothing is sent to any server.
 
 ## Running it
 
 ```
-cd gigdex
 node tests/run.mjs              # every browser spec (Playwright + Chromium)
 node tests/run.mjs 30- songs    # only specs whose file name contains "30-" or "songs"
 node tools/stamp-build.mjs --dev  # after adding or removing a file: refreshes the offline file list in sw.js
@@ -296,7 +294,7 @@ settlement or budget).
 
 ## Writing for people
 
-Gigdex is used by musicians on a phone, often in a dark venue or a studio. Write the way Vdex does: plain words,
+Gdex is used by musicians on a phone, often in a dark venue or a studio. Write the way Vdex does: plain words,
 short sentences, no jargon a musician would not use, helpful empty states, labels on every control, confirmation
 before anything destructive, and a toast after a save that isn't visible otherwise. Use music words people know:
 load-in, soundcheck, doors, set, curfew, changeover, guarantee, door split, settlement, rider, input list, stage plot,
@@ -311,7 +309,7 @@ backline, take, comp, stems, split sheet.
 * Spec files by owner: `00-smoke` (core), `10-bookings`, `15-show`, `20-daysheet`, `25-money`, `30-studio`,
   `35-songs`, `40-acts`, `45-people`, `50-backline`, `55-venues`, `60-tools`, `65-insurance`, `70-settings`.
 * Test what a person does: open the section, tap the buttons, fill the forms, check what shows and what is stored.
-* `window.gigdexAudioState()` (from `js/audio.js`) reports live audio (context, microphone tracks, tuner, metronome,
+* `window.gdexAudioState()` (from `js/audio.js`) reports live audio (context, microphone tracks, tuner, metronome,
   meter, timer, wake lock): a spec can check that leaving a page leaves nothing listening.
 * `00-smoke` must keep passing: every section opens with and without the sample, with no console errors.
 

@@ -3,7 +3,7 @@
 import { h } from './util.js';
 import { registerState } from './audio.js';
 
-// Settings saved in this browser (keys start gigdex-). Reads fall back when storage is blocked or holds junk.
+// Settings saved in this browser (keys start gdex-). Reads fall back when storage is blocked or holds junk.
 export const pref = {
   get(key, fallback) { try { const raw = localStorage.getItem(key); if (raw == null) return fallback; const v = JSON.parse(raw); return v == null ? fallback : v; } catch { return fallback; } },
   set(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* private mode or full: the setting lasts this visit */ } },

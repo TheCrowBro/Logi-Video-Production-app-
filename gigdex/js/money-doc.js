@@ -67,7 +67,7 @@ export function renderDoc(snap, opts = {}) {
   const isInv = snap.kind === 'invoice';
   return h('article', { class: 'cs-doc money-doc' },
     h('header', { class: 'cs-head' },
-      h('div', null, h('div', { class: 'cs-brand' }, (snap.from || [])[0] || 'Gigdex'), h('div', { class: 'cs-kicker' }, K.label.toUpperCase())),
+      h('div', null, h('div', { class: 'cs-brand' }, (snap.from || [])[0] || 'Gdex'), h('div', { class: 'cs-kicker' }, K.label.toUpperCase())),
       h('div', { class: 'cs-when' }, h('b', null, snap.number), snap.issued && h('div', null, dateText(snap.issued)), snap.due && h('div', null, `${K.dueLabel} ${dateText(snap.due)}`))),
     h('div', { class: 'money-parties' },
       h('div', null, h('h4', null, 'From'), ...(snap.from || []).map(l => h('div', null, l))),
@@ -84,7 +84,7 @@ export function renderDoc(snap, opts = {}) {
       isInv && t.paid > 0 && snap.status !== 'void' && kv('Balance due', m(t.due), 'total')),
     snap.notes && h('section', { class: 'cs-sec' }, h('h4', null, 'Notes'), h('p', { class: 'cs-pre' }, snap.notes)),
     paySection(snap, opts),
-    h('footer', { class: 'cs-foot' }, [...(snap.from || []).slice(0, 2), `${K.label} ${snap.number}`, 'Made with Gigdex'].join(' · ')));
+    h('footer', { class: 'cs-foot' }, [...(snap.from || []).slice(0, 2), `${K.label} ${snap.number}`, 'Made with Gdex'].join(' · ')));
 }
 
 // The same document as plain text, for an email or a message.

@@ -12,7 +12,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 document.head.append(h('style', null, docCss('.paper ') + '\n' + docPrintCss));
 
 function fail(msg) {
-  document.title = 'Gigdex';
+  document.title = 'Gdex';
   bar.replaceChildren();
   box.replaceChildren(h('div', { class: 'msg', role: 'alert' }, h('h2', null, 'This link does not open a document'), h('p', null, msg), h('p', null, 'Ask the person who sent it for a fresh link.')));
 }

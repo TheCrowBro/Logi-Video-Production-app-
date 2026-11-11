@@ -8,7 +8,7 @@ import { db, byId, bookingsOn } from './store.js';
 import { micAnalyser, micLive, rmsOf, dbfs, aWeighting, registerState } from './audio.js';
 import { pref, clamp, num, readout, repeatButton } from './tools-ui.js';
 
-const CAL_KEY = 'gigdex-meter-cal', LIMIT_KEY = 'gigdex-meter-limit', WEIGHT_KEY = 'gigdex-meter-weight';
+const CAL_KEY = 'gdex-meter-cal', LIMIT_KEY = 'gdex-meter-limit', WEIGHT_KEY = 'gdex-meter-weight';
 export const DEFAULT_CAL = 100; // a typical phone: speech at a metre reads about 60 dB, a loud band about 100
 const WINDOW = 60000;           // the average covers the last minute
 const LOW = 30, HIGH = 120;     // the bar's range in dB
@@ -22,7 +22,7 @@ registerState('meter', () => (current ? current() : { listening: false }));
 
 export function meter(panel) {
   // wanted: the person still wants the meter on while the browser starts the microphone (a Stop tapped meanwhile, or
-  // Gigdex going to the background, leaves it off when it arrives). micWeight: the weighting the live microphone uses.
+  // Gdex going to the background, leaves it off when it arrives). micWeight: the weighting the live microphone uses.
   let mic = null, timer = 0, alive = true, starting = false, wanted = false, micWeight = null;
   let cal = readCal(), weight = pref.get(WEIGHT_KEY, 'A') === 'Z' ? 'Z' : 'A';
   let fast = null, max = null, lastT = 0, samples = [], startedAt = 0, warned = false;
@@ -211,7 +211,7 @@ export function meter(panel) {
 
   return {
     stop() { alive = false; stopListening(true); current = null; },
-    hidden() { if (mic || (starting && wanted)) { stopListening(true); label.textContent = 'Paused while Gigdex was in the background. Tap Start meter to carry on.'; } },
+    hidden() { if (mic || (starting && wanted)) { stopListening(true); label.textContent = 'Paused while Gdex was in the background. Tap Start meter to carry on.'; } },
     data() { drawLimit(); },
   };
 }

@@ -404,7 +404,7 @@ async function submitTop(page) { await topSheet(page).locator('button[type=submi
   // The CSV exports download.
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#mn-csv-invoices')]);
   const csvText = fs.readFileSync(await dl.path(), 'utf8');
-  ok('the invoices CSV downloads', dl.suggestedFilename() === `gigdex-invoices-${expect.Y}.csv` && /^﻿?Number,Date,Due/.test(csvText) && /GIG-0007/.test(csvText) && /420\.00/.test(csvText), csvText.slice(0, 200));
+  ok('the invoices CSV downloads', dl.suggestedFilename() === `gdex-invoices-${expect.Y}.csv` && /^﻿?Number,Date,Due/.test(csvText) && /GIG-0007/.test(csvText) && /420\.00/.test(csvText), csvText.slice(0, 200));
   const [dl2] = await Promise.all([page.waitForEvent('download'), page.click('#mn-csv-shows')]);
   const csv2 = fs.readFileSync(await dl2.path(), 'utf8');
   ok('the shows CSV downloads with the settlement (Settled says no for a night counted but not marked settled)', /Date,Act,Venue/.test(csv2) && /The Lantern Rooms,Done,[^\n]*,214,[^\n]*,1338\.00,no/.test(csv2), csv2.split('\n').slice(0, 3).join(' / '));

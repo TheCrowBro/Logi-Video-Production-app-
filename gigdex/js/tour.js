@@ -15,7 +15,7 @@ const profileStep = {
   },
 };
 export const STEPS = [
-  { title: 'Welcome to Gigdex', text: 'The booking deck for producers and bands: shows, studio sessions and rehearsals, your acts and people, backline, venues, songs and setlists, settlements and invoices, and the tools you need on the night. This takes about a minute. Tap Skip any time.' },
+  { title: 'Welcome to Gdex', text: 'The booking deck for producers and bands: shows, studio sessions and rehearsals, your acts and people, backline, venues, songs and setlists, settlements and invoices, and the tools you need on the night. This takes about a minute. Tap Skip any time.' },
   profileStep,
   { go: 'bookings', target: ['.binder'], title: 'The Rolodex', text: 'Spin it to move between sections: drag it, tap ▲ ▼, use the arrow keys, or scroll on it.' },
   { go: 'bookings', target: ['.page-head'], title: 'Bookings', text: 'Shows, studio sessions and rehearsals on one calendar. Open one for its times, deal, setlist, guest list, day sheet, settlement and invoice.' },
@@ -24,9 +24,9 @@ export const STEPS = [
   { go: 'tools', target: ['.page-head'], title: 'Tools', text: 'A tuner, a metronome with tap tempo, delay times for any tempo, a sound level meter and a set timer.' },
   { go: 'settings', target: ['.page-head'], title: 'Settings', text: 'Your details, quotes and invoices, backups, display and this tour again. Everything stays on this device unless you save a backup.' },
 ];
-const RESUME = 'gigdex-tour-at'; // the step to resume at when a step leaves the page (a calendar sign-in that redirects)
-const done = () => { try { localStorage.setItem('gigdex-tour', 'done'); } catch { /* ignore */ } };
-export const tourSeen = () => { try { return !!localStorage.getItem('gigdex-tour'); } catch { return true; } };
+const RESUME = 'gdex-tour-at'; // the step to resume at when a step leaves the page (a calendar sign-in that redirects)
+const done = () => { try { localStorage.setItem('gdex-tour', 'done'); } catch { /* ignore */ } };
+export const tourSeen = () => { try { return !!localStorage.getItem('gdex-tour'); } catch { return true; } };
 export const resumeTourAt = n => { try { if (n == null) localStorage.removeItem(RESUME); else localStorage.setItem(RESUME, String(n)); } catch { /* ignore */ } };
 
 // Steps for a sheet, by the sheet's title (its aria-label): sheetTutorial('Edit setlist', steps or () => steps).
@@ -78,7 +78,7 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   const willShow = s => !s.target || !!s.go || !!s.before || !!find(s);
   const step = async n => {
     if (n < 0) return;
-    if (n >= STEPS.length) { if (!seen.size && !STEPS.some(x => !x.target)) { stop(); window.dispatchEvent(new CustomEvent('gigdex-tour-empty')); return; } return stop(); }
+    if (n >= STEPS.length) { if (!seen.size && !STEPS.some(x => !x.target)) { stop(); window.dispatchEvent(new CustomEvent('gdex-tour-empty')); return; } return stop(); }
     i = n; const s = STEPS[n];
     if (s.go) { window.logiGo?.(s.go); await new Promise(r => setTimeout(r, 650)); }
     if (s.before) { try { await s.before(); } catch { /* the step still shows */ } await new Promise(r => setTimeout(r, 250)); }

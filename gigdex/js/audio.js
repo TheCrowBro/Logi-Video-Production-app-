@@ -7,7 +7,7 @@
 /* ------------------------------- the context ------------------------------- */
 let ctx = null;
 const mics = new Set();       // live microphone streams
-const states = new Map();     // name -> () => object, merged into gigdexAudioState() (tests and debugging)
+const states = new Map();     // name -> () => object, merged into gdexAudioState() (tests and debugging)
 let generation = 0;           // bumped by stopAll(): a microphone that arrives after it is stopped at once
 
 // A problem with a message written for a person. code: unsupported, insecure, denied, nomic, busy, cancelled, other.
@@ -39,7 +39,7 @@ export async function micPermission() {
 }
 
 export async function getMic() {
-  if (!window.isSecureContext) throw new AudioProblem('insecure', 'The microphone only works when Gigdex is opened from its secure (https://) address or installed on your device. Open it from there and try again.');
+  if (!window.isSecureContext) throw new AudioProblem('insecure', 'The microphone only works when Gdex is opened from its secure (https://) address or installed on your device. Open it from there and try again.');
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new AudioProblem('unsupported', 'This browser can’t use the microphone. Try an up-to-date Chrome, Safari, Firefox or Edge.');
   const gen = generation;
   let stream;
@@ -48,7 +48,7 @@ export async function getMic() {
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, video: false });
   } catch (e) {
     const n = e && e.name;
-    if (n === 'NotAllowedError' || n === 'PermissionDeniedError' || n === 'SecurityError') throw new AudioProblem('denied', 'Gigdex isn’t allowed to use the microphone. Allow it for this site in your browser’s settings (tap the lock or ⓘ beside the address), then tap Start again.');
+    if (n === 'NotAllowedError' || n === 'PermissionDeniedError' || n === 'SecurityError') throw new AudioProblem('denied', 'Gdex isn’t allowed to use the microphone. Allow it for this site in your browser’s settings (tap the lock or ⓘ beside the address), then tap Start again.');
     if (n === 'NotFoundError' || n === 'DevicesNotFoundError' || n === 'OverconstrainedError') throw new AudioProblem('nomic', 'No microphone was found. Plug one in, or check that this device has one, then tap Start again.');
     if (n === 'NotReadableError' || n === 'TrackStartError' || n === 'AbortError') throw new AudioProblem('busy', 'The microphone is busy: another app or tab may be using it. Close that, then tap Start again.');
     throw new AudioProblem('other', 'The microphone could not be started' + (e && e.message ? ` (${e.message})` : '') + '. Tap Start to try again.');
@@ -102,7 +102,7 @@ export function stopAll() {
 }
 
 /* ------------------------------- state hook ------------------------------- */
-// A tool reports its live state here (metronome running, wake lock held…). window.gigdexAudioState() shows it all.
+// A tool reports its live state here (metronome running, wake lock held…). window.gdexAudioState() shows it all.
 export const registerState = (name, fn) => { states.set(name, fn); };
 export function audioState() {
   const live = [...mics].flatMap(s => s.getTracks()).filter(t => t.readyState === 'live').length;
@@ -110,7 +110,7 @@ export function audioState() {
   for (const [k, fn] of states) { try { out[k] = fn(); } catch { out[k] = null; } }
   return out;
 }
-if (typeof window !== 'undefined') window.gigdexAudioState = audioState;
+if (typeof window !== 'undefined') window.gdexAudioState = audioState;
 
 /* ------------------------------- notes ------------------------------- */
 export const NOTE_NAMES = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];

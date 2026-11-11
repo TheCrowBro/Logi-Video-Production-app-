@@ -1,4 +1,4 @@
-// Bookings: the heart of Gigdex. Three views kept in module state (S): the month calendar with "Coming up" under it,
+// Bookings: the heart of Gdex. Three views kept in module state (S): the month calendar with "Coming up" under it,
 // one day, and a booking's own page (its header, then one fold-down box per block from js/blocks/index.js).
 // Adapted from Vdex's bookings page: the month grid, the day list, press and hold to delete, duplicate.
 import { h, nodes, ymd, todayISO, parseISO, fmtLong, fmtShort, daysUntil, toast, announce, sheet, empty, backBtn, hold, wasHeld, telUrl } from '../util.js';
@@ -360,7 +360,7 @@ function exportCalendar() {
   const list = upcoming().filter(passes);
   if (!list.length) return toast(filtersOn() ? 'Nothing coming up with these filters.' : 'Nothing coming up to export yet.');
   const act = S.act && byId('acts', S.act);
-  const name = ['Gigdex', act && act.name, S.kind && KIND_CHIP[S.kind]].filter(Boolean).join(' – ');
+  const name = ['Gdex', act && act.name, S.kind && KIND_CHIP[S.kind]].filter(Boolean).join(' – ');
   saveFile(allIcs(list, name), fileName(name, 'ics'), 'text/calendar')
     .then(done => { if (done) toast(`${plural(list.length, 'booking')} saved to a calendar file`); })
     .catch(() => toast('The calendar file could not be saved here.'));

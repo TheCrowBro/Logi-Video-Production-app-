@@ -9,7 +9,7 @@ import { haptic } from './a11y.js';
 import { registerState } from './audio.js';
 import { pref, clamp, num, keepAwake, letSleep, wakeState } from './tools-ui.js';
 
-const KEY = 'gigdex-settimer';
+const KEY = 'gdex-settimer';
 const MAX_MIN = 600;
 // total and left are seconds; endsAt (ms since 1970) is set only while running; bookingId: the show it came from.
 const T = (() => {

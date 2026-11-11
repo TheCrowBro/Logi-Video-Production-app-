@@ -227,7 +227,7 @@ export default {
         h('button', { type: 'button', class: 'btn ghost small', id: 'sh-st-save', onclick: () => saveDoc(`Settlement – ${bookingTitle(fresh(b))}`, doc()) }, '⬇ Save')));
   },
   tutorial: [
-    { title: 'The door', text: 'Type the ticket count, comps and what the promoter handed over. Gigdex works out what the deal pays, takes off the deposit and shows anything still owed.', target: ['#blk-settlement .sh-st-inputs', '#blk-settlement'] },
+    { title: 'The door', text: 'Type the ticket count, comps and what the promoter handed over. Gdex works out what the deal pays, takes off the deposit and shows anything still owed.', target: ['#blk-settlement .sh-st-inputs', '#blk-settlement'] },
     { title: 'Merch and costs', text: 'Count each merch item in and out, and add the night’s costs. The show’s budget lines count too.', target: ['#sh-st-merch'] },
     { title: 'Payouts', text: 'The profit split between everyone on the show. Make a share 2 for a double share, or 0 to leave someone out.', target: ['#blk-settlement .sh-pay', '#blk-settlement .sh-st-totals'] },
     { title: 'Settle up', text: 'Mark settled when it’s done; print, copy or save the sheet for the promoter and the band.', target: ['#blk-settlement .sh-st-actions'] },

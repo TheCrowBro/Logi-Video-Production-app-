@@ -20,7 +20,7 @@ const cap = s => (s ? s[0].toUpperCase() + s.slice(1) : s);
 const S = { erase: '' }; // what is typed in the erase box survives the redraw after every change
 
 /* ------------------------------- open sections ------------------------------- */
-const OPEN_KEY = 'gigdex-settings-open';
+const OPEN_KEY = 'gdex-settings-open';
 const OPEN = (() => { try { const a = JSON.parse(localStorage.getItem(OPEN_KEY)); return new Set(Array.isArray(a) ? a : []); } catch { return new Set(); } })();
 const saveOpen = () => { try { localStorage.setItem(OPEN_KEY, JSON.stringify([...OPEN])); } catch { /* private mode */ } };
 
@@ -270,17 +270,17 @@ function install() {
 function aboutBody(up) {
   let size = 0; try { size = new Blob([store.serialize()]).size; } catch { /* ignore */ }
   return [
-    h('p', null, h('strong', null, `Gigdex ${VERSION}`), BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ` (${BUILT})` : ''}` : '', h('br'),
+    h('p', null, h('strong', null, `Gdex ${VERSION}`), BUILD !== 'dev' ? ` · build ${BUILD}${BUILT ? ` (${BUILT})` : ''}` : '', h('br'),
       h('span', { class: 'small muted' }, 'The booking deck for music producers and their bands.')),
     h('div', { class: 'card se-where' },
       h('strong', null, 'Where your data is kept'),
       h('p', { class: 'small muted' }, 'Everything you enter stays in this browser, on this device. There is no account, and nothing is sent to a server: not your bookings, your contacts or your fees. A backup file keeps it safe and moves it to another device.'),
       h('p', { class: 'small muted' }, `It takes about ${sizeText(size)} here.`),
-      isApple() && !installState().standalone && h('p', { class: 'small muted' }, 'On iPhone and iPad, Safari can clear a website’s data when it hasn’t been opened for a week or so. Add Gigdex to the Home Screen to keep it, and save a backup now and then.')),
+      isApple() && !installState().standalone && h('p', { class: 'small muted' }, 'On iPhone and iPad, Safari can clear a website’s data when it hasn’t been opened for a week or so. Add Gdex to the Home Screen to keep it, and save a backup now and then.')),
     up.el,
     h('div', { class: 'actions' },
       h('a', { class: 'btn ghost', href: 'privacy.html', target: '_blank', rel: 'noopener' }, 'Privacy'),
-      !installState().standalone && h('button', { type: 'button', class: 'btn ghost', id: 'se-install', onclick: install }, '⤓ Install Gigdex')),
+      !installState().standalone && h('button', { type: 'button', class: 'btn ghost', id: 'se-install', onclick: install }, '⤓ Install Gdex')),
   ];
 }
 
@@ -302,7 +302,7 @@ function eraseBody() {
     onkeydown: e => { if (e.key === 'Enter' && eraseArmed()) { e.preventDefault(); eraseDevice(); } } });
   input.spellcheck = false;
   return [
-    h('p', { class: 'warn small', id: 'se-erase-warn' }, 'This removes everything Gigdex keeps on this device: bookings, acts, people, songs, setlists, backline, venues, take logs, insurance, your details and money settings. Backup files, and a copy kept in a file, stay as they are. There is no undo.'),
+    h('p', { class: 'warn small', id: 'se-erase-warn' }, 'This removes everything Gdex keeps on this device: bookings, acts, people, songs, setlists, backline, venues, take logs, insurance, your details and money settings. Backup files, and a copy kept in a file, stay as they are. There is no undo.'),
     h('div', { class: 'field' }, h('label', { for: 'se-erase-input' }, 'Type ERASE to confirm'), input),
     h('div', { class: 'actions' }, go),
   ];
@@ -317,7 +317,7 @@ const SECTIONS = [
   ['help', 'Help', 'A walkthrough for any page, and the welcome tour.'],
   ['sample', 'Sample data', 'Load a sample band and a few weeks of bookings to try things out, and remove it again in one go.'],
   ['about', 'About', 'The version and updates, privacy, and where your data is kept.'],
-  ['erase', 'Erase this device', 'Wipes everything Gigdex keeps on this device. You type ERASE first, so it can’t happen by accident.'],
+  ['erase', 'Erase this device', 'Wipes everything Gdex keeps on this device. You type ERASE first, so it can’t happen by accident.'],
 ];
 
 export const settings = {
@@ -342,7 +342,7 @@ export const settings = {
       ]),
       sample: section('sample', '🧪', 'Sample data', sampleCount() ? `${plural(sampleCount(), 'sample record')} loaded` : 'Not loaded', sampleBody()),
       about: section('about', 'ℹ️', 'About', `Version ${VERSION}${BUILD !== 'dev' ? ' · ' + BUILD : ''} · your data stays on this device`, aboutBody(up)),
-      erase: section('erase', '🗑️', 'Erase this device', 'Remove everything Gigdex keeps here', eraseBody()),
+      erase: section('erase', '🗑️', 'Erase this device', 'Remove everything Gdex keeps here', eraseBody()),
     };
     // A backup saved or the file copy written is not a change to the data, so the page is not redrawn: its line is.
     done.push(onBackupChange(() => { sec.backups.sub.textContent = backupSummary(); }));

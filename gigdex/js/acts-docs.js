@@ -94,7 +94,7 @@ const venueName = b => { const v = b.venueId ? byId('venues', b.venueId) : null;
 const showDate = b => (b.endDate && b.endDate > b.date ? `${fmtShort(b.date)} – ${fmtShort(b.endDate)}` : fmtShort(b.date));
 // Confirmed shows still to come: the dates a press kit lists (holds and offers are not public yet).
 export const pressShows = actId => upcoming().filter(b => b.actId === actId && b.kind === 'show' && ['confirmed', 'advanced'].includes(b.status)).slice(0, 12);
-// Who to call about the act: its own email and phone, else the person using Gigdex.
+// Who to call about the act: its own email and phone, else the person using Gdex.
 function contactRows(a) {
   if (a.email || a.phone) return [a.email && kv('Email', h('a', { href: 'mailto:' + a.email }, a.email)), a.phone && kv('Phone', h('a', { href: telUrl(a.phone) }, a.phone))].filter(Boolean);
   const p = db.profile || {};
@@ -129,7 +129,7 @@ export function epkDoc(a, qrMarkup = '') {
     members.length > 0 && sec('Line-up', ...members.map(p => kv(p.name, roleOf(p) || '—'))),
     shows.length > 0 && sec('Upcoming shows', h('table', null, h('tbody', null, shows.map(b => { const [name, city] = venueName(b); return h('tr', null, h('td', null, showDate(b)), h('td', null, [name || 'Venue to be announced', city].filter(Boolean).join(', '))); })))),
     ...(() => { const rows = contactRows(a); return rows.length ? [sec('Contact', ...rows)] : []; })(),
-    h('div', { class: 'cs-foot' }, `${a.name || 'Untitled act'} · press kit · made with Gigdex`));
+    h('div', { class: 'cs-foot' }, `${a.name || 'Untitled act'} · press kit · made with Gdex`));
 }
 async function epkWithQr(a) {
   const t = qrTarget(a);
@@ -226,7 +226,7 @@ export function riderDoc(a) {
     a.riderTech && sec('Technical rider', h('p', { class: 'cs-pre' }, a.riderTech)),
     a.riderHospitality && sec('Hospitality rider', h('p', { class: 'cs-pre' }, a.riderHospitality)),
     contact.length > 0 && sec('Contact', ...contact),
-    h('div', { class: 'cs-foot' }, `${a.name || 'Untitled act'} · technical rider · made with Gigdex`));
+    h('div', { class: 'cs-foot' }, `${a.name || 'Untitled act'} · technical rider · made with Gdex`));
 }
 // Prints the act's tech rider: input list, stage plot, riders and contact. Returns false when the act is gone.
 export function printRider(actId) {

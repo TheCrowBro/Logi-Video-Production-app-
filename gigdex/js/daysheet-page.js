@@ -1,5 +1,5 @@
 // The page the band opens from a day sheet link (daysheet.html#…): the sheet was packed into the address by the sender's
-// Gigdex, and is drawn here read-only, with Print and Add to calendar. No store, no account, nothing fetched but this
+// Gdex, and is drawn here read-only, with Print and Add to calendar. No store, no account, nothing fetched but this
 // page. Whatever the link carries goes through cleanDaySheet first: only the day sheet's own fields, as plain text.
 import { h, fmtShort } from './util.js';
 import { unpack } from './link-pack.js';
@@ -11,7 +11,7 @@ const bar = document.getElementById('bar'), box = document.getElementById('doc')
 document.head.append(h('style', { id: 'ds-doc-css' }, docCss('.ds-paper ') + '\n' + dsDocCss('.ds-paper ')));
 
 const fail = (msg, head = 'This link is incomplete') => {
-  document.title = 'Day sheet · Gigdex';
+  document.title = 'Day sheet · Gdex';
   bar.replaceChildren();
   box.replaceChildren(h('div', { class: 'ds-msg', role: 'alert' }, h('h1', null, head), h('p', null, msg), h('p', null, 'Ask whoever sent it for a fresh link.')));
 };
@@ -29,9 +29,9 @@ async function show() {
   let raw;
   try { raw = await unpack(hash); } catch { if (n === token) fail('Part of it is missing or damaged: it may have been cut off when it was copied.'); return; }
   if (n !== token) return;
-  if (raw && typeof raw === 'object' && Number(raw.v) > 1) return fail('It was made by a newer version of Gigdex than this page knows. Reload the page; if that does not help, ask for a fresh link.', 'This day sheet is too new for this page');
+  if (raw && typeof raw === 'object' && Number(raw.v) > 1) return fail('It was made by a newer version of Gdex than this page knows. Reload the page; if that does not help, ask for a fresh link.', 'This day sheet is too new for this page');
   const d = raw && typeof raw === 'object' && Number(raw.v) === 1 ? cleanDaySheet(fromLink(raw)) : null;
-  if (!d || !(d.title || d.date || d.times.length)) return fail('It does not hold a day sheet Gigdex can read.');
+  if (!d || !(d.title || d.date || d.times.length)) return fail('It does not hold a day sheet Gdex can read.');
 
   document.title = `${d.title || typeLabel(d)}${d.date ? ' – ' + fmtShort(d.date) : ''} · Day sheet`;
   const from = [d.from.name, d.from.business].filter(Boolean).join(' · ');

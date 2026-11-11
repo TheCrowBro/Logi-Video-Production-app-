@@ -3,11 +3,11 @@
 // stamps the time, saves, and tells the page to redraw.
 import { uid, ymd } from './util.js';
 
-const KEY = 'gigdex-db-v1';
+const KEY = 'gdex-db-v1';
 // Every list of records, in the order the backup file shows them.
 export const COLLECTIONS = ['bookings', 'acts', 'people', 'gear', 'kits', 'venues', 'songs', 'setlists', 'logs', 'shifts', 'insurance'];
 const blank = () => ({
-  app: 'gigdex', version: 1, updatedAt: 0,
+  app: 'gdex', version: 1, updatedAt: 0,
   profile: { name: '', business: '', role: '', phone: '', email: '', website: '', location: '', address: '', currency: '$', bio: '', updatedAt: 0 },
   ...Object.fromEntries(COLLECTIONS.map(c => [c, []])),
   deleted: {},              // id -> time deleted: a merge with an older backup does not bring records back
@@ -25,7 +25,7 @@ export function normalise(raw) {
   out.logs = out.logs.map(l => ({ ...l, takes: Array.isArray(l.takes) ? l.takes : [] }));
   out.deleted = Object.fromEntries(Object.entries(raw && raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {}).filter(([, t]) => Date.now() - t < 180 * 864e5));
   for (const k of ['templates', 'billing', 'priceList']) out[k] = raw && raw[k] && typeof raw[k] === 'object' ? raw[k] : b[k];
-  out.app = 'gigdex';
+  out.app = 'gdex';
   return out;
 }
 
@@ -198,8 +198,8 @@ export function eraseAll() {
   db = blank(); db.updatedAt = Date.now();
   sealed = false; dirty = false;
   flush(); emit();
-  const KEEP = new Set(['gigdex-prefs', 'gigdex-tab']);
-  try { const keys = []; for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); keys.filter(k => k && k.startsWith('gigdex-') && k !== KEY && !KEEP.has(k)).forEach(k => localStorage.removeItem(k)); } catch { /* blocked storage */ }
+  const KEEP = new Set(['gdex-prefs', 'gdex-tab']);
+  try { const keys = []; for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); keys.filter(k => k && k.startsWith('gdex-') && k !== KEY && !KEEP.has(k)).forEach(k => localStorage.removeItem(k)); } catch { /* blocked storage */ }
 }
 
 /* ------------------------------- sample ------------------------------- */

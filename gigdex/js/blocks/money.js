@@ -1,5 +1,5 @@
 // The Quote & invoice box on a show, a session or an other booking: a tab for each document. With none yet, it shows
-// what Gigdex would start it with (the show's fee, the studio time and players, the booking's fee) and makes it in one
+// what Gdex would start it with (the show's fee, the studio time and players, the booking's fee) and makes it in one
 // tap; with one, its lines, totals and payments, what to do next (send, accept, record a payment) and the ways to
 // send it (the client's link, email, print, a web page, text). The documents live in js/money.js.
 import { h, toast, ymd } from '../util.js';
@@ -31,7 +31,7 @@ function makeView(b, kind) {
   const K = KINDS[kind], s = suggestLines(b, kind), quote = docOf(b, 'quote');
   const net = s.lines.reduce((t, l) => t + (Number(l.qty) || 0) * (Number(l.price) || 0), 0);
   return h('div', { class: 'mn-make stack' },
-    h('p', { class: 'muted small mn-lead' }, kind === 'quote' ? 'No quote yet. Gigdex starts one from the booking with:' : 'No invoice yet. Gigdex starts one from the booking with:'),
+    h('p', { class: 'muted small mn-lead' }, kind === 'quote' ? 'No quote yet. Gdex starts one from the booking with:' : 'No invoice yet. Gdex starts one from the booking with:'),
     h('ul', { class: 'mn-suggest' },
       ...s.lines.map(l => h('li', null, h('span', null, l.desc, h('small', { class: 'muted' }, ` · ${qtyText(l.qty, l.unit)}`)), h('b', null, l.price === '' ? 'no price yet' : fmtMoney((Number(l.qty) || 0) * Number(l.price))))),
       ...s.payments.map(p => h('li', { class: 'mn-suggest-pay' }, h('span', null, p.method), h('b', null, '−' + fmtMoney(p.amount))))),
@@ -113,7 +113,7 @@ export default {
       h('div', { id: 'mn-panel', role: 'tabpanel', 'aria-labelledby': `mn-tab-${kind}` }, doc ? docView(b, kind, doc) : makeView(b, kind)));
   },
   tutorial: [
-    { title: 'Quote & invoice', text: 'One quote and one invoice per booking. Gigdex starts them from the booking: a show’s fee, a session’s studio time and players, or the booking’s fee.', target: ['#blk-money'] },
+    { title: 'Quote & invoice', text: 'One quote and one invoice per booking. Gdex starts them from the booking: a show’s fee, a session’s studio time and players, or the booking’s fee.', target: ['#blk-money'] },
     { title: 'Quote or invoice', text: 'Switch between the two. A quote becomes the invoice in one tap once it is accepted.', target: ['.mn-tabs'] },
     { title: 'Next step', text: 'Edit the lines, mark it as sent, and record payments as they arrive. Paid in full ticks the checklist for you.', target: ['.mn-doc-actions', '.mn-make'] },
     { title: 'Send it', text: 'A link the client opens on any phone with Pay buttons, an email, a printout or a web page to attach.', target: ['.mn-send'] },

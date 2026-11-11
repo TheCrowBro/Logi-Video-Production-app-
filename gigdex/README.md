@@ -1,6 +1,6 @@
-# Gigdex
+# Gdex
 
-**Gigdex is an app for music producers and the bands they play in, manage or produce.**
+**Gdex is an app for music producers and the bands they play in, manage or produce.**
 
 It keeps your shows, studio sessions and rehearsals in one calendar, with your acts, the people you work with, your
 backline, the venues and studios you play, and your songs and setlists. On the day it gives the band a day sheet, tunes
@@ -9,11 +9,11 @@ your guitar, counts you in and times your set. Afterwards it settles the night, 
 It works on a phone and on a computer, in the browser or installed like an app, and keeps working with no signal. There
 is no account: your information stays on your own phone or computer unless you choose to save a backup or send a link.
 
-Gigdex is a sibling of [Vdex](../README.md), the app for videographers, and shares its look and the way it works.
+Gdex is a sibling of Vdex, the app for videographers, and shares its look and the way it works.
 
 ## Start here
 
-1. **Open Gigdex** in your phone's or computer's browser. (It is not published at a public address yet; until it is,
+1. **Open Gdex** in your phone's or computer's browser. (It is not published at a public address yet; until it is,
    the person who looks after the tech can run it: see *For the person who looks after the tech* below.)
 2. **Put it on your home screen** so it opens like a normal app, even with no signal:
    - **iPhone:** open it in Safari, tap **Share** (the square with an arrow), then **Add to Home Screen**.
@@ -42,14 +42,14 @@ The spinning drum at the top is the Rolodex. Swipe it, or tap the little arrows,
 
 1. **Bookings → + New → Show.** Pick the act and the venue, the date, and the times: load-in, soundcheck, doors, on
    stage and the curfew.
-2. **Deal & fee:** a guarantee, a door split, or a guarantee versus a percentage. Gigdex shows what it pays at a quarter,
+2. **Deal & fee:** a guarantee, a door split, or a guarantee versus a percentage. Gdex shows what it pays at a quarter,
    half, three quarters and a full house.
 3. **Advance checklist:** tick it off as you advance the show, or tap **Email the promoter** for an advance email that
    asks about everything still blank.
 4. **Line-up & gear, setlist, guest list:** who's playing, what's going in the van, the set that fits your slot, and who's
    on the door list.
 5. **Day sheet:** print it, or send the band a link with the times, address, line-up and setlist. It never shows money.
-6. **On the night: Settlement.** Tickets, comps, merch counts and costs; Gigdex works out what the band made and each
+6. **On the night: Settlement.** Tickets, comps, merch counts and costs; Gdex works out what the band made and each
    person's share.
 7. **Quote & invoice:** made from the booking, with Pay buttons in the link you send.
 
@@ -68,17 +68,17 @@ The spinning drum at the top is the Rolodex. Swipe it, or tap the little arrows,
 - **Everything stays on this device.** Nothing is sent anywhere by itself. The [privacy page](privacy.html) says in
   plain words what leaves your device and when.
 - **Save a backup now and then:** tap ☁ at the top → **Save a backup**. Keep the file somewhere safe. To move to a new
-  phone or computer, open Gigdex there and import the file. On a computer with Chrome or Edge you can also have Gigdex
+  phone or computer, open Gdex there and import the file. On a computer with Chrome or Edge you can also have Gdex
   keep a copy in a file inside your Dropbox, Google Drive, OneDrive or iCloud Drive folder.
 - **Links you send** (a day sheet, an invoice) carry the document inside the link itself, so no server sees them. Send
   them only to the people they are for.
 
 ## For the person who looks after the tech
 
-- Gigdex is a plain web app in this folder, with no build step: serve the folder from any static web host.
+- Gdex is a plain web app with no build step: serve this repository's files from any static web host.
   `npm run serve` (or `node -e "import('./tests/lib.mjs').then(m => m.serve('.', 8124))"`) runs it on
   http://localhost:8124/.
 - Before publishing a new version, run `node tools/stamp-build.mjs` so installed copies notice the update.
 - The browser tests: `node tests/run.mjs` (needs Playwright and Chromium).
 - [How it is built](docs/developers.md): the data, the sections, the booking boxes and who owns which file.
-- Gigdex does not share anything with Vdex: its own storage (`gigdex-…` keys), its own offline cache, its own files.
+- Gdex does not share anything with Vdex: its own storage (`gdex-…` keys), its own offline cache, its own files.

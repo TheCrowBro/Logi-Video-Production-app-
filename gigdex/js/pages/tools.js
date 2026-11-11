@@ -20,7 +20,7 @@ const TOOLS = [
   { id: 'meter', label: 'Meter', icon: '🔊', make: meter, steps: METER_STEPS },
   { id: 'timer', label: 'Set timer', icon: '⏱️', make: setTimer, steps: TIMER_STEPS },
 ];
-const TOOL_KEY = 'gigdex-tool';
+const TOOL_KEY = 'gdex-tool';
 const S = { tool: (() => { try { const t = localStorage.getItem(TOOL_KEY); return TOOLS.some(x => x.id === t) ? t : 'tuner'; } catch { return 'tuner'; } })() };
 const ARROWS = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'];
 
@@ -109,7 +109,7 @@ export const tools = {
   },
   // The walkthrough for whichever tool is open.
   tutorial: () => [
-    { target: ['.tl-seg'], title: 'Five tools', text: 'A tuner, a metronome, tap tempo with delay times, a sound level meter and a set timer. Gigdex opens the one you used last.' },
+    { target: ['.tl-seg'], title: 'Five tools', text: 'A tuner, a metronome, tap tempo with delay times, a sound level meter and a set timer. Gdex opens the one you used last.' },
     ...((TOOLS.find(t => t.id === S.tool) || TOOLS[0]).steps),
   ],
 };

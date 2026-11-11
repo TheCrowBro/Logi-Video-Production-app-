@@ -107,7 +107,7 @@ const LINEUP = ['Maya Brooks', 'Leo Grant', 'Priya Shah', 'Jonah Reyes', 'Dee Ok
   const [dl] = await Promise.all([band.waitForEvent('download'), band.getByRole('button', { name: /Add to calendar/ }).click()]);
   const ics = fs.readFileSync(await dl.path(), 'utf8');
   const ymd5 = await page.evaluate(() => import('./js/util.js').then(u => u.ymd(new Date(Date.now() + 5 * 864e5)).replace(/-/g, '')));
-  ok('Add to calendar gives an event from load-in to curfew at the venue', /\.ics$/.test(dl.suggestedFilename()) && ics.includes(`DTSTART:${ymd5}T170000`) && ics.includes(`DTEND:${ymd5}T230000`) && /SUMMARY:The Night Owls @ The Lantern Rooms/.test(ics) && /LOCATION:The Lantern Rooms\\, 12 Quay Street/.test(ics) && /UID:daysheet-s-show1@gigdex/.test(ics) && /\r\n/.test(ics), dl.suggestedFilename());
+  ok('Add to calendar gives an event from load-in to curfew at the venue', /\.ics$/.test(dl.suggestedFilename()) && ics.includes(`DTSTART:${ymd5}T170000`) && ics.includes(`DTEND:${ymd5}T230000`) && /SUMMARY:The Night Owls @ The Lantern Rooms/.test(ics) && /LOCATION:The Lantern Rooms\\, 12 Quay Street/.test(ics) && /UID:daysheet-s-show1@gdex/.test(ics) && /\r\n/.test(ics), dl.suggestedFilename());
   ok('every line of the calendar file is folded to 75 bytes', ics.split('\r\n').every(l => Buffer.byteLength(l) <= 75));
 
   /* ---------------- after midnight ---------------- */
@@ -156,7 +156,7 @@ const LINEUP = ['Maya Brooks', 'Leo Grant', 'Priya Shah', 'Jonah Reyes', 'Dee Ok
   await sheet.locator('.ds-parts > summary').click();
   await sheet.getByLabel('Guest list names and +1s').check();
   await page.waitForFunction(() => /Ivy Chen \+1/.test(document.querySelector('.ds-preview').textContent));
-  ok('ticking guest names puts them on the sheet, and it is remembered', /Ivy Chen \+1, Sam \(photographer\)/.test(await doc.innerText()) && (await page.evaluate(() => JSON.parse(localStorage.getItem('gigdex-daysheet')).guestNames)) === true);
+  ok('ticking guest names puts them on the sheet, and it is remembered', /Ivy Chen \+1, Sam \(photographer\)/.test(await doc.innerText()) && (await page.evaluate(() => JSON.parse(localStorage.getItem('gdex-daysheet')).guestNames)) === true);
   await sheet.getByLabel('Booking notes').uncheck();
   await page.waitForFunction(() => !/Sample show\./.test(document.querySelector('.ds-preview').textContent));
   ok('unticking booking notes takes them off', !/Sample show\./.test(await doc.innerText()));
@@ -177,7 +177,7 @@ const LINEUP = ['Maya Brooks', 'Leo Grant', 'Priya Shah', 'Jonah Reyes', 'Dee Ok
   // Notes taken off in the sheet must stay off what the box sends, the very first time, on the real booking page.
   const notesIn = u => page.evaluate(async x => { if (!x) return 'no link'; const m = await import('./js/link-pack.js'); return (await m.unpack(x.split('#')[1])).notes || ''; }, u);
   const mailOf = async sel => { await page.waitForFunction(s => /^mailto:/.test((document.querySelector(s) || { getAttribute() {} }).getAttribute('href') || ''), sel); const body = new URLSearchParams((await page.locator(sel).getAttribute('href')).split('?')[1]).get('body') || ''; return { body, link: (body.match(/https?:\/\/\S*daysheet\.html#\S+/) || [''])[0] }; };
-  const setChoices = c => page.evaluate(x => localStorage.setItem('gigdex-daysheet', JSON.stringify(x)), c);
+  const setChoices = c => page.evaluate(x => localStorage.setItem('gdex-daysheet', JSON.stringify(x)), c);
   const shareFrom = async sel => { await page.evaluate(() => navigator.clipboard.writeText('')); await page.locator(sel).click(); await page.waitForFunction(() => navigator.clipboard.readText().then(t => /^http\S*daysheet\.html#\S+$/.test(t)).catch(() => false)); return clip(); };
   const stubPrint = () => page.evaluate(() => { window.__printedText = null; window.print = () => { window.__printedText = document.getElementById('print-root').textContent; window.dispatchEvent(new Event('afterprint')); }; });
   const BOX = '#blk-daysheet', boxMail = `${BOX} a.btn[aria-label^="Email the day sheet to the band"]`;
@@ -214,16 +214,16 @@ const LINEUP = ['Maya Brooks', 'Leo Grant', 'Priya Shah', 'Jonah Reyes', 'Dee Ok
 
   // A private window cannot store the choice: it still holds while the app is open.
   await setChoices({ guestNames: false, notes: true });
-  await page.evaluate(() => { const set = Storage.prototype.setItem; window.__setItem = set; Storage.prototype.setItem = function (k, v) { if (k === 'gigdex-daysheet') throw new Error('private window'); return set.call(this, k, v); }; });
+  await page.evaluate(() => { const set = Storage.prototype.setItem; window.__setItem = set; Storage.prototype.setItem = function (k, v) { if (k === 'gdex-daysheet') throw new Error('private window'); return set.call(this, k, v); }; });
   await page.locator('#ds-test button[aria-label="Choose what goes on the day sheet"]').click(); await doc.waitFor();
   ok('“What goes on it” on the box opens the sheet at those choices', await sheet.locator('.ds-parts').evaluate(d => d.open));
   await sheet.getByLabel('Booking notes').uncheck();
   await page.waitForFunction(() => !/Sample show\./.test(document.querySelector('.ds-preview').textContent));
-  const priv = await page.evaluate(() => import('./js/daysheet.js').then(m => ({ notes: m.choices().notes, stored: JSON.parse(localStorage.getItem('gigdex-daysheet')).notes })));
+  const priv = await page.evaluate(() => import('./js/daysheet.js').then(m => ({ notes: m.choices().notes, stored: JSON.parse(localStorage.getItem('gdex-daysheet')).notes })));
   ok('where the choice cannot be stored (a private window), notes taken off stay off', priv.notes === false && priv.stored === true, JSON.stringify(priv));
   await page.evaluate(() => { Storage.prototype.setItem = window.__setItem; });
   await sheet.getByLabel('Booking notes').check(); await sleep(200);
-  ok('once it can be stored again, the choice is stored', await page.evaluate(() => import('./js/daysheet.js').then(m => m.choices().notes === true && JSON.parse(localStorage.getItem('gigdex-daysheet')).notes === true)));
+  ok('once it can be stored again, the choice is stored', await page.evaluate(() => import('./js/daysheet.js').then(m => m.choices().notes === true && JSON.parse(localStorage.getItem('gdex-daysheet')).notes === true)));
   await closeSheet();
 
   /* ---------------- on a phone: the share sheet ---------------- */

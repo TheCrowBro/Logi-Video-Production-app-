@@ -33,7 +33,7 @@ const tabs = [
   section('insurance', 'Insurance', '🛡️', () => import('./pages/insurance.js').then(m => m.insurance)),
   section('settings', 'Settings', '⚙️', () => import('./pages/settings.js').then(m => m.settings)),
 ];
-window.gigdexPages = () => tabs.map(t => ({ id: t.id, label: t.label, icon: t.icon, page: t.page || null }));
+window.gdexPages = () => tabs.map(t => ({ id: t.id, label: t.label, icon: t.icon, page: t.page || null }));
 const pageOf = t => (t.page ? Promise.resolve(t.page) : (t.loading || (t.loading = t.load().then(p => { t.page = p; return p; }).catch(e => { t.loading = null; throw e; }))));
 const page = document.getElementById('page');
 let current = -1;
@@ -43,7 +43,7 @@ let showing = Promise.resolve(), showToken = 0;
 function show(i, dir = 0) {
   const token = ++showToken;
   current = i;
-  try { localStorage.setItem('gigdex-tab', tabs[i].id); } catch { /* private mode */ }
+  try { localStorage.setItem('gdex-tab', tabs[i].id); } catch { /* private mode */ }
   showing = pageOf(tabs[i]).then(p => {
     if (token !== showToken) return; // the drum moved on while this section was loading
     cleanup && cleanup();
@@ -86,7 +86,7 @@ for (const t of ['pointerup', 'pointercancel']) document.addEventListener(t, () 
 store.subscribe(() => { if (redrawQueued) return; redrawQueued = true; if (!pressed) setTimeout(redraw, 0); });
 
 let start = 0;
-try { const saved = localStorage.getItem('gigdex-tab'); start = Math.max(0, tabs.findIndex(t => t.id === saved)); } catch { /* ignore */ }
+try { const saved = localStorage.getItem('gdex-tab'); start = Math.max(0, tabs.findIndex(t => t.id === saved)); } catch { /* ignore */ }
 const nav = document.getElementById('rolodex');
 const rolodex = createRolodex(nav, tabs, { start, onSelect: (i, dir) => { showNav(); show(i, dir); } });
 // The Rolodex bar: hidden by a slide while the page scrolls down, back the moment it scrolls up, and always there near

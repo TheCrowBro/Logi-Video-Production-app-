@@ -1,4 +1,4 @@
-// Backups. Gigdex keeps everything in this browser only, so this is the safety net: a backup file saved and brought
+// Backups. Gdex keeps everything in this browser only, so this is the safety net: a backup file saved and brought
 // back (merged into this device or replacing it), optionally locked with a passphrase; a copy kept in a file in a
 // synced folder (Chrome or Edge on a computer), written a moment after every change; how recent the last copy is; and
 // an occasional reminder. The ☁ button at the top opens openBackupSheet(); Settings → Backups shows backupPanel().
@@ -12,7 +12,7 @@ const ls = {
   get: k => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, String(v)); } catch { /* private mode */ } },
 };
-const KEY = { saved: 'gigdex-backup-at', file: 'gigdex-file-at', nudge: 'gigdex-backup-nudge' };
+const KEY = { saved: 'gdex-backup-at', file: 'gdex-file-at', nudge: 'gdex-backup-nudge' };
 const DAY = 864e5, STALE_DAYS = 14;
 const arr = Array.isArray;
 
@@ -34,11 +34,11 @@ const totalOf = counts => Object.values(counts).reduce((a, b) => a + b, 0);
 export const countText = counts => store.COLLECTIONS.filter(c => counts[c]).map(c => `${counts[c]} ${(NAMES[c] || [c, c])[counts[c] === 1 ? 0 : 1]}`).join(' · ') || 'nothing yet';
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 
-// A Vdex file (the videographer app) has crew and no acts or songs. It is refused rather than read as an empty Gigdex.
-export const isVdex = d => !!d && typeof d === 'object' && d.app !== 'gigdex' && (d.vdex === 'encrypted-backup' || d.app === 'vdex' || arr(d.crew)
+// A Vdex file (the videographer app) has crew and no acts or songs. It is refused rather than read as an empty Gdex.
+export const isVdex = d => !!d && typeof d === 'object' && d.app !== 'gdex' && (d.vdex === 'encrypted-backup' || d.app === 'vdex' || arr(d.crew)
   || (arr(d.logs) && arr(d.shifts) && !arr(d.acts)) || (!d.app && (arr(d.bookings) || arr(d.gear)) && !arr(d.songs) && !arr(d.acts)));
-export const isGigdex = d => !!d && typeof d === 'object' && !arr(d) && (d.app === 'gigdex' || (arr(d.songs) && arr(d.bookings)));
-const isLocked = d => !!d && typeof d === 'object' && d.gigdex === 'encrypted-backup';
+export const isGdex = d => !!d && typeof d === 'object' && !arr(d) && (d.app === 'gdex' || (arr(d.songs) && arr(d.bookings)));
+const isLocked = d => !!d && typeof d === 'object' && d.gdex === 'encrypted-backup';
 
 /* ------------------------------- how recent ------------------------------- */
 // Whole calendar days between then and today (0 = today).
@@ -98,12 +98,12 @@ async function save(text, name) {
   changed();
   return true;
 }
-// Everything in one file: gigdex-backup-YYYY-MM-DD.json.
-export const exportBackup = () => save(store.exportJSON(), `gigdex-backup-${fileDate()}.json`);
+// Everything in one file: gdex-backup-YYYY-MM-DD.json.
+export const exportBackup = () => save(store.exportJSON(), `gdex-backup-${fileDate()}.json`);
 
 // The same, locked with a passphrase (AES-GCM, the key made from the passphrase with PBKDF2).
 const canLock = () => !!(window.crypto && crypto.subtle && window.isSecureContext !== false);
-const NO_LOCK = 'Locked backups need a secure connection (an https address). Save a plain backup instead, or open Gigdex at its https address.';
+const NO_LOCK = 'Locked backups need a secure connection (an https address). Save a plain backup instead, or open Gdex at its https address.';
 export async function exportLocked() {
   if (!canLock()) { toast(NO_LOCK); return false; }
   const pass = await askPassphrase({
@@ -115,8 +115,8 @@ export async function exportLocked() {
   const salt = C.bytes(16), iter = C.PBKDF2_ITERATIONS;
   let box;
   try { box = await C.encrypt(await C.pbkdf2Key(pass, salt, iter), store.exportJSON()); } catch (e) { toast('The backup could not be locked: ' + (e.message || e)); return false; }
-  const text = JSON.stringify({ gigdex: 'encrypted-backup', v: 1, exported: new Date().toISOString(), kdf: { salt: C.toB64(salt), iter }, iv: box.iv, ct: box.ct });
-  return save(text, `gigdex-backup-${fileDate()}.locked.json`);
+  const text = JSON.stringify({ gdex: 'encrypted-backup', v: 1, exported: new Date().toISOString(), kdf: { salt: C.toB64(salt), iter }, iv: box.iv, ct: box.ct });
+  return save(text, `gdex-backup-${fileDate()}.locked.json`);
 }
 
 // A sheet asking for a passphrase. check(pass) returns true, or a message to show (the sheet stays open). Resolves to
@@ -175,15 +175,15 @@ async function unlock(box) {
   return pass ? out : null;
 }
 
-// Read a backup file someone picked, check it is Gigdex's, and ask: merge it into this device, or replace this
+// Read a backup file someone picked, check it is Gdex's, and ask: merge it into this device, or replace this
 // device's data with it. Resolves to 'merge', 'replace', or null (refused or cancelled).
 export async function importBackup(file) {
   if (!file) return null;
   let data;
-  try { data = JSON.parse(await file.text()); } catch { return refuse('That file couldn’t be read as a backup. Pick a file Gigdex saved: its name starts with gigdex-backup and ends in .json.'); }
+  try { data = JSON.parse(await file.text()); } catch { return refuse('That file couldn’t be read as a backup. Pick a file Gdex saved: its name starts with gdex-backup and ends in .json.'); }
   if (isLocked(data)) { data = await unlock(data); if (!data) return null; }
-  if (isVdex(data)) return refuse('This is a Vdex backup, not a Gigdex one. Vdex and Gigdex keep separate data: open this file in Vdex instead.');
-  if (!isGigdex(data)) return refuse('That file is not a Gigdex backup. Pick a file Gigdex saved: its name starts with gigdex-backup and ends in .json.');
+  if (isVdex(data)) return refuse('This is a Vdex backup, not a Gdex one. Vdex and Gdex keep separate data: open this file in Vdex instead.');
+  if (!isGdex(data)) return refuse('That file is not a Gdex backup. Pick a file Gdex saved: its name starts with gdex-backup and ends in .json.');
   return chooseHow(data, file.name || 'backup');
 }
 
@@ -234,7 +234,7 @@ function chooseHow(data, name) {
 /* ------------------------------- a copy kept in a file ------------------------------- */
 // Chrome and Edge on a computer can keep writing to a file the person picked (the File System Access API). Picked
 // inside a folder that Dropbox, Google Drive, OneDrive or iCloud Drive syncs, that file is an always-current backup in
-// their cloud. The file's handle is kept in IndexedDB ('gigdex', store 'kv') so it is linked again on the next visit;
+// their cloud. The file's handle is kept in IndexedDB ('gdex', store 'kv') so it is linked again on the next visit;
 // the browser then asks for permission again on a tap.
 export const fileSupported = () => typeof window.showSaveFilePicker === 'function';
 const isPhone = () => /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1) || matchMedia('(pointer: coarse)').matches;
@@ -243,7 +243,7 @@ export const fileState = () => ({ supported: fileSupported(), linked: !!FILE.han
 const setStatus = (status, error = '') => { FILE.status = status; FILE.error = error; changed(); };
 
 const idb = () => new Promise((res, rej) => {
-  const r = indexedDB.open('gigdex', 1);
+  const r = indexedDB.open('gdex', 1);
   r.onupgradeneeded = () => { if (!r.result.objectStoreNames.contains('kv')) r.result.createObjectStore('kv'); };
   r.onsuccess = () => res(r.result);
   r.onerror = () => rej(r.error);
@@ -307,19 +307,19 @@ document.addEventListener('visibilitychange', () => { if (document.hidden && FIL
 export async function linkFile() {
   if (!fileSupported()) { toast(isPhone() ? 'Phones can’t keep writing to a file. Save a backup now and then instead.' : 'This needs Chrome or Edge on a computer.'); return false; }
   let handle;
-  try { handle = await window.showSaveFilePicker({ suggestedName: 'gigdex-db.json', types: [{ description: 'Gigdex database', accept: { 'application/json': ['.json'] } }] }); }
+  try { handle = await window.showSaveFilePicker({ suggestedName: 'gdex-db.json', types: [{ description: 'Gdex database', accept: { 'application/json': ['.json'] } }] }); }
   catch (e) { if (e && e.name !== 'AbortError') toast('No file was chosen: ' + (e.message || e.name)); return false; }
   clearTimeout(timer);
   FILE.handle = handle; FILE.fails = 0; FILE.error = '';
   try { await kv('readwrite', s => s.put(handle, 'fileHandle')); FILE.remembered = true; } catch { FILE.remembered = false; }
   const ok = await writeNow();
-  if (ok) toast(`Gigdex keeps a copy in ${handle.name}`);
+  if (ok) toast(`Gdex keeps a copy in ${handle.name}`);
   return ok;
 }
 // The browser asks again for permission to write (after a restart): only from a tap.
 export async function allowFile() {
   if (!FILE.handle) return false;
-  if (!(await permitted(FILE.handle, true))) { setStatus('needs-permission'); toast('Gigdex can’t keep the copy up to date without your OK.'); return false; }
+  if (!(await permitted(FILE.handle, true))) { setStatus('needs-permission'); toast('Gdex can’t keep the copy up to date without your OK.'); return false; }
   return writeNow();
 }
 export const saveFileNow = () => writeNow();
@@ -381,14 +381,14 @@ function fileCard() {
   }
   if (!f.linked) {
     return h('div', { class: 'card stack se-bk-file', 'data-state': 'off' }, title,
-      h('p', { class: 'small muted' }, 'Pick a file inside a folder that Dropbox, Google Drive, OneDrive or iCloud Drive already syncs. Gigdex writes everything to it a moment after each change, and your sync app keeps it safe in your cloud.'),
+      h('p', { class: 'small muted' }, 'Pick a file inside a folder that Dropbox, Google Drive, OneDrive or iCloud Drive already syncs. Gdex writes everything to it a moment after each change, and your sync app keeps it safe in your cloud.'),
       h('button', { type: 'button', class: 'btn ghost se-bk-link', onclick: () => linkFile() }, 'Choose a file…'),
       h('p', { class: 'small muted' }, 'It is a copy, not a sync: to use it on another computer, bring it in there with Bring back a backup.'));
   }
   const lines = {
     saved: `✅ Copy kept in ${f.name}, saved ${f.at ? ago(f.at) : 'just now'}.`,
     saving: `Saving the copy in ${f.name}…`,
-    'needs-permission': `⚠ Gigdex needs your OK to keep writing to ${f.name}. Browsers ask again after a restart.`,
+    'needs-permission': `⚠ Gdex needs your OK to keep writing to ${f.name}. Browsers ask again after a restart.`,
     error: `⚠ The copy in ${f.name} wasn’t saved: ${f.error || 'the file could not be written.'}`,
   };
   return h('div', { class: 'card stack se-bk-file', 'data-state': f.status }, title,
@@ -409,7 +409,7 @@ export function backupPanel() {
   const body = h('div', { class: 'stack' });
   const draw = () => redraw(body, [
     statusLine(),
-    h('p', { class: 'small muted' }, 'Gigdex keeps everything on this device only. A backup file holds all of it: bookings, acts, people, songs, setlists, backline, venues, your details and money settings. Keep it in your cloud drive or email it to yourself; it also moves Gigdex to a new phone or computer.'),
+    h('p', { class: 'small muted' }, 'Gdex keeps everything on this device only. A backup file holds all of it: bookings, acts, people, songs, setlists, backline, venues, your details and money settings. Keep it in your cloud drive or email it to yourself; it also moves Gdex to a new phone or computer.'),
     h('div', { class: 'se-bk-actions' },
       h('button', { type: 'button', class: 'btn primary se-bk-save', onclick: () => exportBackup() }, '⤓ Save a backup'),
       h('button', { type: 'button', class: 'btn ghost se-bk-open', onclick: () => input.click() }, '📂 Bring back a backup…'),
@@ -432,21 +432,21 @@ export function openBackupSheet() { sheet('Backups', backupPanel()); }
 
 /* ------------------------------- walkthroughs ------------------------------- */
 const STEPS = [
-  { title: 'How safe your data is', text: 'When the last backup was made. Gigdex keeps everything on this device only, so a backup is your safety net if the phone is lost or the browser is cleared.', target: ['.se-bk-status'] },
+  { title: 'How safe your data is', text: 'When the last backup was made. Gdex keeps everything on this device only, so a backup is your safety net if the phone is lost or the browser is cleared.', target: ['.se-bk-status'] },
   { title: 'Save a backup', text: 'One file with everything in it. Keep it in your cloud drive or email it to yourself. On a phone the share sheet lets you pick where it goes.', target: ['.se-bk-save'] },
-  { title: 'Bring back a backup', text: 'Pick a backup file, then merge it into this device (nothing here is lost) or replace what is here. This is also how Gigdex moves to a new phone or computer.', target: ['.se-bk-open'] },
+  { title: 'Bring back a backup', text: 'Pick a backup file, then merge it into this device (nothing here is lost) or replace what is here. This is also how Gdex moves to a new phone or computer.', target: ['.se-bk-open'] },
   { title: 'With a passphrase', text: 'The same backup, locked: it opens only with the passphrase you choose. Good for a file you keep online.', target: ['.se-bk-lock'] },
-  { title: 'Keep a copy in a file', text: 'On a computer with Chrome or Edge: pick a file in a folder that Dropbox, Google Drive, OneDrive or iCloud Drive syncs, and Gigdex writes to it after every change.', target: ['.se-bk-file'] },
+  { title: 'Keep a copy in a file', text: 'On a computer with Chrome or Edge: pick a file in a folder that Dropbox, Google Drive, OneDrive or iCloud Drive syncs, and Gdex writes to it after every change.', target: ['.se-bk-file'] },
 ];
 export const backupSteps = STEPS;
 sheetTutorial('Backups', STEPS);
 sheetTutorial('Bring back a backup', [
   { title: 'What is in the file', text: 'How many bookings, songs, people and so on the backup holds, next to what is on this device now.', target: ['.se-imp-file'] },
   { title: 'Merge', text: 'Keeps everything on both. Where the same record is in both, the one changed last wins, and records deleted on one side stay deleted.', target: ['.se-imp-merge'] },
-  { title: 'Replace', text: 'Makes this device exactly like the file. Anything added here since the backup is lost, so Gigdex asks first.', target: ['.se-imp-replace'] },
+  { title: 'Replace', text: 'Makes this device exactly like the file. Anything added here since the backup is lost, so Gdex asks first.', target: ['.se-imp-replace'] },
 ]);
 sheetTutorial('Save with a passphrase', [
-  { title: 'Your passphrase', text: 'At least 8 characters, typed twice. Gigdex never keeps it: without it, nobody can open the file, not even you.', target: ['#se-pass-1'] },
+  { title: 'Your passphrase', text: 'At least 8 characters, typed twice. Gdex never keeps it: without it, nobody can open the file, not even you.', target: ['#se-pass-1'] },
 ]);
 
 paintButton();

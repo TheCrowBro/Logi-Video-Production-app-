@@ -389,7 +389,7 @@ function matches(p, words) {
 
 function exportContacts(list) {
   if (!list.length) return;
-  const name = list.length === 1 ? nameOf(list[0]) : 'Gigdex contacts' + (S.group ? ' - ' + groupLabel(S.group) : '') + (S.act && byId('acts', S.act) ? ' - ' + byId('acts', S.act).name : '');
+  const name = list.length === 1 ? nameOf(list[0]) : 'Gdex contacts' + (S.group ? ' - ' + groupLabel(S.group) : '') + (S.act && byId('acts', S.act) ? ' - ' + byId('acts', S.act).name : '');
   saveFile(list.map(vcard).join('\r\n') + '\r\n', fileName(name, 'vcf'), 'text/vcard').then(okd => { if (okd) toast(`${plural(list.length, 'contact')} ready to import`); });
 }
 

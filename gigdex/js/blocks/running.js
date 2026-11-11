@@ -256,7 +256,7 @@ export default {
   },
   tutorial: [
     { title: 'Running order', text: 'The night in order: doors, the supports, changeovers, your set and the curfew, each with its end time. Times after midnight sort to the end of the night.', target: ['#blk-running .sh-ro', '#blk-running'] },
-    { title: 'Build it in one go', text: 'Fill in doors, your time and set length, and the support acts: Gigdex lays out the night with 15-minute changeovers.', target: ['#sh-ro-build'] },
+    { title: 'Build it in one go', text: 'Fill in doors, your time and set length, and the support acts: Gdex lays out the night with 15-minute changeovers.', target: ['#sh-ro-build'] },
     { title: 'Warnings', text: 'A set past curfew, slots that overlap, or a soundcheck after doors show here in red.', target: ['#blk-running .warn'] },
   ],
 };

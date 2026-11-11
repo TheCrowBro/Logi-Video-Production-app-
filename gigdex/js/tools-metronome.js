@@ -20,7 +20,7 @@ const MARKINGS = [[40, 'Grave'], [60, 'Largo'], [66, 'Larghetto'], [76, 'Adagio'
 export const marking = bpm => MARKINGS.find(([max]) => bpm <= max)[1];
 const sigOf = id => SIGS.find(s => s.id === id) || SIGS[2];
 
-const KEY = 'gigdex-metronome';
+const KEY = 'gdex-metronome';
 const saved = pref.get(KEY, {}) || {};
 const M = {
   bpm: Number.isFinite(Number(saved.bpm)) ? clamp(Math.round(Number(saved.bpm)), BPM_MIN, BPM_MAX) : 120,
@@ -34,7 +34,7 @@ const save = () => pref.set(KEY, { bpm: M.bpm, sig: M.sig, sub: M.sub, accent: M
 // Set the tempo from elsewhere (the Tempo tool's "Use in the metronome").
 export function setMetronomeBpm(bpm, from = '') { if (!Number.isFinite(Number(bpm))) return; M.bpm = clamp(Math.round(Number(bpm)), BPM_MIN, BPM_MAX); M.song = from; save(); }
 
-// The engine's live numbers, for gigdexAudioState().metronome.
+// The engine's live numbers, for gdexAudioState().metronome.
 const E = { running: false, clicks: 0, beats: 0, lastBeat: -1 };
 registerState('metronome', () => ({ running: E.running, bpm: M.bpm, sig: M.sig, sub: M.sub, accent: M.accent, clicks: E.clicks, beats: E.beats, beat: E.lastBeat }));
 

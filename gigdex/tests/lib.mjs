@@ -1,4 +1,4 @@
-// Shared bits for the browser specs: a static server serving a scratch copy of Gigdex (specs may rewrite files), and
+// Shared bits for the browser specs: a static server serving a scratch copy of Gdex (specs may rewrite files), and
 // the PASS / FAIL convention the runner counts.
 import { createServer } from 'node:http';
 import { createReadStream, statSync, mkdtempSync, cpSync, readdirSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.svg': 'image/svg+xml', '.png': 'image/png', '.md': 'text/markdown', '.txt': 'text/plain' };
 export function scratchCopy(appRoot) {
-  const dir = mkdtempSync(join(tmpdir(), 'gigdex-test-'));
+  const dir = mkdtempSync(join(tmpdir(), 'gdex-test-'));
   for (const n of readdirSync(appRoot)) if (!['node_modules', 'tests', 'docs'].includes(n)) cpSync(join(appRoot, n), join(dir, n), { recursive: true });
   return dir;
 }

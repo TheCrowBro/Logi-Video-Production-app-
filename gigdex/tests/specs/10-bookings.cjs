@@ -209,7 +209,7 @@ const unfold = t => t.replace(/\r\n /g, '');
   ok('it starts at load-in and ends at the curfew after midnight, the next day, in local time', u1.includes(`DTSTART:${compact(D)}T180000\r\n`) && u1.includes(`DTEND:${compact(D1)}T003000\r\n`), (u1.match(/DT(START|END)[^\r]*/g) || []).join(' '));
   ok('the location is the venue and its address on one line, commas escaped', u1.includes('LOCATION:The Moth Club\\, Valette Street\\, Hackney\\, London\r\n'));
   ok('the description carries the run of the day and the act, and no money', /DESCRIPTION:Show · Advanced\\nAct: The Night Owls\\n\\nLoad-in 18:00\\nDoors 19:30\\nOn stage 23:30 \(60 min set\)\\nOff stage 00:30\\nCurfew 00:30/.test(u1) && !/777|fee|Guarantee|deposit/i.test(u1.replace(/^(UID|DTSTAMP):[^\r]*\r\n/gm, '')));
-  ok('an advanced show is CONFIRMED and has a stable UID', u1.includes('STATUS:CONFIRMED') && u1.includes(`UID:${SID}@gigdex.crowmade.app`));
+  ok('an advanced show is CONFIRMED and has a stable UID', u1.includes('STATUS:CONFIRMED') && u1.includes(`UID:${SID}@gdex.crowmade.app`));
   ok('no line is longer than 75 octets', lines1.every(l => Buffer.byteLength(l, 'utf8') <= 75), String(Math.max(...lines1.map(l => Buffer.byteLength(l, 'utf8')))));
   const unit = await page.evaluate(() => import('./js/ics.js').then(m => {
     const a = m.bookingIcs({ id: 'u1', kind: 'other', status: 'hold', title: 'Back\\slash; semi, comma\nnew line', date: '2026-12-01', endDate: '2026-12-02' });
@@ -285,7 +285,7 @@ const unfold = t => t.replace(/\r\n /g, '');
   /* ---- export the calendar ---- */
   const all = await download(page, () => page.locator('.bk-export').click());
   const upcomingCount = await page.evaluate(() => import('./js/store.js').then(s => s.upcoming().length));
-  ok('Export calendar saves every upcoming booking in one file', (all.text.match(/BEGIN:VEVENT/g) || []).length === upcomingCount && upcomingCount >= 4 && /X-WR-CALNAME:Gigdex/.test(all.text), `${(all.text.match(/BEGIN:VEVENT/g) || []).length} of ${upcomingCount}`);
+  ok('Export calendar saves every upcoming booking in one file', (all.text.match(/BEGIN:VEVENT/g) || []).length === upcomingCount && upcomingCount >= 4 && /X-WR-CALNAME:Gdex/.test(all.text), `${(all.text.match(/BEGIN:VEVENT/g) || []).length} of ${upcomingCount}`);
   ok('…with no deals or fees in it', !/Guarantee|\$|fee/i.test(unfold(all.text)));
   const F0 = compact(await dayFromNow(page, 40)), F1 = compact(await dayFromNow(page, 41));
   const fest = (unfold(all.text).split('BEGIN:VEVENT').find(e => e.includes('Greenfield Festival')) || '');
@@ -418,7 +418,7 @@ const unfold = t => t.replace(/\r\n /g, '');
   /* ---- the walkthrough ---- */
   await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('s-show1'))); await sleep(300);
   await page.locator('#blk-advance > summary').click(); await sleep(150);
-  const steps = await page.evaluate(() => window.gigdexPages().find(p => p.id === 'bookings').page.tutorial().map(s => s.title));
+  const steps = await page.evaluate(() => window.gdexPages().find(p => p.id === 'bookings').page.tutorial().map(s => s.title));
   ok('the booking page’s walkthrough includes the open boxes’ steps', steps.includes('Status') && steps.includes('Checklist') && steps.includes('Your own lines') && !steps.includes('Notes'), steps.join(', '));
   await page.click('#helpBtn'); await page.waitForSelector('.tour-card'); await sleep(400);
   ok('the ? button runs it', /The booking/.test(await page.locator('.tour-card').innerText()));

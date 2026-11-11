@@ -325,7 +325,7 @@ export function splitDoc(s) {
         h('div', { class: 'sg-sign-line' }),
         h('div', null, h('b', null, p.name || 'Name'), p.role ? ` · ${p.role}` : '', p.share ? ` · ${fmtPct(p.share)}` : ''),
         h('div', { class: 'sg-sign-sub' }, 'Signature and date'))))),
-    h('div', { class: 'cs-foot' }, `Made with Gigdex on ${fmtLong(todayISO())}.`));
+    h('div', { class: 'cs-foot' }, `Made with Gdex on ${fmtLong(todayISO())}.`));
 }
 const SPLIT_CSS = pre => [
   ['.sg-split-bad', 'border:1.5px solid #b3321c;color:#b3321c;border-radius:8px;padding:6px 10px;font-weight:700'],

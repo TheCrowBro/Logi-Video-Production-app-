@@ -1,15 +1,15 @@
-// Shared by the browser specs: a browser with Gigdex open on a phone-sized screen, the welcome tour marked as seen,
+// Shared by the browser specs: a browser with Gdex open on a phone-sized screen, the welcome tour marked as seen,
 // errors collected, and a PASS / FAIL printer the runner counts.
 //   const { open, ok, sleep } = require('../helpers.cjs');
 //   const { browser, page, errors } = await open({ sample: true });
 const { chromium } = require('playwright');
-const BASE = process.env.GIGDEX_URL || 'http://localhost:8124/';
+const BASE = process.env.GDEX_URL || 'http://localhost:8124/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 async function open({ sample = false, viewport = { width: 420, height: 900 }, tab = null, init = null, permissions = [] } = {}) {
   const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
   const ctx = await browser.newContext({ viewport, serviceWorkers: 'block', acceptDownloads: true, permissions });
-  await ctx.addInitScript(() => { try { localStorage.setItem('gigdex-tour', 'done'); } catch (e) { /* ignore */ } });
+  await ctx.addInitScript(() => { try { localStorage.setItem('gdex-tour', 'done'); } catch (e) { /* ignore */ } });
   if (init) await ctx.addInitScript(init);
   const tile = { status: 200, contentType: 'image/png', body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64') }; // a 1×1 map tile: no network, no console error
   await ctx.route('https://tile.openstreetmap.org/**', r => r.fulfill(tile));

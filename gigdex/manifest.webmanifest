@@ -1,6 +1,6 @@
 {
-  "name": "Gigdex",
-  "short_name": "Gigdex",
+  "name": "Gdex",
+  "short_name": "Gdex",
   "description": "Shows, studio sessions, setlists, backline, settlements and invoices for music producers and bands.",
   "start_url": "./index.html",
   "scope": "./",

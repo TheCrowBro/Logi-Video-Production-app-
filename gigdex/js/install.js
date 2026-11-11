@@ -26,10 +26,10 @@ export function initInstall(btn) {
 export function openInstallHelp() {
   const ios = isIOS();
   const steps = ios
-    ? [['Open this page in Safari', 'Other iPhone browsers can’t add web apps to the Home Screen.'], ['Tap the Share button', 'The square with an arrow, at the bottom of the screen.'], ['Choose “Add to Home Screen”', 'Then tap Add. Gigdex opens full-screen like any other app, and works offline.']]
-    : [['Chrome, Edge or Samsung Internet', 'On Android: menu ⋮ → “Install app” or “Add to Home screen”. On a computer: the install icon at the right of the address bar, or menu → “Install Gigdex”.'], ['Firefox', 'Firefox doesn’t install web apps; keep using it in a tab, or bookmark the page.'], ['Your data stays on this device', 'Each browser keeps its own copy. Move it between devices with a backup file (☁ at the top).']];
-  sheet('Install Gigdex', h('div', { class: 'stack' },
-    h('p', null, 'Gigdex runs in the browser as it is. Installing it adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline. Both ways use the same address.'),
+    ? [['Open this page in Safari', 'Other iPhone browsers can’t add web apps to the Home Screen.'], ['Tap the Share button', 'The square with an arrow, at the bottom of the screen.'], ['Choose “Add to Home Screen”', 'Then tap Add. Gdex opens full-screen like any other app, and works offline.']]
+    : [['Chrome, Edge or Samsung Internet', 'On Android: menu ⋮ → “Install app” or “Add to Home screen”. On a computer: the install icon at the right of the address bar, or menu → “Install Gdex”.'], ['Firefox', 'Firefox doesn’t install web apps; keep using it in a tab, or bookmark the page.'], ['Your data stays on this device', 'Each browser keeps its own copy. Move it between devices with a backup file (☁ at the top).']];
+  sheet('Install Gdex', h('div', { class: 'stack' },
+    h('p', null, 'Gdex runs in the browser as it is. Installing it adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline. Both ways use the same address.'),
     h('ol', { class: 'install-steps' }, steps.map(([t, d]) => h('li', null, h('b', null, t), h('div', { class: 'muted small' }, d)))),
     ios && h('p', { class: 'muted small' }, 'The microphone (tuner and sound meter) works in the installed app on iOS 16.4 or later.')));
 }

@@ -9,7 +9,7 @@ import {
 } from './audio.js';
 import { pref, clamp, repeatButton } from './tools-ui.js';
 
-const A4_KEY = 'gigdex-a4', TONE_KEY = 'gigdex-tone';
+const A4_KEY = 'gdex-a4', TONE_KEY = 'gdex-tone';
 const STRINGS = [['E2', 40], ['A2', 45], ['D3', 50], ['G3', 55], ['B3', 59], ['E4', 64], ['A4', 69]]; // a guitar's open strings, and A
 const IN_TUNE = 5; // cents either side that count as in tune
 
@@ -52,7 +52,7 @@ function stopTone() {
   } catch { /* the context is already closed: it made no sound */ }
 }
 
-let current = null; // the open tuner's state, for gigdexAudioState()
+let current = null; // the open tuner's state, for gdexAudioState()
 registerState('tuner', () => (current ? current() : { listening: false, note: null, hz: null, tone: tone ? noteName(T.toneMidi).label : null }));
 
 export function tuner(panel) {
@@ -248,7 +248,7 @@ export function tuner(panel) {
 
 export const TUNER_STEPS = [
   { target: ['.tl-tuner'], title: 'The tuner', text: 'Play one string or note at a time. The big letter is the nearest note with its octave; the needle shows how far off you are, in cents. Green and “In tune” means within 5 cents.' },
-  { target: ['#tl-tuner-start'], title: 'Microphone', text: 'Gigdex listens only while the tuner is open, and asks your permission the first time. Nothing is recorded.' },
+  { target: ['#tl-tuner-start'], title: 'Microphone', text: 'Gdex listens only while the tuner is open, and asks your permission the first time. Nothing is recorded.' },
   { target: ['#tl-a4'], title: 'Concert pitch', text: 'Tuning to a piano or an orchestra at 442? Change A4 here. It is saved on this device.' },
   { target: ['.tl-tone'], title: 'Reference tone', text: 'Pick a string or any note and play it to tune by ear. Rich adds overtones so low notes are audible on a phone speaker.' },
 ];

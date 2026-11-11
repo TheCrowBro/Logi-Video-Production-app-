@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Drops rules from styles.css whose selectors name a class that nothing in Gigdex uses (styles.css began as a copy of
-// Vdex's, which styles many things Gigdex does not have). Conservative: a class counts as used when its name appears
-// anywhere in Gigdex's scripts, pages or feature stylesheets, or starts with a prefix that is built at run time.
+// Drops rules from styles.css whose selectors name a class that nothing in Gdex uses (styles.css began as a copy of
+// Vdex's, which styles many things Gdex does not have). Conservative: a class counts as used when its name appears
+// anywhere in Gdex's scripts, pages or feature stylesheets, or starts with a prefix that is built at run time.
 //   node tools/prune-css.mjs          report what would go
 //   node tools/prune-css.mjs --write  rewrite styles.css
 import { readFileSync, writeFileSync, readdirSync, statSync } from 'node:fs';

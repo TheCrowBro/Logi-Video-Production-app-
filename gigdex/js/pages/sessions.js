@@ -17,7 +17,7 @@ import { haptic } from '../a11y.js';
 import { fmtClock, clockTime } from '../clock.js';
 
 const H = 36e5;
-const KEY = 'gigdex-studio-log'; // the open log, so a reload comes back to it
+const KEY = 'gdex-studio-log'; // the open log, so a reload comes back to it
 // The page's own state, kept between redraws: the open log, the keepers filter, the search, and the note being typed
 // (its text, the moment typing started, and the take it belongs to).
 const S = { id: null, keepers: false, q: '', draft: '', stampAt: null, stampTake: null, lastAdded: null };

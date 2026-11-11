@@ -200,12 +200,12 @@ export function renderDaySheet(d) {
   const who = fromLine(d.from);
   return h('article', { class: 'cs-doc ds-doc', 'data-kind': kind },
     h('header', { class: 'cs-head' },
-      h('div', null, h('div', { class: 'cs-brand' }, d.from.business || d.from.name || 'Gigdex'), h('div', { class: 'cs-kicker' }, 'DAY SHEET')),
+      h('div', null, h('div', { class: 'cs-brand' }, d.from.business || d.from.name || 'Gdex'), h('div', { class: 'cs-kicker' }, 'DAY SHEET')),
       h('div', { class: 'cs-when' }, h('b', null, d.date ? dayLabel(d, fmtShort) : 'Date TBC'), h('div', null, typeLabel(d)))),
     h('h2', null, d.title || typeLabel(d)),
     h('div', { class: 'cs-sub' }, sub),
     times, place, running, lineup, contacts, setlist, songs, due, backline, hosp, guests, notes,
-    h('footer', { class: 'cs-foot' }, [who ? `Day sheet from ${who}.` : 'Day sheet.', d.made ? ` Made ${madeLine(d)}.` : '', ' If plans change, you’ll get a new one. Made with Gigdex.'].join('')));
+    h('footer', { class: 'cs-foot' }, [who ? `Day sheet from ${who}.` : 'Day sheet.', d.made ? ` Made ${madeLine(d)}.` : '', ' If plans change, you’ll get a new one. Made with Gdex.'].join('')));
 }
 
 /* ------------------------------- plain text ------------------------------- */
@@ -258,8 +258,8 @@ export function daySheetIcs(d, href = '') {
     if (end <= start) end = new Date(start.getTime() + 36e5); // one time only: an hour, rather than no length
   }
   const P = d.place, made = d.made || Date.now();
-  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Gigdex//Day sheet//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-    `UID:daysheet-${slug(d.ref || (d.title + '-' + d.date))}@gigdex`, `DTSTAMP:${utc(Date.now())}`, `LAST-MODIFIED:${utc(made)}`, `SEQUENCE:${Math.floor(made / 1000) % 2147483647}`,
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Gdex//Day sheet//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
+    `UID:daysheet-${slug(d.ref || (d.title + '-' + d.date))}@gdex`, `DTSTAMP:${utc(Date.now())}`, `LAST-MODIFIED:${utc(made)}`, `SEQUENCE:${Math.floor(made / 1000) % 2147483647}`,
     timed ? `DTSTART:${local(start)}` : `DTSTART;VALUE=DATE:${dayOnly(d.date)}`,
     timed ? `DTEND:${local(end)}` : `DTEND;VALUE=DATE:${dayOnly(d.endDate || d.date, 1)}`,
     `SUMMARY:${icsText(d.title || typeLabel(d))}`,

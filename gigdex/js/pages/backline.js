@@ -22,7 +22,7 @@ const makeModel = g => [g.make, g.model].map(x => String(x || '').trim()).filter
 const hasValue = g => unitValue(g) > 0;
 const plural = (n, one, many = one + 's') => `${n} ${n === 1 ? one : many}`;
 const itemName = g => String((g && g.name) || '').trim() || 'Unnamed item';
-const brand = () => db.profile.business || db.profile.name || 'Gigdex';
+const brand = () => db.profile.business || db.profile.name || 'Gdex';
 // Stage packs keep their counts in k.qty ({ gearId: n }); never more than are owned.
 const packQty = (k, id) => Math.max(1, Math.floor(Number(k && k.qty && k.qty[id])) || 1);
 const packItems = k => (Array.isArray(k && k.items) ? k.items : []).map(id => byId('gear', id)).filter(Boolean);
@@ -364,7 +364,7 @@ function inventoryDoc(who = '') {
       h('div', { class: 'cs-kv' }, h('span', null, 'Items'), h('b', null, String(units))),
       h('div', { class: 'cs-kv total' }, h('span', null, 'Total value'), h('b', { class: 'bl-inv-total' }, fmtMoney(total)))),
     missing > 0 && h('p', { class: 'cs-pre' }, `${plural(missing, 'item has', 'items have')} no value recorded.`),
-    h('div', { class: 'cs-foot' }, `Replacement values as recorded by the owner. Made with Gigdex on ${fmtLong(today)}.`));
+    h('div', { class: 'cs-foot' }, `Replacement values as recorded by the owner. Made with Gdex on ${fmtLong(today)}.`));
 }
 
 const PRINT_CSS = '#print-root .bl-inv tr.bl-cat td{font-weight:700;background:#f1f1f1;-webkit-print-color-adjust:exact;print-color-adjust:exact}#print-root .bl-inv td.bl-no{color:#777}#print-root .bl-inv td.bl-tick{font-size:16px;line-height:1}';

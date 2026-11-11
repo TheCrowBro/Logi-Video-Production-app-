@@ -131,7 +131,7 @@ export default {
     const sym = ctx.sym || currency();
     if (!hasDeal(b)) {
       return h('div', { class: 'sh-block sh-deal' },
-        h('div', { class: 'empty' }, h('p', null, 'No deal yet. Add what the promoter offered (a guarantee, a door split or both) and the ticket price: Gigdex works out what the night pays at different crowds.'),
+        h('div', { class: 'empty' }, h('p', null, 'No deal yet. Add what the promoter offered (a guarantee, a door split or both) and the ticket price: Gdex works out what the night pays at different crowds.'),
           h('button', { type: 'button', class: 'btn primary', id: 'sh-deal-add', onclick: () => editDeal(b) }, '+ Add the deal')));
     }
     const d = b.deal, m = n => money(n, sym);

@@ -32,7 +32,7 @@ export const PARTS = [
   ['guestNames', 'Guest list names and +1s', false, 'The number on the list is always on it'],
   ['notes', 'Booking notes', true, 'Check they say nothing private first'],
 ];
-const KEY = 'gigdex-daysheet';
+const KEY = 'gdex-daysheet';
 let unsaved = null;
 export const choices = () => { let saved = {}; try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch { /* defaults */ } if (unsaved) saved = unsaved; return Object.fromEntries(PARTS.map(([k, , on]) => [k, typeof saved[k] === 'boolean' ? saved[k] : on])); };
 const remember = inc => { try { localStorage.setItem(KEY, JSON.stringify(inc)); unsaved = null; } catch { unsaved = { ...inc }; } };
@@ -198,7 +198,7 @@ export function emailFor(b, url, inc = choices()) {
   const mk = body => `mailto:${to.join(',')}?` + new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20');
   let mode = 'full', href = mk(intro + url + '\n\n' + daySheetText(b, inc) + outro);
   if (href.length > 1800) { mode = 'link'; href = mk(intro + url + outro); }
-  if (href.length > 1800) { mode = 'paste'; href = mk(intro + '[Paste the link here: Gigdex copied it when you tapped Email]' + outro); }
+  if (href.length > 1800) { mode = 'paste'; href = mk(intro + '[Paste the link here: Gdex copied it when you tapped Email]' + outro); }
   return { href, to, mode };
 }
 export const emailCount = b => new Set(ids(b && b.people).map(id => byId('people', id)).filter(Boolean).map(x => str(x.email)).filter(e => EMAIL.test(e))).size;
@@ -339,5 +339,5 @@ sheetTutorial('Day sheet', [
   { title: 'Sent or not', text: 'Whether the band has it. Once sent, it says so here and on the booking, and warns you if the sheet changes afterwards.', target: ['.ds-status'] },
   { title: 'Send it', text: 'Share the link to the band chat, email everyone on the booking, print it, copy it as text, or save it as a web page. Any of these ticks “Day sheet sent” on a show’s checklist.', target: ['.ds-actions'] },
   { title: 'QR code & link', text: 'At the venue, let the band scan the code off your phone. Open the band’s page to see exactly what they see, with Add to calendar.', target: ['.ds-link > summary'] },
-  { title: 'What goes on it', text: 'Choose whether the guest names and your booking notes go on. Gigdex remembers your choice on this device.', target: ['.ds-parts > summary'] },
+  { title: 'What goes on it', text: 'Choose whether the guest names and your booking notes go on. Gdex remembers your choice on this device.', target: ['.ds-parts > summary'] },
 ]);
