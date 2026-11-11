@@ -144,7 +144,8 @@ const byDate = (a, b) => String(a.date || '').localeCompare(String(b.date || '')
 export const personBookings = id => activeBookings().filter(b => (b.people || []).includes(id)).sort(byDate);
 export const gearBookings = id => activeBookings().filter(b => (b.gear || []).includes(id)).sort(byDate);
 // Other live bookings on overlapping days that need the same person.
-export const personClash = (booking, personId) => activeBookings().filter(b => b.id !== booking.id && overlaps(b, booking) && (b.people || []).includes(personId));
+// A cancelled booking clashes with nothing.
+export const personClash = (booking, personId) => (booking.status === 'cancelled' ? [] : activeBookings().filter(b => b.id !== booking.id && overlaps(b, booking) && (b.people || []).includes(personId)));
 
 /* ------------------------------- gear ------------------------------- */
 export const qtyOf = g => Math.max(1, Math.floor(Number(g && g.qty)) || 1);
@@ -157,6 +158,7 @@ export const totalValue = g => unitValue(g) * qtyOf(g);
 // True when this booking alone needs more of the item than are owned (after 'How many' was lowered, say).
 export const gearShort = (booking, gearId) => { const g = byId('gear', gearId); return !!g && usedQty(booking, gearId) > qtyOf(g); };
 export const gearClash = (booking, gearId) => {
+  if (booking.status === 'cancelled') return [];
   const g = byId('gear', gearId);
   const others = activeBookings().filter(b => b.id !== booking.id && overlaps(b, booking) && (b.gear || []).includes(gearId));
   const need = usedQty(booking, gearId) + others.reduce((s, b) => s + usedQty(b, gearId), 0);
