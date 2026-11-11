@@ -117,6 +117,12 @@ const ymdOffset = n => { const d = new Date(Date.now() + n * 864e5); return `${d
   const late = await page.evaluate(() => import('./js/clock.js').then(c => c.clockHours('s-sess0')));
   ok('hours added by hand past midnight, less the break, add 3 h', late === 9.75, String(late));
   ok('the box lists both shifts', (await page.locator('#host-clock-s-sess0 .sd-shift').count()) === 2);
+  // What the hours come to is what the invoice bills: 4h 22m at $45/hour is billed as 4¼ hours, $191.25 (not $196.65).
+  await page.evaluate(() => import('./js/store.js').then(s => { const now = Date.now(); s.upsert('bookings', { id: 't-hourly', kind: 'session', status: 'confirmed', title: 'Hourly mix', date: '2026-01-05', start: '10:00', end: '18:00', rate: 45, rateUnit: 'hour' }); s.update(d => { d.shifts.push({ id: 't-shift-q', bookingId: 't-hourly', start: now - (4 * 60 + 22) * 6e4, end: now, breaks: [], createdAt: now, updatedAt: now }); }); }));
+  await mount(page, 'clock', 't-hourly');
+  const fee = await page.evaluate(() => Promise.all([import('./js/money.js'), import('./js/model.js'), import('./js/store.js')]).then(([m, md, s]) => { const b = s.byId('bookings', 't-hourly'); return { shown: document.querySelector('#host-clock-t-hourly [data-sd-tick="fee"]').textContent, billed: m.bookingHours(b).hours, income: md.bookingIncome(b) }; }));
+  ok('the clock box’s amount is the hours the invoice bills, to the quarter hour', fee.shown === '$191.25' && fee.billed === 4.25 && fee.income === 191.25, JSON.stringify(fee));
+  await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 't-hourly')));
 
   /* ------------------------------ Studio log ------------------------------ */
   await go(page, 'sessions');
@@ -241,6 +247,23 @@ const ymdOffset = n => { const d = new Date(Date.now() + n * 864e5); return `${d
   await page.waitForSelector('.sd-log-view #sd-take');
   log = await db(page, d => d.logs.filter(l => l.bookingId === 's-sess1').sort((a, b) => b.startedAt - a.startedAt)[0]);
   ok('Start a take log makes a log for the session’s first song and opens it', log.title === 'Undertow takes' && log.songId === 's-sable2' && (await page.evaluate(() => window.logiPage())) === 'sessions', JSON.stringify(log));
+  // A note before any take goes in the session notes, stamped HH:MM even on a phone that shows a 12-hour clock, and
+  // shows its stamp; one stamped "[07:29 PM]" by an older version shows its stamp too.
+  await page.evaluate(() => { const real = Date.prototype.toLocaleTimeString; window.__realLTS = real; Date.prototype.toLocaleTimeString = function (l, o) { return real.call(this, 'en-US', { ...(o || {}), hour12: true }); }; });
+  await page.click('#sd-note');
+  await page.keyboard.type('Mic 2 crackles');
+  await page.keyboard.press('Enter');
+  await page.waitForSelector('.sd-session-notes');
+  log = await db(page, d => d.logs.filter(l => l.bookingId === 's-sess1').sort((a, b) => b.startedAt - a.startedAt)[0]);
+  ok('a session note is stamped HH:MM in a 12-hour locale too', /^\[\d{2}:\d{2}\] Mic 2 crackles$/.test(log.notes), log.notes);
+  const noteShown = () => page.evaluate(() => [...document.querySelectorAll('.sd-session-notes .sd-note-line')].map(x => [x.querySelector('.sd-stamp-badge')?.textContent || '', x.lastChild.textContent]));
+  let lines = await noteShown();
+  ok('…and shows its stamp', lines.length === 1 && /^\d{2}:\d{2}$/.test(lines[0][0]) && lines[0][1] === 'Mic 2 crackles', JSON.stringify(lines));
+  await page.evaluate(id => import('./js/store.js').then(s => s.patch('logs', id, { notes: '[07:29 PM] Old note\n[7:05 a.m.] Older note' })), log.id);
+  await page.waitForFunction(() => /Older note/.test(document.querySelector('.sd-session-notes')?.textContent || ''));
+  lines = await noteShown();
+  ok('notes stamped in a 12-hour format by an older version show their stamp', JSON.stringify(lines) === JSON.stringify([['07:29 PM', 'Old note'], ['7:05 a.m.', 'Older note']]), JSON.stringify(lines));
+  await page.evaluate(() => { Date.prototype.toLocaleTimeString = window.__realLTS; });
   await go(page, 'bookings');
   await page.click('#host-takes-s-sess1 .sd-log >> nth=1');
   await page.waitForSelector('.sd-log-view');

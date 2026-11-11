@@ -7,7 +7,7 @@
 //
 // log = { id, bookingId, date, title, songId (the song the next takes are for), startedAt, takes: [{ id, n, songId,
 // at, rating: 'keep'|'maybe'|'no'|'', text }], notes }
-import { h, uid, toast, announce, empty, backBtn, fmtShort, fmtLong, todayISO, ymd, parseISO, groupBy, sheet } from '../util.js';
+import { h, uid, toast, announce, empty, backBtn, fmtShort, fmtLong, todayISO, ymd, parseISO, groupBy, sheet, pad } from '../util.js';
 import { db, byId, update, upsert, remove, redraw, covers } from '../store.js';
 import { bookingTitle, actName, fmtDur, kindIcon } from '../model.js';
 import { openForm } from '../form.js';
@@ -44,9 +44,13 @@ function songsOf(l) {
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 const latestTake = l => takesOf(l).sort((a, b) => Number(b.at) - Number(a.at))[0] || null;
 const offsetText = (l, ms) => { const off = ms - startOf(l); return off >= 0 && off < 24 * H ? '+' + fmtClock(off) : ''; };
+// The time of day a session note is stamped with: "19:05", whatever the phone's clock format (a 12-hour "07:05 PM"
+// would not read as a stamp).
+const stampTime = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 // A note line stamped "[0:42] …" (into the take) or "[11:05] …" (time of day, on the session notes) shows its stamp apart.
+// Notes stamped before in a 12-hour format ("[07:05 PM] …") are read too.
 const noteLines = text => String(text || '').split('\n').filter(x => x.trim()).map(line => {
-  const m = line.match(/^\[(\d{1,2}:\d{2}(?::\d{2})?)\]\s*(.*)$/);
+  const m = line.match(/^\[(\d{1,2}:\d{2}(?::\d{2})?(?:\s?[AaPp]\.?\s?[Mm]\.?)?)\]\s*(.*)$/);
   return h('div', { class: 'sd-note-line' }, m && h('span', { class: 'sd-stamp-badge' }, m[1]), m ? m[2] : line);
 });
 // Focus the control with this id after the redraw an action causes (a keyboard user keeps their place).
@@ -113,7 +117,7 @@ function saveNote(l) {
   changeLog(l.id, x => {
     const y = take && x.takes.find(z => z.id === take.id);
     if (y) { const off = stampAt - Number(y.at); const pre = off >= 0 && off <= 20 * 6e4 ? `[${fmtDur(off / 1000)}] ` : ''; y.text = [y.text, pre + text].filter(Boolean).join('\n'); }
-    else x.notes = [x.notes, `[${clockTime(stampAt)}] ${text}`].filter(Boolean).join('\n');
+    else x.notes = [x.notes, `[${stampTime(stampAt)}] ${text}`].filter(Boolean).join('\n');
   });
   S.draft = ''; S.stampAt = null; S.stampTake = null;
   haptic(); announce(take ? `Note added to take ${take.n}` : 'Note added to the session notes');
@@ -317,7 +321,7 @@ function logView(l, setTimer) {
   const showStamp = () => {
     const t = S.stampTake ? takesOf(byId('logs', l.id) || l).find(x => x.id === S.stampTake) : null;
     const lt = latestTake(byId('logs', l.id) || l);
-    if (S.stampAt) stampLine.replaceChildren(t ? `On take ${t.n}${songTitle(t.songId) ? ' of ' + songTitle(t.songId) : ''}, ` : 'In the session notes, ', h('b', null, t ? `${fmtDur((S.stampAt - Number(t.at)) / 1000)} into the take` : `at ${clockTime(S.stampAt)}`));
+    if (S.stampAt) stampLine.replaceChildren(t ? `On take ${t.n}${songTitle(t.songId) ? ' of ' + songTitle(t.songId) : ''}, ` : 'In the session notes, ', h('b', null, t ? `${fmtDur((S.stampAt - Number(t.at)) / 1000)} into the take` : `at ${stampTime(S.stampAt)}`));
     else stampLine.textContent = lt ? `Goes on take ${lt.n}${songTitle(lt.songId) ? ' of ' + songTitle(lt.songId) : ''}, stamped the moment you start typing.` : 'Goes in the session notes, stamped the moment you start typing.';
   };
   showStamp();

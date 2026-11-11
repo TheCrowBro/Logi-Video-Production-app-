@@ -96,6 +96,21 @@ const stored = (page, key) => page.evaluate(k => localStorage.getItem(k), key);
   ok('− and + change the tempo by one', (await state(page)).metronome.bpm === 149 && (await page.inputValue('#tl-bpm')) === '149');
   await page.fill('#tl-bpm', '900'); await page.press('#tl-bpm', 'Tab');
   ok('the tempo stays within 30–300', (await state(page)).metronome.bpm === 300 && (await page.inputValue('#tl-bpm')) === '300');
+  // Tap: Enter on the Tap button counts every tap, even at 240 BPM; a mouse tap counts once (its click is not a second tap).
+  await page.evaluate(() => {
+    window.__taps = { key: [], ptr: [] };
+    document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'tl-metro-tap') window.__taps.key.push(performance.now()); }, true);
+    document.addEventListener('pointerdown', e => { if (e.target.closest && e.target.closest('#tl-metro-tap')) window.__taps.ptr.push(e.timeStamp); }, true);
+  });
+  const bpmOf = ts => (60000 * (ts.length - 1)) / (ts[ts.length - 1] - ts[0]);
+  await page.focus('#tl-metro-tap');
+  for (let i = 0; i < 8; i++) { await page.keyboard.press('Enter'); await sleep(250); }
+  let tapped = await page.evaluate(() => window.__taps.key), tappedBpm = (await state(page)).metronome.bpm;
+  ok('tapping the tempo with Enter counts every tap, even fast ones', tapped.length === 8 && Math.abs(tappedBpm - bpmOf(tapped)) <= 4, `${tappedBpm} BPM shown for ${bpmOf(tapped).toFixed(1)} tapped`);
+  await sleep(2100); // the taps start again after two seconds
+  for (let i = 0; i < 4; i++) { await page.click('#tl-metro-tap'); await sleep(400); }
+  tapped = await page.evaluate(() => window.__taps.ptr); tappedBpm = (await state(page)).metronome.bpm;
+  ok('a mouse tap counts once', tapped.length === 4 && Math.abs(tappedBpm - bpmOf(tapped)) <= 4, `${tappedBpm} BPM shown for ${bpmOf(tapped).toFixed(1)} tapped`);
   await page.fill('#tl-bpm', '120'); await page.press('#tl-bpm', 'Tab');
   await page.click('#tl-metro-run');
   const beatsSeen = new Set();
@@ -191,15 +206,39 @@ const stored = (page, key) => page.evaluate(k => localStorage.getItem(k), key);
   ok('the typed limit is saved', JSON.parse(await stored(page, 'gigdex-meter-limit')).db === 10);
   await page.selectOption('#tl-limit', 'v:s-lantern');
   ok('a venue’s noise limit can be picked', (await state(page)).meter.limit === 98 && JSON.parse(await stored(page, 'gigdex-meter-limit')).venueId === 's-lantern' && await page.locator('.tl-dbbar-limit').isVisible());
+  await page.click('[data-w="Z"]');
+  ok('flat weighting can be chosen, and the meter carries on with it', (await stored(page, 'gigdex-meter-weight')) === '"Z"' && /^dB$/.test(await text(page, '.tl-db-unit')) && await until(async () => { const m = (await state(page)).meter; return m.listening && m.micWeight === 'Z' && m.max > 30; }), JSON.stringify((await state(page)).meter));
+  await page.click('#tl-meter-start');
+  ok('Stop turns the meter’s microphone off', await until(async () => (await state(page)).liveTracks === 0));
+  // Stopped, the loudest moment holds still (Stop keeps it), so a new offset moves it by exactly the difference.
   await page.click('.tl-cal summary');
   const before = (await state(page)).meter.max;
   await page.fill('#tl-cal', '90');
   await sleep(150);
-  ok('the calibration offset is saved and shifts the readings', (await stored(page, 'gigdex-meter-cal')) === '90' && (await state(page)).meter.max <= before - 9, `${before} → ${(await state(page)).meter.max}`);
-  await page.click('[data-w="Z"]');
-  ok('flat weighting can be chosen', (await stored(page, 'gigdex-meter-weight')) === '"Z"' && /^dB$/.test(await text(page, '.tl-db-unit')));
+  ok('the calibration offset is saved and shifts the readings', (await stored(page, 'gigdex-meter-cal')) === '90' && Number.isFinite(before) && (await state(page)).meter.max === before - 10, `${before} → ${(await state(page)).meter.max}`);
+  // The microphone can take a while to start. A Stop tapped meanwhile, or Gigdex going to the background, keeps it off;
+  // a weighting picked meanwhile is the one it listens with.
+  await page.evaluate(() => { const md = navigator.mediaDevices, real = md.getUserMedia.bind(md); window.__realGUM = real; md.getUserMedia = c => new Promise(r => setTimeout(r, 900)).then(() => real(c)); });
+  const settled = () => until(async () => !(await state(page)).meter.starting, 6000);
   await page.click('#tl-meter-start');
-  ok('Stop turns the meter’s microphone off', await until(async () => (await state(page)).liveTracks === 0));
+  const startingText = await text(page, '#tl-meter-start');
+  await page.click('#tl-meter-start');
+  const stoppedText = await text(page, '#tl-meter-start');
+  await settled(); await sleep(300);
+  s = await state(page);
+  ok('Stop tapped while the meter is starting keeps the microphone off', /Starting/.test(startingText) && /Start meter/.test(stoppedText) && !s.meter.listening && s.liveTracks === 0 && /Start meter/.test(await text(page, '#tl-meter-start')), `${startingText} → ${stoppedText} → ${JSON.stringify(s.meter)}, ${s.liveTracks} live`);
+  await page.click('#tl-meter-start');
+  await setHidden(true);
+  await settled(); await sleep(300);
+  s = await state(page);
+  ok('going to the background while it starts keeps the microphone off', !s.meter.listening && s.liveTracks === 0, JSON.stringify(s.meter));
+  await setHidden(false);
+  await page.click('#tl-meter-start');
+  await page.click('[data-w="A"]');
+  ok('a weighting picked while it starts is the one it listens with', await until(async () => { const m = (await state(page)).meter; return m.listening && m.micWeight === 'A' && m.weight === 'A'; }, 8000), JSON.stringify((await state(page)).meter));
+  await page.evaluate(() => { navigator.mediaDevices.getUserMedia = window.__realGUM; });
+  await page.click('#tl-meter-start');
+  ok('…and Stop turns it off', await until(async () => (await state(page)).liveTracks === 0));
   await page.evaluate(() => import('./js/store.js').then(st => st.remove('venues', 's-lantern')));
   await sleep(200);
   ok('a venue deleted elsewhere drops out of the limits', !(await page.locator('#tl-limit option[value="v:s-lantern"]').count()) && (await page.inputValue('#tl-limit')) === '' && /no longer in Venues/.test(await text(page, '#tl-panel > .tl-card:nth-child(2)')));

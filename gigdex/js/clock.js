@@ -41,6 +41,8 @@ const midnight = now => { const d = new Date(now); d.setHours(0, 0, 0, 0); retur
 export const todayMs = (bookingId, now = Date.now()) => { const t0 = midnight(now); return shiftsOf(bookingId).reduce((t, s) => t + workedIn(s, t0, t0 + 864e5, now), 0); };
 // Hours worked on a booking by the clock, breaks taken off, the running shift included (to the hundredth of an hour).
 export function clockHours(bookingId) { return Math.round((bookingMs(bookingId) / H) * 100) / 100; }
+// The clock's hours as they are billed: to the quarter hour, as the invoice (money.bookingHours) and the income do.
+export const billedHours = bookingId => Math.round(clockHours(bookingId) * 4) / 4;
 
 // "1:23:45" (hours always shown), and "2h 15m" through the shared minutes formatter.
 export const fmtClock = ms => { const s = Math.max(0, Math.floor(num(ms) / 1000)); return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
@@ -88,7 +90,7 @@ function tickValue(kind, bookingId, now) {
     case 'strip': { const br = currentBreak(live); return live ? fmtClock(br ? now - num(br.start) : workedMs(live, now)) : ''; }
     case 'today': return fmtHm(todayMs(bookingId, now));
     case 'total': return fmtHm(bookingMs(bookingId, now));
-    case 'fee': { const b = byId('bookings', bookingId); return b ? fmtMoney(sessionFee(b, clockHours(bookingId))) : ''; }
+    case 'fee': { const b = byId('bookings', bookingId); return b ? fmtMoney(sessionFee(b, billedHours(bookingId))) : ''; }
     default: return null;
   }
 }

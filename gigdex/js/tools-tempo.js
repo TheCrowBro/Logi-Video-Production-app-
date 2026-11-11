@@ -71,9 +71,8 @@ export function tempo(panel, ctx) {
   const pad = h('button', { type: 'button', class: 'tl-tap', id: 'tl-tap', 'aria-label': 'Tap the tempo', 'aria-describedby': 'tl-tap-sub' },
     h('span', { class: 'tl-tap-word', 'aria-hidden': 'true' }, 'TAP'), tapBpm, h('span', { class: 'tl-tap-unit', 'aria-hidden': 'true' }, 'BPM'));
   tapSub.id = 'tl-tap-sub';
-  let handledAt = 0;
+  let pointerAt = -Infinity; // the click after a pointer tap is skipped (the tap counted on pointerdown), and only that one
   const doTap = t => {
-    handledAt = performance.now();
     const s = tapper.tap(t);
     pad.classList.remove('hit'); void pad.offsetWidth; pad.classList.add('hit');
     if (s.bpm) {
@@ -85,9 +84,10 @@ export function tempo(panel, ctx) {
     clearTimeout(staleTimer);
     staleTimer = setTimeout(() => { if (alive && tapper.stale()) tapSub.textContent = 'Tap again to start over'; }, 2100);
   };
-  pad.addEventListener('pointerdown', e => { if (e.button === 0) doTap(e.timeStamp || performance.now()); });
+  pad.addEventListener('pointerdown', e => { if (e.button === 0) { pointerAt = performance.now(); doTap(e.timeStamp || pointerAt); } });
+  pad.addEventListener('pointercancel', () => { pointerAt = -Infinity; });
   pad.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && !e.repeat) { e.preventDefault(); doTap(performance.now()); } });
-  pad.addEventListener('click', () => { if (performance.now() - handledAt > 350) doTap(performance.now()); }); // a screen reader's tap has no pointerdown
+  pad.addEventListener('click', () => { const followsPointer = performance.now() - pointerAt < 1000; pointerAt = -Infinity; if (!followsPointer) doTap(performance.now()); }); // a screen reader's tap has no pointerdown
   const clearTaps = h('button', { type: 'button', class: 'btn ghost small', id: 'tl-tap-clear', onclick: () => { tapper.reset(); tapBpm.textContent = '–'; tapSub.textContent = 'Tap along: here, or press T'; } }, 'Clear');
 
   /* ---------- BPM ⇄ ms ---------- */
