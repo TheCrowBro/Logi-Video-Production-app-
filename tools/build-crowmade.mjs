@@ -12,6 +12,7 @@ import { PRICE, RATES, withTax } from '../js/tax.js';
 const out = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'crowmade');
 const SUPPORT = 'support@crowmade.app';
 const VDEX = 'https://vdex.crowmade.app/';
+const TOURBOOK = 'https://tourbook.crowmade.app/'; // its own Worker, from TheCrowBro/Gdex
 const VES = 'https://github.com/TheCrowBro/Valheim-Easy-Server-'; // public: the app updates itself from its releases
 const VES_DL = `${VES}/releases/latest/download/`;
 // The Vdex licence's price with tax where the law asks for the whole price (js/tax.js, as on vdex.crowmade.app/download.html).
@@ -65,7 +66,7 @@ header.top nav a:hover{color:var(--ink);background:var(--soft)}header.top nav a[
 .note{color:var(--mute);font-size:.94em}
 code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.9em;background:rgba(127,127,127,.13);padding:1px 5px;border-radius:5px}
 footer.site{border-top:1px solid var(--line);margin-top:40px;color:var(--mute);font-size:.92em}
-footer.site .in{max-width:880px;margin:0 auto;padding:24px 16px 36px;display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+footer.site .in{max-width:880px;margin:0 auto;padding:24px 16px 36px;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:18px}
 footer.site b{display:block;color:var(--ink);font-weight:600;margin-bottom:6px}footer.site a{color:var(--mute);display:block;margin:3px 0;text-decoration:none}footer.site a:hover{color:var(--brand);text-decoration:underline}
 @media (max-width:700px){.features,.values{grid-template-columns:1fr}.shots{grid-template-columns:repeat(2,1fr)}footer.site .in{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:560px){h1{font-size:2em}.hero{flex-direction:column;align-items:flex-start}.hero>img{width:96px;height:96px;border-radius:22px}
@@ -75,7 +76,8 @@ footer.site b{display:block;color:var(--ink);font-weight:600;margin-bottom:6px}f
 // A small crow, drawn for the wordmark (inherits the text colour, so it follows light and dark).
 const CROW = '<svg viewBox="0 0 32 32" aria-hidden="true" fill="currentColor"><path d="M4 21c3.5-.4 6.3-1.6 8.6-3.9 1.9-1.9 3.1-4.4 5.4-6.1 2-1.5 4.6-2 6.7-1.1l3.3-1.4-1.6 2.9c.6 1.4.6 3.1-.1 4.6-1.3 2.9-4.2 4.6-7.2 5.6l1.5 4.4h-1.7l-1.6-4c-1 .2-2 .3-3 .3l.6 3.7h-1.6l-.9-3.8C9.7 22.3 6.6 21.9 4 21z"/><circle cx="23.4" cy="11.6" r="1" fill="var(--bg)"/></svg>';
 
-const NAV = [['/journee/', 'Little Journee'], ['/vdex/', 'Vdex'], ['/valheim/', 'Valheim Easy Server']];
+// Every app the owner makes gets a card on the home page, a page of its own here, a place in this menu and a footer column (CLAUDE.md).
+const NAV = [['/journee/', 'Little Journee'], ['/vdex/', 'Vdex'], ['/tourbook/', 'Tourbook'], ['/valheim/', 'Valheim Easy Server']];
 const page = (title, body, { desc = '', icon = '/journee/icon.png', here = '/', image = '' } = {}) => `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(title)}</title>${desc ? `<meta name="description" content="${esc(desc)}">` : ''}<link rel="icon" href="${icon}">
@@ -90,6 +92,7 @@ const page = (title, body, { desc = '', icon = '/journee/icon.png', here = '/', 
 <div><b>Crowmade</b>Small, careful apps, made by one person.<a href="mailto:${SUPPORT}">${SUPPORT}</a></div>
 <div><b>Little Journee</b><a href="/journee/">About</a><a href="/journee/privacy/">Privacy policy</a><a href="/journee/terms/">Terms of use</a></div>
 <div><b>Vdex</b><a href="/vdex/">About</a><a href="${VDEX}">Open Vdex</a><a href="${VDEX}privacy.html">Privacy policy</a><a href="${VDEX}terms.html">Terms of service</a></div>
+<div><b>Tourbook</b><a href="/tourbook/">About</a><a href="${TOURBOOK}">Open Tourbook</a><a href="${TOURBOOK}privacy.html">Privacy policy</a><a href="${TOURBOOK}terms.html">Terms of service</a></div>
 <div><b>Valheim Easy Server</b><a href="/valheim/">About</a></div>
 </div></footer></body></html>
 `;
@@ -104,6 +107,7 @@ const home = page('Crowmade', `
 <div class="apps">
 ${appCard('/journee/', '/journee/icon.png', 'Little Journee', "Your child's days, logged by the whole family. Encrypted, in your own cloud.", [['Coming soon', 'wait'], 'Android', 'iPhone'], 'See Little Journee')}
 ${appCard('/vdex/', '/vdex/icon.png', 'Vdex', 'For people who film things for a living: shoots, crew, kit, call sheets, stripboards, quotes and invoices, in one place.', [['Available now', 'ok'], 'iPhone', 'Android', 'Windows', 'Mac', 'Linux'], 'See Vdex')}
+${appCard('/tourbook/', '/tourbook/icon.png', 'Tourbook', 'For music producers and bands: shows, studio sessions and rehearsals, songs and setlists, backline, day sheets, settlements and invoices, in one place.', [['Early access', 'wait'], 'iPhone', 'Android', 'Computer'], 'See Tourbook')}
 ${appCard('/valheim/', '/valheim/icon.png', 'Valheim Easy Server', 'Run a Valheim dedicated server on a spare Windows PC or Mac, and look after it with one simple app. No command line.', [['Available now', 'ok'], 'Windows', 'Mac'], 'See Valheim Easy Server')}
 </div>
 <div class="values">
@@ -111,7 +115,7 @@ ${appCard('/valheim/', '/valheim/icon.png', 'Valheim Easy Server', 'Run a Valhei
 <div><b>Made to be used</b><p>Plain words, clear buttons and help built in, for people who'd rather get on with the job.</p></div>
 <div><b>A real person</b><p>Questions, problems, or something that reads wrong in your language: <a href="mailto:${SUPPORT}">${SUPPORT}</a>.</p></div>
 </div>`,
-{ desc: 'Crowmade: small, careful apps. Little Journee, Vdex for videographers, and Valheim Easy Server.', image: '/vdex/icon.png' });
+{ desc: 'Crowmade: small, careful apps. Little Journee, Vdex for videographers, Tourbook for music producers and bands, and Valheim Easy Server.', image: '/vdex/icon.png' });
 
 const vdex = page('Vdex', `
 <div class="hero"><img src="icon.png" alt=""><div><h1>Vdex</h1><p>The production deck for people who film things for a living.</p>${chips([['Available now', 'ok'], 'iPhone', 'Android', 'Windows', 'Mac', 'Linux'])}</div></div>
@@ -141,6 +145,38 @@ ${feature('Safe and in sync', 'Lock it with a PIN, fingerprint or face. With a l
 </ol>
 <p class="note"><a href="${VDEX}privacy.html">Privacy policy</a> · <a href="${VDEX}terms.html">Terms of service</a></p>`,
 { desc: 'Vdex: bookings, crew, kit, venues, insurance, call sheets, stripboards, budgets, quotes and invoices for freelance videographers.', icon: '/vdex/icon.svg', here: '/vdex/', image: '/vdex/icon.png' });
+
+
+const tourbook = page('Tourbook', `
+<div class="hero"><img src="icon.png" alt=""><div><h1>Tourbook</h1><p>The booking deck for music producers and the bands they play in, manage or produce.</p>${chips([['Early access', 'wait'], 'iPhone', 'Android', 'Computer'])}</div></div>
+<p>Tourbook keeps your shows, studio sessions and rehearsals in one calendar, with your acts, the people you work with, your backline, the venues and studios you play, and your songs and setlists. On the day it gives the band a day sheet, tunes your guitar, counts you in and times your set. Afterwards it settles the night, splits the money and makes the invoice.</p>
+<div class="btns"><a class="btn" href="${TOURBOOK}">Open Tourbook</a></div>
+<div class="price"><p class="big">Free to use while it's new.</p>
+<p class="note">Tourbook is in early access: every part of it is free for now, with nothing to sign up for. Later, the Audiophile role (for going to shows and keeping track of the bands you like) stays free for good, for your own personal use. The working roles get 30 days free on each device, then a licence of 20 US dollars once, for up to 3 of your devices. No subscription. A desktop app for Windows, Mac and Linux is on the way; until then, Tourbook installs from the browser on a phone or a computer.</p></div>
+<div class="shots"><img src="shot-bookings.jpg" alt="Bookings: shows, sessions and rehearsals on one calendar, with the record player that moves between sections"><img src="shot-money.jpg" alt="Money: earned, booked ahead, unpaid and overdue, with deposits due"><img src="shot-tools.jpg" alt="Tools: a tuner, metronome, tap tempo, sound meter and set timer"><img src="shot-backline.jpg" alt="Backline: instruments with serial numbers and values, and stage packs"></div>
+<h2>Made for the way you work</h2>
+<p>The first time it opens, Tourbook asks who's using it: <b>producer, manager, band, solo artist, scout or audiophile</b>, or <b>Jack of Trades</b> for a bit of all of it. Each gets its own menu and pages, and you can change any time.</p>
+<h2>What it does</h2>
+<div class="features">
+${feature('Bookings', 'Shows, studio sessions and rehearsals on one calendar, by month, week or day. Open one for everything about it.')}
+${feature('Acts and people', 'The bands and artists you work with, grouped by genre, with press kits and riders; band members, session players, crew, promoters and agents.')}
+${feature('Songs and setlists', 'Keys, tempos and lengths; split sheets for the writers; setlists that add up to your slot.')}
+${feature('Studio log', 'A take log for recording: add a take, mark the keepers, note what to fix.')}
+${feature('Backline', 'Instruments, amps, mics and cables with serial numbers and values; stage packs for the gigs you do often.')}
+${feature('Venues', 'Capacity, stage, PA, curfew, load-in and the house rules, on every show there, with a map.')}
+${feature('Day sheets', 'Everything the band needs on the day, shared as a link, with no money on it.')}
+${feature('Money', 'What you\'ve earned and what\'s unpaid, deposits due, settlements, each person\'s share, and invoices.')}
+${feature('Tools', 'A tuner, a metronome, tap tempo with delay times, a sound level meter and a set timer.')}
+${feature('Yours, and in sync', 'No account: your information stays on your own phone or computer, and you can save a backup any time. Coming soon: connect your own Google Drive to keep your phone and computer the same, with a dated copy each day.')}
+</div>
+<h2>Get started</h2>
+<ol class="steps">
+<li><b>Open Tourbook</b> at <a href="${TOURBOOK}">tourbook.crowmade.app</a> on your phone or computer.</li>
+<li><b>Put it on your home screen</b> so it opens like a normal app, even with no signal. iPhone: Safari's Share button, then <i>Add to Home Screen</i>. Android and computers: tap <i>Install</i> at the top of the page.</li>
+<li><b>Pick your role</b>, then tap <b>?</b> at the top of any page for a walkthrough of it, box by box.</li>
+</ol>
+<p class="note">Tourbook is a sibling of <a href="/vdex/">Vdex</a>, the app for videographers. <a href="${TOURBOOK}privacy.html">Privacy policy</a> · <a href="${TOURBOOK}terms.html">Terms of service</a></p>`,
+{ desc: 'Tourbook: shows, studio sessions and rehearsals; acts, people, backline and venues; songs, setlists and split sheets; day sheets, settlements and invoices. For music producers and bands.', icon: '/tourbook/icon.svg', here: '/tourbook/', image: '/tourbook/icon.png' });
 
 const valheim = page('Valheim Easy Server', `
 <div class="hero"><img src="icon.png" alt=""><div><h1>Valheim Easy Server</h1><p>Your own Valheim server on a spare PC or Mac. One button to start it, nobody touches a command line.</p>${chips([['Available now', 'ok'], 'Free', 'Windows', 'macOS 12 or newer'])}</div></div>
@@ -180,6 +216,7 @@ const redirects = `/vdex/privacy/ ${VDEX}privacy.html 301
 
 fs.writeFileSync(path.join(out, 'index.html'), home);
 fs.writeFileSync(path.join(out, 'vdex', 'index.html'), vdex);
+fs.writeFileSync(path.join(out, 'tourbook', 'index.html'), tourbook);
 fs.writeFileSync(path.join(out, 'valheim', 'index.html'), valheim);
 fs.writeFileSync(path.join(out, '_redirects'), redirects);
-console.log('crowmade/ written: /, /vdex/, /valheim/, _redirects');
+console.log('crowmade/ written: /, /vdex/, /tourbook/, /valheim/, _redirects');

@@ -27,8 +27,8 @@ Before making any change to crowmade.app, including building or publishing `crow
 what the owner's other sessions have changed in the content the site describes, and confirm the site matches it:
 
 1. **Read the other sessions.** List the owner's Claude sessions and read the latest results of each one working on an app the site
-   covers: Vdex (this repository), Little Journee (Children-Schedule-App, once Little Log) and Valheim Easy Server
-   (Valheim-Easy-Server-), plus any new app.
+   covers: Vdex (this repository), Little Journee (Children-Schedule-App, once Little Log), Tourbook (TheCrowBro/Gdex) and
+   Valheim Easy Server (Valheim-Easy-Server-), plus any new app.
 2. **Read the repositories.** Fetch each app's latest default branch and compare its README, store texts, screenshots, prices, names
    and addresses with what the site says.
 3. **Read the live site** (https://crowmade.app and https://crowmade.pages.dev) and the Cloudflare account (Pages projects, Workers
@@ -37,14 +37,22 @@ what the owner's other sessions have changed in the content the site describes, 
    site to match. If something can't be confirmed (a session is mid-change, or a repository can't be read), say so instead of guessing.
 
 **Design:** the owner gave the "Cloudflare Website Maintenance" session (session_013RbmKx6XL267rrFPgHBgAf) the final say on
-crowmade.app's design: the look, layout and structure of the home page and the Vdex and Valheim Easy Server pages. Other sessions keep
+crowmade.app's design: the look, layout and structure of the home page and every app's page. Other sessions keep
 their app's facts on those pages right (prices, features, links, screenshots), and should ask that session (`send_message`) before
 changing the design.
+
+**Every app gets a card.** The owner wants every app they make on crowmade.app: a card on the home page (with its status:
+available, early access, coming soon), a page of its own at crowmade.app/<app>/, a place in the menu and a footer column with its
+privacy policy and terms (`NAV` and the footer in `tools/build-crowmade.mjs`). Today that is Little Journee, Vdex, Tourbook
+(TheCrowBro/Gdex, at tourbook.crowmade.app) and Valheim Easy Server. When a session starts a new app, the site gets its card
+as soon as the app has an address people can open. Keep each page to what is true and live now: say "coming soon" for what isn't.
 
 Who publishes what on crowmade.app:
 
 - The home page, `/vdex/` and `/valheim/`: this repository, `crowmade/`, published only by `tools/deploy-crowmade.sh` (point 4
   above) to the Cloudflare Pages project `crowmade`.
+- `/tourbook/` is this repository's page about Tourbook; the app itself is tourbook.crowmade.app, its own Worker, published from
+  TheCrowBro/Gdex with the owner's go-ahead.
 - `/journee/` (and the old `/littlelog/` addresses): Little Journee's own Worker, published from the Children-Schedule-App repository.
   Never publish Little Journee's pages from here.
 - Vdex itself: https://vdex.crowmade.app, a Worker of its own, published from this repository's main branch by CI (point 3 above).
