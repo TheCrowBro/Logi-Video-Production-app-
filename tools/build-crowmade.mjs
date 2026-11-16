@@ -155,7 +155,7 @@ const tourbook = page('Tourbook', `
 <p class="note">Tourbook is in early access: every part of it is free for now, with nothing to sign up for. Later, the Audiophile role (for going to shows and keeping track of the bands you like) stays free for good, for your own personal use. The working roles get 30 days free on each device, then a licence of 20 US dollars once, for up to 3 of your devices. No subscription. A desktop app for Windows, Mac and Linux is on the way; until then, Tourbook installs from the browser on a phone or a computer.</p></div>
 <div class="shots"><img src="shot-bookings.jpg" alt="Bookings: shows, sessions and rehearsals on one calendar, with the record player that moves between sections"><img src="shot-money.jpg" alt="Money: earned, booked ahead, unpaid and overdue, with deposits due"><img src="shot-tools.jpg" alt="Tools: a tuner, metronome, tap tempo, sound meter and set timer"><img src="shot-backline.jpg" alt="Backline: instruments with serial numbers and values, and stage packs"></div>
 <h2>Made for the way you work</h2>
-<p>The first time it opens, Tourbook asks who's using it: <b>producer, manager, band, solo artist, scout or audiophile</b>, or <b>Jack of Trades</b> for a bit of all of it. Each gets its own menu and pages, and you can change any time.</p>
+<p>The first time it opens, Tourbook asks who's using it: <b>Jack of Trades</b> for a bit of all of it, or <b>producer, manager, band, solo artist, scout or audiophile</b>. Each gets its own menu and pages, and you can change any time.</p>
 <h2>What it does</h2>
 <div class="features">
 ${feature('Bookings', 'Shows, studio sessions and rehearsals on one calendar, by month, week or day. Open one for everything about it.')}
@@ -165,9 +165,9 @@ ${feature('Studio log', 'A take log for recording: add a take, mark the keepers,
 ${feature('Backline', 'Instruments, amps, mics and cables with serial numbers and values; stage packs for the gigs you do often.')}
 ${feature('Venues', 'Capacity, stage, PA, curfew, load-in and the house rules, on every show there, with a map.')}
 ${feature('Day sheets', 'Everything the band needs on the day, shared as a link, with no money on it.')}
-${feature('Money', 'What you\'ve earned and what\'s unpaid, deposits due, settlements, each person\'s share, and invoices.')}
+${feature('Money', 'What you\'ve earned and what\'s unpaid, deposits due, settlements, each person\'s share, and quotes and invoices in your own currency.')}
 ${feature('Tools', 'A tuner, a metronome, tap tempo with delay times, a sound level meter and a set timer.')}
-${feature('Yours, and in sync', 'No account: your information stays on your own phone or computer, and you can save a backup any time. Coming soon: connect your own Google Drive to keep your phone and computer the same, with a dated copy each day.')}
+${feature('Yours, and in sync', 'No account: your information stays on your own phone or computer. Connect your own Google Drive (free, for everyone) and Tourbook keeps your phone and computer the same, with a dated copy each day.')}
 </div>
 <h2>Get started</h2>
 <ol class="steps">
