@@ -1,10 +1,15 @@
 import { h, telUrl, safeUrl, empty, fmtShort, todayISO, personRate, rateText, hasUnit, keepTypedRate, typedRateHint } from '../util.js';
 import { db, upsert, remove, crewBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
+import { groupNames, groupOf, roleWords, fold, MY_ROLES } from '../roles.js';
 
-import { ROLES } from '../workflow.js';
-export { ROLES };
-const S = { q: '', role: '' };
+// The filter: S.role is the group of roles being shown (a department, My roles for roles of your own, or No role;
+// '' for everyone) and S.only one role within it, so clearing S.q and S.role shows everyone. Roles are compared the
+// way the menu compares them, so "gaffer" and "Gaffer" on two cards are one chip.
+const S = { q: '', role: '', only: '' };
+const NO_ROLE = 'No role';
+const roleOf = c => String(c.role || '').trim(), roleKey = c => fold(c.role);
+const bucket = c => groupOf(c.role) || NO_ROLE;
 
 // An older card holds the rate as it was typed ("$450/day", "£55 an hour"): the form shows the amount and the unit it
 // reads and saves them as a number and a unit; the typed text is shown under the box, and what it cannot read ("TBC",
@@ -16,7 +21,7 @@ function edit(c = {}) {
     values: rateValues(c),
     fields: [
       { key: 'name', label: 'Name', required: true },
-      { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' },
+      { key: 'role', label: 'Role', type: 'role' },
       { key: 'phone', label: 'Phone', type: 'tel' },
       { key: 'email', label: 'Email', type: 'email' },
       { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: typedRateHint(c) + 'Prices this person’s line on quotes, invoices and the budget: a day rate per shoot day, or an hourly rate for a standard day’s hours (Settings → Work & billing → Hours & breaks).' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] },
@@ -32,17 +37,27 @@ export const crew = {
   id: 'crew', label: 'Crew', icon: '👥',
   render(root) {
     const draw = () => {
-      const roles = [...new Set(db.crew.map(c => c.role).filter(Boolean))].sort();
+      // Chips for the groups that have people, in the menu's order; then, for the group chosen, the roles in use in it.
+      const where = new Map(db.crew.map(c => [c, bucket(c)])), order = [...groupNames(), MY_ROLES, NO_ROLE], rank = c => order.indexOf(where.get(c));
+      const groups = order.filter(g => db.crew.some(c => where.get(c) === g));
+      if (!groups.includes(S.role)) S.role = '';
+      const roles = S.role && S.role !== NO_ROLE ? [...new Map(db.crew.filter(c => where.get(c) === S.role).map(c => [roleKey(c), roleOf(c)]))].sort((a, b) => a[1].localeCompare(b[1])) : [];
+      if (!roles.some(([key]) => key === S.only)) S.only = '';
       const q = S.q.toLowerCase();
-      const list = db.crew.filter(c => (!S.role || c.role === S.role) && (!q || `${c.name} ${c.role} ${c.notes}`.toLowerCase().includes(q)))
-        .sort((a, b) => (a.role || '').localeCompare(b.role || '') || a.name.localeCompare(b.name));
+      const list = db.crew.filter(c => (!S.role || where.get(c) === S.role) && (!S.only || roleKey(c) === S.only) && (!q || `${c.name} ${c.role} ${c.notes} ${roleWords(c.role)}`.toLowerCase().includes(q)))
+        .sort((a, b) => rank(a) - rank(b) || roleOf(a).localeCompare(roleOf(b)) || a.name.localeCompare(b.name));
+      // A chip keeps the focus through the redraw its tap causes, so the next one is a Tab away.
+      const chip = (key, label, on, pick) => h('button', { class: 'chip' + (on ? ' on' : ''), 'aria-pressed': String(on), 'data-chip': key, onclick: () => { pick(); draw(); root.querySelector(`[data-chip="${CSS.escape(key)}"]`)?.focus(); } }, label);
 
       root.replaceChildren(h('div', null,
         h('div', { class: 'page-head' }, h('h1', null, 'Trusted crew'), h('button', { class: 'btn primary', onclick: () => edit() }, '+ Add')),
         db.crew.length > 3 && h('input', { class: 'search', type: 'search', placeholder: 'Search crew…', value: S.q, 'aria-label': 'Search crew', oninput: e => { S.q = e.target.value; draw(); const i = root.querySelector('.search'); i.focus(); i.setSelectionRange(S.q.length, S.q.length); } }),
-        roles.length > 1 && h('div', { class: 'chips' },
-          h('button', { class: 'chip' + (!S.role ? ' on' : ''), 'aria-pressed': !S.role, onclick: () => { S.role = ''; draw(); } }, 'All'),
-          roles.map(r => h('button', { class: 'chip' + (S.role === r ? ' on' : ''), 'aria-pressed': S.role === r, onclick: () => { S.role = S.role === r ? '' : r; draw(); } }, r))),
+        groups.length > 1 && h('div', { class: 'chips', role: 'group', 'aria-label': 'Show one kind of role' },
+          chip('all', 'All', !S.role, () => { S.role = ''; S.only = ''; }),
+          groups.map(g => chip('g:' + g, g, S.role === g, () => { S.role = S.role === g ? '' : g; S.only = ''; }))),
+        roles.length > 1 && h('div', { class: 'chips by-role', role: 'group', 'aria-label': `Show one role in ${S.role}` },
+          chip('whole', 'Whole group', !S.only, () => { S.only = ''; }),
+          roles.map(([key, label]) => chip('r:' + key, label, S.only === key, () => { S.only = S.only === key ? '' : key; }))),
         list.length
           ? h('div', { class: 'list' }, list.map(card))
           : empty(db.crew.length ? 'No matches.' : 'Add the freelancers you trust — sound, AC, gaffer, editor — with a link to their work.', db.crew.length ? null : h('button', { class: 'btn primary', onclick: () => edit() }, 'Add crew member'))));

@@ -93,6 +93,19 @@ The magnifier **🔍** at the top of every page, beside the menu, searches every
 - **Tap a result** and Vdex opens that booking, person, item, venue, policy, log, quote, invoice or call sheet where it lives. A person, an item or a policy is shown on its own card in its list, outlined for a moment.
 - It all happens on your iPhone: nothing you type is sent anywhere, and nothing about your searches is saved. What you last typed stays in the search box only until Vdex is closed or locked. Searching changes nothing, so it also works when Vdex is read-only, and while Vdex is locked there is nothing to search.
 
+### Your crew and their roles
+
+Crew → **+ Add** makes a card for someone you work with: name, role, phone, email, a day or hourly rate and a link to their work. The **Role** button opens a menu of the roles used in film, television and video work, more than 300 of them, folded into groups of similar jobs: Producing, Directing and ADs, Camera, Drone and specialist camera, Lighting, Grip, Sound, Data and DIT, Art department, Costume, Hair and make-up, Locations, Script and continuity, Casting, Talent and on-screen, Stunts and safety, Production support, Editing and colour, Sound post and music, VFX and motion graphics, Live, broadcast and events, Stills, Social and content, and General.
+
+- **Tap a group** to open it, then **tap a role** to choose it. When the person already has a role, its group is open and the role is marked.
+- **Search roles** at the top finds a role by any of its names. British names come first, and the American and short forms lead to the same job: "cinematographer" or "DP" finds **DOP**, "focus puller" finds **1st AC**, "makeup artist" finds **MUA**. Pick whichever name you use, and that is the one saved.
+- **Not in the list?** Type it in the box at the end and tap **Use this role**. Once the card is saved, the role is kept under **My roles**, the first group, for next time, in your backups and on every device you sync. A role there that nobody has any more can be removed with **✕**.
+- **Clear the role** takes it off again.
+
+**+ Hire someone** on a booking page opens the same menu for the person hired for that job.
+
+On the Crew page the chips under the search box filter **by group first**: tap **Camera** to see only your camera people, and when they have more than one role between them a second row narrows it to one (1st AC, Camera Operator…). Roles of your own are under **My roles**, and people with no role under **No role**. The search box finds people by name, by role, and by the group or another name of their role. The roles already on your cards stay exactly as they were.
+
 ### Add a booking
 
 1. Bookings → **+ New** (or tap a date, then **+ New**).
@@ -350,6 +363,19 @@ The magnifier **🔍** at the top of every page, beside the menu, searches every
 - **The chips** under the search box (All, Bookings, Crew, Equipment, Venues, Insurance, Money, Call sheets, TC Notes…) keep the results to one page, and each shows how many it has. Only pages that have something in them get a chip.
 - **Tap a result** and Vdex opens that booking, person, item, venue, policy, log, quote, invoice or call sheet where it lives. A person, an item or a policy is shown on its own card in its list, outlined for a moment.
 - It all happens on your phone: nothing you type is sent anywhere, and nothing about your searches is saved. What you last typed stays in the search box only until Vdex is closed or locked. Searching changes nothing, so it also works when Vdex is read-only, and while Vdex is locked there is nothing to search.
+
+### Your crew and their roles
+
+Crew → **+ Add** makes a card for someone you work with: name, role, phone, email, a day or hourly rate and a link to their work. The **Role** button opens a menu of the roles used in film, television and video work, more than 300 of them, folded into groups of similar jobs: Producing, Directing and ADs, Camera, Drone and specialist camera, Lighting, Grip, Sound, Data and DIT, Art department, Costume, Hair and make-up, Locations, Script and continuity, Casting, Talent and on-screen, Stunts and safety, Production support, Editing and colour, Sound post and music, VFX and motion graphics, Live, broadcast and events, Stills, Social and content, and General.
+
+- **Tap a group** to open it, then **tap a role** to choose it. When the person already has a role, its group is open and the role is marked.
+- **Search roles** at the top finds a role by any of its names. British names come first, and the American and short forms lead to the same job: "cinematographer" or "DP" finds **DOP**, "focus puller" finds **1st AC**, "makeup artist" finds **MUA**. Pick whichever name you use, and that is the one saved.
+- **Not in the list?** Type it in the box at the end and tap **Use this role**. Once the card is saved, the role is kept under **My roles**, the first group, for next time, in your backups and on every device you sync. A role there that nobody has any more can be removed with **✕**.
+- **Clear the role** takes it off again.
+
+**+ Hire someone** on a booking page opens the same menu for the person hired for that job.
+
+On the Crew page the chips under the search box filter **by group first**: tap **Camera** to see only your camera people, and when they have more than one role between them a second row narrows it to one (1st AC, Camera Operator…). Roles of your own are under **My roles**, and people with no role under **No role**. The search box finds people by name, by role, and by the group or another name of their role. The roles already on your cards stay exactly as they were.
 
 ### Add a booking
 

@@ -5,9 +5,6 @@ import { db, byId, update, upsert, remove, subscribe, endOf, splitHires } from '
 import { openForm } from './form.js';
 import { boardPlan } from './board.js';
 
-// The crew roles offered when adding someone, on the Crew page and when hiring someone for a booking.
-export const ROLES = ['Director', 'Producer', 'DOP', 'Camera Operator', '1st AC', '2nd AC', 'Gaffer', 'Grip', 'Sound Recordist', 'Boom Operator', 'Drone Pilot', 'Editor', 'Colourist', 'Motion Designer', 'MUA', 'Stylist', 'Runner', 'Location Manager', 'Talent', 'Presenter', 'Other'];
-
 /* --------------------------------- stages --------------------------------- */
 export const STAGES = [
   ['Enquiry', 'enquiry'], ['Quoted', 'quoted'], ['Confirmed', 'confirmed'], ['Prepped', 'prepped'],
@@ -278,7 +275,7 @@ export function hiresBlock(b) {
   // unit; the typed text is shown under the box, and what it cannot read stays until an amount replaces it (util.js).
   const rateValues = hr => { const r = personRate(hr); return { ...hr, rate: r.amount === '' ? '' : r.amount, rateUnit: hasUnit(hr) ? hr.rateUnit : r.hourly ? 'hour' : 'day' }; };
   const edit = hr => openForm({ title: hr ? 'Edit hired person' : 'Hire someone for this job', values: hr ? rateValues(hr) : { name: '', role: '', rate: '', rateUnit: 'day', days: shootDaysOf(b), phone: '', email: '', notes: '' },
-    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', list: ROLES, placeholder: 'Pick or type a role' }, { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: typedRateHint(hr) + 'Feeds the budget and the suggested quote lines: a day rate per day, or an hourly rate for a standard day’s hours (Settings → Work & billing → Hours & breaks). Never goes to the crew.' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] }, { key: 'days', label: 'Days', type: 'number', min: 0, step: 'any' }, { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' }, { key: 'notes', label: 'Notes', type: 'textarea', rows: 2 }],
+    fields: [{ key: 'name', label: 'Name', required: true }, { key: 'role', label: 'Role', type: 'role' }, { key: 'rate', label: 'Rate', type: 'number', min: 0, step: 'any', placeholder: 'e.g. 450', hint: typedRateHint(hr) + 'Feeds the budget and the suggested quote lines: a day rate per day, or an hourly rate for a standard day’s hours (Settings → Work & billing → Hours & breaks). Never goes to the crew.' }, { key: 'rateUnit', label: 'Per', type: 'select', options: [['day', 'Day'], ['hour', 'Hour']] }, { key: 'days', label: 'Days', type: 'number', min: 0, step: 'any' }, { key: 'phone', label: 'Phone', type: 'tel' }, { key: 'email', label: 'Email', type: 'email' }, { key: 'notes', label: 'Notes', type: 'textarea', rows: 2 }],
     onSave: v => patch(b, x => { splitHires(x); x.hires = x.hires || []; const kept = keepTypedRate(hr, v); const i = x.hires.findIndex(y => y.id === (hr && hr.id)); if (i >= 0) x.hires[i] = { ...kept, id: hr.id }; else x.hires.push({ ...kept, id: uid() }); }),
     onDelete: hr ? () => patch(b, x => { splitHires(x); x.hires = (x.hires || []).filter(y => y.id !== hr.id); if (x.crewStatus) delete x.crewStatus[hr.id]; if (x.crewCall) delete x.crewCall[hr.id]; }) : null });
   const hires = hiredPeople(b);

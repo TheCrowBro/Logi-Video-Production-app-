@@ -189,6 +189,27 @@ body.search-open .update-bar { z-index: 80; } /* as under the menu: behind the p
 .chip { flex: none; min-height: var(--hit); background: var(--bg2); color: var(--text); border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; font: inherit; font-size: .85rem; cursor: pointer; } .chip.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .avatar { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; flex: none; } .avatar.big { width: 58px; height: 58px; font-size: 1.3rem; }
 .crew-card .card-row { justify-content: flex-start; } .crew-card .icon-btn { margin-left: auto; }
+/* crew roles: the Role button in a form, the menu of roles by department (js/role-picker.js), and the Crew page's second row of chips */
+.role-pick { min-height: var(--hit); width: 100%; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; font: inherit; color: var(--text); background: var(--bg2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; text-align: left; cursor: pointer; }
+.role-pick:hover { border-color: var(--accent); } .role-pick-arrow { color: var(--muted); flex: none; }
+.role-pick-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .role-pick.unset .role-pick-text { color: var(--muted); }
+.sheet-body:has(.role-menu) { padding-top: 0; scroll-padding: calc(var(--hit) + 22px) 0 12px; } .sheet-body:has(.role-now) { scroll-padding-top: calc(2 * var(--hit) + 26px); } /* a role reached with the keyboard is never under the search box and the chosen role above the list */
+.role-menu { min-height: 60vh; } /* the sheet keeps its height while a search shortens the list */
+.role-head { position: sticky; top: 0; z-index: 2; background: var(--bg); margin: 0 -16px 4px; padding: 8px 16px; display: grid; gap: 4px; } .role-head .search { margin: 0; }
+.role-now { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: .9rem; } .role-now > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .role-now .btn { flex: none; }
+.role-group .twirl-name { font-size: 1rem; } .role-group .twirl-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.role-list { display: grid; gap: 6px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 560px) { .role-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.role-opt { min-height: var(--hit); width: 100%; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; font: inherit; font-size: 1rem; color: var(--text); text-align: left; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 6px 11px; cursor: pointer; }
+.role-opt:hover { border-color: var(--accent); } .role-opt.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.role-text { min-width: 0; display: grid; } .role-name { font-weight: 600; overflow-wrap: anywhere; } .role-aka { font-size: .78rem; line-height: 1.3; color: var(--muted); overflow-wrap: anywhere; }
+.role-tick { color: var(--accent); font-weight: 800; flex: none; }
+.role-row { display: flex; gap: 2px; align-items: center; min-width: 0; } .role-row .role-opt { flex: 1 1 auto; }
+.role-results > p, .role-results > .btn { grid-column: 1 / -1; margin: 0; }
+.role-own { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); } .role-own .row-edit { margin-top: 0; } .role-own .btn { flex: none; white-space: nowrap; }
+html[data-contrast=high] .role-pick, html[data-contrast=high] .role-opt { border-width: 2px; }
+@media (forced-colors: active) { .role-opt.on { outline: 2px solid Highlight; outline-offset: -4px; } }
+.chips.by-role { margin-left: 10px; padding-left: 10px; border-left: 2px solid var(--accent); } .chips.by-role .chip { background: transparent; } .chips.by-role .chip.on { background: var(--accent); }
 .bk-list { margin: 8px 0 0; padding-left: 18px; font-size: .9rem; }
 .kv { display: grid; gap: 4px; margin: 8px 0 0; } .kv > div { display: flex; justify-content: space-between; gap: 12px; }
 .gear-line { padding: 5px 0; border-bottom: 1px solid var(--line); font-size: .95rem; } .gear-line.clash { color: var(--danger); } .clash-note { font-style: normal; font-size: .8rem; }

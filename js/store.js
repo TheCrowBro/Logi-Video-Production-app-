@@ -15,6 +15,7 @@ const blank = () => ({
   projectTemplates: [], // the user's own job types: defaults for a new booking (times, kit, crew, deliverables, schedule…)
   billing: { updatedAt: 0 }, // rates, numbering, tax and payment terms for quotes and invoices
   priceList: { list: null, region: '', updatedAt: 0 }, // the lines picked into quotes and invoices (null: not set up yet)
+  myRoles: [], // crew roles the person typed themselves, kept for the role menu: { id, name, updatedAt } (js/roles.js)
 });
 
 function load() {
@@ -58,6 +59,7 @@ function normalise(raw) {
     projectTemplates: Array.isArray(raw.projectTemplates) ? raw.projectTemplates : [],
     billing: raw.billing && typeof raw.billing === 'object' ? raw.billing : { updatedAt: 0 },
     priceList: raw.priceList && typeof raw.priceList === 'object' ? raw.priceList : b.priceList,
+    myRoles: (Array.isArray(raw.myRoles) ? raw.myRoles : []).filter(r => r && typeof r === 'object' && typeof r.id === 'string' && typeof r.name === 'string' && r.name.trim()),
   };
 }
 
@@ -379,7 +381,7 @@ export function mergeDb(local, remote) {
   const dead = { ...local.deleted };
   for (const [id, t] of Object.entries(remote.deleted || {})) dead[id] = Math.max(dead[id] || 0, t);
   const out = { ...local, deleted: dead };
-  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates']) out[list] = mergeList(local[list] || [], remote[list] || [], dead, list === 'bookings' ? mergeBooking : newer);
+  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates', 'myRoles']) out[list] = mergeList(local[list] || [], remote[list] || [], dead, list === 'bookings' ? mergeBooking : newer);
   out.logs = mergeList(local.logs, remote.logs, dead, (x, y) => mergeLog(x, y, dead));
   out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking

@@ -4,7 +4,7 @@
 // edit days in their own colour on the calendar, in the feed and on the clock bar; the shot-list import filling the
 // stripboard; the back button; the share button named for the calendar.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, chooseRole } = require('../helpers.cjs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -93,7 +93,7 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   ok('one People section: stakeholders, crew and hires', (await people.locator('#bk-stakeholders h4').innerText()) === 'Stakeholders (2)' && (await people.locator('#bk-crew h4').innerText()) === 'Crew (2)' && (await people.locator('#bk-hires h4').innerText()) === 'Hires (0)');
   ok('the rental an older copy kept under hires is shown as rented equipment, with the one already under rentals', (await page.locator('#bk-kit #bk-rentals h4').innerText()) === 'Rented (2)' && /Prism lens/.test(await page.locator('#bk-rentals').innerText()) && /Easyrig/.test(await page.locator('#bk-rentals').innerText()), await page.locator('#bk-kit #bk-rentals h4').innerText());
   await page.locator('#bk-hires button', { hasText: 'Hire someone' }).click(); await page.waitForSelector('.sheet form');
-  await page.locator('.sheet form input[data-key="name"]').fill('Dana Fox'); await page.locator('.sheet form input[data-key="role"]').fill('Gaffer'); await page.locator('.sheet form input[data-key="rate"]').fill('400'); await page.locator('.sheet form select').selectOption('day');
+  await page.locator('.sheet form input[data-key="name"]').fill('Dana Fox'); await chooseRole(page, 'Gaffer'); await page.locator('.sheet form input[data-key="rate"]').fill('400'); await page.locator('.sheet form select').selectOption('day');
   await page.locator('.sheet form input[data-key="days"]').fill('2'); await page.locator('.sheet form input[data-key="phone"]').fill('+1 555 0150'); await page.locator('.sheet form input[data-key="email"]').fill('dana@example.com');
   await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
   const stored = await page.evaluate(id => import('./js/store.js').then(s => { const b = s.byId('bookings', id); return { hires: b.hires, rentals: b.rentals }; }), seed.id);
