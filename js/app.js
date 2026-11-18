@@ -32,6 +32,21 @@ let menu = null;
 const openMenu = opts => import('./menu.js').then(m => { menu = m; m.openMenu(opts); }, e => { console.error(e); toast('The menu could not be loaded. Check the connection and try again.'); });
 menuBtn.addEventListener('click', () => openMenu());
 window.logiMenu = { open: openMenu, close: () => { if (menu) menu.closeMenu(); }, isOpen: () => !!menu && menu.isOpen() };
+// The search control beside it opens the search across everything (js/search.js, fetched on first use). "/" when not
+// typing, and Ctrl+K or ⌘K, open it too, but only while the page itself can be used: not under a sheet, the menu, a
+// walkthrough or the lock, each of which closes the search first, as it does the menu (the lock also makes it forget).
+const searchBtn = document.getElementById('searchBtn');
+let search = null;
+const openSearch = opts => import('./search.js').then(m => { search = m; m.openSearch(opts); }, e => { console.error(e); toast('The search could not be loaded. Check the connection and try again.'); });
+searchBtn.addEventListener('click', () => openSearch());
+window.logiSearch = { open: openSearch, close: forget => { if (search) search.closeSearch(forget); }, isOpen: () => !!search && search.isOpen() };
+document.addEventListener('keydown', e => {
+  const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey, k = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key || '').toLowerCase() === 'k';
+  if ((!slash && !k) || e.isComposing || e.defaultPrevented || document.getElementById('app').inert || lock.isLocked()) return;
+  const t = e.target;
+  if (slash && t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return; // a / being typed somewhere
+  e.preventDefault(); openSearch();
+});
 document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);
 const help = () => import('./tutorials.js').then(m => m.openTutorial()); // the tutorials load on first use
 document.getElementById('helpBtn')?.addEventListener('click', help);

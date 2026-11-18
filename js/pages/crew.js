@@ -51,6 +51,9 @@ export const crew = {
   },
 };
 
+// For the search (js/search.js): the list with nothing filtered away, so the person it opens is on it.
+export const showAll = () => { S.q = ''; S.role = ''; };
+
 function card(c) {
   const link = safeUrl(c.link);
   const next = crewBookings(c.id).filter(b => endOf(b) >= todayISO()).slice(0, 2);

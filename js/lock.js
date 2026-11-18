@@ -225,6 +225,7 @@ function coverAll(screen) { const was = [...document.body.children].filter(el =>
 function showLock(notice = '') {
   if (S.screen) return;
   window.logiMenu?.close(); // the menu is not left open behind the lock
+  window.logiSearch?.close(true); // nor the search, which also forgets what was typed and found
   S.locked = true; S.entry = '';
   const len = S.cfg.len || 6;
   const dots = h('div', { class: 'pin-dots', role: 'img', 'aria-label': `0 of ${len} digits entered` });

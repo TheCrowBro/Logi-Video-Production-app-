@@ -40,6 +40,8 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 | 🎬 **TC Notes** | Shoot notes that are stamped with the camera's timecode. |
 | ⚙️ **Settings** | Everything else, including your templates, backups and the lock. |
 
+**Looking for something?** Tap the magnifier 🔍 at the top of any page and type a name, a place, a serial number or an invoice number. Vdex looks through everything you keep in it, on your own device, and opens the one you pick.
+
 ## Your first shoot
 
 1. **Bookings → + New.** Type the job, the client, the date and the address. Tick the crew and the kit you're taking.

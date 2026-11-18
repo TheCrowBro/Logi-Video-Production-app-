@@ -57,7 +57,7 @@ function kitsView(sym) {
         const value = items.reduce((s, g) => s + (Number(g.value) || 0) * usedQty(k, g.id), 0);
         const units = items.reduce((s, g) => s + usedQty(k, g.id), 0);
         const groups = groupBy(items, g => g.category || 'Other');
-        return h('div', { class: 'card' },
+        return h('div', { class: 'card kit-card', 'data-id': k.id },
           h('div', { class: 'card-row' },
             h('div', { class: 'grow' }, h('strong', null, k.name), h('div', { class: 'muted small' }, [k.description, `${units} item${units === 1 ? '' : 's'}`, money(value, sym)].filter(Boolean).join(' · '))),
             h('button', { class: 'icon-btn', 'aria-label': 'Duplicate ' + k.name, onclick: () => dupe(k) }, '⧉'),
@@ -108,6 +108,8 @@ export const gear = {
   },
 };
 
+// For the search (js/search.js): the items, or the kits, with nothing filtered away, so the one it opens is listed.
+export const showAll = (view = 'items') => { Object.assign(S, { q: '', cat: '', loc: '', view }); };
 const stat = (v, l) => h('div', { class: 'stat' }, h('b', null, v), h('span', null, l));
 
 /* -------------------------------- service log -------------------------------- */
@@ -169,7 +171,7 @@ function card(g, today, sym) {
   const all = gearBookings(g.id);
   const ahead = all.filter(b => endOf(b) >= today);
   const past = all.length - ahead.length;
-  return h('div', { class: 'card gear-card' },
+  return h('div', { class: 'card gear-card', 'data-id': g.id },
     h('div', { class: 'card-row' },
       h('div', { class: 'grow' }, h('strong', null, g.name), h('div', { class: 'muted small' }, [qtyOf(g) > 1 && `${qtyOf(g)} owned`, g.serial && 'S/N ' + g.serial, g.value !== '' && g.value != null && money(g.value, sym) + (qtyOf(g) > 1 ? ' each' : '')].filter(Boolean).join(' · ')),
         h('button', { class: 'chip loc-chip' + (g.location ? '' : ' empty'), type: 'button', 'aria-label': `Where ${g.name} is`, title: 'Change where it is', onclick: () => moveItem(g) }, g.location ? '📍 ' + g.location : '📍 Where is it?')),

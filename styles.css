@@ -71,8 +71,12 @@ a { color: var(--accent); }
 .menu-btn[data-dot=amber] .menu-dot, .menu-btn[data-dot=red] .menu-dot { display: block; } .menu-btn[data-state=saving] .menu-dot { animation: pulse 1s infinite; }
 .menu-btn[data-dot=red] .menu-dot { top: -1px; inset-inline-end: -1px; width: 14px; height: 14px; background: var(--danger); }
 .menu-btn[data-dot=red] .menu-dot::after { content: '!'; display: block; color: #fff; font: 800 10px/14px system-ui, sans-serif; text-align: center; }
-/* Where the search control goes: between the brand and the buttons, taking no room while it is empty. */
-.top-search { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; } .top-search:empty { display: none; }
+/* The search control, between the brand and the buttons: a magnifier on a phone, a field-shaped button on a wider screen. */
+.top-search { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; }
+.search-ico { display: block; flex: none; }
+.search-key { flex: none; margin-inline-start: auto; min-width: 1.5rem; padding: 0 6px; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: .75rem; line-height: 1.5; text-align: center; color: var(--muted); }
+@media (min-width: 561px) { .top-search { flex: 0 1 15rem; } .top .search-btn { width: 100%; justify-content: flex-start; gap: 8px; padding: 0 10px 0 12px; color: var(--muted); } .search-btn .search-ico { color: var(--text); } .search-btn .cloud-label { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; } }
+@media (max-width: 560px), (hover: none) { .search-key { display: none; } } /* no keyboard to press it on */
 @keyframes pulse { 50% { opacity: .3; } }
 
 /* The menu: a panel that slides in from the side, under sheets, tours and the lock so none of them can end up beneath it. */
@@ -95,6 +99,40 @@ a { color: var(--accent); }
 .menu-foot { margin: auto 0 0; padding-top: 8px; text-align: center; color: var(--muted); font-size: .85rem; }
 html[data-contrast=high] .menu-row, html[data-contrast=high] .menu-status { border-width: 2px; }
 body.menu-open .update-bar { z-index: 80; } /* the update and licence bars go behind the menu with the rest of the page, not over its last rows */
+
+/* The search panel: the whole screen on a phone (the keyboard takes the lower half), a box near the top of a wider one.
+   Over the page and the menu's layer, under sheets, tours and the lock. Its results are a list box the field drives. */
+.search-back { position: fixed; inset: 0; z-index: 95; background: #000a; display: flex; justify-content: center; align-items: flex-start; overflow: hidden; animation: fade .2s; }
+.search-panel { width: 100%; height: 100%; display: flex; flex-direction: column; background: var(--bg); color: var(--text); font-size: 1rem; --soft: color-mix(in srgb, var(--muted) 70%, var(--text)); /* the small grey lines, dark enough to read on every theme's background */
+  padding: calc(8px + env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 max(12px, env(safe-area-inset-left)); }
+@media (min-width: 700px) and (min-height: 520px) { .search-back { padding: 8vh 16px 0; } .search-panel { width: min(680px, 100%); height: auto; max-height: 80vh; padding: 12px 14px 0; border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 12px 50px #0008; animation: rise .2s cubic-bezier(.2, .9, .3, 1); } }
+.search-back.shown, .search-back.shown .search-panel { animation: none; } /* a walkthrough is pointing at it: there at once */
+.search-head { flex: none; display: flex; align-items: center; gap: 6px; } .search-glass { flex: none; margin-inline: 4px 2px; color: var(--soft); } .search-panel .muted { color: var(--soft); }
+.search-head input { flex: 1 1 auto; margin: 0; font-size: 1rem; }
+.search-chips { flex: none; margin: 10px 0 0; padding-bottom: 4px; } .search-chips .chip { display: inline-flex; align-items: center; gap: 6px; }
+.chip-n { min-width: 1.4em; padding: 0 5px; border-radius: 999px; background: color-mix(in srgb, currentColor 16%, transparent); font-size: .78rem; font-weight: 700; text-align: center; } .chip-n:empty { display: none; }
+.search-chips .chip.none:not(.on) { color: var(--soft); }
+.search-status { flex: none; margin: 4px 4px 0; } .search-status:empty { display: none; }
+.search-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 0 calc(14px + env(safe-area-inset-bottom)); scroll-padding: 44px 0 14px; }
+.sr-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 12px 6px 6px; background: var(--bg); color: var(--soft); font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.sr-count { letter-spacing: 0; }
+.sr { display: flex; align-items: flex-start; gap: 10px; min-height: max(52px, var(--hit)); padding: 8px 10px; border: 1px solid transparent; border-radius: 12px; cursor: pointer; touch-action: manipulation; }
+.sr:hover { background: var(--bg2); } .sr:active { background: var(--card); }
+.sr[aria-selected=true] { background: var(--card); border-color: var(--line); outline: 3px solid var(--focus); outline-offset: -3px; box-shadow: inset 5px 0 0 var(--accent); } /* the marked result: a ring and a bar, so not by the ring's colour alone */
+.sr-ico { flex: none; width: 1.8rem; text-align: center; font-size: 1.15rem; line-height: 1.5; }
+.sr-body { flex: 1 1 auto; min-width: 0; display: grid; gap: 1px; overflow-wrap: anywhere; }
+.sr-title { font-weight: 700; line-height: 1.3; } .sr-meta, .sr-snip { color: var(--soft); font-size: .85rem; line-height: 1.35; } .sr-snip { color: var(--text); } .sr-label { color: var(--soft); }
+.sr-meta { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.sr-more { align-items: center; justify-content: center; min-height: var(--hit); color: var(--accent); font-weight: 700; font-size: .9rem; }
+.search-panel mark { background: color-mix(in srgb, var(--accent) 38%, transparent); color: inherit; border-radius: 3px; box-shadow: 0 2px 0 var(--accent); }
+.search-blank { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 14px 6px calc(18px + env(safe-area-inset-bottom)); } .search-blank h3 { margin: 4px 0 8px; font-size: 1.05rem; text-transform: none; letter-spacing: 0; color: var(--text); overflow-wrap: anywhere; }
+.search-blank p { margin: 0 0 10px; }
+@media (hover: none) { .search-keys { display: none; } }
+@media (forced-colors: active) { .sr[aria-selected=true] { outline: 3px solid Highlight; } }
+body.search-open .update-bar { z-index: 80; } /* as under the menu: behind the panel with the rest of the page */
+/* What a search result opened: its card or box, outlined for a moment where it sits in its list. */
+.found { outline: 3px solid var(--accent); outline-offset: 3px; border-radius: var(--radius); animation: found 2.6s ease-out; } .found:focus { outline: 3px solid var(--accent); }
+@keyframes found { 0%, 60% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--accent) 28%, transparent); } 100% { box-shadow: 0 0 0 8px transparent; } }
 
 /* rolodex */
 .rolodex { position: sticky; top: 0; z-index: 20; margin: 0 calc(-1 * var(--pad)); padding: 6px var(--pad) 10px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 8px 20px #0004; transition: transform .28s ease, box-shadow .28s ease; }

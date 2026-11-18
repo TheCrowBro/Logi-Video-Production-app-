@@ -50,7 +50,7 @@ function card(p, sym) {
   const d = p.renewal ? daysUntil(p.renewal) : null;
   const tone = d == null ? '' : d < 0 ? 'st-cancelled' : d <= 30 ? 'st-enquiry' : 'st-confirmed';
   const link = safeUrl(p.link);
-  return h('div', { class: 'card' },
+  return h('div', { class: 'card policy-card', 'data-id': p.id },
     h('div', { class: 'card-row' },
       h('div', { class: 'grow' }, h('strong', null, p.type), h('div', { class: 'muted' }, [p.provider, p.policy && '#' + p.policy].filter(Boolean).join(' · '))),
       d != null && h('span', { class: 'pill ' + tone }, d < 0 ? `Expired ${-d}d ago` : d === 0 ? 'Expires today' : `${d} days left`),

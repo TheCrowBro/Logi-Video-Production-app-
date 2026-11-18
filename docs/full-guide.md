@@ -65,7 +65,7 @@ If you tapped **Don't Allow** by mistake: the camera and microphone are asked fo
 
 1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from the menu (**☰** at the top right): **Text size and theme**, then *Take the tour again*. **Tutorial for this page**, in the same menu, is the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
-3. **Open the menu (☰ at the top right) and tap Tutorial for this page** on any page for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the menu: **Install Vdex** (until it's installed), **Text size and theme** (display and accessibility) and **Storage, sync and backups**, with a line at the top that says how syncing is going and the version of Vdex at the bottom. A dot on ☰ tells you about your cloud storage without opening the menu: amber while it is saving or when it needs you (sync is paused, or it wants you to sign in again), red when a save failed, and no dot when all is well. **🔒** sits beside ☰ once a PIN is set.
+3. **Open the menu (☰ at the top right) and tap Tutorial for this page** on any page for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the menu: **Install Vdex** (until it's installed), **Text size and theme** (display and accessibility) and **Storage, sync and backups**, with a line at the top that says how syncing is going and the version of Vdex at the bottom. A dot on ☰ tells you about your cloud storage without opening the menu: amber while it is saving or when it needs you (sync is paused, or it wants you to sign in again), red when a save failed, and no dot when all is well. **🔒** sits beside ☰ once a PIN is set, and **🔍** on the same row searches everything you keep in Vdex (see *Find anything: the search*, below).
 
 ### What's on the Rolodex
 
@@ -82,6 +82,16 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 | **Field** | Sun and golden hour, Polaris finder, white-balance reader, noise meter, range finder. |
 | **TC Notes** | Shoot notes stamped with the camera's timecode, with your script alongside. Links your iPhone and a laptop so both can take notes. |
 | **Settings** | Storage, security, calendar links, themes, defaults, backups, your project templates, and everything else. |
+
+### Find anything: the search
+
+The magnifier **🔍** at the top of every page, beside the menu, searches everything you keep in Vdex at once: bookings (the project, client, contacts, address, notes, shot list, deliverables, licences, people hired, kit rented and edit days), crew, equipment and kits (serial numbers and where things are, too), venues and their rules, insurance policies, quotes and invoices (by number, client or what is on a line), call sheets, stripboards, and timecode logs with their notes and scripts.
+
+- **Type** a name, a place, a serial number, an invoice number or a word from your notes. Capitals and accents don't matter (“zoe” finds Zoë), a phone number can be typed without its spaces, and several words narrow it down: every one of them has to be there, in any order.
+- **Results are grouped by page**, the best match first, with the words you typed marked and a line that shows where they were found. A match in a name or a title comes before a match in notes.
+- **The chips** under the search box (All, Bookings, Crew, Equipment, Venues, Insurance, Money, Call sheets, TC Notes…) keep the results to one page, and each shows how many it has. Only pages that have something in them get a chip.
+- **Tap a result** and Vdex opens that booking, person, item, venue, policy, log, quote, invoice or call sheet where it lives. A person, an item or a policy is shown on its own card in its list, outlined for a moment.
+- It all happens on your iPhone: nothing you type is sent anywhere, and nothing about your searches is saved. What you last typed stays in the search box only until Vdex is closed or locked. Searching changes nothing, so it also works when Vdex is read-only, and while Vdex is locked there is nothing to search.
 
 ### Add a booking
 
@@ -313,7 +323,7 @@ If you tapped **Don't allow** by mistake: long-press the Vdex icon → **App inf
 
 1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from the menu (**☰** at the top right): **Text size and theme**, then *Take the tour again*. **Tutorial for this page**, in the same menu, is the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
-3. **Open the menu (☰ at the top right) and tap Tutorial for this page** on any page for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the menu: **Install Vdex** (until it's installed), **Text size and theme** (display and accessibility) and **Storage, sync and backups**, with a line at the top that says how syncing is going and the version of Vdex at the bottom. A dot on ☰ tells you about your cloud storage without opening the menu: amber while it is saving or when it needs you (sync is paused, or it wants you to sign in again), red when a save failed, and no dot when all is well. **🔒** sits beside ☰ once a PIN is set.
+3. **Open the menu (☰ at the top right) and tap Tutorial for this page** on any page for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the menu: **Install Vdex** (until it's installed), **Text size and theme** (display and accessibility) and **Storage, sync and backups**, with a line at the top that says how syncing is going and the version of Vdex at the bottom. A dot on ☰ tells you about your cloud storage without opening the menu: amber while it is saving or when it needs you (sync is paused, or it wants you to sign in again), red when a save failed, and no dot when all is well. **🔒** sits beside ☰ once a PIN is set, and **🔍** on the same row searches everything you keep in Vdex (see *Find anything: the search*, below).
 
 ### What's on the Rolodex
 
@@ -330,6 +340,16 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 | **Field** | Sun and golden hour, Polaris finder, white-balance reader, noise meter, range finder. |
 | **TC Notes** | Shoot notes stamped with the camera's timecode, with your script alongside. Links your phone and a laptop so both can take notes. |
 | **Settings** | Storage, security, calendar links, themes, defaults, backups, your project templates, and everything else. |
+
+### Find anything: the search
+
+The magnifier **🔍** at the top of every page, beside the menu, searches everything you keep in Vdex at once: bookings (the project, client, contacts, address, notes, shot list, deliverables, licences, people hired, kit rented and edit days), crew, equipment and kits (serial numbers and where things are, too), venues and their rules, insurance policies, quotes and invoices (by number, client or what is on a line), call sheets, stripboards, and timecode logs with their notes and scripts.
+
+- **Type** a name, a place, a serial number, an invoice number or a word from your notes. Capitals and accents don't matter (“zoe” finds Zoë), a phone number can be typed without its spaces, and several words narrow it down: every one of them has to be there, in any order.
+- **Results are grouped by page**, the best match first, with the words you typed marked and a line that shows where they were found. A match in a name or a title comes before a match in notes.
+- **The chips** under the search box (All, Bookings, Crew, Equipment, Venues, Insurance, Money, Call sheets, TC Notes…) keep the results to one page, and each shows how many it has. Only pages that have something in them get a chip.
+- **Tap a result** and Vdex opens that booking, person, item, venue, policy, log, quote, invoice or call sheet where it lives. A person, an item or a policy is shown on its own card in its list, outlined for a moment.
+- It all happens on your phone: nothing you type is sent anywhere, and nothing about your searches is saved. What you last typed stays in the search box only until Vdex is closed or locked. Searching changes nothing, so it also works when Vdex is read-only, and while Vdex is locked there is nothing to search.
 
 ### Add a booking
 
@@ -541,6 +561,7 @@ The installed app opens in its own window, works offline, and keeps its data on 
 - Backups, call sheets and exports save through a normal Save dialog instead of a share sheet.
 - The PIN lock works the same way (every computer has a PIN too; Settings → *Security* changes it), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
 - **Updates:** the desktop app checks download.crowmade.app for a new version when it starts and every few hours. Windows, Linux and a signed Mac download it in the background and install it on the next restart (Settings → *General* → *About & Licence* shows progress and has **Restart to update**). On an unsigned Mac, Settings → *General* → *About & Licence* shows the new version with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
+- **Search from the keyboard:** press **/** (when you are not typing in a box) or **Ctrl+K** (**⌘K** on a Mac) on any page to open the search, the **↑ ↓** arrow keys to move through the results, **Enter** to open the one that is marked (with none marked, Enter marks the first) and **Esc** to close. In a wide window the search is a box in the top bar rather than a magnifier.
 - To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 - Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.
 
