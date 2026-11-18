@@ -155,7 +155,7 @@ export const TUTORIALS = {
     T('Budget', 'What the job will cost you, line by line, in categories you pick from a list. Fill from booking adds your crew and hired people at their rates, your rentals and your licences. It compares with the quote, and only you see it.', '#bk-budget', { before: openWork }),
     T('Money', 'The quote and the invoice for this booking.', '#bk-money', { before: openWork }),
     T('Venue', 'The venue’s rules, access, parking and map, with a warning if your kit breaks a rule.', '#bk-venue'),
-    T('People', 'The client’s contacts, your crew with their call times and confirmations, and anyone hired in for the job. Hired people go on the call sheet and the crew link like crew, and their cost into the budget. Long lists fold after five.', '#bk-people'),
+    T('People', 'The client’s contacts, your crew with their call times and confirmations, and anyone hired in for the job. Hired people go on the call sheet and the crew link like crew, and their cost into the budget; their role comes from the same menu of roles as on the Crew page. Long lists fold after five.', '#bk-people'),
     T('Stripboard & shot list', 'Where the board stands, and the shot list to tick off on the day. Import a shot list and its scene headings fill the board as well: check what it guessed.', '#bk-shots'),
     T('Equipment', 'The kit on this shoot, grouped by category, with a warning when an item is also booked elsewhere, and the items rented in with who they come from. Save the set as a kit for next time.', '#bk-kit'),
     T('Media & backups', 'One row per card: tick as it reaches drive 1, drive 2, offsite and verified. A card can only be cleared once it is on two drives.', '#bk-media'),
@@ -213,7 +213,8 @@ export const TUTORIALS = {
   crew: { name: 'Crew', page: 'crew', steps: [
     T('Your crew', 'The freelancers you work with. + Add creates a person with their role, phone, email, a day or hourly rate, and a link to their work.', '#crew .page-head', '.page-head'),
     T('Find someone', 'Search by name or role.', '#crew .search', '.search'),
-    T('Filter by role', 'Tap a role to see only those people.', '#crew .chips', '.chips'),
+    T('Filter by group, then by role', 'Tap a group, such as Camera, to see only those people. When the group holds more than one role, a second row narrows it to one. Roles you typed yourself are under My roles, and people with no role under No role.', '#crew .chips', '.chips'),
+    T('Roles', 'A person’s role is picked with the Role button in their form (+ Add, or ✎ on a card): a menu of film, television and video roles in groups such as Producing, Camera, Lighting and Sound. Open a group and tap a role, search for it by any of its names, or type one of your own, which is kept under My roles for next time.', '#crew .page-head .btn', '.page-head .btn'),
     T('A person', 'Call, text or email them from here, see their work, and which of your bookings they are on.', '.crew-card'),
   ] },
   gear: { name: 'Equipment', page: 'gear', steps: [

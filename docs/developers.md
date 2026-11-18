@@ -84,6 +84,7 @@ js/lock.js       PIN / biometric lock and the encrypted vault     js/crypto.js  
 js/update.js     service worker registration, update checks, the "new version" bar     tools/stamp-build.mjs   stamps a deploy
 js/board.js      the stripboard's data: days, page totals in eighths, strip colours     js/stripboard.js   the stripboard page, script → scenes, dragging
 js/price-list.js the price list for quotes and invoices     js/price-rates.js   typical rates by region (sources in docs/price-list-sources.md)
+js/roles.js      the crew roles by department, their other names, search, and My roles (db.myRoles)     js/role-picker.js   the role menu behind the form's Role button
 tools/stage-site.mjs   copies only the website's files for publishing     cloudflare/   the vdex.crowmade.app Worker: config, pinned Wrangler, worker.mjs (selling and activating licences)
 js/licence.js    the desktop licence in Settings → General → About & Licence, the trial bar and read-only mode     tools/licence-generator.html   the owner's key and free-code page
 js/money.js      quotes, invoices and the budget: suggested lines, documents, PDF, overview, billing settings     js/weather.js   Open-Meteo day forecast

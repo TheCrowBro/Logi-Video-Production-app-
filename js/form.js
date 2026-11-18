@@ -5,10 +5,11 @@ import { canChange } from './store.js';
 
 /*
  fields: [{ key, label, type, options, required, placeholder, list, rows, columns, empty, hint }]
- types: text tel email url number date time textarea select checks rows
+ types: text tel email url number date time textarea select checks rows matrix place role
 */
 export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save' }) {
   const readers = [];
+  const saved = []; // run after a save went through
   const boxesByKey = {};
   const qtyByKey = {};
   const form = h('form', { class: 'form', novalidate: false });
@@ -54,6 +55,19 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
             navigator.geolocation.getCurrentPosition(p => { set({ lat: +p.coords.latitude.toFixed(6), lon: +p.coords.longitude.toFixed(6) }); toast('Using your current location'); }, () => toast('Could not get your location'), { timeout: 10000 });
           } }, '📡 I’m here now')));
       readers.push(() => [f.key, lat.value !== '' && lon.value !== '' ? { lat: Number(lat.value), lon: Number(lon.value) } : null]);
+    } else if (f.type === 'role') {
+      // A crew role: a button that shows the role and opens the menu of roles by department (js/role-picker.js, loaded
+      // on first use). A role the person typed themselves is kept under My roles once the form is saved.
+      let role = String(val ?? '').trim(), picker = null;
+      const text = h('span', { class: 'role-pick-text' });
+      const show = () => { text.textContent = role || f.placeholder || 'Choose a role'; control.classList.toggle('unset', !role); control.setAttribute('aria-label', `${f.label}: ${role || 'none chosen'}`); };
+      control = h('button', { type: 'button', id, class: 'role-pick', 'data-key': f.key, 'aria-haspopup': 'dialog', onclick: () => {
+        control.focus(); // Safari leaves a clicked button unfocused, and the menu gives the focus back to its opener
+        import('./role-picker.js').then(m => { picker = m; m.pickRole({ current: role, onPick: r => { role = r; show(); } }); }).catch(e => toast('Could not open the roles: ' + (e.message || e)));
+      } }, text, h('span', { class: 'role-pick-arrow', 'aria-hidden': 'true' }, '▾'));
+      show();
+      readers.push(() => [f.key, role]);
+      saved.push(() => { if (picker && role) picker.rememberRole(role); });
     } else if (f.type === 'select') {
       control = h('select', { id }, f.options.map(o => {
         const [v, l] = Array.isArray(o) ? o : [o, o];
@@ -141,6 +155,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     if (!canChange()) return; // read-only (the desktop app after its trial): keep the form and what was typed
     close();
     onSave(out);
+    saved.forEach(fn => fn());
   });
   setTimeout(() => { if (!form.contains(document.activeElement)) form.querySelector('input,textarea,select')?.focus(); }, 50); // never take the cursor from a box someone is already typing in
 }

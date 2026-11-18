@@ -2,7 +2,7 @@
 // price it (an hourly rate for a standard day's hours per shoot day); a card from an older copy that holds a typed rate
 // still works and is converted when edited; someone hired for a job gets the same choice.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, chooseRole } = require('../helpers.cjs');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 (async () => {
@@ -26,14 +26,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.getByRole('button', { name: '+ Add' }).click(); await page.waitForSelector('.sheet form');
   const per = page.locator('.sheet form select');
   ok('the form has a Rate box and a Per choice of Day or Hour', (await page.locator('.sheet form input[data-key="rate"]').getAttribute('type')) === 'number' && (await per.count()) === 1 && (await per.locator('option').allInnerTexts()).join('|') === 'Day|Hour' && (await per.inputValue()) === 'day' && (await page.locator('.sheet form label', { hasText: 'Per' }).count()) === 1);
-  await page.locator('.sheet form input[data-key="name"]').fill('Lee Hour'); await page.locator('.sheet form input[data-key="role"]').fill('Colourist');
+  await page.locator('.sheet form input[data-key="name"]').fill('Lee Hour'); await chooseRole(page, 'Colourist');
   await page.locator('.sheet form input[data-key="rate"]').fill('62.5'); await per.selectOption('hour');
   await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
   const lee = await store(() => import('./js/store.js').then(s => s.db.crew.find(c => c.name === 'Lee Hour')));
   ok('an hourly rate is saved as a number per hour', lee && lee.rate === 62.5 && lee.rateUnit === 'hour', JSON.stringify(lee && { rate: lee.rate, unit: lee.rateUnit }));
   ok('…and the card says so', /Colourist · \$62\.50\/hour/.test(await card('Lee Hour').innerText()), await card('Lee Hour').locator('.muted').first().innerText());
   await page.getByRole('button', { name: '+ Add' }).click(); await page.waitForSelector('.sheet form');
-  await page.locator('.sheet form input[data-key="name"]').fill('Dee Day'); await page.locator('.sheet form input[data-key="role"]').fill('Grip'); await page.locator('.sheet form input[data-key="rate"]').fill('380');
+  await page.locator('.sheet form input[data-key="name"]').fill('Dee Day'); await chooseRole(page, 'Grip'); await page.locator('.sheet form input[data-key="rate"]').fill('380');
   await page.locator('.sheet form button[type=submit]').click(); await sleep(400);
   const dee = await store(() => import('./js/store.js').then(s => s.db.crew.find(c => c.name === 'Dee Day')));
   ok('a day rate is the default, saved as a number per day', dee && dee.rate === 380 && dee.rateUnit === 'day' && /Grip · \$380\/day/.test(await card('Dee Day').innerText()));
@@ -90,7 +90,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), seed); await page.waitForSelector('.bk-detail'); await sleep(300);
   await page.locator('#bk-hires button', { hasText: 'Hire someone' }).click(); await page.waitForSelector('.sheet form');
   ok('the hire form has the same Rate box and Per choice', (await page.locator('.sheet form input[data-key="rate"]').getAttribute('type')) === 'number' && (await page.locator('.sheet form select option').allInnerTexts()).join('|') === 'Day|Hour');
-  await page.locator('.sheet form input[data-key="name"]').fill('Pat Hire'); await page.locator('.sheet form input[data-key="role"]').fill('Drone Pilot'); await page.locator('.sheet form input[data-key="rate"]').fill('70'); await page.locator('.sheet form select').selectOption('hour'); await page.locator('.sheet form input[data-key="days"]').fill('2');
+  await page.locator('.sheet form input[data-key="name"]').fill('Pat Hire'); await chooseRole(page, 'Drone Pilot'); await page.locator('.sheet form input[data-key="rate"]').fill('70'); await page.locator('.sheet form select').selectOption('hour'); await page.locator('.sheet form input[data-key="days"]').fill('2');
   await page.locator('.sheet form button[type=submit]').click(); await sleep(500);
   const pat = await store(() => import('./js/store.js').then(s => (s.db.bookings.find(x => /Harbour/.test(x.title)).hires || [])[0]));
   ok('the hired person is saved with a number per hour and shown with it', pat && pat.rate === 70 && pat.rateUnit === 'hour' && /Drone Pilot · \$70\/hour · 2 days/.test(await page.locator('#bk-hires').innerText()), await page.locator('#bk-hires .crew-line .muted').first().innerText());
