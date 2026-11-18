@@ -4,7 +4,7 @@
 // buttons; the phone's calendar kept in step both ways; backups through the Files app; a file handed to Vdex; printing
 // and sharing through the phone. The server side of the purchase is spec 102.
 const { chromium } = require('playwright');
-const { acceptTerms, openSetting } = require('../helpers.cjs');
+const { acceptTerms, openSetting, openMenu, menuClick } = require('../helpers.cjs');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
@@ -112,7 +112,10 @@ const bridge = () => {
     await sleep(600);
 
     /* --------------------------------- the app --------------------------------- */
-    ok('the Install button does not show in the app', await page.locator('#installBtn').isHidden());
+    await openMenu(page);
+    const rows = await page.locator('#menu .menu-row:visible .menu-name').allInnerTexts();
+    ok('Install is not listed in the app’s menu; the tutorial, text size and theme, and storage are', (await page.locator('#installBtn').isHidden()) && JSON.stringify(rows) === JSON.stringify(['Tutorial for this page', 'Text size and theme', 'Storage, sync and backups']), rows.join(' | '));
+    await page.keyboard.press('Escape'); await sleep(150);
     ok('the app is known as the iPhone app, not the Play app', (await stored(page)).ios === true && !(await stored(page)).play);
 
     /* ------------------------------- the licence ------------------------------- */
@@ -246,7 +249,7 @@ const bridge = () => {
     ok('Export backup opens the Files app with the backup file', saves.length === 1 && /^vdex-backup-\d{4}-\d\d-\d\d\.json$/.test(saves[0].name) && saves[0].type === 'application/json' && backup && Array.isArray(backup.bookings) && backup.bookings.length > 0 && /Backup saved/.test(await toastText(page)), JSON.stringify(saves[0] && saves[0].name));
     backup.bookings[0].title = 'Imported from the Files app';
     await page.evaluate(f => { window.__cap.picked = f; }, { name: 'vdex-backup.json', data: b64(JSON.stringify(backup)), type: 'application/json' });
-    await page.click('#cloudBtn'); await page.waitForSelector('.sheet'); await page.locator('.sheet').getByRole('button', { name: 'Import backup…' }).click(); await sleep(600);
+    await menuClick(page, '#cloudBtn'); await page.waitForSelector('.sheet'); await page.locator('.sheet').getByRole('button', { name: 'Import backup…' }).click(); await sleep(600);
     ok('Import backup picks the file in the Files app and restores it', (await calls(page, 'DocumentPicker', 'open')).length === 1 && (await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings[0].title))) === 'Imported from the Files app' && /Imported/.test(await toastText(page)));
     await page.keyboard.press('Escape'); await sleep(300);
 
@@ -296,7 +299,7 @@ const bridge = () => {
     await p3.reload(); await p3.waitForSelector('#rolodex .drum-btn'); await sleep(400);
     const wait3 = act => Promise.all([p3.waitForEvent('framenavigated', { predicate: f => f === p3.mainFrame() && /[?&](state|app)=/.test(f.url()), timeout: 10000 }), act()]).then(() => p3.waitForSelector('#rolodex .drum-btn')).then(() => sleep(600));
     // Dropbox
-    await p3.locator('#cloudBtn').click(); await p3.waitForSelector('.sheet .storage'); await sleep(200);
+    await menuClick(p3, '#cloudBtn'); await p3.waitForSelector('.sheet .storage'); await sleep(200);
     const more = p3.locator('.sheet details.twirl-more'); if (!(await more.evaluate(e => e.open))) { await more.locator('> summary').click(); await sleep(350); }
     await wait3(() => p3.locator('.sheet .cloud-choice[data-svc="dropbox"] button').click());
     const lastAuth = () => p3.evaluate(() => JSON.parse(sessionStorage.getItem('cap-webauth-last') || 'null'));

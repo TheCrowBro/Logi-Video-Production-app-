@@ -17,7 +17,7 @@ This is the long version. The short one is the [README](../README.md).
 | 📱 **iPhone or iPad** | [iPhone guide](#iphone-guide) |
 | 🤖 **Android phone or tablet** | [Android guide](#android-guide) |
 | 💻 **Windows, Mac or Linux computer** | [Using Vdex on a computer](#using-vdex-on-a-computer): one-click installers, or the browser |
-| 🔌 Linking Google Drive, iCloud, Dropbox, OneDrive or your own server | Tap **☁** at the top and sign in. More in [Connecting your storage](connections.md) |
+| 🔌 Linking Google Drive, iCloud, Dropbox, OneDrive or your own server | Open the menu **☰** at the top right, tap **Storage, sync and backups** and sign in. More in [Connecting your storage](connections.md) |
 | 🧑‍💻 Running the app yourself | [For developers](developers.md) |
 
 The two phone guides cover the same ground in the same order, so a crew with both kinds of phone can follow along together. Where the phones behave differently, the guide for that phone says so.
@@ -37,7 +37,7 @@ Or, with no app at all, install the website from Safari:
 3. Scroll down and tap **Add to Home Screen**, then **Add**.
 4. From now on, open Vdex from its Home Screen icon.
 
-Tapping **Install** in Vdex's own top bar shows these same steps.
+Tapping **Install Vdex** in Vdex's own menu (**☰** at the top right) shows these same steps.
 
 Why install it rather than keep it in a Safari tab:
 
@@ -63,9 +63,9 @@ If you tapped **Don't Allow** by mistake: the camera and microphone are asked fo
 
 ### The first time you open it
 
-1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
+1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from the menu (**☰** at the top right): **Text size and theme**, then *Take the tour again*. **Tutorial for this page**, in the same menu, is the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
-3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage, sync and backups) and **🔒** once a PIN is set.
+3. **Open the menu (☰ at the top right) and tap Tutorial for this page** on any page for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the menu: **Install Vdex** (until it's installed), **Text size and theme** (display and accessibility) and **Storage, sync and backups**, with a line at the top that says how syncing is going and the version of Vdex at the bottom. A dot on ☰ tells you about your cloud storage without opening the menu: amber while it is saving or when it needs you (sync is paused, or it wants you to sign in again), red when a save failed, and no dot when all is well. **🔒** sits beside ☰ once a PIN is set.
 
 ### What's on the Rolodex
 
@@ -163,7 +163,7 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: choose **Save to Files** (iCloud Drive keeps it off the phone), AirDrop it to your Mac, or mail it to yourself. **Import backup** picks that file from Files. Do this before changing phones. In the App Store app, Export and Import open the Files app itself (iCloud Drive, On My iPhone, Dropbox and so on).
 
-**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. (In the App Store app, the sign-in opens in the phone's own sign-in window and comes back to Vdex by itself.) Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
+**Using Vdex on more than one device.** Open the menu **☰** at the top right and tap **Storage, sync and backups** (or go to Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. (In the App Store app, the sign-in opens in the phone's own sign-in window and comes back to Vdex by itself.) Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
 | On an iPhone you can link | Notes |
 |---|---|
@@ -196,7 +196,7 @@ Set your location first (Field → **Use GPS**, or Settings → *Field tool defa
 
 ### Make it yours
 
-Tap **Aa** (or Settings → *General* → *Display & accessibility*):
+Open the menu **☰** and tap **Text size and theme** (or go to Settings → *General* → *Display & accessibility*):
 
 - **Colour theme** — the classics (Brass, Noir, Forest, Ocean, Plum, Mono) and a set in the colours of camera brands (Sony, Canon, Nikon, Fujifilm, Lumix, Blackmagic, RED, ARRI, Leica, GoPro, DJI), each in light and dark, or following your iPhone. The brand themes borrow the colours only; Vdex isn't affiliated with any of them.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
@@ -208,7 +208,7 @@ Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
 2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On an iPhone that is Face ID or Touch ID, and it works in Safari and in the installed app on iOS 16.4 or later (not yet in the App Store app, which opens with the PIN). If the switch doesn't appear, your iPhone or browser doesn't offer it to web apps, and the PIN is the way in.
-3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
+3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar, beside the menu, locks it right now, for instance before handing the phone to someone.
 
 What the lock does: the screen can't be used until the PIN or Face ID opens it, and everything Vdex stores on the phone (bookings, contacts, kit serials, insurance details, cloud sign-ins) is kept **encrypted** (AES-256) whenever Vdex is locked, in the background or closed. The PIN is never stored, only a key derived from it, so after five wrong tries the lock makes you wait, and you can choose to have the phone's Vdex data **erased after 10 wrong PINs** (only sensible with a cloud storage linked or a recent backup).
 
@@ -289,7 +289,7 @@ The Money overview (Bookings → Money) adds up what is invoiced and unpaid, wha
 Vdex is a web app, so there is nothing to find in the Play Store. You install it from the browser:
 
 1. Open the Vdex address in **Chrome**. Edge and Samsung Internet work too. Firefox can't install it, so use it in a tab there.
-2. Tap **Install** in Vdex's top bar and confirm. If you don't see it, open Chrome's menu **⋮ → Install app** (older phones say *Add to Home screen*).
+2. Open Vdex's menu (**☰** at the top right), tap **Install Vdex** and confirm. If you don't see it, open Chrome's menu **⋮ → Install app** (older phones say *Add to Home screen*).
 3. Vdex appears in your app list and on the Home screen. It opens full-screen and works offline.
 
 Chrome and the installed app share the same data, so it doesn't matter which one you open. (If you install from Samsung Internet, that browser keeps its own copy, so pick one browser and stick with it.)
@@ -311,9 +311,9 @@ If you tapped **Don't allow** by mistake: long-press the Vdex icon → **App inf
 
 ### The first time you open it
 
-1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
+1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from the menu (**☰** at the top right): **Text size and theme**, then *Take the tour again*. **Tutorial for this page**, in the same menu, is the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
-3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage, sync and backups) and **🔒** once a PIN is set.
+3. **Open the menu (☰ at the top right) and tap Tutorial for this page** on any page for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the menu: **Install Vdex** (until it's installed), **Text size and theme** (display and accessibility) and **Storage, sync and backups**, with a line at the top that says how syncing is going and the version of Vdex at the bottom. A dot on ☰ tells you about your cloud storage without opening the menu: amber while it is saving or when it needs you (sync is paused, or it wants you to sign in again), red when a save failed, and no dot when all is well. **🔒** sits beside ☰ once a PIN is set.
 
 ### What's on the Rolodex
 
@@ -411,7 +411,7 @@ Each item also has a **Where it is** field: a shelf, a case, the van, a person o
 
 **Backups.** Settings → *Storage, sync & backups* → **Export backup** (with a licence) opens the share sheet: save it to Drive, Files or mail it to yourself. **Import backup** picks that file. Do this before changing phones.
 
-**Using Vdex on more than one device.** Tap **☁** at the top (or Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
+**Using Vdex on more than one device.** Open the menu **☰** at the top right and tap **Storage, sync and backups** (or go to Settings → *Storage, sync & backups*), tap **Connect** next to Google Drive or iCloud, and sign in to your own account. That is all. Do the same on your other devices with the same account: they then share one database, and changes made on two devices at once are merged rather than overwriting each other. Vdex only uses a space of its own and cannot see your other files. Dropbox, OneDrive and the rest are under *More ways to keep a copy* in the same panel.
 
 | On Android you can link | Notes |
 |---|---|
@@ -443,7 +443,7 @@ Set your location first (Field → **Use GPS**, or Settings → *Field tool defa
 
 ### Make it yours
 
-Tap **Aa** (or Settings → *General* → *Display & accessibility*):
+Open the menu **☰** and tap **Text size and theme** (or go to Settings → *General* → *Display & accessibility*):
 
 - **Colour theme** — the classics (Brass, Noir, Forest, Ocean, Plum, Mono) and a set in the colours of camera brands (Sony, Canon, Nikon, Fujifilm, Lumix, Blackmagic, RED, ARRI, Leica, GoPro, DJI), each in light and dark, or following your phone. The brand themes borrow the colours only; Vdex isn't affiliated with any of them.
 - **Text size** and **extra-large buttons** for gloves and bright sun; **high contrast**.
@@ -455,7 +455,7 @@ Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
 2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On Android that is the fingerprint, face or screen-lock check Chrome already uses. If the switch doesn't appear, your phone or browser doesn't offer it to web apps, and the PIN is the way in.
-3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
+3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar, beside the menu, locks it right now, for instance before handing the phone to someone.
 
 What the lock does: the screen can't be used until the PIN or your fingerprint opens it, and everything Vdex stores on the phone (bookings, contacts, kit serials, insurance details, cloud sign-ins) is kept **encrypted** (AES-256) whenever Vdex is locked, in the background or closed. The PIN is never stored, only a key derived from it, so after five wrong tries the lock makes you wait, and you can choose to have the phone's Vdex data **erased after 10 wrong PINs** (only sensible with a cloud storage linked or a recent backup).
 
@@ -495,7 +495,7 @@ That's Google's rule for apps like this: a sign-in lasts about an hour. Tap **Si
 Put both on the same Wi‑Fi or on the phone's hotspot (no internet needed). Some office and hotel networks keep devices apart; a hotspot always works. If one side can't scan, copy the code and paste it.
 
 **My bookings aren't on my other device.**
-Each device starts with its own data. Link the same storage on both (☁), or export a backup on one and import it on the other (with a licence).
+Each device starts with its own data. Link the same storage on both (menu ☰ → *Storage, sync and backups*), or export a backup on one and import it on the other (with a licence).
 
 **Can clients log in to review or approve?**
 No. Vdex is your side of the job: you record their feedback and send them the documents.
@@ -531,7 +531,7 @@ Open https://vdex.crowmade.app/download.html, download the file for your compute
 
 **The licence.** Vdex is free to try for 30 days, on the website, on each computer and in the Android and iPhone apps. After that it needs a licence: **Buy a licence** in Settings → *General* → *About & Licence* (20 US dollars once plus the tax where you live, for up to 3 of your devices; in the UK, the EU and Australia the button shows the whole price with tax, and the download page lists them all; in the iPhone app the purchase goes through the App Store at the price it shows and works on every iPhone and iPad of your Apple Account without using any of the 3 places, **Restore purchases** brings it back after a reinstall or on another iPhone or iPad, **Add your email** puts an email address on it for signing in on the website and in the Android app, and **Copy the code for the desktop app** gives the code for a computer). **Delete my licence records**, under About & Licence while you are signed in, removes what the licence server keeps about you; your licence stays, and signing in again or restoring the purchase brings it back. On the website and in the Android and iPhone apps, press **Sign in** and use the email address you bought with: Vdex emails you a 6-digit code to type in. In the desktop app, paste the code from your email under **Enter licence code**. Keeping a copy in cloud storage, and saving backup and spreadsheet files and a calendar file of all your bookings, come with the licence (during the trial too); a storage linked before is paused until then. PDFs, printing and links for clients and crew never need a licence. Vdex activates it online once, and checks about once a week that the computer is still on the code. Without a code once the trial is over, Vdex is read-only: everything opens, prints and can be shared, but nothing can be changed, imported or added, so no new quotes or invoices. To move a licence to a new computer, use **Release this computer** on the old one, or pick which computer to move it from when you activate it on the new one (up to 3 moves a month). Desktop installs that were in use before licences went on sale stay free.
 
-The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **☁ → A file in a synced folder**, which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Google Drive or iCloud (or Dropbox, OneDrive or WebDAV), and link the same one everywhere.
+The installed app opens in its own window, works offline, and keeps its data on your user account on that computer. It also has an extra storage option, **A file in a synced folder** (menu ☰ → *Storage, sync and backups* → *More ways to keep a copy*), which keeps the database as a file inside iCloud Drive (Mac), OneDrive, Google Drive for desktop, Dropbox or any synced folder with no sign-in. Phones can't use that option, so for phone-and-computer use choose Google Drive or iCloud (or Dropbox, OneDrive or WebDAV), and link the same one everywhere.
 
 **Good to know about the desktop app**
 
@@ -546,6 +546,6 @@ The installed app opens in its own window, works offline, and keeps its data on 
 
 ### Or use it in a browser
 
-Everything in the phone guides works the same on a computer in a browser, with no installer at all. In Chrome or Edge tap **Install** in Vdex's top bar (or the install icon at the right of the address bar) to give it a window and an icon; Safari on a Mac has *File → Add to Dock*; Firefox and Chromebooks just use it in a tab. Chrome and Edge also offer the *file in a synced folder* storage option. With a wide window, timecode notes and the script sit side by side, and the Rolodex turns with the **arrow keys** or the mouse wheel.
+Everything in the phone guides works the same on a computer in a browser, with no installer at all. In Chrome or Edge open Vdex's menu (**☰** at the top right) and tap **Install Vdex** (or use the install icon at the right of the address bar) to give it a window and an icon; Safari on a Mac has *File → Add to Dock*; Firefox and Chromebooks just use it in a tab. Chrome and Edge also offer the *file in a synced folder* storage option. With a wide window, timecode notes and the script sit side by side, and the Rolodex turns with the **arrow keys** or the mouse wheel.
 
 ---

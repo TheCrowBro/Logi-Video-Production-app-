@@ -1,4 +1,4 @@
-// "Install" affordance: Chrome/Edge/Android get the real install prompt; iOS and others get instructions.
+// "Install" affordance (a row of the menu, listed only while Vdex is not installed): Chrome/Edge/Android get the real install prompt; iOS and others get instructions.
 import { h, sheet } from './util.js';
 import { isApp } from './native.js';
 
@@ -29,7 +29,7 @@ export function openInstallHelp() {
   const ios = isIOS();
   const steps = ios
     ? [['Open this page in Safari', 'Other iPhone browsers can’t add web apps to the Home Screen.'], ['Tap the Share button', 'The square with an arrow, at the bottom of the screen.'], ['Choose “Add to Home Screen”', 'Then tap Add. Vdex opens full-screen like any other app, and works offline.']]
-    : [['Chrome, Edge or Samsung Internet', 'On Android: menu ⋮ → “Install app” or “Add to Home screen”. On a computer: the install icon at the right of the address bar, or menu → “Install Vdex”.'], ['Firefox', 'Firefox doesn’t install web apps; keep using it in a tab, or bookmark the page.'], ['Same data everywhere', 'Link a cloud storage under ☁ and the installed app, your phone and your browser all share one database.']];
+    : [['Chrome, Edge or Samsung Internet', 'On Android: menu ⋮ → “Install app” or “Add to Home screen”. On a computer: the install icon at the right of the address bar, or menu → “Install Vdex”.'], ['Firefox', 'Firefox doesn’t install web apps; keep using it in a tab, or bookmark the page.'], ['Same data everywhere', 'Link a cloud storage under Storage, sync and backups, in the menu ☰, and the installed app, your phone and your browser all share one database.']];
   sheet('Install Vdex', h('div', { class: 'stack' },
     h('p', null, 'Vdex runs in the browser as it is. Installing it adds an icon to your home screen or desktop, opens it full-screen and keeps it available offline. Both ways use the same address and the same data.'),
     h('ol', { class: 'install-steps' }, steps.map(([t, d]) => h('li', null, h('b', null, t), h('div', { class: 'muted small' }, d)))),

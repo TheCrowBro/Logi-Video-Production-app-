@@ -10,3 +10,8 @@ exports.acceptTerms = () => ({ content: `try { localStorage.setItem('logi-terms'
 // Opens a Settings section by its exact title, together with the group it sits in (General, Work & billing), the way
 // a link into Settings does, and scrolls to it. The page must already be on Settings.
 exports.openSetting = (page, title) => page.evaluate(t => { const d = [...document.querySelectorAll('details.settings-section, details.settings-group')].find(x => x.querySelector(':scope > summary .ss-title')?.textContent === t); if (!d) throw new Error('no Settings section ' + t); for (let p = d; p; p = p.parentElement && p.parentElement.closest('details')) p.open = true; d.scrollIntoView(); }, title);
+// The top bar holds the lock and the hamburger; the page's tutorial (#helpBtn), Install (#installBtn), text size and
+// theme (#displayBtn) and storage (#cloudBtn) are rows of the menu behind the hamburger. openMenu opens it if it is
+// closed; menuClick opens it and taps a row, as a person would.
+exports.openMenu = async page => { if (!(await page.locator('#menu').isVisible())) await page.locator('#menuBtn').click(); await page.locator('#menu').waitFor({ state: 'visible' }); };
+exports.menuClick = async (page, row) => { await exports.openMenu(page); await page.locator(row).click(); };

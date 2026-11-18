@@ -161,7 +161,7 @@ Sunrise and sunset, a white balance reader, a sound level meter and a range find
 YOURS, PRIVATELY
 Vdex keeps everything on your device, behind a PIN, and opens with your fingerprint or face. With a licence, link your own Google Drive to share between your phone and computer and keep a daily backup. Pick a colour theme to match your camera brand.
 
-Works offline. Tap ? on any page for a walkthrough.
+Works offline. Every page has its own walkthrough, in the menu.
 ```
 
 ## Data safety answers

@@ -74,6 +74,7 @@ const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([typ
 
 // Modal bottom sheet: traps focus, restores it on close, hides the page from assistive tech while open.
 export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
+  window.logiMenu?.close(); // a sheet never opens over the menu: the menu closes first, and the focus comes back to its button
   const opener = document.activeElement;
   // If a redraw replaces the opener while the sheet is open, its stand-in (same data-fk) gets the focus back.
   const fk = opener && opener.closest && opener.closest('[data-fk]') ? opener.closest('[data-fk]').dataset.fk : null;

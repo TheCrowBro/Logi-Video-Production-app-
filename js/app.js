@@ -23,6 +23,15 @@ const lockBtn = document.getElementById('lockBtn');
 const paintLock = () => { if (lockBtn) lockBtn.hidden = !lock.enabled(); };
 paintLock(); lock.onChange(paintLock);
 lockBtn && lockBtn.addEventListener('click', () => lock.lockNow());
+// The hamburger at the top right opens the menu (js/menu.js, fetched on the first tap): the page's tutorial, Install,
+// text size and theme, and storage are its rows. They are in index.html from the start, so they are wired here as the
+// top bar's buttons were; the menu closes itself before a row does its work. Sheets, walkthroughs and the lock close
+// it through window.logiMenu before they open, so it is never left open underneath one of them.
+const menuBtn = document.getElementById('menuBtn');
+let menu = null;
+const openMenu = opts => import('./menu.js').then(m => { menu = m; m.openMenu(opts); }, e => { console.error(e); toast('The menu could not be loaded. Check the connection and try again.'); });
+menuBtn.addEventListener('click', () => openMenu());
+window.logiMenu = { open: openMenu, close: () => { if (menu) menu.closeMenu(); }, isOpen: () => !!menu && menu.isOpen() };
 document.getElementById('displayBtn')?.addEventListener('click', openDisplaySettings);
 const help = () => import('./tutorials.js').then(m => m.openTutorial()); // the tutorials load on first use
 document.getElementById('helpBtn')?.addEventListener('click', help);
@@ -135,11 +144,30 @@ if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in win
 const cloudBtn = document.getElementById('cloudBtn');
 const cloudLabel = document.getElementById('cloudLabel');
 
+// The sync state, in three places: a word on the menu's storage row, the full sentence at the top of the menu, and a
+// dot on the hamburger, since the menu is closed most of the time. No dot when all is well (synced, or kept on this
+// device only), amber while saving or when it needs the person (paused, sign in again), red when a save failed; the
+// hamburger's name says the same in words.
+const SYNC = {
+  off: ['Local', '', () => 'Kept on this device only', () => 'No cloud storage is linked. Storage, sync and backups, below, links one.'],
+  synced: ['Synced', '', n => `Synced with ${n}`, () => 'Everything is up to date.'],
+  saving: ['Saving…', 'amber', n => `Saving to ${n}…`, () => 'Your changes are being copied.'],
+  paused: ['Paused', 'amber', n => `Sync with ${n} is paused`, () => 'Nothing is copied until this device has a licence. Your changes are safe on this device.'],
+  'needs-permission': ['Sign in', 'amber', n => `${n} needs you to sign in again`, () => 'Open Storage, sync and backups, below, and tap Sign in again. Your changes are safe on this device.'],
+  error: ['Sync error', 'red', n => `Could not sync with ${n}`, c => [c.error, 'Your changes are safe on this device.'].filter(Boolean).join(' · ')],
+};
 function paintCloud() {
-  const s = store.cloud.status;
-  const text = { off: 'Local', synced: 'Synced', saving: 'Saving…', 'needs-permission': 'Sign in', error: 'Sync error', paused: 'Paused' }[s];
-  cloudLabel.textContent = text;
+  const c = store.cloud, s = c.status, [word, dot, title, text] = SYNC[s] || SYNC.off;
+  const headline = title(c.adapter ? c.adapter.label : 'your storage');
+  cloudLabel.textContent = word;
   cloudBtn.dataset.state = s;
+  document.getElementById('menuStatus').dataset.state = s;
+  document.getElementById('menuStatusTitle').textContent = headline;
+  document.getElementById('menuStatusText').textContent = text(c);
+  menuBtn.dataset.state = s;
+  if (dot) menuBtn.dataset.dot = dot; else delete menuBtn.dataset.dot;
+  const name = dot ? `Menu. ${headline}` : 'Menu';
+  menuBtn.setAttribute('aria-label', name); menuBtn.title = name;
 }
 paintCloud();
 

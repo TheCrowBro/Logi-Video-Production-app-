@@ -1,4 +1,4 @@
-// Page tutorials: the ? button at the top runs a short walkthrough of whatever is on screen, highlighting each box
+// Page tutorials: Tutorial for this page, in the menu, runs a short walkthrough of whatever is on screen, highlighting each box
 // with a one-line description. Steps whose box is not on screen (an empty list, a hidden tool) are skipped, so the
 // same tutorial fits a fresh install and a full one. "Other pages…" opens any page's tutorial from anywhere.
 import { h, sheet, toast, ymd, todayISO, uid } from './util.js';
@@ -73,7 +73,7 @@ const setupSteps = () => [
   C('Welcome to Vdex', 'Your whole production in one deck: bookings, crew, kit, venues, insurance, field tools and timecode notes. This set-up takes about three minutes: a look at the deck, your details, your calendar, and two sample people to try things on. Next moves on, and Skip leaves at any point; Settings → General → About & Licence → Take the tour runs it again.'),
   C('Your PIN', (lock.enabled() ? (tourSeen() ? 'Vdex is locked with your PIN' : 'Vdex is locked with the PIN you just set') : 'Vdex locks with a PIN') + ', and everything it stores on this device is encrypted whenever it is locked, in the background or closed. A forgotten PIN cannot be recovered: the way back is to erase the device and restore from your cloud storage or a backup, so keep one of those current. Settings → Security sets when it locks, adds fingerprint or face unlock, and has a switch to erase this device after 10 wrong PINs, which stays off unless you turn it on.'),
   T('The Rolodex', 'Spin it to move between sections: drag it, tap ▲ ▼, use the arrow keys, or scroll on it. It slides away as a page scrolls down and comes back as you scroll up.', '.binder', '#rolodex', { go: 'bookings' }),
-  C('What is in the deck', 'Bookings holds the calendar and, for each shoot, the call sheet, the stripboard, the crew link, the hours, the quote and the invoice. Crew, Equipment, Venues and Insurance are your lists. Me is your contact card. Field has the sun, Polaris, white balance, noise and range tools. TC Notes stamps notes with the camera’s timecode. Settings has the rest. Tap ? at the top of any page for that page’s own walkthrough.'),
+  C('What is in the deck', 'Bookings holds the calendar and, for each shoot, the call sheet, the stripboard, the crew link, the hours, the quote and the invoice. Crew, Equipment, Venues and Insurance are your lists. Me is your contact card. Field has the sun, Polaris, white balance, noise and range tools. TC Notes stamps notes with the camera’s timecode. Settings has the rest. On any page, the menu ☰ at the top right has Tutorial for this page: that page’s own walkthrough.'),
   profileStep('You', 'Your name and business go on call sheets, quotes and invoices, and on your contact card. Type them here and tap Next.', [['Full name', 'name'], ['Business name', 'business']]),
   profileStep('How clients reach you', 'Phone and email go on your documents and your contact card, and the crew link shows them to the people on your shoots.', [['Phone', 'phone', 'tel'], ['Email', 'email', 'email']]),
   profileStep('Your website', 'Your site, showreel or portfolio goes on the contact card with a QR code anyone can scan, and on your documents. A job title, where you are based and a short bio can be added later under Settings → General → Profile.', [['Website', 'website', 'text', { inputMode: 'url', placeholder: 'https://…' }]]),
@@ -81,7 +81,7 @@ const setupSteps = () => [
   calendarStep(),
   T('Two sample people', 'Sample talent and Sample crew member were just added to your Crew list, so you can see how it works: a role, a day or hourly rate, phone and email, and the bookings they are on. A booking picks its crew from this list, and their rates price the quote.', '.crew-card[data-id="sample-talent"]', '.crew-card', { go: 'crew', before: addSamples }),
   T('Removing someone', 'Tap ✎ on a card to edit the person; Delete at the bottom of the form removes them, and Vdex asks once to be sure.', '.crew-card[data-id="sample-talent"] .icon-btn', '.crew-card .icon-btn'),
-  { title: 'Keep the samples?', text: 'Sample talent and Sample crew member stay on the Crew page until you remove them: ✎ then Delete, or the button here. That is the set-up done. Tap ? at the top of any page for its walkthrough, and Other pages… on its first card for any other.', target: null,
+  { title: 'Keep the samples?', text: 'Sample talent and Sample crew member stay on the Crew page until you remove them: ✎ then Delete, or the button here. That is the set-up done. Open the menu ☰ at the top right of any page and tap Tutorial for this page for its walkthrough, and Other pages… on its first card for any other.', target: null,
     body: ctx => h('div', { class: 'actions tour-done' }, samplesPresent()
       ? h('button', { class: 'btn ghost', type: 'button', onclick: () => { removeSamples(); toast('Samples removed'); ctx.refresh(); } }, '🗑 Remove the samples')
       : h('span', { class: 'small muted' }, 'The samples have been removed.')) },
@@ -127,8 +127,10 @@ export const TUTORIALS = {
   setup: { name: 'Set up Vdex', page: null, hidden: true, dynamic: setupSteps },
   around: { name: 'Getting around', page: null, steps: [
     T('The Rolodex', 'Spin it to move between sections: drag or swipe it, tap ▲ ▼, or use the arrow keys on a keyboard.', '.binder', '#rolodex'),
-    T('The top bar', 'Aa sets text size, theme and accessibility. ☁ links your cloud storage and shows the sync state. 🔒 appears once a PIN is set and locks Vdex at once.' + (native.isApp ? '' : ' ⤓ installs the app.'), '.top-actions'),
-    T('This button', 'Tap ? on any page for its tutorial. The first card has “Other pages…” to read about a page you are not on.', '#helpBtn'),
+    T('The top bar', 'One slim row above the Rolodex. ☰ opens the menu. A dot on it is about your cloud storage: amber while it saves or when it needs you (sync is paused, or it wants you to sign in again), red when a save failed, and no dot when all is well. 🔒 appears beside it once a PIN is set and locks Vdex at once.', '.top-actions'),
+    T('How syncing is going', 'The top of the menu says in words what the dot means: kept on this device only, synced, saving, paused, asking you to sign in again, or what went wrong.', '#menuStatus', { menu: true }),
+    T('The menu', 'Text size and theme opens the display and accessibility settings. Storage, sync and backups links your cloud storage and holds the backups.' + (native.isApp ? '' : ' Install Vdex is listed until Vdex is installed.') + ' The version of Vdex is at the bottom.', '#menu .menu-list', { menu: true }),
+    T('Tutorial for this page', 'On any page, open the menu and tap this for that page’s tutorial. The first card has “Other pages…” to read about a page you are not on.', '#helpBtn', { menu: true }),
     T('The running clock', 'While the clock runs, this strip shows the time on every page: stop work or take a timed break from anywhere. Start it in the Hours box of the booking.', '#clockbar:not([hidden])'),
   ] },
   bookings: { name: 'Bookings calendar', page: 'bookings', steps: [
@@ -368,7 +370,7 @@ async function reach(key) {
   const t = TUTORIALS[key];
   if (t.page) { await window.logiGo?.(t.page); await wait(650); }
   if (key === 'tcnotes' && document.querySelector('.tc-log-head')) { click('.tc-log-head .btn.ghost.small'); await wait(300); }
-  if (key === 'tclog' && !document.querySelector('.tc-log-head')) { if (!click('#page .list .card.tap')) { toast('Create a log first with + New log, then tap ? inside it.'); return false; } await wait(350); }
+  if (key === 'tclog' && !document.querySelector('.tc-log-head')) { if (!click('#page .list .card.tap')) { toast('Create a log first with + New log, then open the menu and tap Tutorial for this page inside it.'); return false; } await wait(350); }
   const click = sel => { const el = document.querySelector(sel); if (el) { el.click(); return true; } return false; };
   if (['booking', 'callsheet', 'money', 'day', 'strips'].includes(key)) {
     // from wherever the Bookings page is, go to the month view first

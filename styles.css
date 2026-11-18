@@ -1,12 +1,12 @@
 :root {
   --bg: #14110f; --bg2: #1d1915; --card: #25201b; --line: #3a332b; --text: #f1e6cf; --muted: #a09584; --accent: #e0a43a; --accent-ink: #1a1305; --paper: #f1e6cf; --paper-ink: #2a2118;
-  --danger: #e5604d; --ok: #5fb376; --blue: #5b9bd5; --edit: #b388ff; /* edit days: a hue no theme uses for anything else */
+  --danger: #e5604d; --ok: #5fb376; --warn: #e0a43a; --blue: #5b9bd5; --edit: #b388ff; /* edit days: a hue no theme uses for anything else */
   --radius: 14px; --pad: 16px; --hit: 44px; --focus: #4aa3ff;
   color-scheme: dark;
 }
-:root[data-scheme=light] { --bg: #efe8da; --bg2: #e6dec9; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --accent-ink: #ffffff; --paper: #fbf7ec; --paper-ink: #2a2118; color-scheme: light; --edit: #6a3fc9; --danger: #b3321c; } /* a darker red reads on the light background (the error line on the lock screens) */
+:root[data-scheme=light] { --bg: #efe8da; --bg2: #e6dec9; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --accent-ink: #ffffff; --paper: #fbf7ec; --paper-ink: #2a2118; color-scheme: light; --edit: #6a3fc9; --danger: #b3321c; --warn: #b87a10; } /* a darker red and amber read on the light background (the error line on the lock screens, the menu's dot) */
 /* Before the app sets data-scheme, follow the device. */
-@media (prefers-color-scheme: light) { :root:not([data-scheme]) { --bg: #efe8da; --bg2: #e6dec9; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --accent-ink: #ffffff; --paper: #fbf7ec; --paper-ink: #2a2118; color-scheme: light; --edit: #6a3fc9; --danger: #b3321c; } }
+@media (prefers-color-scheme: light) { :root:not([data-scheme]) { --bg: #efe8da; --bg2: #e6dec9; --card: #fbf7ec; --line: #d4c9b0; --text: #2a2118; --muted: #756a58; --accent: #b87a10; --accent-ink: #ffffff; --paper: #fbf7ec; --paper-ink: #2a2118; color-scheme: light; --edit: #6a3fc9; --danger: #b3321c; --warn: #b87a10; } }
 :root[data-palette=noir] { --bg: #0b0b0c; --bg2: #141416; --card: #1b1b1e; --line: #2c2c31; --text: #f2f2f2; --muted: #9a9aa2; --accent: #e8412c; --accent-ink: #ffffff; --paper: #ececec; --paper-ink: #121214; --edit: #b388ff; }
 :root[data-palette=noir][data-scheme=light] { --bg: #f3f3f4; --bg2: #e9e9ec; --card: #ffffff; --line: #d6d6dc; --text: #151518; --muted: #6b6b74; --accent: #d2321e; --accent-ink: #ffffff; --paper: #ffffff; --paper-ink: #151518; --edit: #6a3fc9; }
 :root[data-palette=forest] { --bg: #0f1712; --bg2: #16211a; --card: #1d2b22; --line: #2d4034; --text: #e9f0e4; --muted: #93a596; --accent: #c9b23a; --accent-ink: #141a0a; --paper: #e9f0e4; --paper-ink: #1a2a1f; --edit: #b388ff; }
@@ -64,8 +64,37 @@ a { color: var(--accent); }
 .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 30%, transparent); }
 .cloud { min-height: var(--hit); background: var(--card); border: 1px solid var(--line); color: var(--text); border-radius: 999px; padding: 0 10px; font: inherit; font-size: .85rem; cursor: pointer; display: flex; gap: 4px; align-items: center; }
 .top .cloud-ico { font-size: 1.05rem; width: auto; min-width: 1.2rem; }
-.cloud[data-state=synced] .cloud-ico { color: var(--ok); } .cloud[data-state=error] .cloud-ico, .cloud[data-state=needs-permission] .cloud-ico { color: var(--danger); } .cloud[data-state=saving] .cloud-ico { animation: pulse 1s infinite; }
+/* The hamburger carries a dot about the cloud storage: none when all is well, amber while it saves or when it needs
+   the person (paused, sign in again), red with a ! when a save failed. The words are in its name and in the menu. */
+.menu-btn { position: relative; } .menu-bars { display: block; flex: none; }
+.menu-dot { display: none; position: absolute; top: 1px; inset-inline-end: 1px; width: 10px; height: 10px; border-radius: 50%; background: var(--warn); box-shadow: 0 0 0 2px var(--bg); forced-color-adjust: none; } /* on the button's rim, clear of its icon and label */
+.menu-btn[data-dot=amber] .menu-dot, .menu-btn[data-dot=red] .menu-dot { display: block; } .menu-btn[data-state=saving] .menu-dot { animation: pulse 1s infinite; }
+.menu-btn[data-dot=red] .menu-dot { top: -1px; inset-inline-end: -1px; width: 14px; height: 14px; background: var(--danger); }
+.menu-btn[data-dot=red] .menu-dot::after { content: '!'; display: block; color: #fff; font: 800 10px/14px system-ui, sans-serif; text-align: center; }
+/* Where the search control goes: between the brand and the buttons, taking no room while it is empty. */
+.top-search { flex: 0 1 auto; min-width: 0; display: flex; justify-content: flex-end; } .top-search:empty { display: none; }
 @keyframes pulse { 50% { opacity: .3; } }
+
+/* The menu: a panel that slides in from the side, under sheets, tours and the lock so none of them can end up beneath it. */
+.menu-back { position: fixed; inset: 0; z-index: 90; background: #000a; display: flex; justify-content: flex-end; overflow: hidden; animation: fade .2s; }
+.menu { width: min(340px, 88vw); height: 100%; overflow: auto; overscroll-behavior: contain; display: flex; flex-direction: column; gap: 10px; background: var(--bg); color: var(--text); border-inline-start: 1px solid var(--line); box-shadow: 0 0 40px #0008;
+  padding: calc(8px + env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) calc(14px + env(safe-area-inset-bottom)) 14px; animation: menuIn .22s cubic-bezier(.2, .9, .3, 1); }
+@keyframes menuIn { from { transform: translateX(100%); } } @keyframes menuInRtl { from { transform: translateX(-100%); } }
+[dir=rtl] .menu { animation-name: menuInRtl; padding-inline: 14px max(14px, env(safe-area-inset-left)); }
+.menu-back.shown, .menu-back.shown .menu { animation: none; } /* a walkthrough is pointing at it: there at once, so the spotlight lands on it */
+.menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: none; } .menu-head h2 { font-size: 1.15rem; }
+.menu-status { flex: none; display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); }
+.menu-status::before { content: ''; flex: none; width: 10px; height: 10px; margin-top: .42em; border-radius: 50%; background: var(--muted); forced-color-adjust: none; }
+.menu-status[data-state=synced]::before { background: var(--ok); } .menu-status[data-state=error]::before { background: var(--danger); }
+.menu-status[data-state=saving]::before, .menu-status[data-state=paused]::before, .menu-status[data-state=needs-permission]::before { background: var(--warn); }
+.menu-status strong, .menu-name, .menu-sub { display: block; overflow-wrap: anywhere; } .menu-status strong { font-size: 1rem; line-height: 1.3; } .menu-sub { color: var(--muted); font-size: .85rem; line-height: 1.35; } .menu-sub:empty { display: none; }
+.menu-list { flex: none; display: grid; gap: 8px; }
+.menu-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: max(60px, var(--hit)); padding: 10px 14px; background: var(--card); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius); font: inherit; text-align: start; cursor: pointer; touch-action: manipulation; transition: transform .12s ease, border-color .15s ease; }
+.menu-row:hover { border-color: var(--accent); } .menu-row:active { transform: scale(.98); }
+.menu-ico { flex: none; width: 2rem; text-align: center; font-size: 1.3rem; font-weight: 800; color: var(--accent); } .menu-name { font-weight: 700; font-size: 1.05rem; line-height: 1.25; }
+.menu-foot { margin: auto 0 0; padding-top: 8px; text-align: center; color: var(--muted); font-size: .85rem; }
+html[data-contrast=high] .menu-row, html[data-contrast=high] .menu-status { border-width: 2px; }
+body.menu-open .update-bar { z-index: 80; } /* the update and licence bars go behind the menu with the rest of the page, not over its last rows */
 
 /* rolodex */
 .rolodex { position: sticky; top: 0; z-index: 20; margin: 0 calc(-1 * var(--pad)); padding: 6px var(--pad) 10px; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 8px 20px #0004; transition: transform .28s ease, box-shadow .28s ease; }
@@ -579,7 +608,6 @@ body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; } @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
 .wxline { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 4px 0 8px; }
 
-#helpBtn .cloud-ico { font-weight: 800; }
 .tour-actions .spacer { flex: 1; }
 
 .sheet-tools { display: flex; gap: 4px; align-items: center; }

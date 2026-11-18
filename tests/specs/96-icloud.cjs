@@ -2,7 +2,7 @@
 // that changes with every request, a big database split across records and read back whole, dated backups, a run-out
 // sign-in, a full iCloud, a link carrying someone else's session, the calendar feed note, and Disconnect.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, menuClick } = require('../helpers.cjs');
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -67,7 +67,7 @@ const utf8 = s => Buffer.byteLength(s, 'utf8');
     page.on('dialog', d => d.accept());
     return { ctx, page, ck };
   };
-  const openCloud = async page => { await page.locator('#cloudBtn').click(); await page.waitForSelector('.sheet .storage'); await sleep(200); };
+  const openCloud = async page => { await menuClick(page, '#cloudBtn'); await page.waitForSelector('.sheet .storage'); await sleep(200); };
   const toasts = page => page.evaluate(() => window.__toasts.join(' | '));
   const setVis = (page, hidden) => page.evaluate(h => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => h }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') }); document.dispatchEvent(new Event('visibilitychange')); }, hidden);
   const status = page => page.evaluate(() => import('./js/store.js').then(s => s.cloud.status));
@@ -162,7 +162,8 @@ const utf8 = s => Buffer.byteLength(s, 'utf8');
   ck.valid.clear();
   await page.evaluate(async () => (await import('./js/store.js')).sync());
   await page.waitForFunction(() => document.getElementById('cloudBtn')?.dataset.state === 'needs-permission', null, { timeout: 8000 }).catch(() => {});
-  ok('a run-out sign-in shows Sign in and forgets the old session', (await page.locator('#cloudBtn').innerText()).includes('Sign in') && !(await page.evaluate(() => localStorage.getItem('logi-icloud-session'))));
+  const ranOut = await page.evaluate(() => { const b = document.getElementById('menuBtn'); return { dot: b.dataset.dot, name: b.getAttribute('aria-label'), row: document.getElementById('cloudLabel').textContent, line: document.getElementById('menuStatusTitle').textContent }; });
+  ok('a run-out sign-in shows on the hamburger (an amber dot) and in the menu (Sign in), and forgets the old session', ranOut.dot === 'amber' && /iCloud needs you to sign in again/.test(ranOut.name) && ranOut.row === 'Sign in' && !(await page.evaluate(() => localStorage.getItem('logi-icloud-session'))), JSON.stringify(ranOut));
   await openCloud(page);
   await Promise.all([page.waitForURL(u => /ckWebAuthToken/.test(u.toString()) || ck.signIns === 2, { timeout: 15000 }), page.locator('.sheet button:has-text("Sign in again")').click()]);
   await page.waitForSelector('#rolodex .drum-btn');

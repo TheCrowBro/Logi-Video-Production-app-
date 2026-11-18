@@ -2,7 +2,7 @@
 // trip, Google's and Microsoft's sign-in windows (stood in for), undo on a cancelled sign-in, a developer's own key,
 // Nextcloud's shortcut and folder creation, the calendar panel, and the "not switched on yet" state.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, menuClick } = require('../helpers.cjs');
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -31,7 +31,7 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     page.on('dialog', d => d.accept());
     return { ctx, page };
   };
-  const openCloud = async page => { await page.locator('#cloudBtn').click(); await page.waitForSelector('.sheet .storage'); await sleep(200); };
+  const openCloud = async page => { await menuClick(page, '#cloudBtn'); await page.waitForSelector('.sheet .storage'); await sleep(200); };
   const closeSheet = async page => { await page.keyboard.press('Escape'); await sleep(200); };
   const card = (page, svc) => page.locator(`.sheet .cloud-choice[data-svc="${svc}"]`);
   // Dropbox and OneDrive sit inside the folded "More ways"; open it first, as a person would
@@ -122,7 +122,8 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   // an hour later: the token has run out; one tap, and the account is named so Google can skip its chooser
   await page.evaluate(async () => { const p = await import('./js/providers.js'); p.forgetGoogleToken('https://www.googleapis.com/auth/drive.appdata'); (await import('./js/store.js')).sync(); });
   await page.waitForFunction(() => document.getElementById('cloudBtn')?.dataset.state === 'needs-permission', null, { timeout: 8000 }).catch(() => {});
-  ok('when Google’s hour is up the top bar says Sign in', (await page.locator('#cloudBtn').innerText()).includes('Sign in'));
+  const hourUp = await page.evaluate(() => { const b = document.getElementById('menuBtn'); return { dot: b.dataset.dot, name: b.getAttribute('aria-label'), row: document.getElementById('cloudLabel').textContent, line: document.getElementById('menuStatusTitle').textContent }; });
+  ok('when Google’s hour is up the hamburger carries an amber dot, and its name and the menu say to sign in again', hourUp.dot === 'amber' && hourUp.name === 'Menu. Google Drive needs you to sign in again' && hourUp.row === 'Sign in' && hourUp.line === 'Google Drive needs you to sign in again', JSON.stringify(hourUp));
   await page.locator('.sheet button:has-text("Sign in again")').click();
   const reSynced = await synced(page), reHint = await page.evaluate(() => window.__greq && window.__greq.login_hint);
   ok('signing in again takes one tap and names the account', reSynced && reHint === 'gee@example.com', JSON.stringify({ reSynced, reHint, state: await page.evaluate(() => document.getElementById('cloudBtn').dataset.state), err: await page.evaluate(() => import('./js/store.js').then(s => s.cloud.error)) }));
