@@ -61,6 +61,11 @@ function foot(buttons, close, sum = null) {
   });
   return { el: h('div', { class: 'add-foot' }, sum, said, h('div', { class: 'actions add-actions' }, ...btns, h('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Cancel'))), refuse, btns };
 }
+// Once Add has added it, what follows only shows the thing where it now lives (and, for equipment, offers Undo). Each
+// of those steps may need a part of Vdex that is fetched on first use, and with no connection and no offline copy yet
+// that fetch fails. The thing is in all the same, so such a failure never reaches the button's "Could not add it":
+// it is passed over, and `missing` (when given) says what is missing instead.
+const afterAdd = async (step, missing = '') => { try { return await step(); } catch (e) { console.warn('share-add:', e); if (missing) toast(missing); return null; } };
 // What does not fit the browser's storage is turned down before anything is changed (roomFor in js/gear-import.js).
 const noRoom = (what, done, ask) => `This ${what} is bigger than the space Vdex has on this device, so nothing was ${done}. Free some space first (erase old logs and bookings), or ask for ${ask}.`;
 
@@ -81,7 +86,7 @@ async function previewBooking(snap) {
     if (!m.roomForBooking(snap)) return f.refuse(noRoom('booking', was ? 'changed' : 'added', 'a link with fewer parts ticked'));
     const done = m.applyBooking(snap); if (!done) return;
     sh.close(); toast(was ? 'Booking updated' : 'Added to your Bookings');
-    await window.logiGo('bookings'); (await import('./pages/bookings.js')).openBooking(done.booking.id);
+    await afterAdd(async () => { await window.logiGo('bookings'); (await import('./pages/bookings.js')).openBooking(done.booking.id); });
   }, 'primary']], () => sh.close());
   const sh = dialog(was ? 'Update this booking?' : 'Add this booking?', h('div', { class: 'stack add-preview' },
     h('div', null, h('h3', { class: 'add-title' }, snap.title || 'Shared shoot'), h('div', { class: 'muted small' }, p.from ? `Shared by ${p.from}` : 'From a shared link', snap.made ? ` · sent ${new Date(snap.made).toLocaleDateString()}` : '')),
@@ -124,7 +129,7 @@ async function previewContact(c) {
   const add = as => async () => {
     const done = m.applyContact(c, as); if (!done) return;
     sh.close(); toast(done.existing ? 'Contact updated' : 'Added to your Crew');
-    (await import('./pages/crew.js')).showPerson(done.person.id);
+    await afterAdd(async () => (await import('./pages/crew.js')).showPerson(done.person.id));
   };
   const f = foot(was ? [['Update the contact', add('update'), 'primary']] : maybe ? [['Add as a new person', add('new'), 'primary'], [`Update ${maybe.name}`, add('update')]] : [['Add to my Crew', add('new'), 'primary']], () => sh.close());
   const sh = dialog(was ? 'Update this contact?' : 'Add this contact?', h('div', { class: 'stack add-preview' },
@@ -152,9 +157,14 @@ async function previewGear(g) {
     if (!m.roomForGear(plan, { kits: g.kits, from })) return f.refuse(noRoom('list', 'added', 'the list in parts'));
     const done = m.applyGearImport(plan, { kits: g.kits, from }); if (!done) return;
     sh.close();
-    await (await import('./pages/gear.js')).showItems([...done.added, ...done.updated]);
-    // The same Undo as after a file import: a bar for a short while, then under Import… until Vdex is closed.
-    const undo = (await import('./gear-import-ui.js')).offerUndo(done, from ? `a link shared by ${from}` : 'a shared link');
+    await afterAdd(async () => (await import('./pages/gear.js')).showItems([...done.added, ...done.updated]));
+    // The same Undo as after a file import: a bar for a short while, then under Import… until Vdex is closed. Without
+    // the file that draws it, the equipment is in and said to be; only Undo is missing, and that is said too.
+    const kits = (done.kitsAdded || []).length + (done.kitsBefore || []).length;
+    const said = [done.added.length && `${done.added.length.toLocaleString()} added`, done.updated.length && `${done.updated.length.toLocaleString()} updated`].filter(Boolean).join(', ') || (kits ? 'Your kits are changed' : '');
+    const ui = await afterAdd(() => import('./gear-import-ui.js'), said ? `${said}. Undo could not be loaded, so there is none for this import.` : 'Nothing changed');
+    if (!ui) return;
+    const undo = ui.offerUndo(done, from ? `a link shared by ${from}` : 'a shared link');
     if (undo) undo.focus({ preventScroll: true }); else toast('Nothing changed');
   }, 'primary add-go']], () => sh.close(), sum), go = f.btns[0];
   // The line above the buttons and the button itself say what the tap would do; with nothing to do, there is no tap.

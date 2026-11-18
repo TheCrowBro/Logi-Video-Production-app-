@@ -60,9 +60,12 @@ const ODD_XLSX = zip({
   const errors = [], requests = [], dialogs = [];
   const watch = p => { p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); }); p.on('dialog', d => { dialogs.push(d.message()); d.accept(); }); return p; };
   // A browser of its own: one that has agreed to the terms, skipped the PIN set-up and seen the tour.
-  const open = async ({ width = 420, height = 900, init = null, light = false } = {}) => {
+  // signIn: false switches the cloud sign-ins off, whatever js/cloud-config.js holds, for a visit to Settings (whose
+  // storage panel otherwise fetches Google's sign-in script, and this spec counts every request made).
+  const open = async ({ width = 420, height = 900, init = null, light = false, signIn = true } = {}) => {
     const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1, serviceWorkers: 'block', acceptDownloads: true });
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+    if (!signIn) await ctx.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: "export const CLOUD_APPS = { icloud: { container: '', apiToken: '', desktopToken: '' }, dropbox: '', google: '', microsoft: '', googleCalendar: true };" }));
     await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
     await ctx.addInitScript(acceptTerms().content);
     if (light) await ctx.addInitScript(() => { localStorage.setItem('logi-prefs', JSON.stringify({ scheme: 'light' })); });
@@ -892,6 +895,31 @@ const ODD_XLSX = zip({
     ok(`${width} px: it steps aside for the menu and for the search as well, and comes back each time`, same(aside, { menu: false, afterMenu: true, search: false, afterSearch: true }), JSON.stringify(aside));
     await V.ctx.close();
   }
+
+  /* ============================== the narrowest phone: 320 px ============================== */
+  // An equipment card holds a name, how booked the item is and two buttons in one row. At 320 px that row does not
+  // fit, and it used to push the whole list, and so the page, 5 px wider than the screen. The other pages are
+  // looked at as well, with the same sample data.
+  { const N = await open({ width: 320, height: 640, signIn: false });
+    await N.page.evaluate(() => import('./js/store.js').then(s => s.loadSample())); await sleep(200);
+    const over = async () => N.page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    await N.page.evaluate(() => window.logiGo('gear')); await N.page.waitForSelector('#page .gear-card'); await sleep(400);
+    const g = await N.page.evaluate(() => { const cards = [...document.querySelectorAll('#page .gear-card')]; const r = e => e.getBoundingClientRect(); return { wide: document.documentElement.scrollWidth - innerWidth, n: cards.length, inside: cards.every(c => r(c).left >= 0 && r(c).right <= innerWidth), parts: cards.every(c => [...c.querySelectorAll('strong, .pill, .icon-btn, .loc-chip')].every(e => r(e).left >= r(c).left && r(e).right <= r(c).right + 0.5)), nameRoom: Math.min(...cards.map(c => r(c.querySelector('.grow')).width)), below: cards.every(c => { const acts = c.querySelector('.gear-acts'); return !!acts && r(acts).top >= r(c.querySelector('.grow')).bottom - 1; }), hit: cards.every(c => [...c.querySelectorAll('.icon-btn')].every(b => r(b).height >= 43.5 && r(b).width >= 43.5)) }; });
+    ok('320 px: the Equipment page does not scroll sideways: every card ends inside the screen, with its name, place, booked mark and buttons inside the card', g.wide <= 0 && g.n >= 10 && g.inside && g.parts, JSON.stringify(g));
+    ok('320 px: the name has the card’s width to itself, and the booked mark and the two buttons sit on the line below it, still big enough to tap', g.nameRoom >= 240 && g.below && g.hit, JSON.stringify(g));
+    await N.page.screenshot({ path: `${OUT}/gear-320.png` });
+    await N.page.locator('#page .seg button', { hasText: 'Kits' }).click(); await sleep(300);
+    const sides = { 'Equipment, kits': await over() };
+    for (const p of ['bookings', 'crew', 'venues', 'insurance', 'me', 'field', 'tcnotes', 'settings']) { await N.page.evaluate(p => window.logiGo(p), p); await sleep(700); sides[p] = await over(); }
+    ok('320 px: no other page scrolls sideways with the sample data either', Object.values(sides).every(v => v <= 0), JSON.stringify(sides));
+    await N.ctx.close(); }
+  // …and where the row does fit, it is laid out as it always was: the name beside the booked mark and the buttons.
+  { const M = await open({ width: 360, height: 740 });
+    await M.page.evaluate(() => import('./js/store.js').then(s => s.loadSample())); await sleep(200);
+    await M.page.evaluate(() => window.logiGo('gear')); await M.page.waitForSelector('#page .gear-card'); await sleep(400);
+    const g = await M.page.evaluate(() => { const cards = [...document.querySelectorAll('#page .gear-card')]; const r = e => e.getBoundingClientRect(); return { wide: document.documentElement.scrollWidth - innerWidth, beside: cards.every(c => { const acts = c.querySelector('.pill'), name = c.querySelector('.grow'); return r(acts).left >= r(name).right && r(acts).top < r(name).bottom; }), right: cards.every(c => { const edit = [...c.querySelectorAll('.card-row .icon-btn')].pop(); return Math.abs(r(edit).right - (r(c).right - 15)) <= 1.5; }) }; });
+    ok('360 px: the same card keeps its one row, the booked mark and the buttons at the right of the name', g.wide <= 0 && g.beside && g.right, JSON.stringify(g));
+    await M.ctx.close(); }
 
   /* ============================== nothing leaves the device ============================== */
   const away = requests.filter(q => !q.startsWith('GET ' + BASE) && !q.startsWith('GET https://api.open-meteo.com/') && !q.startsWith('GET blob:') && !q.startsWith('GET data:'));

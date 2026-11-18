@@ -77,6 +77,10 @@ export function settleApp() {
   app.inert = !!document.querySelector('.sheet-back, .tour, body > .lock, body > .terms-gate') || document.body.classList.contains('menu-open') || document.body.classList.contains('search-open');
 }
 
+// A full screen that covers everything else is up: the lock screen, the PIN set-up or the offer of a longer PIN
+// (coverAll in js/lock.js makes what is on the page at that moment inert and hides the sheets).
+export const covered = () => !!document.querySelector('body > .lock');
+
 const sheetStack = []; // open sheets, newest last: only the top one answers Escape and keeps Tab inside it
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"])';
 
@@ -100,7 +104,9 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   const keys = e => {
     // A sheet opened over this one handles the key. And a sheet that is out of reach answers no keys at all: under the
     // lock screen or the offer of a longer PIN, Escape belongs to that screen and must not close what is underneath.
-    if (back.inert || sheetStack[sheetStack.length - 1] !== back) return;
+    // The same for a key that screen has just used on its way out (it marks the key as taken): by the time the key
+    // gets here the sheet is in reach again, and would close on the Escape that closed the offer.
+    if (e.defaultPrevented || back.inert || sheetStack[sheetStack.length - 1] !== back) return;
     if (e.key === 'Escape') return close();
     if (e.key !== 'Tab') return;
     const items = [...box.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
@@ -115,6 +121,10 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   back.append(box);
   if (dismissOnBackdrop) back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
   document.addEventListener('keydown', keys);
+  // Opened by code while the lock screen or the offer of a longer PIN is up (a save that finished, a file that arrived):
+  // the sheet starts as everything else under that screen is, out of reach and out of sight, so no key pressed on that
+  // screen reaches it. The screen's way out (coverAll in js/lock.js) gives it back with the rest.
+  if (covered()) { back.inert = true; back.classList.add('behind-lock'); back.dataset.covered = ''; }
   document.body.append(back);
   sheetStack.push(back);
   settleApp();

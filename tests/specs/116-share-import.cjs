@@ -7,7 +7,8 @@
 // it replaces), money on a booking that came from a producer, cards that only look like someone on the Crew list, one's
 // own card and one's own equipment, Undo after an equipment link, lists and shoots longer than a link may bring, a
 // link too big for the browser's storage, one preview at a time, the scanner on a long code, and the shared pages'
-// line for people whose Vdex is an app.
+// line for people whose Vdex is an app. And: the name an invoice is listed under when the booking came from a link, the
+// formula guard in the TC Notes spreadsheet, and an Add whose follow-up cannot be fetched.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const { acceptTerms } = require('../helpers.cjs');
@@ -722,21 +723,60 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   await E.page.reload(); await E.page.waitForSelector('#rolodex .drum-btn'); await E.page.evaluate(() => window.logiGo('me')); await E.page.waitForSelector('#page .qr svg', { timeout: 8000 });
   ok('the code chosen is remembered on this device: after a reload it is still Phone contacts', (await E.page.locator('#page .me-modes button.on').innerText()) === 'Phone contacts' && /No connection needed/.test(await E.page.locator('#page .qr-cap').innerText()) && (await E.page.evaluate(() => localStorage.getItem('logi-me-code'))) === 'vcard');
 
-  // ---- text from a link in the spreadsheets Vdex writes ----
-  await arrive(E.page, await pack(shoot({ ref: 'REF-CSV', title: '=HYPERLINK("https://evil.example","Open")', client: '+SUM(1,2)' })));
+  // ---- text from a link in the spreadsheets Vdex writes, and the name an invoice is listed under ----
+  // The link-made booking (its invoice is headed to the sender, here a business whose name starts like a formula) beside
+  // two bookings of one's own: one with a client, one with only a contact.
+  await arrive(E.page, await pack(shoot({ ref: 'REF-CSV', title: '=HYPERLINK("https://evil.example","Open")', client: '+SUM(1,2)', by: { name: 'Pat Producer', business: '-2+3 Films', email: 'pat@quayfilms.example' } })));
   await E.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await E.page.waitForSelector('.bk-detail'); await sleep(300);
   await E.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings[0]; x.invoice = { number: 'INV-0009', date: x.date, due: x.date, lines: [{ id: 'l', desc: 'Day', qty: 1, unit: 'day', price: 100 }], taxRate: 0, deposit: 150, status: 'Sent' };
-    d.shifts.push({ id: 'sh1', bookingId: x.id, date: x.date, kind: 'shoot', start: Date.now() - 8 * 36e5, end: Date.now() - 36e5, breaks: [], note: '@cmd' }); x.updatedAt = Date.now(); })));
-  await E.page.evaluate(() => import('./js/money.js').then(m => m.openMoney(() => {}))); await E.page.waitForSelector('.sheet .stats');
-  const [inv] = await Promise.all([E.page.waitForEvent('download', { timeout: 15000 }), E.page.locator('.sheet button:has-text("Invoices (CSV)")').click()]);
-  const invText = fs.readFileSync(await inv.path(), 'utf8').split('\r\n')[1];
+    d.shifts.push({ id: 'sh1', bookingId: x.id, date: x.date, kind: 'shoot', start: Date.now() - 8 * 36e5, end: Date.now() - 36e5, breaks: [], note: '@cmd' }); x.updatedAt = Date.now();
+    d.bookings.push({ id: 'own-job', title: 'Own job', client: 'Harbour Bakery', date: x.date, start: '09:00', end: '17:00', status: 'Confirmed', address: '', stakeholders: [{ name: 'Bea Baker', role: 'Owner', email: 'bea@harbourbakery.example' }], crew: [], gear: [], notes: '', invoice: { number: 'INV-0010', date: x.date, due: x.date, lines: [{ id: 'o', desc: 'Edit day', qty: 1, unit: 'day', price: 300 }], taxRate: 0, status: 'Sent' }, updatedAt: Date.now() },
+      { id: 'own-bare', title: 'No client yet', client: '', date: x.date, start: '09:00', end: '17:00', status: 'Enquiry', address: '', stakeholders: [{ name: 'Zed Contact', role: '', email: '' }], crew: [], gear: [], notes: '', quote: { number: 'Q-0003', date: x.date, lines: [{ id: 'q', desc: 'Day', qty: 1, unit: 'day', price: 50 }], taxRate: 0, status: 'Draft' }, updatedAt: Date.now() }); })));
+  const moneyRows = async () => { await E.page.evaluate(() => import('./js/money.js').then(m => m.openMoney(() => {}))); await E.page.waitForSelector('.sheet .stats'); return E.page.evaluate(() => Object.fromEntries([...document.querySelectorAll('.sheet .list .card.tap')].map(c => [c.querySelector('strong').textContent, c.querySelector('.muted.small').textContent]))); };
+  const invoicesCsv = async () => { const [dl] = await Promise.all([E.page.waitForEvent('download', { timeout: 15000 }), E.page.locator('.sheet button:has-text("Invoices (CSV)")').click()]); return fs.readFileSync(await dl.path(), 'utf8').split('\r\n'); };
+  const rows1 = await moneyRows(), csv1 = await invoicesCsv(), invText = csv1[1];
   const cells = await E.page.evaluate(() => import('./js/backup.js').then(m => [m.csvText('=1+1'), m.csvText('-5 gels'), m.csvText('@x'), m.csvText('Plain "quoted"'), m.csvCell(-50), m.csvCell('2026-11-28')]));
-  ok('the invoices spreadsheet keeps a title and a client from a link as text (an apostrophe in front of = and +), and its amounts and dates as they are', invText.includes(`"'+SUM(1,2)","'=HYPERLINK(""https://evil.example"",""Open"")","100.00"`) && invText.startsWith('"INV-0009","') && !/"'\d/.test(invText) && JSON.stringify(cells) === JSON.stringify([`"'=1+1"`, `"'-5 gels"`, `"'@x"`, '"Plain ""quoted"""', '"-50"', '"2026-11-28"']), invText + ' ' + cells.join(' '));
+  ok('the invoices spreadsheet keeps a title and a sender’s business from a link as text (an apostrophe in front of = and -), and its amounts and dates as they are', invText.includes(`"'-2+3 Films","'=HYPERLINK(""https://evil.example"",""Open"")","100.00"`) && invText.startsWith('"INV-0009","') && !/"'\d/.test(invText) && JSON.stringify(cells) === JSON.stringify([`"'=1+1"`, `"'-5 gels"`, `"'@x"`, '"Plain ""quoted"""', '"-50"', '"2026-11-28"']), invText + ' ' + cells.join(' '));
+  // who an invoice is for, wherever it is named: the Money overview, the spreadsheet, the Money page, the search, the
+  // document, its link, its PDF and its emails
+  const HEAD = '-2+3 Films', TITLE = '=HYPERLINK("https://evil.example","Open")';
+  ok('the Money overview lists an invoice on a booking from a link under the name it is headed to, the sender, not under the sender’s client', (rows1[TITLE] || '').startsWith(HEAD + ' · ') && !/SUM/.test(rows1[TITLE]), JSON.stringify(rows1));
+  ok('…and so does the Client column of the invoices spreadsheet', csv1[0].split(',')[3] === '"Client"' && invText.split('","')[3] === `'${HEAD}` && !invText.includes('SUM(1,2)'), invText);
+  ok('a booking of one’s own is listed under its client as before, there and in the spreadsheet; one with no client shows none (a contact’s name is not put in its place)', (rows1['Own job'] || '').startsWith('Harbour Bakery · ') && /^"INV-0010",.*"Harbour Bakery","Own job","300\.00"/.test(csv1[2]) && !!rows1['No client yet'] && !/Zed|·/.test(rows1['No client yet']), JSON.stringify([rows1, csv1[2]]));
   await E.page.keyboard.press('Escape'); await sleep(200);
-  await E.page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/hours.js')]).then(([s, m]) => m.openHoursSheet(s.db.bookings[0].id))); await E.page.waitForSelector('.sheet button:has-text("CSV")');
+  const linkId = await E.page.evaluate(() => import('./js/store.js').then(s => s.db.bookings[0].id));
+  const moneyHead = async id => { await E.page.evaluate(id => window.logiGo('bookings').then(() => import('./js/pages/bookings.js')).then(m => m.openBooking(id, { view: 'money', kind: 'invoice' })), id); await E.page.waitForSelector('.money-page .money-doc'); await sleep(200); return E.page.evaluate(() => ({ head: document.querySelector('.money-page > .muted').textContent, to: [...document.querySelectorAll('.money-page .money-parties > div')][1].innerText.split('\n').slice(1) })); };
+  const pageLink = await moneyHead(linkId), pageOwn = await moneyHead('own-job');
+  ok('the Money page names the same one above the document as the document is headed to; a booking of one’s own shows its client', pageLink.head === `${TITLE} · ${HEAD}` && pageLink.to[0] === HEAD && !/SUM/.test(pageLink.head + pageLink.to.join()) && pageOwn.head === 'Own job · Harbour Bakery' && pageOwn.to[0] === 'Harbour Bakery', JSON.stringify([pageLink, pageOwn]));
+  const found = await E.page.evaluate(() => import('./js/search.js').then(m => { m.buildIndex(); const pick = q => m.search(q, 'money').map(r => `${r.title} | ${r.meta}`); return { byNumber: pick('INV-0009'), bySender: pick('films'), byClient: pick('sum'), own: pick('INV-0010'), ownByClient: pick('bakery'), bare: pick('Q-0003'), bareByContact: pick('zed') }; }));
+  ok('the search lists that invoice with the sender’s name, finds it by that name, and still finds it by the client on the booking', found.byNumber.length === 1 && found.byNumber[0].startsWith(`Invoice INV-0009 | ${TITLE} · ${HEAD} · Sent`) && found.bySender.join() === found.byNumber.join() && found.byClient.join() === found.byNumber.join(), JSON.stringify(found));
+  ok('…and one’s own invoices and quotes are listed and found as before', found.own.length === 1 && found.own[0].startsWith('Invoice INV-0010 | Own job · Harbour Bakery · Sent') && found.ownByClient.join() === found.own.join() && found.bare.length === 1 && found.bare[0].startsWith('Quote Q-0003 | No client yet · Draft') && found.bareByContact.length === 0, JSON.stringify(found));
+  const docs = await E.page.evaluate(id => Promise.all([import('./js/store.js'), import('./js/money.js'), import('./js/money-doc.js')]).then(async ([s, m, d]) => { const b = s.byId('bookings', id), snap = m.snapshot(b, 'invoice'), mail = k => decodeURIComponent(m.mailtoFor(b, 'invoice', 'https://x.example/i', k)), pdf = d.pdfBlocks(snap); return { link: await m.shareLink(b, 'invoice'), text: m.moneyText(b, 'invoice').split('\n')[2], pdfTo: pdf[pdf.findIndex(x => x.type === 'heading' && x.text === 'To') + 1].text.split('\n')[0], send: mail('send'), remind: mail('remind'), named: m.billedName(b) }; }), linkId);
+  const pub = await E.ctx.newPage(); await pub.goto(docs.link); await pub.waitForSelector('.paper .money-doc');
+  const pubTo = await pub.evaluate(() => [...document.querySelectorAll('.money-parties > div')][1].innerText.split('\n').slice(1)); await pub.close();
+  ok('the page the link opens, the PDF, the text and both emails all name the sender, and none of them the sender’s client', pubTo[0] === HEAD && docs.pdfTo === HEAD && docs.text === `To: ${HEAD}, Pat Producer · Producer · ${HEAD} · pat@quayfilms.example` && docs.named === HEAD && docs.send.startsWith('mailto:pat@quayfilms.example?') && docs.remind.startsWith('mailto:pat@quayfilms.example?') && ![pubTo.join(), docs.pdfTo, docs.text, docs.send, docs.remind].some(t => /SUM\(1,2\)/.test(t)), JSON.stringify([pubTo, docs.pdfTo, docs.text, docs.named]));
+  // the client changed by hand heads the document again, and every list follows
+  await E.page.evaluate(id => import('./js/store.js').then(s => s.update(d => { const x = d.bookings.find(b => b.id === id); x.client = 'Lantern Studios'; x.updatedAt = Date.now(); })), linkId);
+  const rows2 = await moneyRows(), csv2 = await invoicesCsv();
+  const after = await E.page.evaluate(id => Promise.all([import('./js/store.js'), import('./js/money.js'), import('./js/search.js')]).then(([s, m, q]) => { q.buildIndex(); const b = s.byId('bookings', id); return { to: m.snapshot(b, 'invoice').to[0], search: q.search('INV-0009', 'money').map(r => r.meta) }; }), linkId);
+  ok('with the client changed by hand the document is headed to that client, and the overview, the spreadsheet and the search say the same', after.to === 'Lantern Studios' && (rows2[TITLE] || '').startsWith('Lantern Studios · ') && csv2[1].split('","')[3] === 'Lantern Studios' && after.search.length === 1 && after.search[0].startsWith(`${TITLE} · Lantern Studios · Sent`), JSON.stringify([after, rows2[TITLE], csv2[1]]));
+  await E.page.keyboard.press('Escape'); await sleep(200);
+  await E.page.evaluate(id => import('./js/store.js').then(s => s.update(d => { const x = d.bookings.find(b => b.id === id); x.client = '+SUM(1,2)'; x.updatedAt = Date.now(); })), linkId);
+  await E.page.evaluate(id => import('./js/hours.js').then(m => m.openHoursSheet(id)), linkId); await E.page.waitForSelector('.sheet button:has-text("CSV")');
   const [hrs] = await Promise.all([E.page.waitForEvent('download', { timeout: 15000 }), E.page.locator('.sheet button:has-text("CSV")').click()]);
   const hrsText = fs.readFileSync(await hrs.path(), 'utf8').split('\n')[1];
-  ok('…and so does the hours spreadsheet, for the project, the client and the note', hrsText.includes(`"'=HYPERLINK(""https://evil.example"",""Open"")","'+SUM(1,2)"`) && hrsText.endsWith(`"'@cmd"`), hrsText);
+  ok('the hours spreadsheet guards its text too, for the project, the client and the note (hours belong to the booking, so the client there is the booking’s)', hrsText.includes(`"'=HYPERLINK(""https://evil.example"",""Open"")","'+SUM(1,2)"`) && hrsText.endsWith(`"'@cmd"`), hrsText);
+  await E.page.keyboard.press('Escape'); await sleep(200);
+  // ---- the TC Notes spreadsheet: a note, and a script line that came from someone else's script ----
+  await E.page.evaluate(() => import('./js/store.js').then(s => s.upsert('logs', { id: 'log-csv', title: 'Formula log', created: '2026-11-18', rate: '25', mode: 'free', camera: '', sync: null, script: null, notes: [
+    { id: 'n1', frames: 2250000, text: '=1+1', at: '2026-11-18T10:00:00.000Z' }, { id: 'n2', frames: 2250025, text: 'said, "twice"', quote: '-Who is there?', start: 3, at: '2026-11-18T10:00:01.000Z' },
+    { id: 'n3', frames: 2250050, text: '', dur: '00:00:02:00', quote: '+44 on the door', at: '=NOW()' }, { id: 'n4', frames: 2250075, text: '@home take, good', at: '2026-11-18T10:00:03.000Z' }, { id: 'n5', frames: 2250100, text: 'Plane overhead', at: '2026-11-18T10:00:04.000Z' }] })));
+  await E.page.evaluate(() => window.logiGo('tcnotes').then(() => import('./js/pages/tcnotes.js')).then(m => m.openLog('log-csv'))); await E.page.waitForSelector('.tc-log-head');
+  await E.page.locator('.tc-log-head .actions button', { hasText: 'Export' }).click(); await E.page.waitForSelector('.sheet button:has-text("Share as spreadsheet")');
+  const [tc] = await Promise.all([E.page.waitForEvent('download', { timeout: 15000 }), E.page.locator('.sheet button:has-text("Share as spreadsheet")').click()]);
+  const tcRows = fs.readFileSync(await tc.path(), 'utf8').split('\n');
+  ok('the TC Notes spreadsheet keeps a note and a script line that start like a formula as text, as the others do', tcRows[0] === 'Timecode,Note,Script line,Captured' && /^\d\d:\d\d:\d\d:\d\d,"'=1\+1","",2026-11-18T10:00:00\.000Z$/.test(tcRows[1]) && tcRows[2].includes(`,"said, ""twice""","'-Who is there?",2026-11-18T10:00:01.000Z`) && tcRows[3].includes(`," [00:00:02:00]","'+44 on the door","'=NOW()"`) && tcRows[4].includes(`,"'@home take, good","",`), tcRows.slice(1, 5).join(' ¶ '));
+  ok('…and leaves a plain note, the timecode and the time it was captured exactly as they were', /^\d\d:\d\d:\d\d:\d\d,"Plane overhead","",2026-11-18T10:00:04\.000Z$/.test(tcRows[5]) && tcRows.length === 7 && tcRows[6] === '', tcRows[5]);
   await E.page.keyboard.press('Escape'); await sleep(200);
   await E.ctx.close();
 
@@ -786,6 +826,34 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('on a 1200-pixel screen the preview sits inside the window', wide.inside && wide.page, JSON.stringify(wide));
   await sleep(400); await W.page.screenshot({ path: OUT + '/share-add-gear-1200.png' });
   await W.ctx.close();
+
+  /* ============== after the Add, a part of Vdex that cannot be fetched is not "Could not add it" ============== */
+  // No connection and no offline copy yet: the file that draws the Undo bar (and, for a contact, the Crew page) cannot be
+  // fetched once Add has been tapped. A browser of its own, whose failed requests are expected and counted apart.
+  const offline = async (lost, packed) => {
+    const ctx = await browser.newContext({ viewport: { width: 420, height: 900 }, deviceScaleFactor: 1, serviceWorkers: 'block' });
+    await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+    await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); window.__toasts = []; new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document, { childList: true, subtree: true }); }); // every message, even one that has faded
+    await ctx.addInitScript(acceptTerms().content);
+    const page = await ctx.newPage(), broke = []; page.on('pageerror', e => broke.push(e.message)); page.on('dialog', d => d.accept());
+    await page.goto(BASE); await page.waitForSelector('#rolodex .drum-btn');
+    await ctx.route(lost, r => r.abort());
+    await arrive(page, packed);
+    return { ctx, page, broke };
+  };
+  const O1 = await offline('**/js/gear-import-ui.js', await pack({ v: 1, kind: 'gear', title: 'Two lights', by: { name: 'Lena Lights' }, items: [{ name: 'Offline panel A', serial: 'OFF-A1' }, { name: 'Offline panel B', serial: 'OFF-B2' }], kits: [] }));
+  await O1.page.locator('.sheet .add-go').click();
+  await O1.page.waitForFunction(() => window.__toasts.length > 0, null, { timeout: 15000 }).catch(() => {}); await sleep(500);
+  const o1 = await O1.page.evaluate(() => import('./js/store.js').then(s => ({ gear: s.db.gear.map(g => g.name).sort().join('|'), toasts: window.__toasts, sheets: document.querySelectorAll('.sheet-back').length, bar: document.querySelectorAll('.undo-bar').length, on: window.logiPage(), shown: document.querySelectorAll('.gear-card.just-added').length })));
+  ok('when the file behind Undo cannot be fetched, the equipment is added all the same and shown on the Equipment page', o1.gear === 'Offline panel A|Offline panel B' && o1.sheets === 0 && o1.on === 'gear' && o1.shown === 2, JSON.stringify(o1));
+  ok('…it is said to be added, never “Could not add it”, and that Undo is what is missing', o1.toasts.length === 1 && o1.toasts[0] === '2 added. Undo could not be loaded, so there is none for this import.' && o1.bar === 0 && O1.broke.length === 0, JSON.stringify([o1.toasts, O1.broke]));
+  await O1.ctx.close();
+  const O2 = await offline('**/js/pages/crew.js', await cardOf({ name: 'Otto Offline', title: 'Gaffer', phone: '+1 555 0177', email: 'otto@offline.example' }));
+  await O2.page.locator('.sheet button:has-text("Add to my Crew")').click();
+  await O2.page.waitForFunction(() => window.__toasts.length > 0, null, { timeout: 15000 }).catch(() => {}); await sleep(600);
+  const o2 = await O2.page.evaluate(() => import('./js/store.js').then(s => ({ crew: s.db.crew.map(c => c.name).join('|'), toasts: window.__toasts, sheets: document.querySelectorAll('.sheet-back').length })));
+  ok('the same for a contact when the Crew page cannot be fetched: the person is added and said to be, and nothing says otherwise', o2.crew === 'Otto Offline' && o2.toasts.join('|') === 'Added to your Crew' && o2.sheets === 0 && O2.broke.length === 0, JSON.stringify([o2, O2.broke]));
+  await O2.ctx.close();
   const origin = new URL(BASE).origin;
   const outside = requests.filter(u => !u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:') && !/^https:\/\/api\.open-meteo\.com\//.test(u));
   const leaked = requests.filter(u => u.includes(hashOf(cardLink).slice(0, 40)) || u.includes(hashOf(kitLink).slice(0, 40)) || /[?&]add=/.test(u));

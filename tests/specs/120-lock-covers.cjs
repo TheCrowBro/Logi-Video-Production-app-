@@ -5,7 +5,9 @@
 // it above a form the walkthrough was started from. The lock screen follows a PIN changed under it, wrong tries made
 // in another tab and an erase from another tab; the app never starts behind a lock screen; the offer never comes over
 // the terms; a PIN the disk would not take is not reported as set; and what the lock screen says to a screen reader
-// (the wait, how many digits are in) is said from inside it, where it can be heard.
+// (the wait, how many digits are in) is said from inside it, where it can be heard. The two PIN fields do not take the
+// cursor back from someone already in the second; arrow keys do not turn the Rolodex under a cover; Enter presses the
+// lock screen's own buttons (never a digit key); and a sheet that code opens while a cover is up starts covered.
 // ONLY=<part of a case's name> runs just those cases, for working on one.
 const { chromium } = require('playwright');
 const { TERMS_RECORD } = require('../helpers.cjs');
@@ -157,14 +159,50 @@ const PHONE = { width: 360, height: 740 };
     await addForm(page);
     await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.tour-card h2'); await sleep(300);
     await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap');
-    await page.locator('.sheet .card.tap', { hasText: 'Quotes & invoices, start to finish' }).click();
+    const titles = () => page.evaluate(() => [...document.querySelectorAll('.sheet')].map(x => x.getAttribute('aria-label')));
+    const course = () => page.locator('.sheet .card.tap', { hasText: 'Quotes & invoices, start to finish' }).click();
+    // A course closes every sheet on its way, the form it was reached from included: that is said before it starts.
+    await course(); await sleep(400);
+    const asked = { titles: await titles(), text: await page.locator('.sheet').last().locator('.sheet-body p').innerText().catch(() => ''), buttons: await page.locator('.sheet').last().locator('.actions button').allInnerTexts().catch(() => []), tour: (await state(page)).tour };
+    ok('a course chosen over an open form says first that the form would be closed and what was typed lost, in one sentence with two buttons', asked.titles.join('|') === 'Add trusted crew|Tutorials|A form is still open' && asked.text === 'This walkthrough closes “Add trusted crew”, and anything typed in it that is not saved would be lost.' && asked.buttons.join('|') === 'Back to the form|Close it and carry on' && asked.tour === 0, JSON.stringify(asked));
+    await page.locator('.sheet').last().locator('button', { hasText: 'Back to the form' }).click(); await sleep(300);
+    const back = { titles: await titles(), ...(await state(page)) };
+    ok('Back to the form goes back to it: the form is the only sheet, what was typed is in it, the cursor is in it, and no course runs', back.titles.join('|') === 'Add trusted crew' && back.typed === 'Robin Example' && back.focus === 'sheet' && back.tour === 0 && await page.locator('.sheet form [data-key="name"]').fill('Robin Example-Hale', { timeout: 2500 }).then(() => true, () => false), JSON.stringify(back));
+    // A page's own tutorial closes nothing, so it asks nothing and the form stays under it.
+    await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.tour-card h2'); await sleep(300);
+    await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap');
+    await page.locator('.sheet .card.tap', { hasText: /^Equipment$/ }).click(); await page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(900);
+    const plain = { titles: await titles(), ...(await state(page)) };
+    ok('a page’s own tutorial, which closes nothing, starts without asking and leaves the form as it is', plain.titles.join('|') === 'Add trusted crew' && plain.tour === 1 && plain.typed === 'Robin Example-Hale', JSON.stringify(plain));
+    // …and from its first card the way to the course is the same, this time carried on with.
+    await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap');
+    await course(); await sleep(400);
+    await page.locator('.sheet').last().locator('button', { hasText: 'Close it and carry on' }).click();
     await page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(300);
-    for (let i = 0; i < 6 && (await state(page)).sheets > 0; i++) await nextCard(page);
-    await sleep(500);
-    ok('(the course has closed the form it was started from)', (await state(page)).sheets === 0 && (await state(page)).tour === 1, await card(page));
+    const on = { card: await card(page), ...(await state(page)) };
+    ok('Close it and carry on closes the form and starts the course', on.sheets === 0 && on.tour === 1 && on.card === 'Quotes and invoices, start to finish', JSON.stringify(on));
+    for (let i = 0; i < 4; i++) await nextCard(page);
+    await sleep(300);
     await page.keyboard.press('Escape'); await sleep(300);
     const st = await state(page);
     ok('when a course started from a form ends, the page is usable: the form is gone, so nothing is out of reach', st.tour === 0 && st.sheets === 0 && !st.appInert && await usable(page), JSON.stringify(st));
+    // with no form open there is nothing to ask
+    await page.evaluate(() => import('./js/tutorials.js').then(m => m.openChooser())); await page.waitForSelector('.sheet .card.tap');
+    await course(); await page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(300);
+    ok('with no form open the course starts straight away, as before', (await state(page)).sheets === 0 && (await card(page)) === 'Quotes and invoices, start to finish');
+    await page.keyboard.press('Escape'); await sleep(300);
+    // the same question before the set-up walkthrough and the practice job, which close sheets too
+    await addForm(page, 'Robin Example');
+    await page.evaluate(() => import('./js/tutorials.js').then(m => m.openChooser())); await page.waitForSelector('.sheet .card.tap');
+    await page.locator('.sheet button', { hasText: 'The set-up walkthrough again' }).click(); await sleep(400);
+    const setUp = await page.locator('.sheet').last().locator('.sheet-body p').innerText().catch(() => '');
+    await page.locator('.sheet').last().locator('button', { hasText: 'Back to the form' }).click(); await sleep(300);
+    await page.evaluate(() => import('./js/tutorials.js').then(m => m.openMoneyGuide())); await page.waitForSelector('.sheet .money-guide-body');
+    await page.locator('.sheet button', { hasText: 'Open the practice job' }).click(); await sleep(400);
+    const job = await page.locator('.sheet').last().locator('.sheet-body p').first().innerText().catch(() => '');
+    await page.locator('.sheet').last().locator('button', { hasText: 'Back to the form' }).click(); await sleep(300);
+    const end = { titles: await titles(), ...(await state(page)) };
+    ok('the set-up walkthrough and the practice job ask the same before they close a form, and going back keeps it', setUp === 'The set-up walkthrough closes “Add trusted crew”, and anything typed in it that is not saved would be lost.' && job === 'Opening the practice job closes “Add trusted crew”, and anything typed in it that is not saved would be lost.' && end.titles.join('|') === 'Add trusted crew' && end.typed === 'Robin Example' && end.tour === 0 && !(await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.some(b => b.practice)))), JSON.stringify([setUp, job, end]));
     await ctx.close();
   });
 
@@ -531,6 +569,139 @@ const PHONE = { width: 360, height: 740 };
     const w = await heard(page), line = await page.evaluate(() => ({ text: document.querySelector('.lock-msg').textContent, live: document.querySelector('.lock-msg').getAttribute('aria-live') }));
     ok('the wait after wrong PINs is said once from inside the lock screen, where a screen reader hears it', /^Wrong PIN\. Wait \d+ seconds\. 5 tries left before this device is erased\.$/.test(w.text) && w.reachable, JSON.stringify(w));
     ok('…while the seconds ticking on screen are not read out one by one', /Try again in \d+ s\./.test(line.text) && line.live === 'off', JSON.stringify(line));
+    await ctx.close();
+  });
+
+  /* ------------------- the two PIN fields: the cursor is not taken from the second one ------------------- */
+  the('pin fields keep the cursor', async () => {
+    const { ctx, page } = await existing();
+    // Change PIN… and Set a PIN… ask in this sheet. It puts the cursor in the first field a moment after it opens.
+    const ask = () => page.evaluate(() => import('./js/lock.js').then(l => { window.__asked = l.askSecret({ title: 'New PIN', confirm: true }); }));
+    await ask(); await page.waitForSelector('.sheet .pin-input');
+    const first = await page.evaluate(async () => { await new Promise(r => setTimeout(r, 200)); return document.activeElement.getAttribute('aria-label'); });
+    ok('the sheet that asks for a new PIN puts the cursor in the first field', first === 'New PIN', first);
+    await page.keyboard.press('Escape'); await sleep(200);
+    // Someone (or a password manager) who is in the second field before that moment keeps the cursor there.
+    const kept = await page.evaluate(async () => { const l = await import('./js/lock.js'); window.__asked = l.askSecret({ title: 'New PIN', confirm: true }); const [a, b] = document.querySelectorAll('.sheet .pin-input'); b.focus(); await new Promise(r => setTimeout(r, 200)); return { at: document.activeElement === b ? 'second' : document.activeElement === a ? 'first' : document.activeElement.tagName }; });
+    await page.keyboard.insertText(P9); // goes where the cursor is, as typing and Playwright's fill() do
+    const vals = await page.evaluate(() => [...document.querySelectorAll('.sheet .pin-input')].map(i => i.value));
+    ok('…and leaves it alone when it is already in the second field: what is typed next lands there, not in the first', kept.at === 'second' && vals[0] === '' && vals[1] === P9, JSON.stringify([kept, vals]));
+    await page.keyboard.press('Escape'); await sleep(200);
+    await ctx.close();
+    // The first-start set-up has the same two fields and the same moment.
+    const c2 = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 1 });
+    await c2.addInitScript(t => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); }, TERMS_RECORD);
+    await c2.addInitScript(() => { const mo = new MutationObserver(() => { const f = document.querySelectorAll('.lock-setup .pin-input'); if (f.length === 2) { mo.disconnect(); f[1].focus(); window.__early = document.activeElement === f[1]; } }); mo.observe(document, { childList: true, subtree: true }); });
+    const p2 = await c2.newPage(); watch(p2);
+    await p2.goto(BASE); await p2.waitForSelector('.lock-setup .pin-input'); await sleep(300);
+    const setUp = await p2.evaluate(() => { const f = document.querySelectorAll('.lock-setup .pin-input'); return { early: window.__early, at: document.activeElement === f[1] ? 'second' : document.activeElement === f[0] ? 'first' : document.activeElement.tagName }; });
+    ok('the PIN set-up at a first start leaves the cursor in the second field too, when it is there already', setUp.early === true && setUp.at === 'second', JSON.stringify(setUp));
+    await c2.close();
+  });
+
+  /* ----------------------------- arrow keys do not turn the Rolodex underneath ----------------------------- */
+  the('arrows under a cover', async () => {
+    const { ctx, page } = await existing();
+    const section = () => page.evaluate(() => window.logiPage());
+    await page.evaluate(() => window.logiGo('bookings')); await sleep(400);
+    await lockNow(page); await lockUp(page);
+    for (const k of ['ArrowRight', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowUp', 'ArrowRight']) { await page.keyboard.press(k); await sleep(120); }
+    await sleep(500);
+    ok('arrow keys on the lock screen do not turn the Rolodex behind it', (await section()) === 'bookings' && (await state(page)).lock === 1, await section());
+    await page.keyboard.type(OLD); await lockGone(page); await sleep(300);
+    ok('…so after the PIN the section that was open is still the one open', (await section()) === 'bookings' && (await page.locator('#rolodex .tab[aria-selected="true"]').getAttribute('aria-label')).startsWith('Bookings'), await section());
+    await page.keyboard.press('ArrowRight'); await sleep(700);
+    ok('…and the arrow keys turn it again once the page is back', (await section()) === 'crew', await section());
+    // under a walkthrough: left and right move its cards, and up and down belong to nothing underneath
+    await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await page.waitForSelector('.tour-card h2'); await sleep(400);
+    const at = await section();
+    await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowUp'); await page.keyboard.press('ArrowDown'); await sleep(700);
+    ok('under a walkthrough the up and down arrows do not turn it either', (await section()) === at && (await state(page)).tour === 1, `${at} → ${await section()}`);
+    await page.keyboard.press('Escape'); await sleep(300);
+    // under the offer of a longer PIN
+    await page.evaluate(() => window.logiGo('bookings')); await sleep(400);
+    await page.evaluate(() => import('./js/lock.js').then(l => l.setOption({ max: undefined })));
+    await lockNow(page); await unlock(page); await page.waitForSelector('.pin-offer', { timeout: 10000 }); await sleep(300);
+    await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowDown'); await sleep(600);
+    ok('…nor on the offer of a longer PIN', (await section()) === 'bookings' && (await state(page)).offer === 1, await section());
+    await page.keyboard.press('Escape'); await sleep(300);
+    ok('…and the page is usable afterwards', await usable(page));
+    await ctx.close();
+  });
+
+  /* ------------------------------ Enter presses the lock screen's own buttons ------------------------------ */
+  the('enter on the lock buttons', async () => {
+    // A fingerprint is "enrolled" so the two fingerprint buttons are on the screen; the device's own prompt is stood
+    // in for, and says no every time, so only how often it was asked for counts.
+    const { ctx, page } = await existing({ patch: { bio: { id: 'AAAA', pub: null, alg: null, mode: 'device', prfSalt: 'AAAA', wrap: null } } });
+    await page.evaluate(() => { window.__bio = 0; navigator.credentials.get = () => { window.__bio++; return Promise.reject(Object.assign(new Error('not now'), { name: 'NotAllowedError' })); }; window.__confirms = []; window.confirm = m => { window.__confirms.push(m); return false; }; });
+    await lockNow(page); await lockUp(page); await sleep(700); // the screen asks for the fingerprint once by itself
+    const asked0 = await page.evaluate(() => window.__bio);
+    const forgot = () => page.evaluate(() => ({ open: !document.getElementById('lock-forgot').hidden, said: document.querySelector('.lock .btn[aria-controls="lock-forgot"]').getAttribute('aria-expanded') }));
+    await page.locator('.lock .btn[aria-controls="lock-forgot"]').focus(); await page.keyboard.press('Enter'); await sleep(150);
+    const f1 = await forgot();
+    ok('Enter on Forgot PIN? opens it, as Space does', f1.open && f1.said === 'true', JSON.stringify(f1));
+    await page.locator('.lock-forgot button', { hasText: 'Erase this device' }).focus(); await page.keyboard.press('Enter'); await sleep(150);
+    ok('Enter on Erase this device asks the question (answered no here, and nothing is erased)', (await page.evaluate(() => window.__confirms.join('|'))) === 'Erase all Vdex data on this device?' && !!(await ls(page, 'logi-vault')) && (await state(page)).lock === 1, await page.evaluate(() => window.__confirms.join('|')));
+    await page.locator('.lock-forgot button', { hasText: 'Keep trying' }).focus(); await page.keyboard.press('Enter'); await sleep(150);
+    const f2 = await forgot();
+    ok('Enter on Keep trying closes it again', !f2.open && f2.said === 'false', JSON.stringify(f2));
+    await page.locator('.lock .lock-bio').focus(); await page.keyboard.press('Enter'); await sleep(250);
+    const asked1 = await page.evaluate(() => window.__bio);
+    await page.locator('.lock .keypad .key[aria-label="Unlock with fingerprint or face"]').focus(); await page.keyboard.press('Enter'); await sleep(250);
+    const asked2 = await page.evaluate(() => window.__bio);
+    ok('Enter on Use fingerprint or face, and on the keypad’s fingerprint key, asks the device', asked0 === 1 && asked1 === 2 && asked2 === 3, [asked0, asked1, asked2].join(','));
+    // what the Enter key is kept from: the keys that put a digit in or take one out
+    await page.locator('.lock .key[aria-label="5"]').focus(); await page.keyboard.type('24'); await page.keyboard.press('Enter'); await sleep(300);
+    const d1 = await dots(page);
+    await page.locator('.lock .key[aria-label="Delete"]').focus(); await page.keyboard.press('Enter'); await sleep(300);
+    const d2 = await dots(page);
+    ok('Enter with a digit key or ⌫ in focus still presses neither: the digits typed stay as they are', d1.on === 2 && d2.on === 2, JSON.stringify([d1, d2]));
+    ok('…and before the last digit it still sends nothing: no wrong PIN is counted', (await cfg(page)).attempts === 0 && (await state(page)).lock === 1 && (await heard(page)).text === '2 of 6', JSON.stringify(await heard(page)));
+    await page.keyboard.press('Backspace'); await page.keyboard.press('Backspace');
+    await page.keyboard.type(OLD); await lockGone(page); await sleep(300);
+    ok('the PIN still unlocks afterwards', (await state(page)).lock === 0 && await usable(page));
+    await ctx.close();
+  });
+
+  /* --------------------------- a sheet that code opens while a cover is up --------------------------- */
+  the('sheet opened under a cover', async () => {
+    const { ctx, page } = await existing();
+    // What a save that finishes, or a file that arrives, does while the lock screen is up: it opens a sheet.
+    const openSheet = title => page.evaluate(t => import('./js/util.js').then(u => { const box = document.createElement('div'); const i = document.createElement('input'); i.setAttribute('aria-label', 'A field'); box.append(i); u.sheet(t, box); }), title);
+    const sheetState = () => page.evaluate(() => [...document.querySelectorAll('.sheet-back')].map(b => ({ title: b.querySelector('.sheet').getAttribute('aria-label'), inert: b.inert, seen: getComputedStyle(b).visibility !== 'hidden' })));
+    await lockNow(page); await lockUp(page);
+    await openSheet('Opened under the lock'); await sleep(200);
+    const under = await sheetState(), st = await state(page);
+    ok('a sheet opened by code while the lock screen is up starts out of reach and out of sight, and the focus stays on the lock screen', under.length === 1 && under[0].inert && !under[0].seen && st.focus === 'lock' && st.appInert, JSON.stringify([under, st]));
+    await page.keyboard.press('Escape'); await sleep(250);
+    ok('Escape on the lock screen does not close it', (await sheetState()).length === 1 && (await state(page)).lock === 1);
+    await page.keyboard.type(OLD); await lockGone(page); await sleep(300);
+    const after = await sheetState();
+    ok('after the PIN it is there to see and to use', after.length === 1 && !after[0].inert && after[0].seen && (await state(page)).appInert && await page.locator('.sheet input[aria-label="A field"]').fill('typed after the unlock', { timeout: 2500 }).then(() => true, () => false), JSON.stringify(after));
+    await page.keyboard.press('Escape'); await sleep(250);
+    ok('…Escape closes it then, and the page is usable', (await sheetState()).length === 0 && await usable(page), JSON.stringify(await state(page)));
+    // over a form that was open already: after the unlock both are back, the newer one on top
+    await addForm(page);
+    await lockNow(page); await lockUp(page);
+    await openSheet('Opened over the form'); await sleep(200);
+    await page.keyboard.press('Escape'); await sleep(200);
+    await page.keyboard.type(OLD); await lockGone(page); await sleep(300);
+    const two = await sheetState();
+    ok('with a form open before the lock, both come back, and Escape closes the newer one first', two.length === 2 && two.every(x => !x.inert && x.seen) && two[1].title === 'Opened over the form' && (await state(page)).typed === 'Robin Example', JSON.stringify(two));
+    await page.keyboard.press('Escape'); await sleep(250);
+    ok('…then the form, with what was typed still in it', (await sheetState()).length === 1 && (await state(page)).typed === 'Robin Example');
+    await page.keyboard.press('Escape'); await sleep(250);
+    // under the offer of a longer PIN
+    await page.evaluate(() => import('./js/lock.js').then(l => l.setOption({ max: undefined })));
+    await lockNow(page); await unlock(page); await page.waitForSelector('.pin-offer', { timeout: 10000 }); await sleep(300);
+    await openSheet('Opened under the offer'); await sleep(200);
+    const underOffer = await sheetState();
+    await page.keyboard.press('Escape'); await sleep(350); // on the offer: keeps the PIN, closes the offer only
+    const kept = await sheetState();
+    ok('the same under the offer of a longer PIN: out of reach while it is up, untouched by its Escape, usable after it', underOffer.length === 1 && underOffer[0].inert && !underOffer[0].seen && (await state(page)).offer === 0 && kept.length === 1 && !kept[0].inert && kept[0].seen && await page.locator('.sheet input[aria-label="A field"]').fill('typed after the offer', { timeout: 2500 }).then(() => true, () => false), JSON.stringify([underOffer, kept]));
+    await page.keyboard.press('Escape'); await sleep(250);
+    ok('…and once it is closed the page is usable', (await sheetState()).length === 0 && await usable(page), JSON.stringify(await state(page)));
     await ctx.close();
   });
 

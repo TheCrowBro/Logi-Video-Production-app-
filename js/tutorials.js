@@ -393,13 +393,30 @@ async function reach(key) {
   }
   return true;
 }
+// The two courses, the set-up walkthrough and the practice job close every open sheet on their way (closeSheets above):
+// they need the page itself. Reached through the ? in a form's header (then Other pages…, or a guide), that would take
+// the form with it, and what was typed in it, without a word. So before one of them starts from the sheet `sh` over
+// such a form, a sentence says what would be closed, and the person chooses: back to the form, or on without it.
+// what: how the sentence names the thing about to start. go: starts it. A form here is a sheet with something to type
+// into; one that only holds switches and lists (they take effect as they are set) has nothing to lose.
+const TYPED = 'form, textarea, input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])';
+function overForm(sh, what, go) {
+  const under = [...document.querySelectorAll('.sheet-back')].filter(b => !b.contains(sh.el) && b.querySelector(TYPED));
+  if (!under.length) { sh.close(); return go(); }
+  const top = under[under.length - 1], name = top.querySelector('.sheet').getAttribute('aria-label') || 'the form';
+  const ask = sheet('A form is still open', h('div', { class: 'stack' },
+    h('p', null, `${what} closes “${name}”, and anything typed in it that is not saved would be lost.`),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', type: 'button', onclick: () => { ask.close(); sh.close(); (top.querySelector('input:not([type=hidden]), textarea, select') || top.querySelector('.sheet-tools button'))?.focus(); } }, 'Back to the form'),
+      h('button', { class: 'btn ghost', type: 'button', onclick: async () => { ask.close(); sh.close(); await closeSheets(); go(); } }, 'Close it and carry on'))));
+}
 export function openChooser() {
-  let close = () => {};
+  const start = (key, t) => async () => { const go = async () => { if (await reach(key)) openTutorial(key); }; if (t.course) return overForm(sh, 'This walkthrough', go); sh.close(); go(); };
   const body = h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'A short walkthrough of any page. Each one highlights the boxes on that page with a line about what they do.'),
-    h('div', { class: 'list' }, ...Object.entries(TUTORIALS).filter(([, t]) => !t.sheet && !t.hidden).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: async () => { close(); if (await reach(key)) openTutorial(key); } }, h('strong', null, t.name)))),
-    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { close(); openTcGuide(); } }, '📖 Timecode guide'), h('button', { class: 'btn ghost small', onclick: () => { close(); openMoneyGuide(); } }, '📖 Quotes & invoices guide'), h('button', { class: 'btn ghost small', onclick: () => { close(); startTour(); } }, '🧭 The set-up walkthrough again')));
-  ({ close } = sheet('Tutorials', body));
+    h('div', { class: 'list' }, ...Object.entries(TUTORIALS).filter(([, t]) => !t.sheet && !t.hidden).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: start(key, t) }, h('strong', null, t.name)))),
+    h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { sh.close(); openTcGuide(); } }, '📖 Timecode guide'), h('button', { class: 'btn ghost small', onclick: () => { sh.close(); openMoneyGuide(); } }, '📖 Quotes & invoices guide'), h('button', { class: 'btn ghost small', onclick: () => overForm(sh, 'The set-up walkthrough', () => startTour()) }, '🧭 The set-up walkthrough again')));
+  const sh = sheet('Tutorials', body);
 }
 
 /* ------------------------------ the timecode guide ------------------------------ */
@@ -416,14 +433,13 @@ const GUIDE = [
   ['When something looks wrong', ['Stamps are a few seconds out: the frame rate or mode is wrong, or the camera drifted. Fix the rate in ⚙ and re-sync.', 'The clock shows dashes: the log is not synced yet.', 'Notes say unsynced: they were taken before the sync. Tap their timecode to correct them.', 'The phone and the laptop disagree: link them, or sync each to the camera separately.', 'Drop-frame confusion: a timecode with a semicolon is drop frame; set the log to the DF rate and type the semicolon, or let the scan read it.', 'A practice log, with a sync, a few notes and the sample script, lets you try all of this without a camera: Walk me through it below makes one.']],
 ];
 export function openTcGuide() {
-  let close = () => {};
   const body = h('div', { class: 'stack tc-guide-body' },
     h('p', { class: 'small muted' }, 'Everything about timecode notes in one read, in the order of a shoot day. Five minutes.'),
     ...GUIDE.map(([head, paras]) => h('section', null, h('h3', null, head), ...paras.map(t => h('p', null, t)))),
     h('div', { class: 'actions' },
-      h('button', { class: 'btn primary', onclick: async () => { close(); if (await reach('tccourse')) openTutorial('tccourse'); } }, '🎓 Walk me through it'),
-      h('button', { class: 'btn ghost', onclick: async () => { close(); const m = await import('./pages/tcnotes.js'); m.openPracticeLog(); } }, '🧪 Open the practice log')));
-  ({ close } = sheet('Timecode guide', body));
+      h('button', { class: 'btn primary', onclick: () => overForm(sh, 'This walkthrough', async () => { if (await reach('tccourse')) openTutorial('tccourse'); }) }, '🎓 Walk me through it'),
+      h('button', { class: 'btn ghost', onclick: async () => { sh.close(); const m = await import('./pages/tcnotes.js'); m.openPracticeLog(); } }, '🧪 Open the practice log')));
+  const sh = sheet('Timecode guide', body);
 }
 
 /* ------------------------------ the quotes and invoices guide ------------------------------ */
@@ -439,12 +455,11 @@ const MONEY_GUIDE = [
   ['The overview, and the accountant', ['Bookings → 💰 Money shows what is invoiced and unpaid, overdue, quoted and awaiting, and paid this year, and lists every booking that has a quote or an invoice. Invoices (CSV) exports them as a spreadsheet for the accountant, with a licence.']],
 ];
 export function openMoneyGuide() {
-  let close = () => {};
   const body = h('div', { class: 'stack tc-guide-body money-guide-body' },
     h('p', { class: 'small muted' }, 'Quotes and invoices in one read, in the order of a job: from setting your rates to the accountant’s spreadsheet. Five minutes.'),
     ...MONEY_GUIDE.map(([head, paras]) => h('section', null, h('h3', null, head), ...paras.map(t => h('p', null, t)))),
     h('div', { class: 'actions' },
-      h('button', { class: 'btn primary', onclick: async () => { close(); if (await reach('moneycourse')) openTutorial('moneycourse'); } }, '🎓 Walk me through it'),
-      h('button', { class: 'btn ghost', onclick: async () => { close(); await toPracticeJob(); } }, '📐 Open the practice job')));
-  ({ close } = sheet('Quotes & invoices guide', body));
+      h('button', { class: 'btn primary', onclick: () => overForm(sh, 'This walkthrough', async () => { if (await reach('moneycourse')) openTutorial('moneycourse'); }) }, '🎓 Walk me through it'),
+      h('button', { class: 'btn ghost', onclick: () => overForm(sh, 'Opening the practice job', () => toPracticeJob()) }, '📐 Open the practice job')));
+  const sh = sheet('Quotes & invoices guide', body);
 }

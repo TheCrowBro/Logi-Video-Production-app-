@@ -129,9 +129,14 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
   ok('signing in again takes one tap and names the account', reSynced && reHint === 'gee@example.com', JSON.stringify({ reSynced, reHint, state: await page.evaluate(() => document.getElementById('cloudBtn').dataset.state), err: await page.evaluate(() => import('./js/store.js').then(s => s.cloud.error)) }));
   await page.evaluate(() => localStorage.setItem('logi-google-scopes', localStorage.getItem('logi-google-scopes') + ' https://www.googleapis.com/auth/calendar.app.created'));
   await page.evaluate(async () => { (await import('./js/providers.js')).forgetGoogleToken('https://www.googleapis.com/auth/drive.appdata'); });
-  await page.locator('.sheet button:has-text("Sync now")').click(); await synced(page);
+  // The storage still reads "synced" while Google's window is open, so that state says nothing about this tap: wait
+  // for what the tap itself ends with, the panel's word that the copy is saved, before asking what the window left.
+  const saidBefore = await page.evaluate(() => window.__toasts.length);
+  await page.locator('.sheet button:has-text("Sync now")').click();
+  await page.waitForFunction(n => window.__toasts.slice(n).some(t => /Up to date\. Your copy is saved\./.test(t)), saidBefore, { timeout: 15000 }).catch(() => {});
+  await synced(page);
   ok('one Google window renews Drive and Calendar together', /drive\.appdata/.test(await page.evaluate(() => window.__gcfg.scope)) && /calendar\.app\.created/.test(await page.evaluate(() => window.__gcfg.scope)));
-  ok('…and the calendar is then covered without another window', await page.evaluate(async () => { const p = await import('./js/providers.js'); return !!(await p.googleToken('https://www.googleapis.com/auth/calendar.app.created', false)); }));
+  ok('…and the calendar is then covered without another window', await page.evaluate(async () => { const p = await import('./js/providers.js'); return p.googleToken('https://www.googleapis.com/auth/calendar.app.created', false).then(t => !!t, () => false); }));
   await page.evaluate(() => { window.__gdeny = true; });
   const feedErr = await page.evaluate(async () => { try { await (await import('./js/store.js')).setFeed(true); return 'no error'; } catch (e) { return e.message; } });
   await page.evaluate(() => { window.__gdeny = false; });

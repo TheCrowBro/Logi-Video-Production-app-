@@ -193,9 +193,12 @@ function card(g, today, sym) {
     h('div', { class: 'card-row' },
       h('div', { class: 'grow' }, h('strong', null, g.name), h('div', { class: 'muted small' }, [qtyOf(g) > 1 && `${qtyOf(g)} owned`, g.serial && 'S/N ' + g.serial, g.value !== '' && g.value != null && money(g.value, sym) + (qtyOf(g) > 1 ? ' each' : '')].filter(Boolean).join(' · ')),
         h('button', { class: 'chip loc-chip' + (g.location ? '' : ' empty'), type: 'button', 'aria-label': `Where ${g.name} is`, title: 'Change where it is', onclick: () => moveItem(g) }, g.location ? '📍 ' + g.location : '📍 Where is it?')),
-      h('span', { class: 'pill ' + (ahead.length ? 'st-confirmed' : 'st-delivered') }, ahead.length ? `${ahead.length} booked` : 'Free'),
-      h('button', { class: 'icon-btn', 'aria-label': 'Service log for ' + g.name, title: 'Service log', onclick: () => serviceSheet(g) }, '🔧'),
-      h('button', { class: 'icon-btn', 'aria-label': 'Edit ' + g.name, onclick: () => edit(g) }, '✎')),
+      // How booked it is and the two buttons stay together: where the name would be squeezed beside them (a 320 px
+      // phone, large text) they take the line below it as one (.gear-acts in styles.css).
+      h('div', { class: 'gear-acts' },
+        h('span', { class: 'pill ' + (ahead.length ? 'st-confirmed' : 'st-delivered') }, ahead.length ? `${ahead.length} booked` : 'Free'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Service log for ' + g.name, title: 'Service log', onclick: () => serviceSheet(g) }, '🔧'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Edit ' + g.name, onclick: () => edit(g) }, '✎'))),
     serviceState(g).map(st => h('div', { class: (st.level === 'due' ? 'warn' : 'note') + ' small' }, (st.level === 'due' ? '⚠ ' : '⏰ ') + st.text)),
     ahead.length > 0 && h('ul', { class: 'bk-list' }, ahead.slice(0, 5).map(b => h('li', null, h('b', null, fmtShort(b.date) + (endOf(b) > b.date ? ' – ' + fmtShort(endOf(b)) : '')), (usedQty(b, g.id) > 1 ? ` ×${usedQty(b, g.id)}` : ''), ' — ', b.title, b.client && h('span', { class: 'muted' }, ` (${b.client})`)))),
     past > 0 && h('div', { class: 'muted small' }, `Used on ${past} past shoot${past > 1 ? 's' : ''}`),

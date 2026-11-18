@@ -123,7 +123,8 @@ export async function restoreFromCloud() {
     h('p', { class: 'small muted' }, 'Vdex keeps one backup per weekday and one per month, so a mistake can be undone for about a week, or a month.')));
 }
 
-// One cell of a CSV file, for every spreadsheet Vdex writes (this register, the invoices, the budget, the hours).
+// One cell of a CSV file, for every spreadsheet Vdex writes (this register, the invoices, the budget, the hours, the
+// timecode notes).
 // csvCell quotes a value as it is: for numbers and dates. csvText is for words. A cell that starts like a formula
 // would be run by the spreadsheet that opens the file, and a name, a title or a note can come from someone else's
 // list or link: an apostrophe in front keeps it text (Vdex's own import takes it off again).

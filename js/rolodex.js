@@ -67,6 +67,9 @@ export function createRolodex(root, tabs, { onSelect, start = 0 }) {
   document.addEventListener('keydown', e => {
     if (/input|textarea|select/i.test(e.target.tagName) || e.target.isContentEditable) return;
     if (e.defaultPrevented || document.querySelector('.sheet-back')) return; // a control that used the key (a stripboard handle) keeps it
+    // Out of reach, the drum does not turn: under the lock screen or the offer of a longer PIN, a walkthrough, the menu
+    // or the search, an arrow key belongs to what is on top, and the section underneath stays the one that was open.
+    if (root.closest('[inert]')) return;
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(index + 1);
     else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') go(index - 1);
   });

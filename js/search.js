@@ -10,7 +10,7 @@ import * as store from './store.js';
 import { typeLabel, hiredPeople, rentalsOf } from './workflow.js';
 import { sheetOf, sheetState } from './callsheet.js';
 import { boardOf, ieOf } from './board.js';
-import { KINDS, methodLabel } from './money.js';
+import { KINDS, methodLabel, billedName } from './money.js';
 import { PERMS } from './pages/venues.js';
 import { findRole, groupOf } from './roles.js';
 
@@ -96,10 +96,15 @@ function bookingEntries(out, db) {
     ], b.date);
     // The booking's own documents are things of their own: each is found under its page and opens as itself.
     const about = [['Project', b.title, 60, { shown: true }], ['Client', b.client, 45, { shown: true }]];
+    // A quote or an invoice is listed with the name it is headed to. On a booking added from someone's link that is the
+    // person who shared it, not the booking's client (billedName in js/money.js); the booking's client is still looked
+    // in, so the job's documents are found by either name.
+    let to = txt(b.client); if (b.quote || b.invoice) { try { to = txt(billedName(b)); } catch { /* a record that cannot be read that far keeps its client */ } }
+    const billed = [['Project', b.title, 60, { shown: true }], ['Client', to, 45, { shown: true }], to !== txt(b.client) && ['Client on the booking', b.client, 30]].filter(Boolean);
     for (const kind of ['quote', 'invoice']) {
       const doc = b[kind]; if (!doc || typeof doc !== 'object') continue;
-      entry(out, 'money', kind, b.id, kind === 'quote' ? '🧾' : '💰', `${KINDS[kind].label} ${txt(doc.number)}`, join(b.title, b.client, doc.status, shortDay(doc.date)), [
-        ['Number', `${KINDS[kind].label} ${txt(doc.number)}`, 100, { shown: true }], ...about, ['Status', doc.status, 40, { shown: true }], ['Date', join(dayText(doc.date), dayText(doc.due), dayText(doc.until)), 25],
+      entry(out, 'money', kind, b.id, kind === 'quote' ? '🧾' : '💰', `${KINDS[kind].label} ${txt(doc.number)}`, join(b.title, to, doc.status, shortDay(doc.date)), [
+        ['Number', `${KINDS[kind].label} ${txt(doc.number)}`, 100, { shown: true }], ...billed, ['Status', doc.status, 40, { shown: true }], ['Date', join(dayText(doc.date), dayText(doc.due), dayText(doc.until)), 25],
         ...list(doc.lines).map(l => ['Line', l.desc, 40]), ...list(doc.payments).map(p => ['Payment', join(methodLabel(p.method), p.note, dayText(p.date)), 25]), ['Notes', doc.notes, 20],
       ], doc.date || b.date);
     }

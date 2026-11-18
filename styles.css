@@ -191,7 +191,7 @@ body.search-open .update-bar { z-index: 80; } /* as under the menu: behind the p
 .card-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .card-row > div:first-child { min-width: 0; overflow-wrap: break-word; } .card.stack { grid-template-columns: minmax(0, 1fr); } /* text wraps by word, buttons stay on screen */
 .stack .card-row > .btn, .stack .card-row > button.btn { width: auto; flex: none; } /* a button beside text keeps its own size, never squeezing the text */
-.list { display: grid; gap: 0; } .list > .card { margin-bottom: 10px; }
+.list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; } .list > .card { margin-bottom: 10px; } /* the column is the page's width, never a card's widest line: a card that cannot shrink must not make the page scroll sideways */
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; } .actions.center { justify-content: center; }
 .empty { text-align: center; color: var(--muted); padding: 28px 12px; border: 1px dashed var(--line); border-radius: var(--radius); display: grid; gap: 12px; justify-items: center; }
 .empty p { margin: 0; max-width: 34ch; }
@@ -706,6 +706,12 @@ body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
 /* Where an item is */
 .loc-chip { margin-top: 6px; }
 .loc-chip.empty { opacity: .65; }
+/* An equipment card: the name, then how booked it is with the service-log and edit buttons. They sit beside the name
+   while it keeps 6rem; with less room (a 320 px phone, large text or large buttons) they move to a line of their own. */
+.gear-card .card-row { flex-wrap: wrap; }
+.gear-card .card-row > .grow { flex: 1 1 6rem; }
+.gear-acts { display: flex; align-items: center; gap: 10px; flex: none; margin-left: auto; }
+@media (max-width: 359px) { .gear-card .card-row > .grow { flex-basis: 100%; } } /* on the narrowest phones every card the same way */
 .gear-line .muted { text-align: right; }
 
 /* Connecting a cloud storage or calendar: one card per service, sign in with one tap */

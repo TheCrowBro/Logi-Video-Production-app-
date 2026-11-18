@@ -9,6 +9,7 @@ import { RATES, rate, framesToTc, tcToFrames, tcAt, framesAt, durationText } fro
 import { haptic } from '../a11y.js';
 import { docxToLines, textToLines, buildScript, SAMPLE_SCRIPT } from '../docx.js';
 import * as native from '../native.js';
+import { csvText } from '../backup.js';
 
 // pending = frames captured when the user started typing the next note; target = the script line/selection about to be marked
 const S = { id: null, pending: null, view: 'notes', target: null, shared: null, redraw: () => {}, cleanupScript: null };
@@ -184,8 +185,12 @@ function openSync(log) {
 
 /* -------------------------------- export -------------------------------- */
 const asText = log => `${log.title}\n${rate(log.rate).label}${log.camera ? ' · ' + log.camera : ''} · ${log.created}\n\n` + log.notes.map(n => `${fmt(n.frames, log)}  ${n.quote ? (n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`) + (n.text ? ' — ' : '') : ''}${n.text}${n.dur ? ` [${n.dur}]` : ''}`).join('\n') + '\n';
-const csvq = s => `"${String(s ?? '').replace(/"/g, '""')}"`;
-const asCsv = log => 'Timecode,Note,Script line,Captured\n' + log.notes.map(n => `${fmt(n.frames, log)},${csvq(n.text + (n.dur ? ' [' + n.dur + ']' : ''))},${csvq(n.quote || '')},${n.at}`).join('\n') + '\n';
+// A note and the script line beside it are text, and a script can come from someone else's file: a cell that starts
+// like a formula (a line of dialogue with a dash in front, "=…") gets an apostrophe so that a spreadsheet does not run
+// it, as in every other spreadsheet Vdex writes (csvText in js/backup.js). The time a note was captured is written as
+// the plain time it is; a note from a linked device that carries anything else there has it written as text too.
+const captured = at => (/^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(at) ? at : csvText(at));
+const asCsv = log => 'Timecode,Note,Script line,Captured\n' + log.notes.map(n => `${fmt(n.frames, log)},${csvText((n.text || '') + (n.dur ? ' [' + n.dur + ']' : ''))},${csvText(n.quote || '')},${captured(n.at)}`).join('\n') + '\n';
 
 async function shareFile(name, type, text) {
   const file = new File([text], name, { type });

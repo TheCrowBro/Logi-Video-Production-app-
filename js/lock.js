@@ -238,6 +238,8 @@ function derToRaw(sig) { // ECDSA signature: DER sequence of two integers → 64
 // inert while a lock screen is up, and comes back as it was. Sheets and the walkthrough answer no keys while they are
 // inert (sheet() in js/util.js, runTour() in js/tour.js), so a key pressed on this screen stays on this screen. The page
 // itself (#app) is not put back from memory: it is out of reach or not by what is open once the screen has gone.
+// A sheet that code opens while the screen is up was not on the page to be covered: sheet() in js/util.js sees the
+// screen (covered()) and starts it covered, marked data-covered, and it comes back here with the rest.
 export function coverAll(screen) {
   const was = [...document.body.children].filter(el => el !== screen).map(el => [el, el.inert]);
   was.forEach(([el]) => { el.inert = true; });
@@ -245,6 +247,7 @@ export function coverAll(screen) {
   document.querySelectorAll('.sheet-back').forEach(el => el.classList.add('behind-lock'));
   return () => {
     was.forEach(([el, inert]) => { if (el.isConnected) el.inert = inert; });
+    document.querySelectorAll('.sheet-back[data-covered]').forEach(el => { el.inert = false; el.removeAttribute('data-covered'); });
     settleApp();
     if (app) app.removeAttribute('aria-hidden');
     document.querySelectorAll('.sheet-back.behind-lock').forEach(el => el.classList.remove('behind-lock'));
@@ -313,7 +316,8 @@ function showLock(notice = '') {
     if (busy()) return;
     try { if (await unlockBio()) { recordSuccess(); unlocked(false); } } catch (e) { msg.textContent = e.name === 'NotAllowedError' ? 'Biometric check cancelled. Use the PIN.' : (e.message || 'Biometric unlock failed'); }
   }
-  const key = (label, fn, cls = '') => h('button', { type: 'button', class: 'key ' + cls, onclick: fn, 'aria-label': label === '⌫' ? 'Delete' : label }, label);
+  // A digit key or ⌫: one of the keys that change what is entered (data-entry, which the Enter key looks for below).
+  const key = (label, fn, cls = '') => h('button', { type: 'button', class: 'key ' + cls, 'data-entry': '', onclick: fn, 'aria-label': label === '⌫' ? 'Delete' : label }, label);
   const bio = !!S.cfg.bio;
   S.screen = h('div', { class: 'lock', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Vdex is locked' },
     h('div', { class: 'lock-card' },
@@ -328,9 +332,12 @@ function showLock(notice = '') {
       forgot));
   // Enter never sends a PIN short of its length: the screen sends the PIN by itself at the last digit, so an earlier
   // Enter could only be a wrong PIN, and would be counted as one. It tells a screen reader how far along the PIN is
-  // instead, and it must never press the keypad key that has the focus. (Only a config with no length recorded, which no
-  // version has written, still sends on Enter from four digits.)
-  S.keys = e => { if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (/^\d$/.test(e.key)) { press(e.key); e.preventDefault(); } else if (e.key === 'Backspace') { back(); e.preventDefault(); } else if (e.key === 'Enter') { e.preventDefault(); if (busy()) return; if (S.cfg.len) { if (S.entry) say(count()); } else if (S.entry.length >= PIN_MIN) submit(); } };
+  // instead, and it must never press the digit key or ⌫ that has the focus: the PIN was typed on a keyboard, and that
+  // key only has the focus because the screen put it there, or a tap did. (Only a config with no length recorded, which
+  // no version has written, still sends on Enter from four digits.) On any other button of this screen (Forgot PIN?,
+  // Erase this device, Keep trying, the fingerprint or face buttons) Enter is left alone and presses it, as everywhere.
+  const ownButton = t => { const b = t && t.closest ? t.closest('button') : null; return !!b && S.screen.contains(b) && !b.hasAttribute('data-entry'); };
+  S.keys = e => { if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (/^\d$/.test(e.key)) { press(e.key); e.preventDefault(); } else if (e.key === 'Backspace') { back(); e.preventDefault(); } else if (e.key === 'Enter') { if (ownButton(e.target)) return; e.preventDefault(); if (busy()) return; if (S.cfg.len) { if (S.entry) say(count()); } else if (S.entry.length >= PIN_MIN) submit(); } };
   // A pasted PIN (a long one kept in a password manager) goes in as if typed. Anything but digits, or more of them
   // than the PIN has, is left out and said: it is never cut to fit and tried as a guess.
   S.paste = e => {
@@ -526,7 +533,7 @@ function pinReady() {
       save);
     document.body.append(screen);
     uncover = coverAll(screen);
-    setTimeout(() => a.focus(), 60);
+    setTimeout(() => { if (!card.contains(document.activeElement)) a.focus(); }, 60); // never take the cursor from a field someone is already typing in
   });
 }
 
@@ -587,7 +594,9 @@ export function askSecret({ title, confirm = false, numeric = true, intro = '', 
       a, b, err,
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'submit' }, confirm ? 'Save' : 'Continue'), h('button', { class: 'btn ghost', type: 'button', onclick: () => close() }, 'Cancel')));
     ({ close } = sheet(title, form, { dismissOnBackdrop: false, onClose: () => { if (!done) resolve(null); } }));
-    setTimeout(() => a.focus(), 60);
+    // The first field gets the cursor once the sheet is up, unless someone is in the form already: a second field
+    // reached within that moment (a quick Tab, a password manager) must not have its digits land in the first.
+    setTimeout(() => { if (!form.contains(document.activeElement)) a.focus(); }, 60);
   });
 }
 

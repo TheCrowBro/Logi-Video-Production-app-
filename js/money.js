@@ -135,6 +135,11 @@ export function billTo(b) {
   const own = (b.client || '') !== linkClient ? b.client : '';
   return { head: own || (producer && (producer.business || producer.name)) || (mine[0] && mine[0].name) || '—', contacts };
 }
+// The name beside a quote or an invoice wherever the documents are listed rather than drawn: the head of the Money
+// page, a row of the Money overview, the Client column of the invoices spreadsheet, a search result. The booking's
+// client as always; on a booking added from someone's link it is the name the document is headed to (billTo above),
+// so the list and the document never name two different people, and nothing while the document is headed to nobody.
+export const billedName = b => { if (!(b.shared && b.shared.ref)) return b.client; const head = billTo(b).head; return head === '—' ? '' : head; };
 // A self-contained copy of a quote or invoice: the document, the PDF, the email text and the client's link are all
 // made from it, and the public invoice page renders it without the app.
 export function snapshot(b, kind) {
@@ -248,7 +253,7 @@ export function moneyPage(b, kind, go) {
     h('div', { class: 'page-head' },
       backBtn('Booking', () => go({ view: 'booking', id: b.id })),
       h('div', { class: 'seg', role: 'tablist' }, ...Object.entries(KINDS).map(([k, v]) => h('button', { role: 'tab', class: k === kind ? 'on' : '', 'aria-selected': k === kind, onclick: () => go({ kind: k }) }, v.label + (b[k] ? ' ✓' : ''))))),
-    h('h1', null, K.label), h('div', { class: 'muted' }, [b.title, b.client].filter(Boolean).join(' · ')),
+    h('h1', null, K.label), h('div', { class: 'muted' }, [b.title, billedName(b)].filter(Boolean).join(' · ')),
     doc ? [
       h('div', { class: 'card-row' }, h('p', { class: 'status-line', 'data-state': stateCls }, `${doc.status}${isOverdue(b) ? ' · overdue' : ''}${partPaid ? ' · part paid' : ''} · ${fmtMoney(t.total)}${kind === 'invoice' && t.paid > 0 && t.balance > 0 ? ' · balance ' + fmtMoney(t.balance) : ''}${doc.sentAt ? ' · sent ' + fmtShort(ymd(new Date(doc.sentAt))) : ''}${doc.paidAt ? ' · paid ' + fmtShort(ymd(new Date(doc.paidAt))) : ''}`)),
       h('div', { class: 'actions' },
@@ -386,17 +391,18 @@ export function openMoney(onOpen) {
   const stat = (v, l, cls = '') => h('div', { class: 'stat ' + cls }, h('b', null, v), h('span', null, l));
   const csv = () => {
     // Text cells (a title or a client can come from someone's shared link) are written so that a spreadsheet does not
-    // run them as formulas; amounts and dates stay plain, so a negative balance is still a number.
+    // run them as formulas; amounts and dates stay plain, so a negative balance is still a number. Client is who the
+    // invoice is headed to (billedName above): on a booking added from a link, the person who shared it.
     const q = csvCell, tx = csvText;
     const rows = [['Number', 'Date', 'Due', 'Client', 'Project', 'Subtotal', 'Tax', 'Total', 'Paid', 'Balance', 'Status', 'Paid on'].map(q).join(',')];
-    for (const b of list.filter(x => x.invoice).sort((x, y) => String(x.invoice.number).localeCompare(String(y.invoice.number)))) { const t = totals(b.invoice); rows.push([tx(b.invoice.number), q(b.invoice.date), q(b.invoice.due), tx(b.client), tx(b.title), q(t.subtotal.toFixed(2)), q(t.tax.toFixed(2)), q(t.total.toFixed(2)), q(t.paid.toFixed(2)), q(t.balance.toFixed(2)), tx(b.invoice.status), q(b.invoice.paidAt ? ymd(new Date(b.invoice.paidAt)) : '')].join(',')); }
+    for (const b of list.filter(x => x.invoice).sort((x, y) => String(x.invoice.number).localeCompare(String(y.invoice.number)))) { const t = totals(b.invoice); rows.push([tx(b.invoice.number), q(b.invoice.date), q(b.invoice.due), tx(billedName(b)), tx(b.title), q(t.subtotal.toFixed(2)), q(t.tax.toFixed(2)), q(t.total.toFixed(2)), q(t.paid.toFixed(2)), q(t.balance.toFixed(2)), tx(b.invoice.status), q(b.invoice.paidAt ? ymd(new Date(b.invoice.paidAt)) : '')].join(',')); }
     if (!requirePaid('export')) return; // spreadsheets come with a licence
     saveOrShare('﻿' + rows.join('\r\n'), `vdex-invoices-${today}.csv`, 'text/csv').then(ok => ok && toast('Invoices exported'));
   };
   const body = h('div', { class: 'stack' },
     h('div', { class: 'stats money-stats' }, stat(fmtMoney(outstanding), 'invoiced, unpaid'), stat(fmtMoney(overdue), 'overdue', overdue ? 'bad' : ''), stat(fmtMoney(quotedOpen), 'quoted, awaiting'), stat(fmtMoney(paidYear), `paid in ${year}`)),
     list.length ? h('div', { class: 'list' }, ...list.map(b => h('button', { class: 'card tap', type: 'button', onclick: () => { close(); onOpen(b); } },
-      h('div', { class: 'card-row money-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [b.client, fmtShort(b.date)].filter(Boolean).join(' · '))),
+      h('div', { class: 'card-row money-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [billedName(b), fmtShort(b.date)].filter(Boolean).join(' · '))),
         h('div', { class: 'money-pills' }, b.quote && h('span', { class: 'pill ' + (b.quote.status === 'Accepted' ? 'st-confirmed' : b.quote.status === 'Declined' ? 'st-cancelled' : 'st-enquiry') }, `Q ${b.quote.status} ${fmtMoney(totals(b.quote).total)}`),
           b.invoice && h('span', { class: 'pill ' + (b.invoice.status === 'Paid' ? 'st-confirmed' : isOverdue(b) ? 'st-cancelled' : 'st-enquiry') }, `Inv ${isOverdue(b) ? 'Overdue' : b.invoice.status}${b.invoice.status !== 'Paid' && totals(b.invoice).received > 0 ? ' (part paid)' : ''} ${fmtMoney(totals(b.invoice).total)}`))))))
       : h('p', { class: 'muted' }, 'No quotes or invoices yet. Open a booking and create one under Money.'),
