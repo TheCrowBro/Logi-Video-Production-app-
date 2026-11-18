@@ -224,6 +224,8 @@ function derToRaw(sig) { // ECDSA signature: DER sequence of two integers → 64
 function coverAll(screen) { const was = [...document.body.children].filter(el => el !== screen).map(el => [el, el.inert]); was.forEach(([el]) => { el.inert = true; }); const app = document.getElementById('app'); if (app) app.setAttribute('aria-hidden', 'true'); document.querySelectorAll('.sheet-back').forEach(el => el.classList.add('behind-lock')); return () => { was.forEach(([el, inert]) => { if (el.isConnected) el.inert = inert; }); if (app) app.removeAttribute('aria-hidden'); document.querySelectorAll('.sheet-back.behind-lock').forEach(el => el.classList.remove('behind-lock')); }; }
 function showLock(notice = '') {
   if (S.screen) return;
+  window.logiMenu?.close(); // the menu is not left open behind the lock
+  window.logiSearch?.close(true); // nor the search, which also forgets what was typed and found
   S.locked = true; S.entry = '';
   const len = S.cfg.len || 6;
   const dots = h('div', { class: 'pin-dots', role: 'img', 'aria-label': `0 of ${len} digits entered` });

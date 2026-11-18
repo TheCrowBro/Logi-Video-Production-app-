@@ -349,7 +349,7 @@ function noteRow(log, n) {
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } });
   const tc = h('button', { class: 'tc-mono tc-badge', type: 'button', title: 'Edit timecode', onclick: () => editStamp(log, n) }, n.frames == null ? 'unsynced' : fmt(n.frames, log));
   const quote = n.quote && h('button', { class: 'tc-quote', type: 'button', onclick: () => jumpTo(log, n), 'aria-label': 'Show this line in the script' }, n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`, n.para && ' ↗');
-  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') + (n.id === S.lastAdded ? ' pop-in' : '') }, tc, h('div', { class: 'tc-body' }, quote, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => deleteNote(log, n) }, '✕'));
+  return h('li', { class: 'tc-note' + (n.kind === 'roll' ? ' take' : '') + (n.id === S.lastAdded ? ' pop-in' : ''), 'data-id': n.id }, tc, h('div', { class: 'tc-body' }, quote, text, n.dur && h('span', { class: 'tc-dur muted small' }, `take length ${n.dur}`)), h('button', { class: 'icon-btn', 'aria-label': 'Delete note', onclick: () => deleteNote(log, n) }, '✕'));
 }
 
 function editStamp(log, n) {
@@ -395,6 +395,14 @@ export function openPracticeLog() {
   }
   S.id = log.id; S.view = 'notes'; S.target = null; try { localStorage.setItem('logi-tclog', log.id); } catch { /* ignore */ }
   if (window.logiPage && window.logiPage() !== 'tcnotes') window.logiGo('tcnotes'); else S.redraw && S.redraw();
+}
+// Opens a log from anywhere, on its notes or on its script (the search does). Resolves once it is on screen, with
+// false when the log is no longer there.
+export async function openLog(id, view = 'notes') {
+  if (!byId('logs', id)) return false;
+  S.id = id; S.view = view === 'script' ? 'script' : 'notes'; S.target = null; try { localStorage.setItem('logi-tclog', id); } catch { /* ignore */ }
+  if (window.logiPage && window.logiPage() !== 'tcnotes') await window.logiGo('tcnotes'); else S.redraw && S.redraw();
+  return true;
 }
 const openGuide = () => import('../tutorials.js').then(m => m.openTcGuide());
 export function receiveSharedFile(file) { S.shared = file; S.view = 'script'; window.logiGo('tcnotes'); S.redraw(); } // redraw covers the case where this tab is already open

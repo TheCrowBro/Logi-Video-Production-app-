@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openMenu, menuClick } = require('../helpers.cjs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -15,10 +15,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
   await page.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await page.waitForSelector('#rolodex .drum-btn');
   await page.evaluate(() => import('./js/store.js').then(s => s.loadSample()));
-  ok('the ? button is in the top bar', await page.locator('#helpBtn').isVisible());
+  await openMenu(page);
+  ok('Tutorial for this page is a row of the menu', (await page.locator('#helpBtn').isVisible()) && /Tutorial for this page/.test(await page.locator('#helpBtn').innerText()));
+  await page.keyboard.press('Escape');
   // Walk a tutorial: count the steps that resolved to a highlighted box, and that Done closes it
   const walk = async (btn = '#helpBtn') => {
-    if (btn) await page.locator(btn).last().click();
+    if (btn === '#helpBtn') await menuClick(page, btn); else if (btn) await page.locator(btn).last().click();
     await page.waitForSelector('.tour-card');
     let spots = 0, cards = 0, titles = [], counter = '', label = '';
     for (let i = 0; i < 40; i++) {
@@ -49,7 +51,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('#bk-work').evaluate(d => { d.open = true; }); await sleep(150);
   await page.locator('#bk-money button').first().click(); await page.waitForSelector('.money-page'); await expect('Money', 2);
   ok('the Money page offers newcomers the guide, and its tutorial card offers it too', (await page.locator('.money-page .walk-btn').count()) === 1);
-  await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card .tour-actions');
+  await menuClick(page, '#helpBtn'); await page.waitForSelector('.tour-card .tour-actions');
   ok('…as a Guide button on the first card', (await page.locator('.tour-card button:has-text("Guide")').count()) === 1);
   await page.keyboard.press('Escape'); await sleep(200);
   for (const [tab, name, min] of [['crew', 'Crew', 3], ['gear', 'Equipment', 5], ['venues', 'Venues', 3], ['insurance', 'Insurance', 3], ['me', 'Me', 3], ['field', 'Field', 2], ['settings', 'Settings', 10]]) {
@@ -83,7 +85,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('.sheet[aria-label="Export notes"] .icon-btn[aria-label="Close"]').click(); await sleep(250);
   // Other pages…: the chooser lists every tutorial and can reach a booking from anywhere
   await page.evaluate(() => window.logiGo('crew')); await sleep(300);
-  await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card');
+  await menuClick(page, '#helpBtn'); await page.waitForSelector('.tour-card');
   await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet');
   const names = await page.locator('.sheet .card.tap').allInnerTexts();
   ok('chooser lists every page tutorial (sheet walkthroughs live behind the sheets’ own ?; the set-up walkthrough has its own button)', names.length === 18 && names.some(n => /Stripboard/.test(n)) && names.some(n => /a log/.test(n)) && names.some(n => /Timecode, start to finish/.test(n)) && names.some(n => /Quotes & invoices, start to finish/.test(n)) && !names.some(n => /Set up/.test(n)), names.join(', '));
@@ -93,7 +95,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('choosing “A booking” opens a booking and starts its tutorial', (await page.locator('.bk-detail').count()) === 1 && /booking/i.test(await page.locator('.tour-card h2').innerText()));
   await page.keyboard.press('Escape'); await sleep(200);
   ok('Escape closes the tutorial and the page is usable again', (await page.locator('.tour').count()) === 0 && !(await page.evaluate(() => document.getElementById('app').inert)));
-  await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card'); await page.screenshot({ path: S + '/tutorial.png' }); await page.keyboard.press('Escape');
+  await menuClick(page, '#helpBtn'); await page.waitForSelector('.tour-card'); await page.screenshot({ path: S + '/tutorial.png' }); await page.keyboard.press('Escape');
   // Timecode, start to finish: on the practice log, with the sheets opening and closing along the way
   await page.evaluate(() => import('./js/pages/tcnotes.js').then(m => m.openPracticeLog())); await sleep(700);
   ok('the practice log exists, synced, with notes and a script', await page.evaluate(() => import('./js/store.js').then(s => { const l = s.db.logs.find(x => x.practice); return !!(l && l.sync && l.notes.length >= 3 && l.script); })));
@@ -109,7 +111,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('the timecode guide reads through the whole job', /What timecode is/i.test(guide) && /Before the shoot/i.test(guide) && /Syncing/i.test(guide) && /During the shoot/i.test(guide) && /Scripts/i.test(guide) && /After the shoot/i.test(guide) && /looks wrong/i.test(guide) && /drop frame/i.test(guide)); // headings are shown in capitals
   ok('the guide offers the walkthrough and the practice log', (await page.locator('.sheet button:has-text("Walk me through it")').count()) === 1 && (await page.locator('.sheet button:has-text("practice log")').count()) === 1);
   await page.keyboard.press('Escape'); await sleep(300);
-  await page.locator('#helpBtn').click(); await page.waitForSelector('.tour-card .tour-actions');
+  await menuClick(page, '#helpBtn'); await page.waitForSelector('.tour-card .tour-actions');
   ok('the timecode page tutorials offer the guide', (await page.locator('.tour-card button:has-text("Guide")').count()) === 1);
   await page.keyboard.press('Escape'); await sleep(200);
   // Quotes & invoices, start to finish: through Settings, then a practice job's quote, invoice, a payment and the overview

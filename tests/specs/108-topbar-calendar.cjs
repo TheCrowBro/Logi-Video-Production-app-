@@ -1,9 +1,9 @@
-// The top bar on one slim row (icons only on a phone, labels still read out); the Rolodex on a bar of its own that
+// The top bar on one slim row (the hamburger as an icon on a phone, its name still read out); the Rolodex on a bar of its own that
 // slides away as the page scrolls down and comes back as it scrolls up, on a section change or when it takes the
 // focus; the Bookings tools as a grid of even tiles; the calendar in its own frame; the clock in the booking's Hours
 // box with a strip under the Rolodex only while it runs.
 const { chromium } = require('playwright');
-const { acceptTerms } = require('../helpers.cjs');
+const { acceptTerms, openMenu } = require('../helpers.cjs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -20,17 +20,20 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => window.logiGo('bookings')); await sleep(400);
 
   // ---- the top bar ----
-  const row = async () => page.evaluate(() => { const b = [...document.querySelectorAll('.top-actions button')].filter(x => !x.hidden); const tops = b.map(x => Math.round(x.getBoundingClientRect().top)); return { n: b.length, oneRow: tops.every(t => t === tops[0]), height: Math.round(document.querySelector('.top').getBoundingClientRect().height), wide: document.documentElement.scrollWidth <= innerWidth, labelW: Math.round(document.getElementById('cloudLabel').getBoundingClientRect().width), text: document.getElementById('cloudBtn').innerText.trim() }; });
+  // The bar holds the hamburger (and the lock, once a PIN is set: spec 115); everything else is in the menu behind it.
+  const row = async () => page.evaluate(() => { const b = [...document.querySelectorAll('.top-actions button')].filter(x => !x.hidden); const tops = b.map(x => Math.round(x.getBoundingClientRect().top)); const label = document.querySelector('#menuBtn .cloud-label'); return { n: b.length, ids: b.map(x => x.id).join(','), oneRow: tops.every(t => t === tops[0]), height: Math.round(document.querySelector('.top').getBoundingClientRect().height), wide: document.documentElement.scrollWidth <= innerWidth, labelW: Math.round(label.getBoundingClientRect().width), text: label.textContent, name: document.getElementById('menuBtn').getAttribute('aria-label') }; });
   for (const w of [360, 420]) {
     await page.setViewportSize({ width: w, height: 900 }); await sleep(200);
     const r = await row();
-    ok(`at ${w}px the top bar is one slim row of icon buttons, the labels still read out, no sideways scroll`, r.n >= 4 && r.oneRow && r.height <= 64 && r.wide && r.labelW <= 1 && /Local/.test(r.text), JSON.stringify(r));
+    ok(`at ${w}px the top bar is one slim row with the hamburger as an icon, its name still read out, no sideways scroll`, r.ids === 'menuBtn' && r.oneRow && r.height <= 64 && r.wide && r.labelW <= 1 && r.text === 'Menu' && r.name === 'Menu', JSON.stringify(r));
   }
   await page.setViewportSize({ width: 1100, height: 900 }); await sleep(200);
   const wide = await row();
-  ok('on a wide screen the labels show again', wide.oneRow && wide.labelW > 10 && /Local/.test(wide.text), JSON.stringify(wide));
+  ok('on a wide screen the hamburger shows its label', wide.oneRow && wide.labelW > 10 && wide.text === 'Menu', JSON.stringify(wide));
   await page.setViewportSize({ width: 420, height: 900 }); await sleep(200);
-  ok('the Install button shows in a browser (it goes once installed)', await page.locator('#installBtn').isVisible());
+  await openMenu(page);
+  ok('Install is listed in the menu in a browser (it goes once installed)', await page.locator('#installBtn').isVisible());
+  await page.keyboard.press('Escape'); await sleep(150);
 
   // ---- the Rolodex bar ----
   const bar = page.locator('#rolodex');

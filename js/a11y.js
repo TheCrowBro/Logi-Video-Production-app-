@@ -73,7 +73,7 @@ export function displayPanel({ onTour } = {}) {
   const theme = h('details', { class: 'twirl' }, h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, '🎨'), h('span', null, h('span', { class: 'twirl-name' }, 'Colour theme'), themeSum)), themeBody);
   const el = h('div', { class: 'stack' }, theme, groups,
     onTour && h('div', { class: 'pref' }, h('div', { class: 'pref-label' }, 'Help'), h('button', { class: 'btn ghost', onclick: onTour }, '🧭 Take the tour again')),
-    h('p', { class: 'muted small' }, '“Small touches” are short, gentle effects: buttons pressing, cards lifting, new notes popping in, the tour spotlight gliding. Nothing slides across the screen. Choose Rolodex only or None to stop them; everything also stops if your phone is set to reduce motion.'));
+    h('p', { class: 'muted small' }, '“Small touches” are short, gentle effects: buttons pressing, cards lifting, new notes popping in, the menu sliding in from the side, the tour spotlight gliding. Nothing else slides across the screen. Choose Rolodex only or None to stop them; everything also stops if your phone is set to reduce motion.'));
   return { el, destroy: () => {} };
 }
 

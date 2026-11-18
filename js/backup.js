@@ -110,7 +110,7 @@ export async function restoreFromCloud() {
   for (const name of backupNames()) {
     try { const text = await a.readExtra(name); if (text) { const d = JSON.parse(text); found.push({ name, text, at: Number(d.updatedAt) || 0, n: (d.bookings || []).length }); } }
     catch (e) { // a sign-in that ran out is not "no backups": say so, and stop asking
-      if (e.name === 'NotAllowedError') { close(); store.reconnectNeeded(e.message); return toast(`${a.label} wants you to sign in again before backups can be listed: tap ☁, then Sign in again.`); }
+      if (e.name === 'NotAllowedError') { close(); store.reconnectNeeded(e.message); return toast(`${a.label} wants you to sign in again before backups can be listed: open Storage, sync and backups in the menu, then tap Sign in again.`); }
       /* an unreadable one is skipped */
     }
   }

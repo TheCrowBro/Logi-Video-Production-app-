@@ -26,9 +26,11 @@ export function startTour(from = 0) {
   let at = from; try { const saved = Number(localStorage.getItem(RESUME)); if (!from && saved) at = saved; localStorage.removeItem(RESUME); } catch { /* ignore */ }
   return import('./tutorials.js').then(m => m.openSetup(at)).catch(() => runTour(STEPS, { remember: true, from: at }));
 }
-// Runs any list of steps: { title, text, target: [selectors], go?: tabId, before?: fn, body?: ctx => node, onNext?: fn }.
+// Runs any list of steps: { title, text, target: [selectors], go?: tabId, menu?: true, search?: true, before?: fn, body?: ctx => node, onNext?: fn }.
 // Steps whose target is not on screen are skipped. A body is a form inside the card (saved by onNext, which may return
-// false to stay on the step); ctx has refresh(), next(), stop() and index.
+// false to stay on the step); ctx has refresh(), next(), stop() and index. A step with menu: true is about something
+// inside the menu: the menu is shown open for it (to look at, not to use), and closed again for every other step.
+// A step with search: true does the same with the search panel.
 export function runTour(steps, { remember = false, from = 0, footer = null, root = null } = {}) {
   if (active) return;
   const STEPS = steps;
@@ -36,12 +38,13 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   const spot = h('div', { class: 'tour-spot', 'aria-hidden': 'true' });
   const card = h('div', { class: 'tour-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title' });
   const layer = h('div', { class: 'tour' }, spot, card);
+  window.logiMenu?.close(); window.logiSearch?.close(); // never left open under the tour
   const wasInert = !!(app && app.inert);
   window.logiShowNav?.(); // the Rolodex bar may be slid away: the tour points at it
   document.body.append(layer); if (app) app.inert = true;
   let i = from, target = null, dir = 1;
   const seen = new Set(); // steps already shown: they keep their place in the count when going back
-  const stop = () => { if (!active) return; active = null; layer.remove(); if (app) app.inert = wasInert; window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
+  const stop = () => { if (!active) return; active = null; layer.remove(); window.logiMenu?.close(); window.logiSearch?.close(); if (app) app.inert = wasInert; window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
   active = { stop };
   // Arrow keys move between steps, except while typing in a field of the card; Escape always leaves.
   const keys = e => { const t = e.target; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && e.key !== 'Escape') return; if (e.key === 'Escape') { e.stopPropagation(); stop(); } else if (e.key === 'ArrowRight') { e.stopPropagation(); next(); } else if (e.key === 'ArrowLeft') { e.stopPropagation(); dir = -1; show(i - 1); } };
@@ -60,12 +63,14 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   // (a booking with no venue has no venue box). Steps that move to a page or prepare something first are counted, as
   // their box only appears then. Worked out again at every step, so the count and "Done" are always right.
   const find = s => { const scope = (root && root()) || document; return s.target ? s.target.map(sel => { try { return scope.querySelector(sel); } catch { return null; } }).find(el => el && el.offsetParent !== null) || null : null; };
-  const willShow = s => !s.target || !!s.go || !!s.before || !!find(s);
+  const willShow = s => !s.target || !!s.go || !!s.before || !!s.menu || !!s.search || !!find(s);
   const step = async n => {
     if (n < 0) return;
     if (n >= STEPS.length) return stop();
     i = n; const s = STEPS[n];
     if (s.go) { window.logiGo?.(s.go); await new Promise(r => setTimeout(r, 650)); }
+    if (s.menu) await window.logiMenu?.open({ show: true }); else window.logiMenu?.close();
+    if (s.search) await window.logiSearch?.open({ show: true, query: '' }); else window.logiSearch?.close();
     if (s.before) { try { await s.before(); } catch { /* the step still shows */ } await new Promise(r => setTimeout(r, 250)); }
     target = find(s);
     if (s.target && !target) return step(n + dir); // nothing to point at here, skip

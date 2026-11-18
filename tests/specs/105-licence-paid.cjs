@@ -4,7 +4,7 @@
 // licence check switched on, faked) and in the desktop app (a stand-in bridge), and that nothing changes while
 // licences are switched off.
 const { chromium } = require('playwright');
-const { acceptTerms, openSetting } = require('../helpers.cjs');
+const { acceptTerms, openSetting, menuClick } = require('../helpers.cjs');
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -72,7 +72,7 @@ const DAY = 86400e3;
     await sleep(300);
     ok('the asset register and other spreadsheets are refused too', csvs.paid === false && csvs.asks === false && !downloads.length);
     await closeSheets(page);
-    await page.evaluate(() => document.getElementById('cloudBtn').click()); await sleep(400);
+    await menuClick(page, '#cloudBtn'); await sleep(400);
     const panel = page.locator('.sheet').first();
     const panelText = await panel.innerText();
     ok('the storage panel says cloud storage comes with a licence', /Cloud storage comes with a Vdex licence/.test(panelText), panelText.slice(0, 300).replace(/\n/g, ' | '));
@@ -107,10 +107,11 @@ const DAY = 86400e3;
     await sleep(1800);
     const st = await page.evaluate(() => import('./js/store.js').then(s => ({ status: s.cloud.status, paused: s.cloud.paused })));
     ok('a storage linked earlier is paused during the trial: changes are not copied to it', st.paused && st.status === 'paused' && davCalls.length === first, `${first} → ${davCalls.length}, ${st.status}`);
-    ok('the cloud button says Paused', /Paused/.test(await page.locator('#cloudBtn').innerText()));
+    const pausedTop = await page.evaluate(() => { const b = document.getElementById('menuBtn'); return { dot: b.dataset.dot, name: b.getAttribute('aria-label'), row: document.getElementById('cloudLabel').textContent }; });
+    ok('the hamburger carries an amber dot and says sync is paused, and the menu’s storage row says Paused', pausedTop.dot === 'amber' && /^Menu\. Sync with .+ is paused$/.test(pausedTop.name) && pausedTop.row === 'Paused', JSON.stringify(pausedTop));
     await page.reload(); await page.waitForSelector('#rolodex .drum-btn'); await sleep(1500);
     ok('opened again, the paused storage is not touched at all', davCalls.length === first, `${first} → ${davCalls.length}`);
-    await page.evaluate(() => document.getElementById('cloudBtn').click()); await sleep(400);
+    await menuClick(page, '#cloudBtn'); await sleep(400);
     ok('its panel explains the pause and offers a licence, with no Sync now', /Paused: cloud storage comes with a licence/.test(await page.locator('.sheet').first().innerText()) && (await page.locator('.sheet').first().getByRole('button', { name: 'Get a licence' }).count()) === 1 && (await page.locator('.sheet').first().getByRole('button', { name: 'Sync now' }).count()) === 0);
     await closeSheets(page);
     // Signing in (here: a stored sign-in the faked server confirms).

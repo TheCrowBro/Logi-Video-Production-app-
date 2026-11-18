@@ -4,7 +4,7 @@ Vdex keeps everything on your own device. Connecting a cloud storage adds a copy
 
 ## Google Drive or iCloud
 
-1. Tap **☁** at the top of Vdex (or Settings → *Storage, sync & backups*).
+1. Open the menu **☰** at the top right of Vdex and tap **Storage, sync and backups** (or go to Settings → *Storage, sync & backups*). The rest of this page calls that panel *Storage*.
 2. Tap **Connect** next to **Google Drive** or **iCloud**.
 3. Sign in to your own account on Google's or Apple's page. Google asks you to tap **Allow**. Apple may ask for the six-digit code from your iPhone; tick **Keep me signed in**.
 4. You come straight back to Vdex, and the panel says *Connected*.
@@ -26,11 +26,11 @@ Until you tap, nothing is lost: your changes wait safely on the device and are c
 
 **The Connect buttons are grey?** Sign-in hasn't been switched on in this copy of Vdex yet. Whoever looks after Vdex does it once: see [Turning on sign-in](turn-on-sign-in.md). Until then, *More ways to keep a copy* has other options.
 
-**Disconnecting** (☁ → *Disconnect*) stops the copying. Everything stays on your device, and the copy in your storage stays where it is. To withdraw Vdex's access completely, remove it in your Google account (*Third-party connections*). With iCloud, ☁ → **Delete Vdex’s copy from iCloud…** removes the copy and its backups from your iCloud and disconnects; everything stays on your device.
+**Disconnecting** (*Storage* → *Disconnect*) stops the copying. Everything stays on your device, and the copy in your storage stays where it is. To withdraw Vdex's access completely, remove it in your Google account (*Third-party connections*). With iCloud, *Storage* → **Delete Vdex’s copy from iCloud…** removes the copy and its backups from your iCloud and disconnects; everything stays on your device.
 
 ## More ways to keep a copy
 
-Tap **☁**, then **More ways to keep a copy** to unfold the rest: Dropbox, OneDrive, Nextcloud or another WebDAV server, a file in a synced folder, or no cloud at all.
+Open *Storage*, then **More ways to keep a copy** to unfold the rest: Dropbox, OneDrive, Nextcloud or another WebDAV server, a file in a synced folder, or no cloud at all.
 
 ### Dropbox or OneDrive
 
@@ -45,7 +45,7 @@ Tap **Connect**, sign in to your own account and tap **Allow** (Microsoft says *
 
 ### Nextcloud, ownCloud or another WebDAV server
 
-☁ → *More ways to keep a copy* → **Nextcloud / ownCloud**:
+*Storage* → *More ways to keep a copy* → **Nextcloud / ownCloud**:
 
 1. Type your Nextcloud address (for example `cloud.example.com`) and your username.
 2. Make an **app password** in Nextcloud (*Settings → Security → Devices & sessions*) and paste it. Your main password never leaves Nextcloud.
@@ -55,7 +55,7 @@ For another WebDAV server, pick **Other WebDAV** and give the full address of a 
 
 ### A file in a synced folder (computers only)
 
-1. In the desktop app, or in Chrome or Edge: ☁ → *More ways to keep a copy* → **Create database file…**
+1. In the desktop app, or in Chrome or Edge: *Storage* → *More ways to keep a copy* → **Create database file…**
 2. Save it inside a folder your sync app keeps copied (iCloud Drive on a Mac, OneDrive, Google Drive for desktop, Dropbox, Box, Proton Drive, Synology Drive…).
 3. On another computer choose **Open existing file…** and pick the same file.
 
@@ -72,6 +72,6 @@ Two-way sync with Google Calendar or Outlook is in the same panel: tap **Connect
 Only for developers who run their own copy of Vdex at another address, or who want sign-ins to go through apps they registered themselves.
 
 - **Built in for everyone:** put your app key and client IDs in `js/cloud-config.js`. Follow [Turning on sign-in](turn-on-sign-in.md), with your own addresses in place of the ones in its table: the redirect URI is the app's folder (for example `https://example.com/vdex/`), and the Google JavaScript origin is the scheme and host only (`https://example.com`).
-- **On one device only:** ☁ → *More ways to keep a copy* → *For developers: use your own app*, and paste the key or IDs there. They are kept on that device only and replace the built-in ones. Register the address the app is opened at (shown in that panel) as the redirect URI.
+- **On one device only:** *Storage* → *More ways to keep a copy* → *For developers: use your own app*, and paste the key or IDs there. They are kept on that device only and replace the built-in ones. Register the address the app is opened at (shown in that panel) as the redirect URI.
 
 What each service needs: Apple, a paid Apple Developer Program membership, an iCloud container with the record type `VdexFile` (fields `text` String, `parts` Int(64), `gen` String) deployed to Production, and two API tokens: one with the sign-in callback *URL Redirect* to your app's folder, for the website, and one with *Post Message* for the desktop app; put them in `js/cloud-config.js` under `icloud` (`container`, `apiToken`, `desktopToken`). Dropbox, a *Scoped access, App folder* app with `files.content.read`, `files.content.write`, `sharing.write` and `sharing.read`, public clients allowed, no secret. Google, a *Web application* client with the Drive and Calendar APIs enabled and the scopes `drive.appdata`, `drive.file` and `calendar.app.created`, no redirect URI needed. Microsoft, a registration for *any directory and personal accounts* with the redirect URIs under *Single-page application* and the delegated permissions `Files.ReadWrite.AppFolder` and `Calendars.ReadWrite`, no secret.

@@ -2,7 +2,7 @@
 // order; a section opened inside a closed group opens the group; the profile is edited in Settings only; storage,
 // sync and backups are one section (and the ☁ sheet matches).
 const { chromium } = require('playwright');
-const { acceptTerms, openSetting } = require('../helpers.cjs');
+const { acceptTerms, openSetting, menuClick } = require('../helpers.cjs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -67,8 +67,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const st = page.locator('details[data-s="Storage, sync & backups"]');
   const stText = await st.innerText();
   ok('the section has the storage choices and, under a Backups heading, the backup actions', /Google Drive/.test(stText) && /BACKUPS|Backups/.test(stText) && (await st.getByRole('button', { name: 'Export backup' }).count()) === 1 && (await st.getByRole('button', { name: 'Load sample data' }).count()) === 1 && (await st.getByRole('button', { name: /Erase all data/ }).count()) === 1);
-  await page.locator('#cloudBtn').click(); await page.waitForSelector('.sheet');
-  ok('the ☁ sheet carries the same name and the backups', (await page.locator('.sheet[aria-label="Storage, sync & backups"]').count()) === 1 && (await page.locator('.sheet').getByRole('button', { name: 'Export backup' }).count()) === 1);
+  await menuClick(page, '#cloudBtn'); await page.waitForSelector('.sheet');
+  ok('the sheet behind the menu’s storage row carries the same name and the backups', (await page.locator('.sheet[aria-label="Storage, sync & backups"]').count()) === 1 && (await page.locator('.sheet').getByRole('button', { name: 'Export backup' }).count()) === 1);
   await page.keyboard.press('Escape'); await sleep(250);
 
   // ---- the Settings tutorial walks the groups and their sections ----

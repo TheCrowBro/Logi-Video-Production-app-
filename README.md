@@ -20,7 +20,7 @@ It works on an iPhone, an Android phone, and a computer. It is free to try for 3
    - **iPhone:** open the address in Safari, tap the **Share** button (the square with an arrow), then **Add to Home Screen**.
    - **Android:** tap **Install** at the top of the page.
    - **Computer:** tap **Install** at the top of the page. Or get the desktop app for Windows, Mac or Linux from https://vdex.crowmade.app/download.html. Vdex is free to try for 30 days; then a licence is 20 US dollars once plus the tax where you live (the download page lists the whole price for the UK, the EU and Australia), for up to 3 of your devices, and you sign in on the website with the email address you bought with.
-3. **Tap ? at the top of any page.** It walks you through that page, box by box. You can do this as often as you like.
+3. **Open the menu (☰ at the top right) and tap Tutorial for this page.** It walks you through the page you are on, box by box. You can do this as often as you like.
 
 That's it. You're in.
 
@@ -40,6 +40,8 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 | 🎬 **TC Notes** | Shoot notes that are stamped with the camera's timecode. |
 | ⚙️ **Settings** | Everything else, including your templates, backups and the lock. |
 
+**Looking for something?** Tap the magnifier 🔍 at the top of any page and type a name, a place, a serial number or an invoice number. Vdex looks through everything you keep in it, on your own device, and opens the one you pick.
+
 ## Your first shoot
 
 1. **Bookings → + New.** Type the job, the client, the date and the address. Tick the crew and the kit you're taking.
@@ -54,20 +56,20 @@ Everything can be changed later, and every screen has a back button. To delete a
 ## Keep your things safe
 
 - **Your PIN.** Vdex asks for one before it can be used on a device (4 to 8 digits), and people who used it before are asked once at their next start. Then Vdex locks when you put the phone down, you can open it with your fingerprint or face, and while it's locked the information on this device is encrypted. **Change PIN…** is under Settings → Security; a forgotten PIN can't be recovered, so keep a cloud storage linked or a backup current.
-- **Connect your cloud storage** (with a licence): tap ☁ at the top, tap **Connect** next to Google Drive or iCloud, and sign in to your own account (Dropbox, OneDrive and more are under *More ways to keep a copy*). Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
+- **Connect your cloud storage** (with a licence): open the menu ☰ at the top right, tap **Storage, sync and backups**, tap **Connect** next to Google Drive or iCloud, and sign in to your own account (Dropbox, OneDrive and more are under *More ways to keep a copy*). Your phone and your computer then share the same information, and Vdex keeps a daily backup copy there by itself.
 - **Nothing is sent anywhere by itself.** The [privacy policy](https://vdex.crowmade.app/privacy.html) says in plain words what stays on your device and what leaves it, and when. The [terms of service](https://vdex.crowmade.app/terms.html) cover using Vdex.
 - **Save a backup now and then** (with a licence): Settings → Storage, sync & backups → **Export backup**. Keep the file somewhere safe. If your phone is lost, install Vdex on the new one and import the file.
 
 ## Need help?
 
-- **Tap ?** at the top of any page, or inside any pop-up panel, for a walkthrough of what you're looking at. Timecode is the trickiest part, so its page also has a **📖 Guide** with a start-to-finish walkthrough on a practice log. Quotes and invoices have the same: **🎓 New to quoting? Start here** on a booking's Money page opens a guide and a walkthrough that makes a practice job, quotes it, invoices it and takes a payment, without touching your real numbering.
+- **Tutorial for this page**, in the menu ☰ at the top right of any page, or **?** inside any pop-up panel, gives a walkthrough of what you're looking at. Timecode is the trickiest part, so its page also has a **📖 Guide** with a start-to-finish walkthrough on a practice log. Quotes and invoices have the same: **🎓 New to quoting? Start here** on a booking's Money page opens a guide and a walkthrough that makes a practice job, quotes it, invoices it and takes a payment, without touching your real numbering.
 - **Settings → General → About & Licence → Take the tour** runs the set-up walkthrough again: a look around the deck, your name, business, phone, email and website, your calendar, and two sample people on the Crew page with how to remove them.
 - **[The complete guide](docs/full-guide.md)** explains every button, separately for iPhone, Android and computers, with answers to common questions.
 
 ### If something isn't working
 
 - **The camera, microphone or location won't start.** Your phone asked for permission once and you said no. Open your phone's Settings, find Vdex or your browser, and allow it.
-- **My shoots aren't on my other device.** Connect the same storage, with the same account, on both devices with the ☁ button, or export a backup on one and import it on the other (both with a licence).
+- **My shoots aren't on my other device.** Connect the same storage, with the same account, on both devices (menu ☰ → *Storage, sync and backups*), or export a backup on one and import it on the other (both with a licence).
 - **The Connect buttons are grey.** Sign-in hasn't been switched on in this copy of Vdex yet. The person who looks after the tech does it once: see [Turning on sign-in](docs/turn-on-sign-in.md).
 - **I forgot my PIN.** It can't be recovered. Tap **Forgot PIN?** on the lock screen, erase this device, then link your storage or import a backup and everything comes back.
 - **Something looks out of date.** Close Vdex fully and open it again. New versions arrive by themselves; a bar at the bottom offers to reload when one has.

@@ -1,5 +1,5 @@
 const { chromium } = require('playwright');
-const { acceptTerms, openSetting } = require('../helpers.cjs');
+const { acceptTerms, openSetting, menuClick } = require('../helpers.cjs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -16,7 +16,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => import('./js/store.js').then(s => s.loadSample()));
 
   // ---- camera-brand themes ----
-  await page.locator('#displayBtn').click(); await page.waitForSelector('.sheet');
+  await menuClick(page, '#displayBtn'); await page.waitForSelector('.sheet');
   await page.locator('.sheet details.twirl > summary', { hasText: 'Colour theme' }).click();
   const groups = await page.locator('.sheet .theme-group').allInnerTexts();
   ok('theme chooser has Classic and Camera brands groups', groups.length === 2 && /camera brands/i.test(groups[1]) && /not affiliated/i.test(groups[1]), JSON.stringify(groups));
