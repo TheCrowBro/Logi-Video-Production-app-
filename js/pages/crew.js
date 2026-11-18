@@ -1,5 +1,5 @@
-import { h, telUrl, safeUrl, empty, fmtShort, todayISO, personRate, rateText, hasUnit, keepTypedRate, typedRateHint } from '../util.js';
-import { db, upsert, remove, crewBookings, endOf } from '../store.js';
+import { h, telUrl, safeUrl, empty, fmtShort, todayISO, personRate, rateText, hasUnit, keepTypedRate, typedRateHint, toast } from '../util.js';
+import { db, upsert, remove, crewBookings, endOf, touch } from '../store.js';
 import { openForm } from '../form.js';
 import { groupNames, groupOf, roleWords, fold, MY_ROLES } from '../roles.js';
 
@@ -33,6 +33,15 @@ function edit(c = {}) {
   });
 }
 
+// "Add from a link": a contact card (or anything else) someone shared from their Vdex, pasted or scanned.
+const addFromLink = () => import('../share-add.js').then(m => m.openAddFromLink()).catch(e => toast('Could not open that: ' + (e.message || e)));
+// Opens the Crew page on one person, with nothing filtered away: where a contact card that was just added lands.
+export async function showPerson(id) {
+  S.q = ''; S.role = '';
+  await window.logiGo('crew'); touch();
+  setTimeout(() => { const el = document.querySelector(`.crew-card[data-id="${CSS.escape(id)}"]`); if (el) { el.classList.add('just-added'); el.scrollIntoView({ block: 'center' }); } }, 60);
+}
+
 export const crew = {
   id: 'crew', label: 'Crew', icon: '👥',
   render(root) {
@@ -51,6 +60,7 @@ export const crew = {
 
       root.replaceChildren(h('div', null,
         h('div', { class: 'page-head' }, h('h1', null, 'Trusted crew'), h('button', { class: 'btn primary', onclick: () => edit() }, '+ Add')),
+        h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: addFromLink, title: 'Add a contact card someone shared with you from Vdex' }, '🔗 Add from a link')),
         db.crew.length > 3 && h('input', { class: 'search', type: 'search', placeholder: 'Search crew…', value: S.q, 'aria-label': 'Search crew', oninput: e => { S.q = e.target.value; draw(); const i = root.querySelector('.search'); i.focus(); i.setSelectionRange(S.q.length, S.q.length); } }),
         groups.length > 1 && h('div', { class: 'chips', role: 'group', 'aria-label': 'Show one kind of role' },
           chip('all', 'All', !S.role, () => { S.role = ''; S.only = ''; }),

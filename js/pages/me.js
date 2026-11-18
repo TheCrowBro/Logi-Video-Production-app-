@@ -3,26 +3,14 @@ import { db } from '../store.js';
 
 import { loadQR } from '../qr.js';
 import * as native from '../native.js';
+import { vcard, QR_MAX } from '../share-data.js';
+import { contactLink, openContactShare } from '../share-out.js';
 
-const esc = s => String(s || '').replace(/([\;,])/g, '\\$1').replace(/\n/g, '\\n');
-
-export function vcard(p) {
-  const [first = '', ...rest] = (p.name || '').trim().split(/\s+/);
-  return [
-    'BEGIN:VCARD', 'VERSION:3.0',
-    `N:${esc(rest.join(' '))};${esc(first)};;;`,
-    `FN:${esc(p.name)}`,
-    p.business && `ORG:${esc(p.business)}`,
-    p.title && `TITLE:${esc(p.title)}`,
-    p.phone && `TEL;TYPE=CELL:${esc(p.phone)}`,
-    p.email && `EMAIL:${esc(p.email)}`,
-    safeUrl(p.website) && `URL:${safeUrl(p.website)}`,
-    p.location && `ADR;TYPE=WORK:;;${esc(p.location)};;;;`,
-    'END:VCARD',
-  ].filter(Boolean).join('\r\n');
-}
-
-const S = { mode: 'contact' };
+// The QR code hands over one of three things. The card (the usual one) is a link to a small page with your details,
+// which anyone can read, save to their phone's contacts, or add to their own Vdex; it is all inside the link, so no
+// server holds it. "Phone contacts" is the plain vCard a phone's camera adds to its address book with no page between.
+const S = { mode: 'card' };
+const MODES = [['card', 'Contact card'], ['vcard', 'Phone contacts'], ['site', 'Website']];
 
 // The details are changed in one place only: Settings → General → Profile.
 const edit = () => import('./settings.js').then(m => m.openSettingsSection('Profile'));
@@ -37,14 +25,18 @@ export const me = {
     const hasData = p.name || p.phone || p.email;
 
     async function paintQR() {
-      const text = S.mode === 'site' ? site : vcard(p);
-      caption.textContent = S.mode === 'site' ? site || 'Add your website first' : 'Scan to save my contact details';
-      if (!text || (S.mode === 'contact' && !hasData)) { qrBox.textContent = 'Add your details to generate a QR code.'; return; }
+      const mode = S.mode;
+      caption.textContent = mode === 'site' ? site || 'Add your website first' : mode === 'vcard' ? 'Scan to save my details straight into a phone’s contacts' : 'Scan to open my contact card: save it to a phone, or add it to Vdex';
+      caption.classList.toggle('words', mode !== 'site'); // a sentence wraps between words; a web address may break anywhere
+      if ((mode === 'site' && !site) || (mode !== 'site' && !hasData)) { qrBox.textContent = 'Add your details to generate a QR code.'; return; }
       try {
+        const text = mode === 'site' ? site : mode === 'vcard' ? vcard(p) : await contactLink(p);
+        if (mode !== S.mode || !qrBox.isConnected) return; // another code was asked for meanwhile
+        if (mode === 'card' && text.length > QR_MAX) throw new Error('too long');
         const qr = (await loadQR())(0, 'M');
         qr.addData(text); qr.make();
         qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
-        qrBox.setAttribute('aria-label', S.mode === 'site' ? 'QR code for ' + site : 'QR code with contact details for ' + p.name);
+        qrBox.setAttribute('aria-label', mode === 'site' ? 'QR code for ' + site : mode === 'vcard' ? 'QR code with contact details for ' + p.name : 'QR code that opens the contact card of ' + p.name);
       } catch { qrBox.textContent = 'Too much data for a QR code — shorten your details.'; }
     }
 
@@ -55,6 +47,8 @@ export const me = {
       if (navigator.canShare?.({ files: [f] })) { try { await navigator.share({ files: [f], title: p.name }); return; } catch (e) { if (e.name === 'AbortError') return; } }
       const a = h('a', { href: URL.createObjectURL(f), download: f.name }); document.body.append(a); a.click(); a.remove(); toast('Saved .vcf file');
     };
+    // The card's link, to send instead of showing the code: copy, share or email (js/share-out.js).
+    const sendLink = () => openContactShare(p);
 
     root.append(h('div', null,
       h('div', { class: 'page-head' }, h('h1', null, 'Me'), h('button', { class: 'btn ghost', onclick: edit, title: 'Your details are changed under Settings → General → Profile' }, 'Edit in Settings →')),
@@ -62,12 +56,12 @@ export const me = {
         h('div', { class: 'id-top' },
           h('div', { class: 'avatar big', 'aria-hidden': 'true' }, (p.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()),
           h('div', null, h('h2', null, p.name || 'Add your name'), h('div', { class: 'muted' }, [p.title, p.business].filter(Boolean).join(' · ') || (p.name ? '' : 'Settings → General → Profile')), p.location && h('div', { class: 'muted small' }, '📍 ' + p.location))),
-        h('div', { class: 'seg', role: 'tablist' },
-          h('button', { class: S.mode === 'contact' ? 'on' : '', role: 'tab', 'aria-selected': S.mode === 'contact', onclick: () => { S.mode = 'contact'; me.render(clear(root)); } }, 'Contact card'),
-          h('button', { class: S.mode === 'site' ? 'on' : '', role: 'tab', 'aria-selected': S.mode === 'site', onclick: () => { S.mode = 'site'; me.render(clear(root)); } }, 'Website')),
+        h('div', { class: 'seg me-modes', role: 'tablist', 'aria-label': 'What the QR code hands over' },
+          MODES.map(([k, label]) => h('button', { class: S.mode === k ? 'on' : '', role: 'tab', 'aria-selected': S.mode === k, onclick: () => { S.mode = k; me.render(clear(root)); root.querySelector('.me-modes button.on')?.focus(); } }, label))),
         qrBox, caption,
         h('div', { class: 'actions center' },
           h('button', { class: 'btn primary', onclick: share, disabled: !hasData }, 'Share contact (.vcf)'),
+          h('button', { class: 'btn ghost', onclick: sendLink, disabled: !hasData }, '🔗 My card’s link…'),
           site && h('a', { class: 'btn ghost', href: site, target: '_blank', rel: 'noopener noreferrer' }, '🌐 Open website'))),
       (p.phone || p.email) && h('div', { class: 'card kv' },
         p.phone && h('div', null, h('span', { class: 'muted' }, 'Phone'), h('a', { href: telUrl(p.phone) }, p.phone)),

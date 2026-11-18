@@ -1,6 +1,6 @@
 import { h, groupBy, empty, fmtShort, todayISO, money, parseISO, ymd, daysUntil, sheet, toast, nodes, uid } from '../util.js';
 import { exportAssetRegister } from '../backup.js';
-import { db, upsert, remove, gearBookings, endOf, qtyOf, usedQty, totalValue, byId } from '../store.js';
+import { db, upsert, remove, gearBookings, endOf, qtyOf, usedQty, totalValue, byId, touch } from '../store.js';
 import { openForm } from '../form.js';
 
 export const CATEGORIES = ['Camera', 'Lens', 'Lighting', 'Audio', 'Support', 'Grip', 'Drone', 'Monitoring', 'Power', 'Media', 'Accessories', 'Other'];
@@ -68,6 +68,21 @@ function kitsView(sym) {
       : empty('No kits yet. Build one for each kind of job you take on.', h('button', { class: 'btn primary', onclick: () => editKit() }, 'Create a kit')));
 }
 
+// Sharing the list with a workmate, adding one a workmate shared, and importing a list kept somewhere else: each loads
+// on first use (js/share-out.js, js/share-add.js, js/gear-import-ui.js).
+const importList = () => import('../gear-import-ui.js').then(m => m.openGearImport()).catch(e => toast('Could not open the import: ' + (e.message || e)));
+const shareList = () => import('../share-out.js').then(m => m.openGearShare()).catch(e => toast('Could not open sharing: ' + (e.message || e)));
+const addFromLink = () => import('../share-add.js').then(m => m.openAddFromLink()).catch(e => toast('Could not open that: ' + (e.message || e)));
+// Opens the Items list with nothing filtered away, on the items given: where equipment that was just added lands.
+// drawn: the caller changed the data a moment ago, so this page is about to be redrawn anyway and is not drawn twice
+// (with thousands of items a draw takes long enough to notice).
+export async function showItems(ids = [], { drawn = false } = {}) {
+  Object.assign(S, { q: '', cat: '', loc: '', view: 'items' });
+  const here = window.logiPage() === 'gear';
+  await window.logiGo('gear'); if (!(drawn && here)) touch();
+  setTimeout(() => { const cards = ids.map(id => document.querySelector(`.gear-card[data-id="${CSS.escape(id)}"]`)).filter(Boolean); cards.forEach(c => c.classList.add('just-added')); if (cards[0]) cards[0].scrollIntoView({ block: 'center' }); }, 60);
+}
+
 export const gear = {
   id: 'gear', label: 'Equipment', icon: '🎥',
   render(root) {
@@ -82,9 +97,12 @@ export const gear = {
       const units = db.gear.reduce((s, g) => s + qtyOf(g), 0);
       const out = db.gear.filter(g => gearBookings(g.id).some(b => endOf(b) >= today)).length;
 
-      root.replaceChildren(h('div', null,
+      root.replaceChildren(h('div', { class: db.gear.length > 200 ? 'gear-many' : null }, // a long list is laid out as it scrolls into view (styles.css)
         h('div', { class: 'page-head' }, h('h1', null, 'Equipment'), h('button', { class: 'btn primary', onclick: () => (S.view === 'kits' ? editKit() : edit()) }, S.view === 'kits' ? '+ New kit' : '+ Add')),
-        h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => exportAssetRegister() }, '🧾 Asset register (CSV)')),
+        h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => exportAssetRegister() }, '🧾 Asset register (CSV)'),
+          h('button', { class: 'btn ghost small', 'data-fk': 'gear-import', onclick: importList, title: 'Bring in a kit list you already keep: a spreadsheet, an export from another app, or pasted text' }, '📥 Import…'),
+          db.gear.length > 0 && h('button', { class: 'btn ghost small', onclick: shareList, title: 'Share the list, a kit or chosen items with a workmate, by link or QR code' }, '📤 Share…'),
+          h('button', { class: 'btn ghost small', onclick: addFromLink, title: 'Add an equipment list someone shared with you from Vdex' }, '🔗 Add from a link')),
         h('div', { class: 'seg', role: 'tablist' },
           h('button', { class: S.view === 'items' ? 'on' : '', role: 'tab', 'aria-selected': S.view === 'items', onclick: () => { S.view = 'items'; draw(); } }, `Items (${db.gear.reduce((s, g) => s + qtyOf(g), 0)})`),
           h('button', { class: S.view === 'kits' ? 'on' : '', role: 'tab', 'aria-selected': S.view === 'kits', onclick: () => { S.view = 'kits'; draw(); } }, `Kits (${db.kits.length})`)),
@@ -102,7 +120,7 @@ export const gear = {
         groups.length
           ? groups.map(([cat, items]) => h('section', { class: 'block' }, h('h3', null, cat),
             h('div', { class: 'list' }, items.sort((a, b) => a.name.localeCompare(b.name)).map(item => card(item, today, sym)))))
-          : empty(db.gear.length ? 'No matches.' : 'Log every camera, lens, light and mic you own. Then assign them to shoots on the Bookings page.', db.gear.length ? null : h('button', { class: 'btn primary', onclick: () => edit() }, 'Add first item'))]));
+          : empty(db.gear.length ? 'No matches.' : 'Log every camera, lens, light and mic you own. Then assign them to shoots on the Bookings page.', db.gear.length ? null : h('div', { class: 'actions center' }, h('button', { class: 'btn primary', onclick: () => edit() }, 'Add first item'), h('button', { class: 'btn ghost', onclick: importList }, '📥 Import a list you already have')))]));
     };
     draw();
   },

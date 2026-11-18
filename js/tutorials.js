@@ -141,6 +141,7 @@ export const TUTORIALS = {
     T('Month to month', 'Previous, next, and Today.', '.bk-month .cal-nav'),
     T('New bookings', '+ New starts a blank booking. From template fills one in from a project template you made, with its kit, crew, deliverables and schedule.', '.bk-month .page-head .actions', '.bk-month .page-head'),
     T('Tools for all your shoots', 'Pipeline shows every project by stage. Call sheets lists each shoot’s sheet. Money has quotes and invoices. Hours & statistics and Calendar & email do what they say.', '.bk-month .bk-tiles', '.bk-month .subactions'),
+    T('Add from a link', 'Did someone share a booking with you from their Vdex? Paste the link here, or scan its QR code. You see what it holds before anything is added, and adding it again later updates it.', '.bk-month .bk-add-link'),
     T('Next up', 'The next few shoots: tap one to open it, or press and hold it for three seconds to delete it.', '.bk-month h3 + .list', '.bk-month .list', '.bk-month .empty'),
   ] },
   day: { name: 'A day', page: 'bookings', steps: [
@@ -150,7 +151,7 @@ export const TUTORIALS = {
   ] },
   booking: { name: 'A booking', page: 'bookings', steps: [
     T('The booking', 'Project, client, dates, times and address, with Add to calendar, Share calendar event and Email. Edit changes the details, including the edit days that show on the calendar in their own colour. Press and hold this box for three seconds to delete the booking.', '.bk-detail .card.hero'),
-    T('Call sheet, stripboard and crew link', 'Call sheet opens this shoot’s sheet. Stripboard & shot list breaks the shoot down scene by scene into shooting days and keeps the shot list. Share with crew makes a read-only page for your cast and crew, with the times, location, who is on and the shot list, and never any prices or budgets.', '.bk-detail .bk-tools'),
+    T('Call sheet, stripboard and crew link', 'Call sheet opens this shoot’s sheet. Stripboard & shot list breaks the shoot down scene by scene into shooting days and keeps the shot list. Share with crew makes a read-only page for your cast and crew, with the times, location, who is on and the shot list, and never any prices or budgets. Crew who use Vdex can add the shoot to their own Bookings from it.', '.bk-detail .bk-tools'),
     T('Hours', 'The clock for this job: Start work on the day (on an edit day, or any other day, the hours count as editing), Stop work, timed breaks against the approved allowance, and the total so far with overtime. While it runs, a strip under the Rolodex repeats it on every page.', '#bk-hours'),
     T('Templates', 'Save as template turns a job that went well into a template; Apply template items adds anything a template still has to offer.', '.bk-detail .bk-tools-more'),
     T('Weather and sun', 'The forecast for the day within two weeks, and sunrise, sunset and golden hour at the venue.', '.bk-detail .wx-card'),
@@ -217,6 +218,7 @@ export const TUTORIALS = {
   ] },
   crew: { name: 'Crew', page: 'crew', steps: [
     T('Your crew', 'The freelancers you work with. + Add creates a person with their role, phone, email, a day or hourly rate, and a link to their work.', '#crew .page-head', '.page-head'),
+    T('Add from a link', 'A contact card someone shared from their Vdex (the QR code on their Me page) goes in here: paste the link or scan the code, and they join this list with their role, phone, email and website.', '#page .subactions'),
     T('Find someone', 'Search by name or role.', '#crew .search', '.search'),
     T('Filter by group, then by role', 'Tap a group, such as Camera, to see only those people. When the group holds more than one role, a second row narrows it to one. Roles you typed yourself are under My roles, and people with no role under No role.', '#crew .chips', '.chips'),
     T('Roles', 'A person’s role is picked with the Role button in their form (+ Add, or ✎ on a card): a menu of film, television and video roles in groups such as Producing, Camera, Lighting and Sound. Open a group and tap a role, search for it by any of its names, or type one of your own, which is kept under My roles for next time.', '#crew .page-head .btn', '.page-head .btn'),
@@ -224,7 +226,7 @@ export const TUTORIALS = {
   ] },
   gear: { name: 'Equipment', page: 'gear', steps: [
     T('Items and kits', 'Items is everything you own. Kits are named sets of gear for the shoots you do most; tick a kit on a booking to load its gear.', '.seg[role=tablist]'),
-    T('Asset register', 'Exports everything with serial numbers, values, warranty and last service: for the insurer, and for the police if kit goes missing.', '.subactions'),
+    T('Asset register, importing, sharing and adding', 'Asset register exports everything with serial numbers, values, warranty and last service: for the insurer, and for the police if kit goes missing. Import… brings in the kit list you already keep, from a CSV or Excel file or pasted text: Vdex shows what it takes each column for, you correct it, and nothing is added until you say so. Share… hands the whole list, a kit or the items you tick to a workmate as a link or QR code, serial numbers and values included. Add from a link takes in a list someone shared with you, and asks what to do with serial numbers you already have.', '.subactions'),
     T('Due for service', 'Items whose service is overdue or whose warranty is about to end.', '#page .warn'),
     T('Totals', 'How many items, what they are worth, and how many are booked ahead.', '.stats'),
     T('Find an item', 'Search by name, serial number or place; the chips filter by category, and the 📍 chips by where things are.', '.search', '.chips'),
@@ -248,8 +250,8 @@ export const TUTORIALS = {
   ] },
   me: { name: 'Me', page: 'me', steps: [
     T('Your card', 'Name, business, title and where you are based, as entered under Settings → General → Profile; your details also go on call sheets, quotes and invoices.', '.id-card'),
-    T('QR code', 'Contact hands over your card; Website opens your site. Anyone can scan it with their camera.', '#me .seg', '.seg'),
-    T('The code', 'Tap Save .vcf to share your contact file instead.', '.qr'),
+    T('QR code', 'Contact card opens a small page with your details: whoever scans it can save you to their phone, or add you to the Crew list in their own Vdex. Phone contacts is the plain card a phone’s camera saves by itself. Website opens your site.', '#me .seg', '.seg'),
+    T('The code', 'Anyone can scan it with their camera. Share contact (.vcf) hands over the contact file instead, and My card’s link… gives the link the code holds, to copy, share or email.', '.qr'),
     T('Contact lines', 'Phone and email, tappable.', '#me .card.kv', '.card.kv'),
   ] },
   field: { name: 'Field tools', page: 'field', steps: [

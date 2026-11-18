@@ -14,6 +14,10 @@ import { termsGate } from './terms.js';
 import * as native from './native.js';
 
 applyPrefs();
+// A shared Vdex link opened in the app (index.html#add=…, from "Add to my Vdex" on a shared page): taken out of the
+// address bar at once and kept for this tab, through the lock, the terms, the PIN set-up and any sign-in on the way.
+const parkAdd = () => { const m = /^#add=(.+)/.exec(location.hash); if (!m) return false; try { sessionStorage.setItem('vdex-add', m[1]); } catch { window.__vdexAdd = m[1]; } history.replaceState(null, '', location.pathname + location.search); return true; };
+parkAdd();
 await lock.gate(); // with a PIN set, nothing below runs until the lock screen is passed
 lock.init();
 await termsGate(); // nor until the terms of service and privacy policy are accepted on this device
@@ -140,6 +144,12 @@ window.logiShowNav = showNav;
 show(start);
 window.logiGo = i => { rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); return showing; }; // lets pages jump between sections; resolves once the section is drawn
 window.logiPage = () => (tabs[current] ? tabs[current].id : null); // which section is open (the page tutorials use it)
+
+// The parked link, if any: js/share-add.js waits for Vdex to be ready (unlocked, no walkthrough running), shows what the
+// link holds and adds it only on a tap. A link put in the address of a page that is already open comes the same way.
+const showAdd = () => { let link = window.__vdexAdd || ''; window.__vdexAdd = ''; try { link = link || sessionStorage.getItem('vdex-add') || ''; } catch { /* kept in memory only */ } if (link) import('./share-add.js').then(m => m.arrived(link)).catch(() => toast('The shared link could not be opened. Check the connection and try again.')); };
+showAdd();
+addEventListener('hashchange', () => { if (parkAdd()) showAdd(); });
 
 // A file handed to Vdex: the iPhone app gets it from the phone ("Copy to Vdex"); on Android the share sheet's file is
 // parked by the service worker. Either way js/share-in.js asks what it is.

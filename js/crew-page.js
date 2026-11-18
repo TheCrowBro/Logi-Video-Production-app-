@@ -1,13 +1,13 @@
 // The page cast and crew open from a "Share with crew" link: the shoot packed into the URL fragment by the producer's
 // copy of Vdex, drawn here read-only. No store, no account, nothing fetched but this page. Only the fields below are
-// ever shown, and the link never carries money: no prices, rates, budgets, quotes or invoices.
+// ever shown, and the link never carries money: no prices, rates, budgets, quotes or invoices. Someone who uses Vdex
+// can add the shoot to their own Bookings: "Add to my Vdex" hands the same packed link to the app (js/share-add.js).
 import { h, fmtLong, fmtShort, mapsUrl, telUrl } from './util.js';
-import { unpack } from './link-pack.js';
+import { readShared, packedOf, isDate } from './share-data.js';
 
 const bar = document.getElementById('bar'), box = document.getElementById('doc');
 addEventListener('hashchange', () => location.reload()); // another crew link opened in this same tab
 const fail = msg => { box.replaceChildren(h('div', { class: 'msg' }, h('h1', null, 'This link does not open shoot info'), h('p', null, msg), h('p', null, 'Ask the producer who sent it for a fresh link.'))); };
-const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(s || '');
 const kv = rows => { const r = rows.filter(([, v]) => v); return r.length ? h('dl', { class: 'kv' }, r.flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)])) : null; };
 const section = (title, ...kids) => { const body = kids.flat().filter(Boolean); return body.length ? [h('h2', null, title), ...body] : []; };
 const link = (href, text) => h('a', { href }, text);
@@ -18,7 +18,6 @@ const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
 const fold = line => { const out = []; let cur = '', bytes = 0; for (const ch of line) { const n = new TextEncoder().encode(ch).length; if (bytes + n > 74) { out.push(cur); cur = ' '; bytes = 1; } cur += ch; bytes += n; } out.push(cur); return out.join('\r\n'); };
 const TIME = /^(\d{1,2}):(\d{2})$/;
-const KINDS = ['sb-int-day', 'sb-ext-day', 'sb-int-night', 'sb-ext-night']; // strip colours: only these class names are ever used
 const at = (d, t) => { const [y, m, dd] = d.split('-').map(Number), x = TIME.exec(t || ''); return x ? new Date(y, m - 1, dd, Number(x[1]), Number(x[2])) : null; };
 const stamp = x => `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}T${String(x.getHours()).padStart(2, '0')}${String(x.getMinutes()).padStart(2, '0')}00`;
 const dayStamp = (d, add = 0) => { const [y, m, dd] = d.split('-').map(Number), x = new Date(y, m - 1, dd + add); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
@@ -38,39 +37,23 @@ function ics(snap) {
     'END:VEVENT', 'END:VCALENDAR'].filter(Boolean);
   return lines.map(l => fold(String(l).replace(/[\r\n]+/g, ' '))).join('\r\n') + '\r\n';
 }
-// Only the shapes this page expects: anything else in a link is dropped, never drawn or written into a file.
-function clean(raw) {
-  const s = v => (v == null ? '' : typeof v === 'string' ? v : typeof v === 'number' || typeof v === 'boolean' ? String(v) : '');
-  const time = v => (TIME.test(s(v)) ? s(v) : '');
-  const list = (v, f) => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object').map(f) : []);
-  const person = p => ({ name: s(p.name), role: s(p.role), phone: s(p.phone), email: s(p.email), call: s(p.call) });
-  const c = raw.call && typeof raw.call === 'object' ? raw.call : {}, l = raw.location && typeof raw.location === 'object' ? raw.location : {};
-  const date = s(raw.date), endDate = isDate(s(raw.endDate)) && s(raw.endDate) > date ? s(raw.endDate) : '';
-  return {
-    kind: s(raw.kind), ref: s(raw.ref), made: Number.isFinite(Number(raw.made)) ? Number(raw.made) : 0, title: s(raw.title), type: s(raw.type), date, endDate,
-    start: time(raw.start), end: time(raw.end), producer: s(raw.producer), client: s(raw.client),
-    call: { general: s(c.general), lunch: s(c.lunch), wrap: s(c.wrap), breaks: s(c.breaks), dress: s(c.dress), weather: s(c.weather), emergency: s(c.emergency) },
-    location: { venue: s(l.venue), address: s(l.address), access: s(l.access), parking: s(l.parking), power: s(l.power), hospital: s(l.hospital), rules: s(l.rules) },
-    schedule: list(raw.schedule, r => ({ date: isDate(s(r.date)) ? s(r.date) : '', time: s(r.time), item: s(r.item) })),
-    crew: list(raw.crew, person), contacts: list(raw.contacts, person), onSet: s(raw.onSet),
-    scenes: list(raw.scenes, d => ({ n: Math.max(1, Math.floor(Number(d.n)) || 1), date: isDate(s(d.date)) ? s(d.date) : '', pages: s(d.pages), items: list(d.items, x => (x.banner != null ? { banner: s(x.banner) } : { scene: s(x.scene), ie: s(x.ie), set: s(x.set), tod: s(x.tod), desc: s(x.desc), cast: Array.isArray(x.cast) ? x.cast.map(s).filter(Boolean) : [], pages: s(x.pages), kind: KINDS.includes(x.kind) ? x.kind : 'sb-int-day' })) })),
-    shots: list(raw.shots, x => ({ text: s(x.text), done: x.done === true })), kit: list(raw.kit, k => ({ name: s(k.name), cat: s(k.cat), qty: Math.max(1, Math.floor(Number(k.qty)) || 1) })),
-    deliverables: list(raw.deliverables, x => ({ name: s(x.name), duration: s(x.duration), due: isDate(s(x.due)) ? s(x.due) : '', status: s(x.status) })), notes: s(raw.notes),
-  };
-}
 const save = (text, name, type) => { const a = h('a', { href: URL.createObjectURL(new File([text], name, { type })), download: name }); document.body.append(a); a.click(); a.remove(); };
 
 (async () => {
+  // Only the fields js/share-data.js allows are ever shown: anything else in a link is dropped, never drawn or written into a file.
   let snap;
-  try { snap = await unpack(location.hash); } catch (e) { return fail(/does not contain/.test(e.message || '') ? 'It has no shoot info in it: part of the link may be missing.' : 'It is incomplete or damaged: part of it may have been cut off when it was copied.'); }
-  if (!snap || typeof snap !== 'object') return fail('It is incomplete or damaged.');
-  snap = clean(snap);
-  if (snap.kind !== 'crew' || !isDate(snap.date)) return fail('It is incomplete or damaged.');
+  try { snap = await readShared(location.hash); } catch (e) {
+    if (e.code === 'none') return fail('It has no shoot info in it: part of the link may be missing.');
+    if (e.code === 'doc') return location.replace('invoice.html' + location.hash); // a quote or an invoice has its own page
+    return fail(e.code === 'damaged' ? 'It is incomplete or damaged: part of it may have been cut off when it was copied.' : e.message);
+  }
+  if (snap.kind !== 'crew') return location.replace('shared.html' + location.hash); // a contact card or an equipment list has its own page
   const when = snap.endDate && snap.endDate > snap.date ? `${fmtLong(snap.date)} → ${fmtLong(snap.endDate)}` : fmtLong(snap.date);
   document.title = `${snap.title || 'Shoot'} — ${fmtShort(snap.date)}`;
   bar.replaceChildren(
     h('div', { class: 'who' }, snap.title || 'Shoot info', snap.producer && h('small', null, 'from ' + snap.producer)),
-    h('div', { class: 'acts' }, h('button', { class: 'btn', type: 'button', onclick: () => save(ics(snap), `${slug(snap.title)}.ics`, 'text/calendar') }, '📆 Add to calendar'), h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, 'Print')));
+    h('div', { class: 'acts' }, h('a', { class: 'btn primary', href: 'index.html#add=' + packedOf(location.hash), title: 'Opens Vdex and shows what would be added to your Bookings, before anything is' }, '＋ Add to my Vdex'),
+      h('button', { class: 'btn', type: 'button', onclick: () => save(ics(snap), `${slug(snap.title)}.ics`, 'text/calendar') }, '📆 Add to calendar'), h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, 'Print')));
 
   const L = snap.location, C = snap.call;
   const days = [...new Set((snap.schedule || []).map(r => r.date || snap.date))].sort();
