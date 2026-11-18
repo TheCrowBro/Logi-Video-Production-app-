@@ -17,7 +17,7 @@ Vdex has no server and no accounts. Everything lives on your device and in the c
 
 - The copy in your cloud storage is plain JSON, protected by that account. Use a strong password and two-factor sign-in there.
 - The phone-to-laptop link trusts whoever scanned the code: pair only with your own devices.
-- A 4-digit PIN can be brute-forced offline by someone who copied the device's storage. Use 6 or more digits, and keep the device's own lock on.
+- A short PIN can be brute-forced offline by someone who copied the device's storage. A PIN can be 4 to 20 digits and Vdex accepts any within that length, so a longer one, and the device's own lock, are what stand against that.
 - Nothing in a browser can stop someone who controls the device at the operating-system level.
 
 ## Reporting a problem
