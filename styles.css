@@ -89,11 +89,14 @@ a { color: var(--accent); }
 .menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: none; } .menu-head h2 { font-size: 1.15rem; }
 /* The status at its top: plain words when all is well (nothing to tap, so no box round them), and a button like the
    rows below, with an arrow, when the storage has something to show or needs the person. Both take the same room, so
-   the rows do not jump under a finger when a save finishes while the menu is open. */
+   the rows do not jump under a finger when a save finishes while the menu is open: the plain one keeps the button's
+   border, unseen. Forced colours (Windows high contrast) draw every border, a see-through one too, which would box
+   the plain words in like a row again: there its border takes the colour of the panel behind it. */
 .menu-status { flex: none; display: flex; gap: 10px; align-items: flex-start; width: 100%; min-height: max(60px, var(--hit)); padding: 12px 14px; background: none; border: 1px solid transparent; border-radius: var(--radius); color: var(--text); font: inherit; text-align: start; }
 button.menu-status { background: var(--card); border-color: var(--line); cursor: pointer; touch-action: manipulation; transition: transform .12s ease, border-color .15s ease; }
 button.menu-status:hover { border-color: var(--accent); } button.menu-status:active { transform: scale(.98); }
 button.menu-status::after { content: '›'; flex: none; align-self: center; margin-inline-start: auto; color: var(--accent); font-size: 1.5rem; font-weight: 800; line-height: 1; } [dir=rtl] button.menu-status::after { content: '‹'; }
+@media (forced-colors: active) { div.menu-status { border-color: Canvas; } }
 .menu-status::before { content: ''; flex: none; width: 10px; height: 10px; margin-top: .42em; border-radius: 50%; background: var(--muted); forced-color-adjust: none; }
 .menu-status[data-state=synced]::before { background: var(--ok); } .menu-status[data-state=error]::before { background: var(--danger); }
 .menu-status[data-state=saving]::before, .menu-status[data-state=paused]::before, .menu-status[data-state=needs-permission]::before { background: var(--warn); }
@@ -148,8 +151,10 @@ body.search-open .update-bar { z-index: 80; } /* as under the menu: behind the p
 .binder::before, .binder::after { content: ''; position: absolute; top: 50%; width: 16px; height: 16px; margin-top: -8px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #cfc6b4, #6e665a); box-shadow: 0 2px 4px #0008; z-index: 3; }
 .binder::before { left: -2px; } .binder::after { right: -2px; }
 /* The magnifier on the bar (js/app.js): there once the top bar and its search control have scrolled out of sight. It
-   stands where the left binder ring is, opposite the ▲ ▼ buttons and clear of the card's icon, and takes the ring's place. */
-.nav-search { position: absolute; left: calc(-1 * var(--pad)); top: 50%; z-index: 4; width: var(--hit); height: var(--hit); margin-top: calc(var(--hit) / -2); display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--card); color: var(--text); box-shadow: 0 2px 6px #0005; cursor: pointer; }
+   stands where the left binder ring is, opposite the ▲ ▼ buttons and clear of the card's icon, and takes the ring's place.
+   As large as any button (--hit), but never wider than the room up to that icon: the bar's own padding, then the 22px
+   and 18px the card and its icon are set in by (.ring, .tab). Extra large buttons on a touch screen would reach past it. */
+.nav-search { --nav-hit: min(var(--hit), calc(var(--pad) + 40px)); position: absolute; left: calc(-1 * var(--pad)); top: 50%; z-index: 4; width: var(--nav-hit); height: var(--nav-hit); margin-top: calc(var(--nav-hit) / -2); display: grid; place-items: center; padding: 0; border: 1px solid var(--line); border-radius: 50%; background: var(--card); color: var(--text); box-shadow: 0 2px 6px #0005; cursor: pointer; }
 .nav-search:hover { border-color: var(--accent); } .nav-search svg { display: block; }
 .binder:has(.nav-search:not([hidden]))::before { display: none; }
 .drum { height: 128px; perspective: 520px; perspective-origin: 50% 50%; overflow: hidden; position: relative; touch-action: pan-x pinch-zoom; user-select: none; -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent); mask-image: linear-gradient(transparent, #000 22%, #000 78%, transparent); }

@@ -324,6 +324,16 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.screenshot({ path: S + '/menu-1200.png' });
   await ctx.close();
 
+  /* ------------------------------ forced colours (Windows high contrast) ------------------------------ */
+  // Forced colours draw every border, a see-through one too, so the plain status would come out boxed in like the rows
+  // under it, which is what it must not look like: there its border takes the colour of the panel behind it.
+  ({ ctx, page } = await open({ options: { forcedColors: 'active' } }));
+  await openMenu(page); await sleep(300);
+  const hc = await page.evaluate(() => { const s = document.getElementById('menuStatus'), col = el => getComputedStyle(el); return { forced: matchMedia('(forced-colors: active)').matches, tag: s.tagName, border: col(s).borderTopColor, panel: col(document.getElementById('menu')).backgroundColor, row: col(document.getElementById('helpBtn')).borderTopColor }; });
+  ok('in forced colours (Windows high contrast) the plain status is still not boxed in like a row: its border is the colour of the panel behind it, and a row’s is not', hc.forced && hc.tag === 'DIV' && hc.border === hc.panel && hc.row !== hc.panel, JSON.stringify(hc));
+  await page.screenshot({ path: S + '/menu-forced-colours-360.png' });
+  await ctx.close();
+
   /* ----------------------------------- the terms gate ----------------------------------- */
   ({ ctx, page } = await open({ terms: false }));
   await page.waitForSelector('.terms-gate');
@@ -854,6 +864,21 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('#searchList .sr-group[data-group="crew"] .sr').first().tap(); await sleep(700);
   const tapped = await page.evaluate(() => { const f = document.querySelector('#page .found'); return { tab: window.logiPage(), found: f ? f.querySelector('strong').textContent : '', open: !document.getElementById('searchBack').hidden }; });
   ok('…and a tap on a result opens it', tapped.tab === 'crew' && tapped.found === 'Sam Rivera' && !tapped.open, JSON.stringify(tapped));
+  await ctx.close();
+
+  /* ---------------- extra large buttons on a touch screen: the bar's magnifier ---------------- */
+  // "Button size: Extra large" makes every button 58 px on a touch screen. The magnifier on the Rolodex bar has only
+  // the room up to the card's icon (56 px): it takes that, and does not reach over the icon.
+  ({ ctx, page } = await open({ options: { hasTouch: true, isMobile: true }, init: () => { localStorage.setItem('logi-prefs', JSON.stringify({ targets: 'large' })); } }));
+  await page.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); s.update(d => { for (let i = 0; i < 60; i++) d.gear.push({ id: 'xl' + i, name: `Probe stand ${String(i).padStart(2, '0')}`, category: 'Grip', serial: '', location: '', qty: 1, notes: '', updatedAt: Date.now() }); }); })); await sleep(300);
+  await page.evaluate(() => window.logiGo('gear')); await page.waitForSelector('#page [data-id="xl59"]', { timeout: 8000 }).catch(() => {}); await sleep(300);
+  // Down the page (the bar slides away), then up a little (it comes back, with the magnifier on it).
+  const barTucked = want => page.waitForFunction(w => document.getElementById('rolodex').classList.contains('tucked') === w, want, { timeout: 4000 }).catch(() => {});
+  await page.evaluate(() => window.scrollTo(0, 2000)); await barTucked(true);
+  await page.evaluate(() => window.scrollTo(0, 1900)); await barTucked(false); await sleep(450);
+  const xl = await page.evaluate(() => { const b = document.getElementById('navSearch'), r = b.getBoundingClientRect(), ico = document.querySelector('#rolodex .tab[aria-selected=true] .tab-ico').getBoundingClientRect(), up = document.querySelector('#rolodex .drum-btn.up').getBoundingClientRect(), nav = document.getElementById('rolodex'), n = nav.getBoundingClientRect(); return { hit: getComputedStyle(document.documentElement).getPropertyValue('--hit').trim(), upW: Math.round(up.width), hidden: b.hidden, tucked: nav.classList.contains('tucked'), w: Math.round(r.width), h: Math.round(r.height), left: Math.round(r.left), right: Math.round(r.right), ico: Math.round(ico.left), inBar: r.top >= n.top && r.bottom <= n.bottom, fits: document.documentElement.scrollWidth <= innerWidth }; });
+  ok('with extra large buttons on a touch screen (58 px) the magnifier takes the room there is beside the card’s icon, at least 44 px each way, and does not reach over the icon', xl.hit === '58px' && xl.upW === 58 && !xl.hidden && !xl.tucked && xl.w >= 44 && xl.h >= 44 && xl.left >= 0 && xl.right <= xl.ico && xl.inBar && xl.fits, JSON.stringify(xl));
+  await page.screenshot({ path: S + '/search-nav-magnifier-large-360.png', clip: { x: 0, y: 0, width: 360, height: 180 } });
   await ctx.close();
 
   /* ------------------------------ ⌘K on Apple devices ------------------------------ */
