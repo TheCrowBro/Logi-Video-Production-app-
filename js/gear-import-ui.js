@@ -14,7 +14,7 @@ import * as M from './gear-import.js';
 // Wide on purpose: a CSV is "text/csv" on one computer and an Excel type on the next, and a phone's picker greys out
 // what is not listed. An old .xls can be picked too, so that it is turned down in a sentence rather than not offered.
 const ACCEPT = '.csv,.tsv,.tab,.txt,.xlsx,.xls,text/csv,text/comma-separated-values,application/csv,text/tab-separated-values,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-const SHOWN = { sample: 5, dups: 30, problems: 100 };
+const SHOWN = { sample: 5, dups: 30, problems: 100, headings: 8 };
 const plural = (n, one, many = one + 's') => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 const letters = i => { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; };
 const day = d => parseISO(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
@@ -22,7 +22,10 @@ const short = (s, n) => (s.length > n ? s.slice(0, n - 1) + '…' : s);
 
 /* ------------------------------------ undo ------------------------------------ */
 // The last import of this visit can be taken back: from the bar that follows it for a short while, and after that
-// from the Import sheet. undoGearImport() only undoes what nothing has touched since.
+// from the Import sheet, until Vdex is closed or reloaded (it is kept in memory only). undoGearImport() only undoes
+// what nothing has touched since. The bar never leaves while the focus is inside it; when its time is up it says
+// where Undo has gone, for people who see the page as well as for those who hear it.
+const BAR_STAYS = 20000, BAR_LOOKS_AGAIN = 4000;
 let last = null, bar = null, barTimer = 0;
 const said = done => [done.added.length && `${done.added.length.toLocaleString()} added`, done.updated.length && `${done.updated.length.toLocaleString()} updated`, done.skipped && `${done.skipped.toLocaleString()} skipped`].filter(Boolean).join(', ') || 'Nothing changed';
 function closeBar() {
@@ -40,26 +43,26 @@ function undoLast() {
   toast(text);
   return true;
 }
-function offerUndo(done) {
+function timeUp() {
+  if (!bar) return;
+  if (bar.contains(document.activeElement)) { barTimer = setTimeout(timeUp, BAR_LOOKS_AGAIN); return; } // someone is on Undo: it is not taken from under them
   closeBar();
+  if (last) toast('Undo is still under Import… until Vdex is closed');
+}
+// Offers Undo for an import that has just been carried out, from this sheet or from a shared link.
+//   done  what applyGearImport() returned
+//   name  where the list came from, for the line under Import ("list.csv", "a shared link")
+// → the Undo button, for the caller to put the focus on, or null when the import changed nothing (no bar is shown).
+export function offerUndo(done, name) {
+  closeBar();
+  last = done.added.length + done.updated.length + (done.kitsAdded || []).length + (done.kitsBefore || []).length ? { done, name: String(name || 'a list') } : null;
+  if (!last) return null;
   const undo = h('button', { class: 'btn small', type: 'button', onclick: undoLast }, 'Undo');
   bar = h('div', { class: 'undo-bar', role: 'group', 'aria-label': 'Import finished' }, h('span', null, said(done)), undo, h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Dismiss', onclick: closeBar }, '✕'));
   document.body.append(bar);
-  barTimer = setTimeout(closeBar, 20000);
-  announce(`${said(done)}. Undo is offered for a short while, and under Import after that.`);
+  barTimer = setTimeout(timeUp, BAR_STAYS);
+  announce(`${said(done)}. Undo is offered for a short while, and under Import… until Vdex is closed.`);
   return undo;
-}
-
-/* --------------------------------- room to keep it --------------------------------- */
-// Vdex keeps everything in this browser's own storage, which has a ceiling (about 5 MB, shared with the encrypted
-// copy when there is a PIN). A list that would not fit is turned down before anything is added, rather than added
-// and then not saved: a test write of the size it needs either fits or does not.
-function roomFor(items) {
-  let vault = false; try { vault = localStorage.getItem('logi-vault') != null; } catch { /* blocked storage: nothing to test */ }
-  const need = Math.ceil((JSON.stringify(items).length + items.length * 60) * (vault ? 2.4 : 1.05));
-  if (need < 150000) return true;
-  try { localStorage.setItem('logi-import-room', 'x'.repeat(need)); return true; } catch { return false; }
-  finally { try { localStorage.removeItem('logi-import-room'); } catch { /* ignore */ } }
 }
 
 /* ------------------------------------ the sheet ------------------------------------ */
@@ -67,10 +70,12 @@ function roomFor(items) {
 export async function openGearImport({ file = null } = {}) {
   await import('./licence.js').then(m => m.initLicence()).catch(() => {}); // whether changes are allowed is known before Add is offered
   const body = h('div', { class: 'stack gi' });
-  let open = true;
-  const sh = sheet('Import equipment', body, { onClose: () => { open = false; } });
+  let open = true, reading = 0; // reading: which read is the one being waited for (a later choice overtakes an earlier one)
+  // A tap beside the sheet does not close it, as with every form: the columns set and the list pasted are work to lose.
+  const sh = sheet('Import equipment', body, { dismissOnBackdrop: false, onClose: () => { open = false; } });
   const sym = store.db.profile.currency || '$';
   let table = null, sheetAt = 0, header = 'auto', L = null, targets = [], live = [], built = null, plan = null, all = 'skip';
+  let lone = 'auto'; // rows with only a word for a kind of kit in the name column: 'auto', or the person's answer, 'headings' or 'items'
   const chosen = new Map(); // row of the file → what to do with it, where the person chose for one item
   let pasted = ''; // what is in the paste box, kept while the sheet is open
   const show = (...kids) => body.replaceChildren(...nodes(kids));
@@ -79,19 +84,22 @@ export async function openGearImport({ file = null } = {}) {
   function choose({ focus = true, given = null } = {}) {
     const warn = h('p', { class: 'warn small gi-warn', role: 'alert', hidden: true }), busy = h('p', { class: 'small muted gi-busy', role: 'status' });
     const say = text => { busy.textContent = ''; warn.textContent = text; warn.hidden = false; warn.scrollIntoView({ block: 'nearest' }); };
+    // A read that nobody waits for any more (the sheet was closed, another list was chosen meanwhile) is told to
+    // stop, and whatever it still brings back is dropped.
     const load = async read => {
+      const mine = ++reading, abandoned = () => !open || mine !== reading;
       warn.hidden = true; busy.textContent = 'Reading…';
-      let got; try { got = await read(); } catch (e) { return say(e && e.code ? e.message : 'That could not be read: ' + ((e && e.message) || e)); }
-      if (!open) return;
+      let got; try { got = await read({ abandoned }); } catch (e) { return abandoned() ? undefined : say(e && e.code ? e.message : 'That could not be read: ' + ((e && e.message) || e)); }
+      if (abandoned()) return;
       table = got; sheetAt = Math.max(0, table.sheets.findIndex(s => !s.hidden)); header = 'auto'; chosen.clear(); all = 'skip';
       analyse(); preview('step');
     };
-    const fileIn = h('input', { type: 'file', class: 'gi-file', hidden: true, tabIndex: -1, accept: ACCEPT, onchange: e => { const f = e.target.files[0]; e.target.value = ''; if (f) load(() => T.readTableFile(f)); } });
+    const fileIn = h('input', { type: 'file', class: 'gi-file', hidden: true, tabIndex: -1, accept: ACCEPT, onchange: e => { const f = e.target.files[0]; e.target.value = ''; if (f) load(opt => T.readTableFile(f, opt)); } });
     // The iPhone app opens the Files app; everywhere else the browser's own file chooser.
     const pick = async () => {
       if (!native.isApp) return fileIn.click();
       let f = null; try { f = await native.files.open(['csv', 'xlsx', 'tsv', 'txt', 'xls']); } catch (e) { return say('Could not open the file: ' + (e.message || e)); }
-      if (f) load(() => T.readTableFile(f));
+      if (f) load(opt => T.readTableFile(f, opt));
     };
     const area = h('textarea', { id: 'gi-paste', rows: 5, spellcheck: false, autocapitalize: 'off', placeholder: 'Sony FX6\n2x Aputure 600d\nSennheiser MKH 416 (S/N 4512345)', value: pasted, oninput: e => { pasted = e.target.value; } });
     show(
@@ -101,20 +109,20 @@ export async function openGearImport({ file = null } = {}) {
       h('label', { class: 'gi-or', for: 'gi-paste' }, 'Or paste the list here'),
       area,
       h('p', { class: 'small muted' }, 'Rows copied out of a spreadsheet, or one item on each line.'),
-      h('button', { class: 'btn ghost gi-use', type: 'button', onclick: () => load(() => T.readTableText(area.value)) }, 'Use the pasted list'),
+      h('button', { class: 'btn ghost gi-use', type: 'button', onclick: () => load(opt => T.readTableText(area.value, opt)) }, 'Use the pasted list'),
       last && h('div', { class: 'note small gi-last' }, `The last import (${said(last.done)}, from ${last.name}) can still be undone. `, h('button', { class: 'btn ghost small', type: 'button', onclick: () => { if (undoLast()) choose(); } }, 'Undo that import')),
       h('p', { class: 'small muted' }, 'Nothing is sent anywhere: the list is read on this device.'));
     if (focus) setTimeout(() => { const b = body.querySelector('.gi-choose'); if (b && open) b.focus({ preventScroll: true }); }, 60);
-    if (given) load(() => T.readTableFile(given));
+    if (given) load(opt => T.readTableFile(given, opt));
   }
 
   /* --------------------------- step 2: columns and results --------------------------- */
   function analyse() {
-    L = G.layout(table.sheets[sheetAt].rows, header); targets = G.guessColumns(L);
+    L = G.layout(table.sheets[sheetAt].rows, header); targets = G.guessColumns(L); lone = 'auto';
     live = Array.from({ length: L.width }, (_, i) => i).filter(i => L.body.some(r => (r.cells[i] ?? '') !== '')); // columns with nothing in them are not shown
   }
   function replan() {
-    built = G.buildItems(L, targets, { own: [...new Set(store.db.gear.map(g => (g.category || '').trim()).filter(Boolean))] });
+    built = G.buildItems(L, targets, { own: [...new Set(store.db.gear.map(g => (g.category || '').trim()).filter(Boolean))], lone });
     plan = M.planGearImport(built.items, { matchNames: true });
     plan.rows.forEach((r, i) => { if (r.match) r.action = chosen.get(built.at[i]) || all; });
   }
@@ -143,7 +151,15 @@ export async function openGearImport({ file = null } = {}) {
       const picks = [];
       const pick = ({ r, i }) => { const s = h('select', { 'aria-label': `What to do with ${r.item.name}`, onchange: e => { r.action = e.target.value; chosen.set(built.at[i], r.action); tally(); } }, M.ACTIONS.map(([v, label]) => h('option', { value: v, selected: v === r.action }, label))); picks.push([r, s]); return s; };
       const everyone = h('select', { class: 'gi-all', 'aria-label': dup.length > 1 ? 'What to do with every item you already have' : dup.length ? `What to do with ${dup[0].r.item.name}` : '', onchange: e => { all = e.target.value; chosen.clear(); dup.forEach(x => { x.r.action = all; }); picks.forEach(([, s]) => { s.value = all; }); tally(); } }, M.ACTIONS.map(([v, label]) => h('option', { value: v, selected: v === all }, label)));
-      const passed = [lf.totals && plural(lf.totals, `total ${word}`), lf.headings + lf.sections && plural(lf.headings + lf.sections, 'heading'), lf.blank && plural(lf.blank, `${word} with nothing Vdex keeps`, `${word}s with nothing Vdex keeps`)].filter(Boolean);
+      // The headings are named, with the row each is on, so a line wrongly taken for one can be seen (“Tripod” may be a tripod).
+      const named = built.passed.slice(0, SHOWN.headings).map(x => `${word} ${x.n} “${short(x.text, 30)}”`).join(', ') + (built.passed.length > SHOWN.headings ? ` and ${(built.passed.length - SHOWN.headings).toLocaleString()} more` : '');
+      const passed = [lf.totals && plural(lf.totals, `total ${word}`), lf.headings + lf.sections && plural(lf.headings + lf.sections, 'heading') + (named ? ` (${named})` : ''), lf.blank && plural(lf.blank, `${word} with nothing Vdex keeps`, `${word}s with nothing Vdex keeps`)].filter(Boolean);
+      // A row with nothing but a word such as “Tripod” in the name column can be a heading over the rows under it or an
+      // item of its own. Vdex says which it took them for, and the person can say otherwise for all of them.
+      const ln = built.lone, loneNow = !ln.rows ? '' : ln.headings === ln.rows ? 'headings' : ln.headings ? 'auto' : 'items';
+      const loneLabel = ln.rows ? `${plural(ln.rows, word)} with only a name, such as “${ln.example}”` : '';
+      const loneSel = ln.rows > 0 && h('select', { 'aria-label': loneLabel, onchange: e => { lone = e.target.value; paint(); const again = results.querySelector('.gi-lone select'); if (again) again.focus({ preventScroll: true }); } },
+        [loneNow === 'auto' && ['auto', 'Headings only where written as one'], ['headings', 'Group headings, not items'], ['items', 'Items of their own']].filter(Boolean).map(([v, label]) => h('option', { value: v, selected: v === loneNow }, label)));
       results.replaceChildren(...nodes(
         n ? h('section', { class: 'add-group gi-sample', 'aria-label': 'The first items' }, h('h4', null, n > SHOWN.sample ? `The first ${SHOWN.sample} of the ${n.toLocaleString()} items found` : n === 1 ? 'The item found' : `The ${n} items found`),
           h('ul', { class: 'add-list add-items' }, built.items.slice(0, SHOWN.sample).map(x => h('li', null, ...line(x)))))
@@ -159,6 +175,7 @@ export async function openGearImport({ file = null } = {}) {
         probs.length > 0 && h('details', { class: 'gi-problems', open: probs.length <= 6 }, h('summary', null, `${plural(probs.length, word)} to look at`),
           h('ul', { class: 'small' }, probs.slice(0, SHOWN.problems).map(p => h('li', null, h('b', null, `${Word} ${p.n}: `), p.text))),
           probs.length > SHOWN.problems && h('p', { class: 'small muted' }, `And ${(probs.length - SHOWN.problems).toLocaleString()} more.`)),
+        loneSel && h('label', { class: 'add-all small gi-lone' }, `${loneLabel}: `, loneSel),
         passed.length > 0 && h('p', { class: 'small muted gi-passed' }, `Not items, so passed over: ${passed.join(', ')}.`)));
       tally();
     };
@@ -194,16 +211,17 @@ export async function openGearImport({ file = null } = {}) {
     // The last step, and the only one that changes anything. While Vdex is read-only the usual sheet explains and this one stays.
     async function add() {
       if (!store.canChange()) return;
-      const adding = plan.rows.filter(r => r.action === 'add' || (r.action === 'update' && !r.match)).map(r => r.item);
-      if (!roomFor(adding)) { full.textContent = `This list is bigger than the space this browser gives Vdex on this device, so nothing was added. Import it in parts, or leave out a column such as Notes.`; full.hidden = false; full.scrollIntoView({ block: 'nearest' }); return; }
+      // Room for the database as it would be saved (js/gear-import.js roomFor): a list that would not fit is turned
+      // down here, before anything is added, rather than added and then not saved.
+      if (!M.roomForGear(plan)) { full.textContent = `This list is bigger than the space Vdex has on this device, so nothing was added. Import it in parts, or leave out a column such as Notes.`; full.hidden = false; full.scrollIntoView({ block: 'nearest' }); return; }
       go.disabled = true;
       const page = await import('./pages/gear.js'); // loaded already: Import is on that page
       const done = M.applyGearImport(plan);
       if (!done) { go.disabled = false; return; }
-      last = done.added.length + done.updated.length ? { done, name: short(table.name, 40) } : null;
       sh.close();
       await page.showItems([...done.added, ...done.updated].slice(0, 40), { drawn: true }); // in the same breath as the change: the page is drawn once
-      if (last) offerUndo(done).focus({ preventScroll: true }); else toast(said(done));
+      const undo = offerUndo(done, short(table.name, 40));
+      if (undo) undo.focus({ preventScroll: true }); else toast(said(done));
     }
   }
   choose({ given: file });

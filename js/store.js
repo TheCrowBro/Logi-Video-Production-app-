@@ -1,7 +1,7 @@
 // Single JSON database. Lives in localStorage for speed/offline, and is mirrored to a
 // file you pick inside any cloud-synced folder (Google Drive, Dropbox, OneDrive, iCloud Drive...)
 // using the File System Access API where available. Export/Import covers everything else.
-import { uid, ymd, toast } from './util.js';
+import { uid, ymd, toast, announce } from './util.js';
 import { fileAdapter, dropboxAdapter, gdriveAdapter, icloudAdapter, onedriveAdapter, webdavAdapter, dropboxBegin, dropboxFinish, icloudFinish, microsoftFinish } from './providers.js';
 
 const KEY = 'logi-db-v1';
@@ -80,11 +80,23 @@ const emit = (reason = 'data') => subs.forEach(fn => fn(reason)); // 'data' afte
 
 // Writes are coalesced: a burst of changes in one task (an import, a template, a merge) is serialised and written once,
 // at the end of that task. Sealing flushes first, so nothing plain is ever written after the lock has taken over.
-let writeQueued = false;
+// When the browser refuses the write (its storage for Vdex is full, or it lets nothing be stored), the person is told:
+// in a toast and to a screen reader, and again at most once a minute for as long as it lasts, so that no change is
+// ever lost without a word. The change stays in memory, and every later change tries to save everything again.
+const NOT_SAVED = 'Not enough storage to save your last change: free some space, or erase old logs and bookings. Until then, changes may be gone when Vdex is closed.';
+const NO_STORAGE = 'This browser is not letting Vdex store anything, so your last change is not saved. Changes may be gone when Vdex is closed.';
+let writeQueued = false, notSavedAt = 0;
+function notSaved(e) {
+  console.warn('The database could not be saved', e);
+  if (Date.now() - notSavedAt < 60000) return;
+  notSavedAt = Date.now();
+  const full = !!e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22 || e.code === 1014), text = full ? NOT_SAVED : NO_STORAGE;
+  toast(text); announce(text);
+}
 function writeNow() {
   writeQueued = false;
   if (sealed) { dirty = true; return; }
-  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { console.warn('localStorage full?', e); }
+  try { localStorage.setItem(KEY, JSON.stringify(db)); } catch (e) { notSaved(e); }
 }
 function persistLocal() {
   rev++;

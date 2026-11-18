@@ -182,7 +182,7 @@ Afterwards the new items are outlined on the Equipment page and a bar at the bot
 
 Good to know:
 
-- Values are read with or without a currency sign, with either kind of thousands and decimal mark (`£1,299.00`, `1.299,00 €`), and `n/a` or a dash counts as empty. A quantity that is missing is 1. Dates are read in the usual forms; for a date such as 03/04/2024 Vdex looks at the rest of the column to tell the day from the month, and otherwise goes by your device's setting, so glance at the dates in the preview.
+- Values are read with or without a currency sign, with either kind of thousands and decimal mark (`£1,299.00`, `1.299,00 €`), and `n/a` or a dash counts as empty. A quantity that is missing is 1 for a new item, and leaves your own quantity as it is when you update an item you already have. Dates are read in the usual forms; for a date such as 03/04/2024 Vdex looks at the rest of the column to tell the day from the month, and otherwise goes by your device's setting, so glance at the dates in the preview.
 - The value Vdex keeps is the **replacement value of one item**. When a file has several money columns it takes the replacement value first, then a plain value or price, then what you paid; a column of line totals is left out.
 - A formula in a cell is never worked out: Vdex keeps what the cell showed when the file was saved, as plain text.
 - An old **.xls** file cannot be read: open it and save it as .xlsx or CSV. A file over 20 MB, or the rows after the first 10,000, are not read: import a big list in parts.
@@ -491,7 +491,7 @@ Afterwards the new items are outlined on the Equipment page and a bar at the bot
 
 Good to know:
 
-- Values are read with or without a currency sign, with either kind of thousands and decimal mark (`£1,299.00`, `1.299,00 €`), and `n/a` or a dash counts as empty. A quantity that is missing is 1. Dates are read in the usual forms; for a date such as 03/04/2024 Vdex looks at the rest of the column to tell the day from the month, and otherwise goes by your device's setting, so glance at the dates in the preview.
+- Values are read with or without a currency sign, with either kind of thousands and decimal mark (`£1,299.00`, `1.299,00 €`), and `n/a` or a dash counts as empty. A quantity that is missing is 1 for a new item, and leaves your own quantity as it is when you update an item you already have. Dates are read in the usual forms; for a date such as 03/04/2024 Vdex looks at the rest of the column to tell the day from the month, and otherwise goes by your device's setting, so glance at the dates in the preview.
 - The value Vdex keeps is the **replacement value of one item**. When a file has several money columns it takes the replacement value first, then a plain value or price, then what you paid; a column of line totals is left out.
 - A formula in a cell is never worked out: Vdex keeps what the cell showed when the file was saved, as plain text.
 - An old **.xls** file cannot be read: open it and save it as .xlsx or CSV. A file over 20 MB, or the rows after the first 10,000, are not read: import a big list in parts.

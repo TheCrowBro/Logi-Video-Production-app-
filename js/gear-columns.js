@@ -22,8 +22,9 @@ export const TARGETS = [
 const CAPS = { name: 200, category: 60, serial: 80, location: 120, firmware: 60, notes: 2000 };
 
 /* --------------------------------- headings --------------------------------- */
-// A heading as it is compared: lower case, accents and bracketed units gone ("Value each (£)" → "value each").
-export const headKey = s => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9#/]+/g, ' ').trim();
+// A heading as it is compared: lower case, accents and bracketed units gone ("Value each (£)" → "value each"). Only
+// its opening is looked at: no heading is longer, and a cell of thousands of brackets must not slow the reading.
+export const headKey = s => String(s == null ? '' : s).slice(0, 200).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\([^)]*\)/g, ' ').replace(/[^a-z0-9#/]+/g, ' ').trim();
 
 // Kind → lists of headings, the surest first: a file with both "Replacement value" and "Purchase price" gives the
 // item's value from the first. 'folder' is a place or a category, decided by what is in it; 'skip' is known and unwanted.
@@ -76,12 +77,15 @@ export const isNothing = s => { const t = String(s == null ? '' : s).trim(); ret
 // Money or any number as typed: "£1,299.00", "1.299,00 €", "1 299", "1'299.50", "USD 450", "450,-". → a number, ''
 // for nothing ("n/a", "-"), or NaN when it is not a number. The last of a comma and a point is the decimal mark. One
 // alone, followed by exactly three digits, separates thousands: always for a comma, and for a point when the column
-// writes its numbers the continental way (numberStyle below).
-const SYMBOLS = /[£$€¥₹₩₽₺₪฿₫₴₦₱]/g, CODES = '(?:usd|us|gbp|eur|aud|cad|nzd|chf|sek|nok|dkk|jpy|inr|zar|sgd|hkd|pln|czk|kr|zl|rs)';
+// writes its numbers the continental way (numberStyle below). No amount, date or quantity is long (LONGEST), so longer
+// text is not one, without a pattern being tried on it: a cell made of thousands of dashes or spaces costs nothing.
+const LONGEST = 60;
+const SYMBOLS = /[£$€¥₹₩₽₺₪฿₫₴₦₱]/g, CODES = '(?:usd|us|gbp|eur|aud|cad|nzd|chf|sek|nok|dkk|jpy|inr|zar|sgd|hkd|pln|czk|kwd|bhd|omr|jod|tnd|lyd|iqd|kr|zl|rs)';
 const CODE_BEFORE = new RegExp(`^${CODES}\\.?\\s*(?=[\\d(+-])`, 'i'), CODE_AFTER = new RegExp(`(\\d)\\s*${CODES}\\.?$`, 'i');
 const hasCurrency = s => /[£$€¥₹₩₽₺₪฿₫₴₦₱]/.test(s) || CODE_BEFORE.test(s.trim()) || CODE_AFTER.test(s.trim());
 export function parseAmount(raw, { dotThousands = false } = {}) {
   let s = String(raw == null ? '' : raw).trim(); if (isNothing(s)) return '';
+  if (s.length > LONGEST) return NaN;
   s = s.replace(/\b(?:us|au|a|ca|c|nz|hk|s|r)\$/i, '').replace(SYMBOLS, '').trim().replace(CODE_BEFORE, '').replace(CODE_AFTER, '$1')
     .replace(/[\s\u00A0\u2009\u202F'’_]/g, '').replace(/^\((.*)\)$/, '$1').replace(/(?:each|ea|pcs?)\.?$/i, '').replace(/[.,]?-+$/, ''); // "450,-" and "12.-"
   if (!/^[+-]?[\d.,]+$/.test(s) || !/\d/.test(s)) return NaN;
@@ -94,14 +98,18 @@ export function parseAmount(raw, { dotThousands = false } = {}) {
   const cut = dec ? s.lastIndexOf(dec) : s.length, n = Number(s.slice(0, cut).replace(/[.,]/g, '') + (dec ? '.' + s.slice(cut + 1) : ''));
   return Number.isFinite(n) ? (neg ? -n : n) : NaN;
 }
-// How a column writes its numbers. Points separate thousands when a value ends in a comma and one or two digits
-// ("1.299,00", "12,50"), or when every value with a point has groups of exactly three digits after it ("1.299",
-// "12.500") and none uses a comma that way: money is not written to three decimal places.
-export function numberStyle(values) {
-  const v = values.map(x => String(x == null ? '' : x).replace(/[^\d.,]/g, '')).filter(Boolean);
+// How a column writes its numbers, worked out from its typed values only (a number cell of an .xlsx is a number
+// already and is never guessed at: buildItems and profile leave those out). Points separate thousands when a value
+// ends in a comma and one or two digits ("1.299,00", "12,50"), or when every value with a point has groups of exactly
+// three digits after it ("1.299", "12.500") and none uses a comma that way: most money is not written to three
+// decimal places. The money that is (the dinars and the Omani rial) keeps its point as the decimal mark when the
+// column says so, by a currency code in its heading or beside a value ("Value (KWD)", "450.500 KWD").
+const THREE_PLACES = /\b(?:kwd|bhd|omr|jod|tnd|lyd|iqd)\b/i;
+export function numberStyle(values, { heading = '' } = {}) {
+  const typed = values.map(x => String(x == null ? '' : x)).filter(x => x.length <= LONGEST), v = typed.map(x => x.replace(/[^\d.,]/g, '')).filter(Boolean);
   const pointDecimals = v.some(x => /\.\d{1,2}$/.test(x)), commaDecimals = v.some(x => /,\d{1,2}$/.test(x));
-  const dotted = v.filter(x => x.includes('.'));
-  return { dotThousands: !pointDecimals && (commaDecimals || dotted.length > 0 && dotted.every(x => /^[1-9]\d{0,2}(?:\.\d{3})+$/.test(x)) && !v.some(x => /,\d{3}/.test(x))) };
+  const dotted = v.filter(x => x.includes('.')), threePlaces = THREE_PLACES.test(String(heading || '').slice(0, 200)) || typed.some(x => THREE_PLACES.test(x));
+  return { dotThousands: !pointDecimals && (commaDecimals || !threePlaces && dotted.length > 0 && dotted.every(x => /^[1-9]\d{0,2}(?:\.\d{3})+$/.test(x)) && !v.some(x => /,\d{3}/.test(x))) };
 }
 
 // Dates, in the ways they are written: 2024-03-01, 01/03/2024, 3/1/24, 1.3.2024, 1 Mar 2024, March 1, 2024, Mar 2024,
@@ -120,6 +128,7 @@ export function dateOrder(values) {
 }
 export function parseDate(raw, order = 'dmy') {
   const s = String(raw == null ? '' : raw).trim(); if (isNothing(s)) return '';
+  if (s.length > LONGEST) return null;
   let m;
   if ((m = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:[T\s].*)?$/))) return iso(m[1], m[2], m[3]);
   if ((m = s.match(/^(\d{1,2})\.(\d{1,2})\.(\d{2,4})\.?$/))) return iso(m[3], m[2], m[1]); // points are written day first
@@ -134,19 +143,22 @@ export function parseDate(raw, order = 'dmy') {
 // → { n, note } : a whole number of at least 1; note says what was done with anything else.
 export function parseQty(raw) {
   const s = String(raw == null ? '' : raw).trim(); if (isNothing(s)) return { n: 1 };
-  const v = parseAmount(s.replace(/^[x×]\s*/i, '').replace(/\s*(?:x|×|pcs?|pieces?|units?|ea|each|off|st|stk|stuck|stück)\.?$/i, ''));
+  const v = s.length > LONGEST ? NaN : parseAmount(s.replace(/^[x×]\s*/i, '').replace(/\s*(?:x|×|pcs?|pieces?|units?|ea|each|off|st|stk|stuck|stück)\.?$/i, ''));
   if (v === '' || Number.isNaN(v)) return { n: 1, note: `“${s.slice(0, 40)}” is not a quantity, so 1 is used` };
   if (v < 1) return { n: 1, note: `the quantity is ${v}, so it is added as 1` };
   if (!Number.isInteger(v)) return { n: Math.floor(v), note: `the quantity ${v} is taken as ${Math.floor(v)}` };
   return v > 9999 ? { n: 9999, note: 'the quantity is taken as 9999, the most an item can have' } : { n: v };
 }
-// "12", "12 months", "1 year", "annually" → months; '' for nothing; null when not understood.
+// "12", "12 months", "1 year", "annually" → months; '' for nothing; null when not understood. The words are looked
+// up in a Map, never in a plain object: a cell that says "constructor" is then simply a word Vdex does not know.
+const MONTH_WORDS = new Map([['annual', 12], ['annually', 12], ['yearly', 12], ['every year', 12], ['once a year', 12], ['twice a year', 6], ['six monthly', 6], ['biannual', 6], ['quarterly', 3], ['monthly', 1], ['every month', 1]]);
 export function parseMonths(raw) {
   const s = String(raw == null ? '' : raw).trim().toLowerCase(); if (isNothing(s) || s === '0') return '';
+  if (s.length > LONGEST) return null;
   let m;
   if ((m = s.match(/^(?:every\s+)?(\d{1,3})\s*(?:m|mo|mos|mth|mths|months?|monthly)?$/))) return Number(m[1]);
   if ((m = s.match(/^(?:every\s+)?(\d{1,2})\s*(?:y|yr|yrs|years?|yearly)$/))) return Number(m[1]) * 12;
-  return { annual: 12, annually: 12, yearly: 12, 'every year': 12, 'once a year': 12, 'twice a year': 6, 'six monthly': 6, biannual: 6, quarterly: 3, monthly: 1, 'every month': 1 }[s] ?? null;
+  return MONTH_WORDS.get(s) ?? null;
 }
 
 /* -------------------------------- categories -------------------------------- */
@@ -181,14 +193,23 @@ export function mapCategory(typed, own = []) {
   const to = tryOne(t) || (steps.length > 1 ? tryOne(steps[steps.length - 1]) || tryOne(steps[0]) : '');
   return to ? { to, how: 'vdex' } : { to: t.slice(0, CAPS.category), how: 'typed' };
 }
+// The same answer for a list whose categories are to stay as they are written (Vdex's own asset register): only a
+// category this person already uses in another spelling changes, to theirs.
+function keepCategory(typed, own = []) {
+  const t = String(typed == null ? '' : typed).replace(/\s+/g, ' ').trim(); if (isNothing(t)) return { to: '', how: '' };
+  const to = own.find(c => c && c.toLowerCase() === t.toLowerCase()) || t.slice(0, CAPS.category);
+  return { to, how: CATEGORIES.includes(to) ? 'vdex' : own.includes(to) ? 'own' : 'typed' };
+}
 
 /* ------------------------------ what a column holds ------------------------------ */
 const SERIAL_LIKE = /^(?=.*\d)[A-Za-z0-9][A-Za-z0-9\-/_.#]{3,29}$/;
 const DATE_LIKE = /^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}|^\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4}$|^\d{1,2}[\s-][A-Za-z]{3,9}[\s-]\d{2,4}$|^[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}$/;
-function profile(values) {
-  const v = values.map(x => String(x == null ? '' : x).trim()).filter(x => !isNothing(x)), n = v.length;
+// numbers: for each value, whether it came out of a number cell of an .xlsx (a row's `nums`). Such a value is the
+// number it is; only the typed ones are read by the column's way of writing numbers.
+function profile(values, numbers = []) {
+  const kept = values.map((x, i) => [String(x == null ? '' : x).trim(), !!numbers[i]]).filter(([x]) => !isNothing(x)), v = kept.map(([x]) => x), n = v.length;
   if (!n) return { n: 0 };
-  const style = numberStyle(v), nums = v.map(x => parseAmount(x, style));
+  const style = numberStyle(kept.filter(([, num]) => !num).map(([x]) => x)), nums = kept.map(([x, num]) => (num && x.length <= LONGEST && Number.isFinite(Number(x)) ? Number(x) : parseAmount(x, style)));
   const good = nums.filter(x => typeof x === 'number' && !Number.isNaN(x)), share = k => k / n;
   const dates = v.filter(x => DATE_LIKE.test(x) && parseDate(x) !== null).length;
   const whole = good.filter(Number.isInteger), small = whole.filter(x => x >= 0 && x <= 500);
@@ -241,29 +262,32 @@ export function findHeader(rows) {
   return -1;
 }
 
-// → { header, head: [heading per column], body: [rows under it], width, list, titles }. header: 'auto' finds it, true
-// takes the first row with anything in it, false says there is none. Opening lines above a table (a title, an
-// address) are left out: above the headings whatever they hold, and with no headings while they fill one cell only
-// (titles counts those).
+// → { header, head: [heading per column], body: [rows under it], width, list, titles, above }. header: 'auto' finds
+// it, true takes the first row with anything in it, false says there is none. Opening lines above a table (a title,
+// an address) are left out: above the headings whatever they hold, and with no headings while they fill one cell only
+// (titles counts those, and above holds them as [{ n, text }], so the preview can say which lines they were).
 export function layout(rows, header = 'auto') {
   const at = header === 'auto' ? findHeader(rows) : header ? 0 : -1;
   const width = Math.min(60, rows.reduce((w, r) => Math.max(w, r.cells.length), 0));
-  let body = rows.slice(at + 1), titles = 0;
-  if (at < 0 && width >= 3) { while (titles < Math.min(body.length - 1, 8) && filled(body[titles]) === 1) titles++; body = body.slice(titles); }
+  let body = rows.slice(at + 1), titles = 0, above = [];
+  if (at < 0 && width >= 3) { while (titles < Math.min(body.length - 1, 8) && filled(body[titles]) === 1) titles++; above = body.slice(0, titles).map(r => ({ n: r.n, text: oneLine(r.cells.find(c => c !== '')).slice(0, 80) })); body = body.slice(titles); }
   const head = at >= 0 ? Array.from({ length: width }, (_, i) => rows[at].cells[i] || '') : null;
-  return { header: at >= 0, head, body, width, list: at >= 0 && !!rows[at].made, titles }; // list: lines of text, under headings Vdex gave them
+  return { header: at >= 0, head, body, width, list: at >= 0 && !!rows[at].made, titles, above }; // list: lines of text, under headings Vdex gave them
 }
 
 // A guess for every column → ['name', 'category', '', 'serial', …] under TARGETS' names.
 export function guessColumns({ head, body, width }) {
   const sample = body.slice(0, 300), col = i => sample.map(r => r.cells[i] ?? '');
-  const prof = Array.from({ length: width }, (_, i) => profile(col(i)));
+  const prof = Array.from({ length: width }, (_, i) => profile(col(i), sample.map(r => !!r.nums && r.nums.includes(i))));
   const kinds = Array.from({ length: width }, (_, i) => (head && head[i] ? headingKind(head[i]) : null));
   const out = new Array(width).fill(''), taken = new Set();
   const cand = kind => kinds.map((k, i) => (k && k.kind === kind ? { i, rank: k.rank } : null)).filter(x => x && prof[x.i].n > 0).sort((a, b) => a.rank - b.rank || a.i - b.i);
   const give = (i, field) => { out[i] = field; if (field && field !== 'notes') taken.add(field); };
-  // the name: the surest heading wins, and a "Description" beside an "Item name" is notes
-  const names = cand('name');
+  // the name: the surest heading wins, and a "Description" beside an "Item name" is notes. A column of numbers is not
+  // the name while another candidate holds words: "Item" as 1, 2, 3 beside "Description" is a line number, left out.
+  const counted = c => { const p = prof[c.i]; return !!p.counting || p.numeric >= 0.8 && p.words < 0.2; };
+  let names = cand('name');
+  if (names.some(counted) && names.some(c => !counted(c) && prof[c.i].words >= 0.5)) names = names.filter(c => !counted(c));
   if (names.length) { give(names[0].i, 'name'); names.slice(1).forEach(c => { if (c.rank > 0 && prof[c.i].length > 0) out[c.i] = 'notes'; }); }
   for (const kind of ['make', 'model', 'category', 'serial', 'qty', 'location', 'purchased', 'warranty', 'serviceEvery', 'firmware', 'lastService']) { const c = cand(kind)[0]; if (c) give(c.i, kind); }
   cand('notes').forEach(c => { out[c.i] = 'notes'; });
@@ -307,60 +331,100 @@ function joinName(name, make, model) {
 // A line that adds the rows up is not an item: "Total" where the name would be, or beside an empty name.
 const TOTAL_NAME = /^(?:grand\s+|sub\s*-?\s*)?totals?(?:\s+(?:value|cost|price|replacement\s+value|sum\s+insured))?\s*:?$/i, TOTAL_CELL = /^(?:(?:grand\s+|sub\s*-?\s*|sum\s+)?totals?|summe|gesamt|gesamtsumme|totaal|totale)\b/i;
 
+// Vdex's own asset register (js/backup.js writes it), known by its row of headings. What comes back from it is kept as
+// it was written: categories as typed, and an item that happens to be called "Total" is an item.
+const REGISTER = ['item', 'category', 'serial number', 'where', 'quantity', 'value each', 'total', 'purchased', 'warranty until', 'firmware', 'last service', 'notes'];
+const isRegister = head => !!head && REGISTER.every((k, i) => headKey(head[i]) === k) && head.slice(REGISTER.length).every(x => !x);
+// "LENSES" and "Lenses:" are written as headings; "Tripod" is just a word, and so is a word that is always written in
+// capitals ("LED", "SSD"): capitals say nothing about those.
+const ACRONYMS = new Set(['led', 'leds', 'hmi', 'evf', 'uav', 'uavs', 'uas', 'ssd', 'ssds', 'dslr', 'dslrs']);
+const writtenAsHeading = t => /[:：]$/.test(t) || t !== t.toLowerCase() && t === t.toUpperCase() && !ACRONYMS.has(t.toLowerCase());
+
 // The rows under a mapping → what would be added.
-//   items     equipment records (GEAR_FIELDS of js/gear-import.js, plus lastService), ready for planGearImport()
+//   items     equipment records (GEAR_FIELDS of js/gear-import.js, plus lastService), ready for planGearImport(). An
+//             item has a qty only when its row gave one, so updating an owned item from a list that says nothing
+//             about quantities leaves the owned quantity alone (a new item without one is added as 1)
 //   at        for each item, the row it came from
 //   problems  [{ n, text }]: what was left out, left empty or changed, by row
 //   left      how many rows were passed over, by reason: { blank, totals, headings, sections, unnamed }
+//   passed    [{ n, text, to }]: the lines taken for headings over a group or for titles above the table, by row, with
+//             the category a group heading gives the rows under it ('' when none), so a wrong call can be seen
+//   lone      { rows, headings, example }: rows holding nothing but a word for a kind of kit in the name column
+//             ("Tripod", "Lenses"), how many of them were taken for group headings, and the first one's text
 //   categories  [{ from, to, count }] for typed categories that became one of Vdex's; kept: the ones kept as typed
 //   currency  the money sign most of the values carry, in their cells or in the column's heading ('' when none)
 // own: the categories this person already uses, so "lens filters" joins their "Lens Filters".
-export function buildItems({ head, body, width, list, titles = 0 }, targets, { own = [] } = {}) {
+// lone: what such a lone word is. 'headings' and 'items' are the person's answer for all of them. 'auto' (the default)
+// takes one for a heading only when the list has no Category column and the word is written as a heading ("LENSES",
+// "Lenses:") or the list plainly opens with one in ordinary writing (its first row is such a word, so headings are
+// not told apart by how they are written); otherwise it is an item, because "Tripod" on a row of its own is more
+// often a tripod than a heading. A lone cell outside the name column is a heading whatever it says.
+export function buildItems({ head, body, width, list, titles = 0, above = [] }, targets, { own = [], lone = 'auto' } = {}) {
   const cols = f => targets.map((t, i) => (t === f ? i : -1)).filter(i => i >= 0 && i < width);
   const C = Object.fromEntries(TARGETS.map(([f]) => [f, cols(f)]));
   const col = i => body.map(r => r.cells[i] ?? '');
-  const style = new Map([...C.value, ...C.total].map(i => [i, numberStyle(col(i))]));
+  const isNum = (r, i) => !!r.nums && r.nums.includes(i); // a number cell of an .xlsx: a number already, read as one
+  const style = new Map([...C.value, ...C.total].map(i => [i, numberStyle(body.filter(r => !isNum(r, i)).map(r => r.cells[i] ?? ''), { heading: head ? head[i] : '' })]));
   const order = new Map([...C.purchased, ...C.warranty, ...C.lastService].map(i => [i, dateOrder(col(i))]));
-  const typeCol = head ? head.findIndex(x => headKey(x) === 'entry type') : -1; // Sortly lists its folders as rows too
+  const headKeys = head ? head.map(headKey) : null, register = isRegister(head);
+  const typeCol = headKeys ? headKeys.indexOf('entry type') : -1; // Sortly lists its folders as rows too
+  const noteHead = new Map(C.notes.map(i => { const k = head && head[i] ? headingKind(head[i]) : null; return [i, head && head[i] && !(k && (k.kind === 'notes' || k.kind === 'name')) ? oneLine(head[i]) : '']; }));
   const first = (r, list) => { for (const i of list) { const v = r.cells[i]; if (v != null && v !== '' && !isNothing(v)) return [v, i]; } return ['', -1]; };
   const items = [], at = [], problems = [], left = { blank: 0, totals: 0, headings: titles, sections: 0, unnamed: 0 }, mapped = new Map(), kept = new Map();
+  const passed = above.map(x => ({ n: x.n, text: x.text, to: '' })), lonely = { rows: 0, headings: 0, example: '' };
   const mappedCols = targets.map((t, i) => (t ? i : -1)).filter(i => i >= 0), signs = new Map();
   const sign = text => { const m = String(text).match(/[£$€¥₹₩₽₺₪฿]/); if (m) signs.set(m[0], (signs.get(m[0]) || 0) + 1); };
   if (head) [...C.value, ...C.total].forEach(i => { for (let k = 0; k < 3; k++) sign(head[i] || ''); }); // a sign in the heading speaks for the column
   const dense = body.filter(r => filled(r) >= 2).length >= body.length * 0.3; // plenty of rows have more than a name, so a lone word can be a heading
+  const nameCols = new Set([...C.name, ...C.make, ...C.model]);
+  // The one filled cell of a row, when it sits in the name column and says a kind of kit: the text, else ''.
+  const loneWord = r => { if (!dense || width < 3) return ''; const live = r.cells.map((c, i) => (c !== '' ? i : -1)).filter(i => i >= 0); if (live.length !== 1 || !nameCols.has(live[0])) return ''; const t = oneLine(r.cells[live[0]]); return !isNothing(t) && mapCategory(t).how === 'vdex' ? t : ''; };
+  // The list plainly opens with a heading that is written like any other word ("Cameras" above the cameras): its other
+  // lone words are headings too. When it opens with one written as a heading, only words written that way are.
+  const opener = body[0] ? loneWord(body[0]) : '', opensWithOne = !!opener && !writtenAsHeading(opener);
+  const headsGroup = t => lone === 'headings' || lone !== 'items' && !C.category.length && (writtenAsHeading(t) || opensWithOne);
+  const pass = (r, text, to) => { if (passed.length < 200) passed.push({ n: r.n, text: oneLine(text).slice(0, 80), to }); };
   let section = '';
   for (const r of body) {
     const say = text => { if (problems.length < 2000) problems.push({ n: r.n, text }); };
     const cells = r.cells, live = cells.map((c, i) => (c !== '' ? i : -1)).filter(i => i >= 0);
     if (!live.length) { left.blank++; continue; }
-    if (head && live.every(i => headKey(cells[i]) === headKey(head[i])) && live.length >= Math.min(2, width)) { left.headings++; continue; } // the headings again, on a later page
-    if (r.heading) { const m = mapCategory(cells[live[0]]); section = m.how === 'vdex' ? m.to : ''; left.sections++; continue; } // "Lenses:" above part of a pasted list
-    if (list && r === body[0] && live.length === 1 && HEAD.has(headKey(cells[live[0]])) && HEAD.get(headKey(cells[live[0]])).kind === 'name') { left.headings++; continue; } // "Equipment" above a pasted list
-    if (typeCol >= 0 && /^folder$/i.test(cells[typeCol] || '')) { left.sections++; continue; }
+    if (head && live.every(i => headKey(cells[i]) === headKeys[i]) && live.length >= Math.min(2, width)) { left.headings++; continue; } // the headings again, on a later page
+    if (r.heading) { const m = mapCategory(cells[live[0]]); section = m.how === 'vdex' ? m.to : ''; left.sections++; pass(r, cells[live[0]], section); continue; } // "Lenses:" above part of a pasted list
+    if (list && r === body[0] && live.length === 1 && HEAD.has(headKey(cells[live[0]])) && HEAD.get(headKey(cells[live[0]])).kind === 'name') { left.headings++; pass(r, cells[live[0]], ''); continue; } // "Equipment" above a pasted list
     const [rawName] = first(r, C.name), [make] = first(r, C.make), [model] = first(r, C.model);
     let name = joinName(oneLine(rawName), oneLine(make), oneLine(model));
-    if (TOTAL_NAME.test(name) || !name && cells.some(c => TOTAL_CELL.test(c))) { left.totals++; continue; }
-    // A word on a line of its own in a table of several columns heads the rows under it: "LENSES" gives them their
-    // category when they have none. Outside the name column such a line is a heading whatever it says.
-    if (dense && live.length === 1 && width >= 3) { const m = mapCategory(oneLine(cells[live[0]])); if (m.how === 'vdex' || !name) { section = m.how === 'vdex' ? m.to : ''; left.sections++; continue; } }
+    if (typeCol >= 0 && /^folder$/i.test(cells[typeCol] || '')) { left.sections++; pass(r, name || cells[live[0]], ''); continue; }
+    // A line that adds the rows up. In Vdex's own register only its own total line is one (no name, or nothing an item
+    // has beside the name): an item called "Total" there has a quantity and stays an item.
+    const bare = register && [...C.category, ...C.serial, ...C.qty, ...C.location].every(i => isNothing(cells[i]));
+    if ((register ? bare : true) && TOTAL_NAME.test(name) || !name && cells.some(c => TOTAL_CELL.test(c.slice(0, 40)))) { left.totals++; continue; }
+    // A word on a line of its own in a table of several columns may head the rows under it: "LENSES" gives them their
+    // category when they have none. Outside the name column such a line is a heading whatever it says; in the name
+    // column it is one only by the rule above (lone), since it may just as well be an item with nothing else filled in.
+    if (dense && live.length === 1 && width >= 3) {
+      const text = oneLine(cells[live[0]]), m = mapCategory(text), word = !!name && m.how === 'vdex';
+      if (word) { lonely.rows++; if (!lonely.example) lonely.example = text.slice(0, 40); }
+      if (!name || word && headsGroup(text)) { if (word) lonely.headings++; section = m.how === 'vdex' ? m.to : ''; left.sections++; pass(r, text, section); continue; }
+    }
     if (!name) { if (mappedCols.some(i => cells[i] !== '' && !isNothing(cells[i]))) { left.unnamed++; say('no name, so it is left out'); } else left.blank++; continue; }
     const item = { name };
     if (r.cut) say('a cell with more text than Vdex reads is cut short');
     if (name.length > CAPS.name) { item.name = name.slice(0, CAPS.name).trim(); say(`the name is shortened to ${CAPS.name} characters`); }
     // category: Vdex's own where it is recognised, otherwise as typed
     const [cat] = first(r, C.category);
-    if (cat) { const m = mapCategory(oneLine(cat), own); item.category = m.to; if (m.how === 'vdex' && m.to.toLowerCase() !== oneLine(cat).toLowerCase()) { const k = oneLine(cat).toLowerCase(), e = mapped.get(k) || { from: oneLine(cat), to: m.to, count: 0 }; e.count++; mapped.set(k, e); } else if (m.how === 'typed') kept.set(m.to.toLowerCase(), m.to); }
+    if (cat) { const m = register ? keepCategory(oneLine(cat), own) : mapCategory(oneLine(cat), own); item.category = m.to; if (m.how === 'vdex' && m.to.toLowerCase() !== oneLine(cat).toLowerCase()) { const k = oneLine(cat).toLowerCase(), e = mapped.get(k) || { from: oneLine(cat), to: m.to, count: 0 }; e.count++; mapped.set(k, e); } else if (m.how === 'typed') kept.set(m.to.toLowerCase(), m.to); }
     else if (section) item.category = section;
     for (const f of ['serial', 'location', 'firmware']) { const [v] = first(r, C[f]); if (!v) continue; const t = oneLine(v); item[f] = t.slice(0, CAPS[f]); if (t.length > CAPS[f]) say(`the ${f === 'location' ? 'place' : f === 'serial' ? 'serial number' : 'firmware version'} is shortened to ${CAPS[f]} characters`); }
-    const [q] = first(r, C.qty), qty = parseQty(q); item.qty = qty.n; if (qty.note) say(qty.note);
-    const money = (list, label) => { const [v, i] = first(r, list); if (!v) return ''; const n = parseAmount(v, style.get(i)); if (Number.isNaN(n) || n < 0 || n > 1e9) { say(`“${oneLine(v).slice(0, 40)}” is not ${label}, so the value is left empty`); return ''; } sign(v); return n; };
+    const [q] = first(r, C.qty), qty = parseQty(q); if (q) item.qty = qty.n; if (qty.note) say(qty.note); // no quantity given: none is set
+    const money = (list, label) => { const [v, i] = first(r, list); if (!v) return ''; const n = isNum(r, i) && v.length <= LONGEST && Number.isFinite(Number(v)) ? Number(v) : parseAmount(v, style.get(i)); if (Number.isNaN(n) || n < 0 || n > 1e9) { say(`“${oneLine(v).slice(0, 40)}” is not ${label}, so the value is left empty`); return ''; } sign(v); return n; };
     const each = money(C.value, 'a value'), whole = each === '' && C.total.length ? money(C.total, 'a value') : '';
     if (each !== '' && each > 0) item.value = Math.round(each * 100) / 100;
-    else if (whole !== '' && whole > 0) item.value = Math.round(whole / item.qty * 100) / 100;
+    else if (whole !== '' && whole > 0) item.value = Math.round(whole / qty.n * 100) / 100;
     for (const f of ['purchased', 'warranty', 'lastService']) { const [v, i] = first(r, C[f]); if (!v) continue; const d = parseDate(v, order.get(i)); if (d) item[f] = d; else if (d === null) say(`“${oneLine(v).slice(0, 40)}” is not a date Vdex can read, so the ${f === 'purchased' ? 'purchase date' : f === 'warranty' ? 'warranty date' : 'last service'} is left empty`); }
     { const [v] = first(r, C.serviceEvery); if (v) { const m = parseMonths(v); if (m) item.serviceEvery = Math.min(m, 600); else if (m === null) say(`“${oneLine(v).slice(0, 40)}” is not a number of months, so the service interval is left empty`); } }
     // notes: every column given to Notes; one whose heading says more than "Notes" or "Description" keeps it ("Condition: good")
-    const notes = C.notes.map(i => { const t = manyLines(cells[i]); if (!t || isNothing(t)) return ''; const k = head && head[i] ? headingKind(head[i]) : null; return head && head[i] && !(k && (k.kind === 'notes' || k.kind === 'name')) ? `${oneLine(head[i])}: ${t}` : t; }).filter(Boolean).join('\n');
+    const notes = C.notes.map(i => { const t = manyLines(cells[i]); if (!t || isNothing(t)) return ''; return noteHead.get(i) ? `${noteHead.get(i)}: ${t}` : t; }).filter(Boolean).join('\n');
     if (notes) { item.notes = notes.slice(0, CAPS.notes); if (notes.length > CAPS.notes) say(`the notes are shortened to ${CAPS.notes} characters`); }
     items.push(item); at.push(r.n);
   }
@@ -368,5 +432,5 @@ export function buildItems({ head, body, width, list, titles = 0 }, targets, { o
   const seen = new Map();
   items.forEach((x, i) => { const k = String(x.serial || '').toUpperCase().replace(/[\s-]+/g, ''); if (!k) return; if (seen.has(k)) problems.push({ n: at[i], text: `the serial number ${x.serial} is also on row ${at[seen.get(k)]}: both are added` }); else seen.set(k, i); });
   problems.sort((a, b) => a.n - b.n);
-  return { items, at, problems, left, categories: [...mapped.values()], kept: [...kept.values()], currency: ([...signs].sort((a, b) => b[1] - a[1])[0] || [''])[0] };
+  return { items, at, problems, left, passed: passed.sort((a, b) => a.n - b.n), lone: lonely, categories: [...mapped.values()], kept: [...kept.values()], currency: ([...signs].sort((a, b) => b[1] - a[1])[0] || [''])[0] };
 }
