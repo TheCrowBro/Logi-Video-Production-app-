@@ -62,11 +62,15 @@ export function show({ knowsPin }) {
     if (!pinProblem(a.value) && b.value === '') { err.textContent = ''; b.focus(); return; }
     const problem = pinProblem(a.value, b.value);
     if (problem) return say(problem, problem.startsWith('The two') ? b : a);
-    busy = true; save.disabled = true; save.textContent = 'Saving…'; err.textContent = '';
-    const failed = (problem2, field) => { busy = false; save.disabled = false; save.textContent = 'Save the new PIN'; say(problem2, field); };
+    // The PIN that is saved is the one just checked and repeated, as it stood at this moment: deriving a key takes a
+    // while (longer on a phone), and the fields are not read again after it. They also stay as they are meanwhile.
+    const pin = a.value, current = cur ? cur.value : null, fields = [cur, a, b].filter(Boolean);
+    const hold = on => { busy = on; save.disabled = on; fields.forEach(f => { f.readOnly = on; }); };
+    hold(true); save.textContent = 'Saving…'; err.textContent = '';
+    const failed = (problem2, field) => { hold(false); save.textContent = 'Save the new PIN'; say(problem2, field); };
     try {
-      if (cur && !(await checkPin(cur.value))) return failed('That is not your current PIN.', cur);
-      await setPin(a.value);
+      if (cur && !(await checkPin(current))) return failed('That is not your current PIN.', cur);
+      await setPin(pin);
     } catch (e2) { return failed('Could not set the PIN: ' + (e2.message || e2), a); }
     busy = false;
     toast('PIN changed');

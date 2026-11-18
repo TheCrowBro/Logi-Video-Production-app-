@@ -86,6 +86,7 @@ a { color: var(--accent); }
 @keyframes menuIn { from { transform: translateX(100%); } } @keyframes menuInRtl { from { transform: translateX(-100%); } }
 [dir=rtl] .menu { animation-name: menuInRtl; padding-inline: 14px max(14px, env(safe-area-inset-left)); }
 .menu-back.shown, .menu-back.shown .menu { animation: none; } /* a walkthrough is pointing at it: there at once, so the spotlight lands on it */
+.menu-back.shown, .search-back.shown { z-index: 140; } /* …and above a sheet (100) the walkthrough was started from, below the walkthrough itself (150): what it points at is never drawn under the form */
 .menu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: none; } .menu-head h2 { font-size: 1.15rem; }
 .menu-status { flex: none; display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; background: var(--bg2); border: 1px solid var(--line); border-radius: var(--radius); }
 .menu-status::before { content: ''; flex: none; width: 10px; height: 10px; margin-top: .42em; border-radius: 50%; background: var(--muted); forced-color-adjust: none; }

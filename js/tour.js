@@ -1,6 +1,6 @@
 // Spotlight walkthrough: dims the page, cuts a hole over the thing being explained, moves the Rolodex as it goes.
 // A step can carry a form (its body) that is saved on Next, so a walkthrough can set things up as well as point.
-import { h, nodes } from './util.js';
+import { h, nodes, settleApp } from './util.js';
 
 // The short tour: the fallback when the set-up walkthrough in tutorials.js cannot be fetched.
 const STEPS = [
@@ -20,6 +20,9 @@ export const resumeTourAt = n => { try { if (n == null) localStorage.removeItem(
 
 let active = null;
 export const tourActive = () => !!active;
+// The lock screen closes the menu and the search when it comes up. A walkthrough that was pointing into one of them
+// shows that step again after the unlock, so its card is not left pointing at nothing.
+export const refreshTour = () => { if (active) active.again(); };
 // The first-run set-up walkthrough lives with the other tutorials and loads when it runs (it is never needed at
 // start-up otherwise); the short tour above stands in if that file cannot be fetched.
 export function startTour(from = 0) {
@@ -39,15 +42,18 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   const card = h('div', { class: 'tour-card', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'tour-title' });
   const layer = h('div', { class: 'tour' }, spot, card);
   window.logiMenu?.close(); window.logiSearch?.close(); // never left open under the tour
-  const wasInert = !!(app && app.inert);
   window.logiShowNav?.(); // the Rolodex bar may be slid away: the tour points at it
   document.body.append(layer); if (app) app.inert = true;
   let i = from, target = null, dir = 1;
   const seen = new Set(); // steps already shown: they keep their place in the count when going back
-  const stop = () => { if (!active) return; active = null; layer.remove(); window.logiMenu?.close(); window.logiSearch?.close(); if (app) app.inert = wasInert; window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
-  active = { stop };
-  // Arrow keys move between steps, except while typing in a field of the card; Escape always leaves.
-  const keys = e => { const t = e.target; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && e.key !== 'Escape') return; if (e.key === 'Escape') { e.stopPropagation(); stop(); } else if (e.key === 'ArrowRight') { e.stopPropagation(); next(); } else if (e.key === 'ArrowLeft') { e.stopPropagation(); dir = -1; show(i - 1); } };
+  // On the way out the page is given back only if nothing else is over it by now: a step may have closed the form the
+  // walkthrough was started from, or opened a sheet of its own (settleApp looks at what is there).
+  const stop = () => { if (!active) return; active = null; layer.remove(); window.logiMenu?.close(); window.logiSearch?.close(); settleApp(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
+  // again: only a step that shows the menu or the search is shown again. One with a form in its card would lose what was typed.
+  active = { stop, again: () => { const s = STEPS[i]; if (s && (s.menu || s.search)) show(i); } };
+  // Arrow keys move between steps, except while typing in a field of the card; Escape always leaves. Under the lock
+  // screen or the offer of a longer PIN the walkthrough is out of reach, and so are its keys.
+  const keys = e => { if (layer.inert) return; const t = e.target; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && e.key !== 'Escape') return; if (e.key === 'Escape') { e.stopPropagation(); stop(); } else if (e.key === 'ArrowRight') { e.stopPropagation(); next(); } else if (e.key === 'ArrowLeft') { e.stopPropagation(); dir = -1; show(i - 1); } };
   const place = () => {
     if (!target) { spot.classList.add('center'); card.classList.add('center'); return; }
     spot.classList.remove('center'); card.classList.remove('center');
