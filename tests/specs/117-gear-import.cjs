@@ -588,6 +588,10 @@ const ODD_XLSX = zip({
       opens: await read(groups), opensAsItems: await read(groups, { lone: 'items' }),
       list: await read('2x Aputure 600d\nSony FX6 (S/N 4512345)\nTripod\n3x Batteries\n'),
       titled: await read('Kit list for the insurer 2026,,,\nSony FX6,FX6-0001,Cameras,6000\nZoom H6,H6-00003,Mics,300\nSigma 18-35,SIG-0002,Lenses,800\n'),
+      // no row of headings: the first group's heading is among the lines taken for titles above the table
+      bare: await read('Kit list 2026\nCameras\nSony FX6\tFX6-1\t6000\nSony A7S\tA7-2\t2900\nLenses\nSigma 18-35\tS-1\t800\nSigma 50\tS-2\t600\nAudio\nRode NTG\tR-1\t300\n'),
+      bareAsItems: await read('Cameras\nSony FX6\tFX6-1\t6000\nSony A7S\tA7-2\t2900\nLenses\nSigma 18-35\tS-1\t800\n', { lone: 'items' }),
+      bareCapitals: await read('CAMERAS\nSony FX6\tFX6-1\t6000\nSony A7S\tA7-2\t2900\nTripod\nLENSES\nSigma 18-35\tS-1\t800\n'),
     };
   });
   ok('with no Category column either, one-word names stay items (Tripod, Gimbal, Headphones) and give no category to the rows under them', same(shapes.plain.items, [['Sony FX6', ''], ['Tripod', ''], ['Gimbal', ''], ['Aputure 600d', ''], ['SmallHD 502', ''], ['Headphones', '']]) && shapes.plain.sections === 0 && same(shapes.plain.lone, { rows: 3, headings: 0, example: 'Tripod' }), JSON.stringify(shapes.plain));
@@ -597,6 +601,8 @@ const ODD_XLSX = zip({
   ok('a list that plainly opens with a group heading keeps its headings, each named with its row; the person’s answer turns them all into items', same(shapes.opens.items, [['Sony FX6', 'Camera'], ['Sigma 18-35', 'Lens']]) && same(shapes.opens.passed, ['2 Cameras > Camera', '4 Lenses > Lens']) && same(shapes.opensAsItems.items, [['Cameras', ''], ['Sony FX6', ''], ['Lenses', ''], ['Sigma 18-35', '']]) && shapes.opensAsItems.passed.length === 0, JSON.stringify([shapes.opens, shapes.opensAsItems]));
   ok('in a pasted list with counts and serial numbers, a line that is only “Tripod” is an item too', same(shapes.list.items.map(x => x[0]), ['Aputure 600d', 'Sony FX6', 'Tripod', 'Batteries']) && shapes.list.sections === 0, JSON.stringify(shapes.list));
   ok('a title line passed over above a list with no headings is named as well', same(shapes.titled.passed, ['1 Kit list for the insurer 2026 > ']) && shapes.titled.headings === 1 && shapes.titled.items.length === 3, JSON.stringify(shapes.titled));
+  ok('a list with no row of headings, divided by plain group headings, keeps them: “Cameras” is taken for a title above the table, and “Lenses” and “Audio” still head their rows and are not added as items', same(shapes.bare.items, [['Sony FX6', ''], ['Sony A7S', ''], ['Sigma 18-35', 'Lens'], ['Sigma 50', 'Lens'], ['Rode NTG', 'Audio']]) && same(shapes.bare.passed, ['1 Kit list 2026 > ', '2 Cameras > ', '5 Lenses > Lens', '8 Audio > Audio']) && same(shapes.bare.lone, { rows: 2, headings: 2, example: 'Lenses' }), JSON.stringify(shapes.bare));
+  ok('…the person’s answer still makes items of them, and where the opening one is written as a heading (CAMERAS) a plain “Tripod” further down is an item', same(shapes.bareAsItems.items.map(x => x[0]), ['Sony FX6', 'Sony A7S', 'Lenses', 'Sigma 18-35']) && same(shapes.bareCapitals.items, [['Sony FX6', ''], ['Sony A7S', ''], ['Tripod', ''], ['Sigma 18-35', 'Lens']]), JSON.stringify([shapes.bareAsItems, shapes.bareCapitals]));
 
   /* ============================== guesses and values put right ============================== */
   const fixes = await Q.page.evaluate(async () => {

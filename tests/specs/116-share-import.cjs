@@ -601,14 +601,15 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   // ---- Add from a link: the box, and a QR code that is not a link ----
   await C.page.evaluate(() => window.logiGo('crew')); await sleep(300);
   // a camera that shows a picture of ours: a QR code drawn on a canvas, moved a little all the time, as a hand does
-  const fakeCamera = (page, text) => page.evaluate(async t => {
+  // fill: how much of the picture's height the code takes, at its middle size (it swings a little, as a hand does)
+  const fakeCamera = (page, text, fill = 0.72) => page.evaluate(async ([t, fill]) => {
     const { qrSvg } = await import('./js/qr.js'), img = new Image();
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(await qrSvg(t, { cellSize: 4 })); await img.decode();
     const c = document.createElement('canvas'); c.width = 1920; c.height = 1080; const g = c.getContext('2d'); let k = 0;
-    const draw = () => { const d = 1080 * 0.9 * (0.72 + 0.06 * Math.sin(k / 3)), x = 960 - d / 2 + 6 * Math.sin(k / 2), y = 540 - d / 2 + 6 * Math.cos(k / 2); k++; g.filter = 'none'; g.fillStyle = '#cfcfcf'; g.fillRect(0, 0, 1920, 1080); g.filter = 'blur(1px)'; g.fillStyle = '#fff'; g.fillRect(x - 12, y - 12, d + 24, d + 24); g.drawImage(img, x, y, d, d); };
+    const draw = () => { const d = 1080 * 0.9 * (fill + (fill < 0.6 ? 0.03 : 0.06) * Math.sin(k / 3)), x = 960 - d / 2 + 6 * Math.sin(k / 2), y = 540 - d / 2 + 6 * Math.cos(k / 2); k++; g.filter = 'none'; g.fillStyle = '#cfcfcf'; g.fillRect(0, 0, 1920, 1080); g.filter = 'blur(1px)'; g.fillStyle = '#fff'; g.fillRect(x - 12, y - 12, d + 24, d + 24); g.drawImage(img, x, y, d, d); };
     draw(); clearInterval(window.__cam); window.__cam = setInterval(draw, 100);
     const stream = c.captureStream(10); navigator.mediaDevices.getUserMedia = async () => stream;
-  }, text);
+  }, [text, fill]);
   await C.page.locator('#page button', { hasText: 'Add from a link' }).click(); await C.page.waitForSelector('.sheet textarea');
   const boxSize = await C.page.evaluate(() => ({ box: parseFloat(getComputedStyle(document.querySelector('.sheet textarea.share-link')).fontSize), root: parseFloat(getComputedStyle(document.documentElement).fontSize) }));
   ok('the box a link is pasted into is as large as the page’s text, not 12 pixels', boxSize.box === boxSize.root && boxSize.box >= 16, JSON.stringify(boxSize));
@@ -628,6 +629,15 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   await C.page.locator('.sheet button:has-text("Scan a QR code")').click();
   const scanned = await C.page.waitForSelector('.sheet .add-preview', { timeout: 60000 }).then(() => true, () => false);
   ok(`Vdex’s own scanner reads a link of the longest length it is said to read (${ownLink.length} characters, held at about three quarters of the frame, slightly blurred)`, scanned && own >= 1000 && ownLink.length > own - 12 && /Long Link Lou/.test(await sheetText(C.page)), `${ownLink.length} of ${own}`);
+  await C.page.evaluate(() => clearInterval(window.__cam)); await C.page.keyboard.press('Escape'); await sleep(200);
+  // Held further away, so the code takes about half of the picture: its squares are then too fine for the small
+  // sample alone (1.5 pixels each), and only the look at full size reads it.
+  await C.page.locator('#page button', { hasText: 'Add from a link' }).click(); await C.page.waitForSelector('.sheet textarea');
+  const farLink = await longCard(own);
+  await fakeCamera(C.page, farLink, 0.5);
+  await C.page.locator('.sheet button:has-text("Scan a QR code")').click();
+  const far = await C.page.waitForSelector('.sheet .add-preview', { timeout: 60000 }).then(() => true, () => false);
+  ok('…and reads it held further away, at about half of the frame, which takes the look at full size', far && /Long Link Lou/.test(await sheetText(C.page)), `${farLink.length} characters`);
   await C.page.evaluate(() => clearInterval(window.__cam)); await C.page.keyboard.press('Escape'); await sleep(200);
   await C.ctx.close();
 

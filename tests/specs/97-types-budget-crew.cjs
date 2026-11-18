@@ -195,6 +195,11 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const odd = await crew.evaluate(() => ({ drawn: !!document.querySelector('.paper'), text: (document.querySelector('.paper') || document.body).innerText, mailto: [...document.querySelectorAll('a[href^="mailto:"]')].map(a => a.getAttribute('href')) }));
   ok('an equipment category that is a word such as “constructor” is just a heading: the page is drawn', odd.drawn && /constructor\s+Tripod/.test(odd.text) && /__proto__\s+Slider × 2/.test(odd.text) && /Monitoring\s+Monitor/.test(odd.text), odd.text.replace(/\s+/g, ' ').slice(0, 200));
   ok('only a plain address becomes an email link; one with a subject or a second recipient tacked on is shown as text', JSON.stringify(odd.mailto) === JSON.stringify(['mailto:sam@studio.example']) && odd.text.includes('anna@studio.example?bcc=someone@elsewhere.example') && odd.text.includes('carl@client.example,other@elsewhere.example'), JSON.stringify(odd.mailto));
+  // that text has no spaces to break at: on a phone it must wrap inside the page like an address does, not widen it
+  const narrow = await crew.context().newPage(); await narrow.setViewportSize({ width: 360, height: 700 }); await narrow.goto(crew.url()); await narrow.waitForSelector('.paper h1', { timeout: 8000 }).catch(() => {});
+  const wide = await narrow.evaluate(() => ({ page: document.documentElement.scrollWidth, screen: innerWidth, shown: document.querySelector('.paper').innerText.includes('anna@studio.example?bcc=someone@elsewhere.example') }));
+  ok('…and on a phone that text wraps inside the page: the page is no wider than the screen', wide.shown && wide.page <= wide.screen, JSON.stringify(wide));
+  await narrow.close();
   await crew.goto(BASE + 'crew.html'); await sleep(600);
   ok('a link with nothing after it says so in plain words', /no shoot info in it/.test(await crew.locator('body').innerText()));
   await crew.goto(BASE + 'crew.html#1.garbage'); await sleep(600);

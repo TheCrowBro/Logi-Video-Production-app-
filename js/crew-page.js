@@ -65,8 +65,9 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
   const people = (list, withCall) => list.length ? h('table', null,
     h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Role'), withCall && h('th', { class: 'nw' }, 'Call'), h('th', null, 'Contact'))),
     h('tbody', null, list.map(p => h('tr', null, h('td', null, p.name || '—'), h('td', null, p.role || ''), withCall && h('td', { class: 'nw' }, p.call || ''),
-      // p.email is an address and nothing more (js/share-data.js), so it can be a link; anything else written there is only shown
-      h('td', null, [p.phone && link(telUrl(p.phone), p.phone), p.phone && (p.email || p.emailText) && h('br'), p.email ? link('mailto:' + p.email, p.email) : p.emailText]))))) : null;
+      // p.email is an address and nothing more (js/share-data.js), so it can be a link; anything else written there is only
+      // shown, and breaks where it must like an address does (.etext in crew.html), so a long one cannot widen the page
+      h('td', null, [p.phone && link(telUrl(p.phone), p.phone), p.phone && (p.email || p.emailText) && h('br'), p.email ? link('mailto:' + p.email, p.email) : p.emailText && h('span', { class: 'etext' }, p.emailText)]))))) : null;
   // By category, in a Map: a category is text from the link, and one called "constructor" must not find anything on an object.
   const kitGroups = new Map(); (snap.kit || []).forEach(k => { const c = k.cat || 'Other'; kitGroups.set(c, [...(kitGroups.get(c) || []), k]); });
 

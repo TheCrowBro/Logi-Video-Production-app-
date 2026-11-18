@@ -356,8 +356,9 @@ const writtenAsHeading = t => /[:：]$/.test(t) || t !== t.toLowerCase() && t ==
 // own: the categories this person already uses, so "lens filters" joins their "Lens Filters".
 // lone: what such a lone word is. 'headings' and 'items' are the person's answer for all of them. 'auto' (the default)
 // takes one for a heading only when the list has no Category column and the word is written as a heading ("LENSES",
-// "Lenses:") or the list plainly opens with one in ordinary writing (its first row is such a word, so headings are
-// not told apart by how they are written); otherwise it is an item, because "Tripod" on a row of its own is more
+// "Lenses:") or the list plainly opens with one in ordinary writing (its first row is such a word, or with no row of
+// headings the last line above the table is, so headings are not told apart by how they are written); otherwise it
+// is an item, because "Tripod" on a row of its own is more
 // often a tripod than a heading. A lone cell outside the name column is a heading whatever it says.
 export function buildItems({ head, body, width, list, titles = 0, above = [] }, targets, { own = [], lone = 'auto' } = {}) {
   const cols = f => targets.map((t, i) => (t === f ? i : -1)).filter(i => i >= 0 && i < width);
@@ -380,8 +381,11 @@ export function buildItems({ head, body, width, list, titles = 0, above = [] }, 
   // The one filled cell of a row, when it sits in the name column and says a kind of kit: the text, else ''.
   const loneWord = r => { if (!dense || width < 3) return ''; const live = r.cells.map((c, i) => (c !== '' ? i : -1)).filter(i => i >= 0); if (live.length !== 1 || !nameCols.has(live[0])) return ''; const t = oneLine(r.cells[live[0]]); return !isNothing(t) && mapCategory(t).how === 'vdex' ? t : ''; };
   // The list plainly opens with a heading that is written like any other word ("Cameras" above the cameras): its other
-  // lone words are headings too. When it opens with one written as a heading, only words written that way are.
-  const opener = body[0] ? loneWord(body[0]) : '', opensWithOne = !!opener && !writtenAsHeading(opener);
+  // lone words are headings too. When it opens with one written as a heading, only words written that way are. A list
+  // with no row of headings has its opening lines taken for titles above the table (layout): the last of them is that
+  // opening heading when it says a kind of kit, so "Lenses" further down such a list still heads its rows.
+  const lead = !head && dense && width >= 3 && above.length ? oneLine(above[above.length - 1].text) : '';
+  const opener = (body[0] && loneWord(body[0])) || (!isNothing(lead) && mapCategory(lead).how === 'vdex' ? lead : ''), opensWithOne = !!opener && !writtenAsHeading(opener);
   const headsGroup = t => lone === 'headings' || lone !== 'items' && !C.category.length && (writtenAsHeading(t) || opensWithOne);
   const pass = (r, text, to) => { if (passed.length < 200) passed.push({ n: r.n, text: oneLine(text).slice(0, 80), to }); };
   let section = '';
