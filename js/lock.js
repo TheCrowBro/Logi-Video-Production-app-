@@ -1,10 +1,11 @@
 // App lock: a PIN, plus fingerprint / face / Windows Hello where the device offers it, and a vault that keeps the
 // database and sign-in secrets encrypted (AES-256-GCM) whenever the app is locked, in the background or closed.
 // A random data key encrypts the vault; the PIN (through PBKDF2) and the biometric each hold a wrapped copy of it.
-import { h, toast, announce, nodes, sheet } from './util.js';
+import { h, toast, announce, nodes, sheet, settleApp } from './util.js';
 import * as store from './store.js';
 import * as C from './crypto.js';
 import { haptic } from './a11y.js';
+import { refreshTour } from './tour.js';
 
 const CFG = 'logi-lock', VAULT = 'logi-vault', DB = 'logi-db-v1', SETUP = 'logi-lock-setup';
 const SEALED = ['logi-dbx-token', 'logi-ms-token', 'logi-google-tokens', 'logi-webdav', 'logi-loc', 'logi-wx', 'logi-cloud-who', 'logi-google-email', 'logi-icloud-session', 'logi-feed-url']; // secrets and private settings that live outside the database
@@ -13,13 +14,17 @@ const WAITS = [[12, 900], [9, 300], [7, 60], [5, 30]]; // wrong attempts → sec
 export const WIPE_AT = 10;
 export const PIN_MIN = 4, PIN_MAX = 20; // digits in a PIN; any PIN within the length is accepted
 
-const S = { cfg: null, key: null, raw: null, locked: false, screen: null, hiddenAt: 0, timer: null, vaultRev: -1, extras: {}, extrasJson: '', vaultExtras: null, pending: null, op: Promise.resolve(), resolveBoot: null, listeners: new Set(), entry: '', checking: false, keys: null, paste: null, byPin: false, offer: null, dropOffer: null };
+const S = { cfg: null, key: null, raw: null, locked: false, screen: null, hiddenAt: 0, timer: null, vaultRev: -1, extras: {}, extrasJson: '', vaultExtras: null, pending: null, op: Promise.resolve(), resolveBoot: null, listeners: new Set(), entry: '', checking: false, keys: null, paste: null, byPin: false, offer: null, dropOffer: null, repaint: null, retell: null, pastTerms: false, onUnlock: null };
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); return true; } catch { return false; } }; // false: the browser's storage is full or blocked
 const FULL = 'Not enough storage to keep the encrypted copy of your data: free some space, or erase old logs and bookings. Until then the data is kept in plain.';
 const storageFull = () => { if (Date.now() - (S.fullWarned || 0) < 60000) return; S.fullWarned = Date.now(); toast(FULL); announce(FULL); };
 const readCfg = () => { try { const c = JSON.parse(lsGet(CFG)); return c && c.pin ? c : null; } catch { return null; } };
-const saveCfg = c => { S.cfg = c; lsSet(CFG, c ? JSON.stringify(c) : null); S.listeners.forEach(f => f()); };
+// The config as this tab holds it. A lock screen that is up draws its dots again, since the PIN's length may be what
+// changed. saveCfg also writes it to the disk; false: the disk would not take it (setPin minds; the lock options carry
+// on in memory).
+const holdCfg = c => { S.cfg = c; S.listeners.forEach(f => f()); if (S.repaint) S.repaint(); };
+const saveCfg = c => { const ok = lsSet(CFG, c ? JSON.stringify(c) : null); holdCfg(c); return ok; };
 const chain = fn => { S.op = S.op.then(fn).catch(e => console.warn('lock:', e)); return S.op; };
 // This device is being erased (here, or from another tab): forget the key, so nothing of this tab's copy is written back.
 const letGo = () => { S.cfg = null; S.key = null; S.raw = null; clearTimeout(S.pending); S.listeners.forEach(f => f()); };
@@ -112,9 +117,13 @@ export async function setPin(pin) { // first PIN makes a new data key; a later o
   const wrap = await C.encrypt(await C.pbkdf2Key(pin, salt, iter), raw);
   if (minting && readCfg()) { const e = new Error(ELSEWHERE); e.code = 'elsewhere'; throw e; } // …or made while the key was being derived
   const before = S.cfg, hadKey = !!S.key;
+  const dropKey = () => { if (!hadKey) { S.key = null; S.raw = null; } };
   await adopt(raw);
-  saveCfg({ ...(S.cfg || { v: 1, autoLock: 1, wipe: false, bio: null }), salt: C.toB64(salt), iter, pin: wrap, len: pin.length, max: PIN_MAX, attempts: 0, until: 0 }); // max: the longest PIN allowed when this one was chosen (offerLongerPin below)
-  try { await writeVault(true); } catch (e) { saveCfg(before); if (!hadKey) { S.key = null; S.raw = null; } throw e; } // no vault, no PIN: the plain copy stays as it was
+  // max: the longest PIN allowed when this one was chosen (offerLongerPin below). A config the disk would not take is a
+  // PIN that was not set: the disk still holds the old one (or none), which the next start would ask for, so this tab
+  // goes back to it and says so.
+  if (!saveCfg({ ...(S.cfg || { v: 1, autoLock: 1, wipe: false, bio: null }), salt: C.toB64(salt), iter, pin: wrap, len: pin.length, max: PIN_MAX, attempts: 0, until: 0 })) { holdCfg(before); dropKey(); throw new Error('the browser storage is full'); }
+  try { await writeVault(true); } catch (e) { saveCfg(before); dropKey(); throw e; } // no vault, no PIN: the plain copy stays as it was
 }
 export async function checkPin(pin) { const raw = await openWithPin(pin); if (!raw) return false; await adopt(raw); return true; }
 export async function removePin() { // the caller has just checked the PIN
@@ -220,34 +229,69 @@ function derToRaw(sig) { // ECDSA signature: DER sequence of two integers → 64
 }
 
 /* ---------------------------------- lock screen ---------------------------------- */
-// Everything on the page but the lock (the app, sheets, the update and licence bars, the skip link) goes inert while a
-// lock screen is up, and comes back as it was.
-export function coverAll(screen) { const was = [...document.body.children].filter(el => el !== screen).map(el => [el, el.inert]); was.forEach(([el]) => { el.inert = true; }); const app = document.getElementById('app'); if (app) app.setAttribute('aria-hidden', 'true'); document.querySelectorAll('.sheet-back').forEach(el => el.classList.add('behind-lock')); return () => { was.forEach(([el, inert]) => { if (el.isConnected) el.inert = inert; }); if (app) app.removeAttribute('aria-hidden'); document.querySelectorAll('.sheet-back.behind-lock').forEach(el => el.classList.remove('behind-lock')); }; }
+// Everything on the page but the lock (the app, sheets, a walkthrough, the update and licence bars, the skip link) goes
+// inert while a lock screen is up, and comes back as it was. Sheets and the walkthrough answer no keys while they are
+// inert (sheet() in js/util.js, runTour() in js/tour.js), so a key pressed on this screen stays on this screen. The page
+// itself (#app) is not put back from memory: it is out of reach or not by what is open once the screen has gone.
+export function coverAll(screen) {
+  const was = [...document.body.children].filter(el => el !== screen).map(el => [el, el.inert]);
+  was.forEach(([el]) => { el.inert = true; });
+  const app = document.getElementById('app'); if (app) app.setAttribute('aria-hidden', 'true');
+  document.querySelectorAll('.sheet-back').forEach(el => el.classList.add('behind-lock'));
+  return () => {
+    was.forEach(([el, inert]) => { if (el.isConnected) el.inert = inert; });
+    settleApp();
+    if (app) app.removeAttribute('aria-hidden');
+    document.querySelectorAll('.sheet-back.behind-lock').forEach(el => el.classList.remove('behind-lock'));
+  };
+}
 function showLock(notice = '') {
   if (S.screen) return;
   window.logiMenu?.close(); // the menu is not left open behind the lock
   window.logiSearch?.close(true); // nor the search, which also forgets what was typed and found
   S.locked = true; S.entry = '';
-  const len = S.cfg.len || 6;
-  const dots = h('div', { class: 'pin-dots', role: 'img', 'aria-label': `0 of ${len} digits entered` });
-  // One dot for each digit, however long the PIN: its length is no secret this screen could keep (it sends the PIN by
-  // itself at that many digits, and the config beside the vault states it), and the dots are how the owner of a long
-  // PIN sees how far along they are. More than ten go in even rows, so twenty fit the narrowest phone.
-  if (len > 10) { dots.classList.add('rows'); dots.style.setProperty('--cols', String(Math.ceil(len / Math.ceil(len / 10)))); }
-  const msg = h('div', { class: 'lock-msg', role: 'status', 'aria-live': 'polite' }, notice);
+  // The PIN's length is read each time it is needed, never kept: the PIN can change while this screen is up (in another
+  // tab, or by a save that finished after the lock came up), and the screen must then ask for the PIN there is now.
+  const len = () => (S.cfg && S.cfg.len) || 6;
+  const dots = h('div', { class: 'pin-dots', role: 'img' });
+  // The wipe countdown, when the switch is on, goes on every message: the ninth wrong PIN must warn about the tenth.
+  const leftText = () => { const left = S.cfg && S.cfg.wipe ? WIPE_AT - (S.cfg.attempts || 0) : 0; return left > 0 ? ` ${left} ${left === 1 ? 'try' : 'tries'} left before this device is erased.` : ''; };
+  // Wrong tries already made (before a restart, or in another tab) are said from the start when the next ones can erase.
+  const first = (notice + (S.cfg.attempts ? leftText() : '')).trim();
+  const msg = h('div', { class: 'lock-msg', role: 'status', 'aria-live': 'polite' }, first);
+  // What this screen says to a screen reader beyond the line above: the wait after wrong PINs, and how many digits are
+  // in. It has a live region of its own inside the card, because everything outside the lock screen is inert while it
+  // is up, the app's shared region (announce() in js/util.js) included, and nothing said there would be heard.
+  const live = h('div', { class: 'sr-only', role: 'status', 'aria-live': 'polite' });
+  let saying = 0;
+  const say = text => { clearTimeout(saying); live.textContent = ''; saying = setTimeout(() => { live.textContent = text; }, 50); };
+  const count = () => `${S.entry.length} of ${len()}`;
   const forgot = h('div', { class: 'lock-forgot', id: 'lock-forgot', hidden: true },
     h('p', { class: 'small' }, 'The PIN is the only key to the data on this device, so it cannot be recovered. You can erase this device and start again: if you linked a cloud storage or exported a backup, link it or import it afterwards and everything comes back.'),
     h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn danger', onclick: () => { if (confirm('Erase all Vdex data on this device?')) wipe('This device was erased. Link your storage or import a backup to get your data back.'); } }, 'Erase this device'), h('button', { type: 'button', class: 'btn ghost', onclick: () => { forgot.hidden = true; forgotBtn.setAttribute('aria-expanded', 'false'); } }, 'Keep trying')));
   const forgotBtn = h('button', { type: 'button', class: 'btn ghost small', 'aria-expanded': 'false', 'aria-controls': 'lock-forgot', onclick: () => { forgot.hidden = !forgot.hidden; forgotBtn.setAttribute('aria-expanded', String(!forgot.hidden)); if (!forgot.hidden) forgot.scrollIntoView({ block: 'nearest' }); } }, 'Forgot PIN?');
-  const paint = () => { dots.replaceChildren(...Array.from({ length: len }, (_, i) => h('i', { class: i < S.entry.length ? 'on' : '' }))); dots.setAttribute('aria-label', `${S.entry.length} of ${len} digits entered`); };
+  // One dot for each digit, however long the PIN: its length is no secret this screen could keep (it sends the PIN by
+  // itself at that many digits, and the config beside the vault states it), and the dots are how the owner of a long
+  // PIN sees how far along they are. More than ten go in even rows, so twenty fit the narrowest phone. When the length
+  // has changed under the screen, the digits typed so far were for the PIN that was, and go.
+  let drawn = 0;
+  const paint = () => {
+    const n = len();
+    if (n !== drawn) {
+      if (drawn) S.entry = '';
+      drawn = n; dots.classList.toggle('rows', n > 10);
+      if (n > 10) dots.style.setProperty('--cols', String(Math.ceil(n / Math.ceil(n / 10)))); else dots.style.removeProperty('--cols');
+    }
+    dots.replaceChildren(...Array.from({ length: n }, (_, i) => h('i', { class: i < S.entry.length ? 'on' : '' }))); dots.setAttribute('aria-label', `${S.entry.length} of ${n} digits entered`);
+  };
   const busy = () => S.checking || waitLeft() > 0;
-  // The wipe countdown, when the switch is on, goes on every message: the ninth wrong PIN must warn about the tenth.
-  const leftText = () => { const left = S.cfg.wipe ? WIPE_AT - (S.cfg.attempts || 0) : 0; return left > 0 ? ` ${left} ${left === 1 ? 'try' : 'tries'} left before this device is erased.` : ''; };
   let ticker = null;
-  // The wait is announced once; the seconds tick on screen without a screen reader repeating them.
-  const showWait = () => { clearInterval(ticker); msg.setAttribute('aria-live', 'off'); announce(`Wrong PIN. Wait ${waitLeft()} seconds.` + leftText()); const tick = () => { const left = waitLeft(); if (!left) { clearInterval(ticker); msg.setAttribute('aria-live', 'polite'); msg.textContent = 'You can try again.' + leftText(); return; } msg.textContent = `Wrong PIN. Try again in ${left} s.` + leftText(); }; tick(); ticker = setInterval(tick, 1000); };
-  const press = d => { if (busy() || S.entry.length >= len) return; S.entry += d; haptic(8); paint(); if (S.entry.length === len) submit(); };
-  const back = () => { if (busy()) return; S.entry = S.entry.slice(0, -1); paint(); };
+  // The wait is said once; the seconds tick on screen without a screen reader repeating them.
+  const showWait = () => { clearInterval(ticker); msg.setAttribute('aria-live', 'off'); say(`Wrong PIN. Wait ${waitLeft()} seconds.` + leftText()); const tick = () => { const left = waitLeft(); if (!left) { clearInterval(ticker); msg.setAttribute('aria-live', 'polite'); msg.textContent = 'You can try again.' + leftText(); return; } msg.textContent = `Wrong PIN. Try again in ${left} s.` + leftText(); }; tick(); ticker = setInterval(tick, 1000); };
+  // How far along the PIN is, for a screen reader: after every digit of a PIN of up to ten, every fourth of a longer
+  // one, and whenever a digit is taken back. The digits themselves are never said.
+  const press = d => { const n = len(); if (busy() || S.entry.length >= n) return; S.entry += d; haptic(8); paint(); if (S.entry.length === n) submit(); else if (n <= 10 || S.entry.length % 4 === 0) say(count()); };
+  const back = () => { if (busy()) return; S.entry = S.entry.slice(0, -1); paint(); say(count()); };
   async function submit() {
     const pin = S.entry; S.entry = ''; paint();
     if (!pin || waitLeft() > 0) return;
@@ -258,8 +302,7 @@ function showLock(notice = '') {
     haptic(60); S.screen.classList.remove('shake'); void S.screen.offsetWidth; S.screen.classList.add('shake');
     if (recordFailure()) return;
     if (waitLeft() > 0) return showWait();
-    msg.textContent = 'Wrong PIN.' + leftText();
-    announce(msg.textContent);
+    msg.textContent = 'Wrong PIN.' + leftText(); // the line is a live region of this screen: a screen reader hears it from there
   }
   async function tryBio() {
     if (busy()) return;
@@ -271,15 +314,18 @@ function showLock(notice = '') {
     h('div', { class: 'lock-card' },
       h('div', { class: 'brand' }, h('span', { class: 'dot' }), 'VDEX'),
       h('h1', null, 'Enter your PIN'),
-      dots, msg,
+      dots, msg, live,
       h('div', { class: 'keypad' }, ...'123456789'.split('').map(d => key(d, () => press(d))),
         bio ? h('button', { type: 'button', class: 'key soft', onclick: tryBio, 'aria-label': 'Unlock with fingerprint or face' }, '👤') : h('span', { 'aria-hidden': 'true' }),
         key('0', () => press('0')), key('⌫', back, 'soft')),
       bio && h('button', { type: 'button', class: 'btn ghost lock-bio', onclick: tryBio }, '👤 Use fingerprint or face'),
       forgotBtn,
       forgot));
-  // Enter submits once four digits are in and otherwise does nothing: it must never press the keypad key that has the focus.
-  S.keys = e => { if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (/^\d$/.test(e.key)) { press(e.key); e.preventDefault(); } else if (e.key === 'Backspace') { back(); e.preventDefault(); } else if (e.key === 'Enter') { e.preventDefault(); if (S.entry.length >= PIN_MIN) submit(); } };
+  // Enter never sends a PIN short of its length: the screen sends the PIN by itself at the last digit, so an earlier
+  // Enter could only be a wrong PIN, and would be counted as one. It tells a screen reader how far along the PIN is
+  // instead, and it must never press the keypad key that has the focus. (Only a config with no length recorded, which no
+  // version has written, still sends on Enter from four digits.)
+  S.keys = e => { if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (/^\d$/.test(e.key)) { press(e.key); e.preventDefault(); } else if (e.key === 'Backspace') { back(); e.preventDefault(); } else if (e.key === 'Enter') { e.preventDefault(); if (busy()) return; if (S.cfg.len) { if (S.entry) say(count()); } else if (S.entry.length >= PIN_MIN) submit(); } };
   // A pasted PIN (a long one kept in a password manager) goes in as if typed. Anything but digits, or more of them
   // than the PIN has, is left out and said: it is never cut to fit and tried as a guess.
   S.paste = e => {
@@ -287,7 +333,7 @@ function showLock(notice = '') {
     e.preventDefault();
     if (busy()) return;
     const text = ((e.clipboardData && e.clipboardData.getData('text')) || '').replace(/\s+/g, '');
-    if (!/^\d+$/.test(text) || S.entry.length + text.length > len) { msg.textContent = 'Not pasted: that is longer than your PIN, or not all digits.'; return; }
+    if (!/^\d+$/.test(text) || S.entry.length + text.length > len()) { msg.textContent = 'Not pasted: that is longer than your PIN, or not all digits.'; return; }
     for (const d of text) press(d);
   };
   document.addEventListener('keydown', S.keys);
@@ -296,15 +342,19 @@ function showLock(notice = '') {
   document.body.append(S.screen);
   S.uncover = coverAll(S.screen);
   paint();
-  if (notice) announce(notice);
-  if (waitLeft() > 0) showWait();
-  const first = S.screen.querySelector('.key'); first && first.focus();
+  if (waitLeft() > 0) showWait(); else if (first) say(first);
+  S.repaint = paint;
+  // Wrong tries made in another tab count here too (takeConfig below): the wait, and how many tries are left before the
+  // erase, are shown as they now stand, so the keypad never goes quiet, or the last try comes, with nothing said.
+  S.retell = () => { if (waitLeft() > 0) return showWait(); clearInterval(ticker); msg.setAttribute('aria-live', 'polite'); msg.textContent = S.cfg.attempts ? leftText().trim() : ''; };
+  const firstKey = S.screen.querySelector('.key'); firstKey && firstKey.focus();
   if (bio && document.visibilityState === 'visible') setTimeout(() => tryBio(), 350);
-  S.hideLock = () => { clearInterval(ticker); };
+  S.hideLock = () => { clearInterval(ticker); clearTimeout(saying); };
 }
 function hideLock() {
   if (!S.screen) return;
   S.hideLock && S.hideLock();
+  S.repaint = null; S.retell = null;
   document.removeEventListener('keydown', S.keys); S.keys = null;
   document.removeEventListener('paste', S.paste); S.paste = null;
   S.screen.remove(); S.screen = null;
@@ -325,7 +375,9 @@ function unlocked(byPin) {
   else chain(() => unseal());
   if (document.hidden) hiddenNow(); // put away while the PIN was being checked: the usual rule applies from now
   announce('Unlocked');
-  if (!boot) offerLongerPin(); // at the start of the app it waits for ensurePin(), after the terms
+  if (!boot && S.pastTerms) offerLongerPin(); // at the start of the app it waits for ensurePin(), which comes after the terms: never over them
+  if (S.onUnlock) { const go = S.onUnlock; S.onUnlock = null; go(); } // ensurePin() is waiting for this unlock (after the line above, so it finds the offer)
+  if (!S.locked) refreshTour(); // a walkthrough step that was showing the menu or the search shows it again (showLock closed them)
 }
 // PINs stopped at 8 digits until they could be 20. A config carries max, the longest PIN allowed when its PIN was chosen;
 // one without it was made under the old rule, and its owner is told once, after the next unlock, that a PIN can be
@@ -337,8 +389,10 @@ const offerDue = () => !!S.cfg && (S.cfg.max || 8) < PIN_MAX;
 function offerLongerPin() {
   if (!offerDue() || S.offer || S.locked) return Promise.resolve();
   const knowsPin = S.byPin; // the PIN was typed a moment ago; after a fingerprint or face it is asked for, as Change PIN… does
-  // The start of the app waits for the answer, but never long for the file: one that cannot be fetched (offline, with
-  // no offline copy yet) or takes over five seconds is left for the next unlock.
+  // The start of the app waits for the answer, but never long for the file. One that takes over five seconds is left
+  // for the next unlock, when it has usually arrived. One that could not be fetched at all (offline, with no offline
+  // copy yet) is offered again at the next start: the browser remembers a failed import for as long as the page lives,
+  // so asking again at the next unlock gets the same failure without going to the network.
   const slow = new Promise((_, no) => setTimeout(() => no(new Error('the offer of a longer PIN could not be fetched in time')), 5000));
   S.offer = Promise.race([import('./pin-offer.js'), slow]).then(m => {
     if (!offerDue() || S.locked) return null;
@@ -349,14 +403,24 @@ function offerLongerPin() {
 export function lockNow() { if (!S.cfg || S.screen) return; showLock(); sealSoon(); }
 // Another tab changed the PIN, a lock setting or the count of wrong tries: this tab takes the config as it now stands,
 // so it asks for the PIN there is now and never writes its older copy back over the change. The data key is the same
-// one (a new key only follows an erase, which init() handles). An offer answered in that tab is answered in this one,
-// and a lock screen that is up is drawn again when the PIN's length or the fingerprint unlock changed under it.
+// one (a new key only follows an erase, which gate() handles). An offer answered in that tab is answered in this one.
+// A lock screen that is up follows: its dots are drawn for the PIN's length as it now is, the wait and the tries left
+// are told again when wrong tries were made elsewhere, and the whole screen is drawn again when the fingerprint unlock
+// came or went (while a PIN is being checked it is left alone: the check ends with the message for the new count).
+// One write is not taken: a config without max over this tab's config with it. That comes from a tab still running a
+// version from before longer PINs, which writes back the whole config it started with, the old PIN included, whenever
+// it counts a wrong try or a lock setting is changed in it. This tab then puts its own config back, with the count of
+// wrong tries (and the wait) from that write when it is the higher one: a wrong try there counts here, and that tab's
+// older count never lowers this one. It can do so only while it is open: such a tab should be reloaded.
 function takeConfig() {
-  const c = readCfg(); if (!c) return;
-  const redraw = !!S.screen && !S.checking && (c.len !== S.cfg.len || !c.bio !== !S.cfg.bio);
-  S.cfg = c; S.listeners.forEach(f => f());
+  const c = readCfg(), was = S.cfg; if (!c) return;
+  if (was.max && !c.max) saveCfg({ ...was, attempts: Math.max(was.attempts || 0, c.attempts || 0), until: Math.max(was.until || 0, c.until || 0) });
+  else holdCfg(c);
+  const now = S.cfg;
   if (S.dropOffer && !offerDue()) S.dropOffer();
-  if (redraw) { hideLock(); showLock(); }
+  if (!S.screen || S.checking) return;
+  if (!now.bio !== !was.bio) { hideLock(); showLock(); }
+  else if ((now.attempts || 0) !== (was.attempts || 0) || (now.until || 0) !== (was.until || 0) || !now.wipe !== !was.wipe) S.retell();
 }
 
 /* --------------------------------- boot & events --------------------------------- */
@@ -365,7 +429,10 @@ function takeConfig() {
 // sessionStorage by the tab that caused it: the gate that shows first says it, else a toast once the app is up.
 export const notice = (take = true) => { try { const n = sessionStorage.getItem('logi-wiped'); if (n && take) sessionStorage.removeItem('logi-wiped'); return n || ''; } catch { return ''; } };
 export async function gate() {
-  window.addEventListener('storage', e => { if (e.key === CFG && e.newValue && S.cfg) takeConfig(); }); // from the lock screen on, not only once the app is up
+  // From the first lock screen on, not only once the app is up. The config changed in another tab: take it. The config
+  // gone: this device was erased from another tab (Forgot PIN → Erase, or Erase all data), so this tab lets go of its
+  // key and starts again. A lock screen left up would still take the old PIN and write the erased data back.
+  window.addEventListener('storage', e => { if (e.key !== CFG || !S.cfg) return; if (e.newValue) takeConfig(); else if (e.oldValue) { letGo(); restart(); } });
   S.cfg = readCfg();
   if (!S.cfg) { if (lsGet(VAULT)) lsSet(VAULT, null); return; }
   store.setSealed(true); // nothing is written in plain until the vault is open
@@ -380,7 +447,15 @@ const restart = why => { try { if (why) sessionStorage.setItem('logi-wiped', why
 // (a first start, or an existing user's next one) sets it up on a full screen that nothing else can be used around.
 // The automated tests boot with 'logi-lock-setup' = 'skip', which skips only this set-up: a PIN that exists always
 // locks, because gate() above never looks at the flag.
-export function ensurePin() {
+export async function ensurePin() {
+  S.pastTerms = true; // from here on an unlock may bring the offer of a longer PIN
+  await pinReady();
+  // The app starts when this resolves, so never while Vdex is locked: a lock screen that came up over the offer (or
+  // while its file was on the way) took the offer away, and the app must not start, draw and say things behind that
+  // lock screen. The next unlock brings the offer back, and its answer is waited for as before.
+  while (S.locked || S.offer) { if (S.locked) await new Promise(res => { S.onUnlock = res; }); else await S.offer; }
+}
+function pinReady() {
   if (S.cfg) return offerLongerPin(); // a PIN from before longer PINs: the one-time offer, ahead of the app
   if (lsGet(SETUP) === 'skip') return Promise.resolve();
   if (readCfg()) return restart('A PIN was just set in another tab: enter it here.'); // made since gate() looked: this tab has no key for it
@@ -459,12 +534,11 @@ export function init() {
   });
   window.addEventListener('pagehide', () => { S.unloading = true; if (S.cfg) sealSoon(); });
   window.addEventListener('pageshow', () => { S.unloading = false; }); // back-forward cache
-  // This device was erased from another tab (Forgot PIN → Erase, or Erase all data): this tab must not write its copy
-  // back, so it lets go of its key and starts again. Meanwhile, another tab sealing the storage while this one is in
-  // use means the plain copies are put back from memory and the vault.
+  // This device erased from another tab is handled in gate(), whose listener is there from the first lock screen on.
+  // Another tab sealing the storage while this one is in use means the plain copies are put back from memory and the
+  // vault.
   addEventListener('vdex-erased', letGo); // the erasing tab itself, before it reloads
   window.addEventListener('storage', e => {
-    if (e.key === CFG && e.oldValue && e.newValue == null && S.cfg) { letGo(); restart(); return; }
     if (!S.cfg || !S.key || document.hidden || S.locked) return;
     // The other tab's changes reach this tab one key at a time: wait a moment, then unseal only if the vault and the
     // config are still there (an erase removes them right after the database).

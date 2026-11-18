@@ -221,7 +221,9 @@ const PHONE = { width: 360, height: 740 };
     ok('…nor at the next start', (await next(page)) === 'app' && (await bookings(page)) === 8);
     await ctx.close(); }
 
-  // --- the offer's own file cannot be fetched, or is slow: Vdex starts all the same, and offers at the next unlock ---
+  // --- the offer's own file cannot be fetched, or is slow: Vdex starts all the same. A file that could not be fetched is
+  // offered again at the next start (the browser remembers a failed import for as long as the page lives, so the next
+  // unlock in the same sitting cannot fetch it either); a slow one has arrived by the next unlock. ---
   { const { ctx, page } = await existing();
     fileAway = true; await ctx.route('**/js/pin-offer.js', r => r.abort());
     await page.reload(); await lockUp(page); await page.keyboard.type(OLD);
@@ -265,9 +267,11 @@ const PHONE = { width: 360, height: 740 };
     await page.waitForFunction(() => { try { return JSON.parse(localStorage.getItem('logi-vault')).v === 1; } catch { return false; } });
     await page.reload(); await lockUp(page); await sleep(200);
     ok('the next start asks for the new PIN: 20 dots', (await dotsOf(page)).n === 20);
-    await page.keyboard.type(OLD); await page.keyboard.press('Enter');
+    await page.keyboard.type(OLD); await page.keyboard.press('Enter'); await sleep(800);
+    ok('the old PIN with Enter after it is not sent: it is short of the 20 digits, so nothing is tried and nothing is counted', (await cfg(page)).attempts === 0 && (await dotsOf(page)).on === 6 && (await page.locator('.lock-msg').innerText()) === '' && (await page.locator('.lock:not(.lock-setup)').count()) === 1, JSON.stringify(await dotsOf(page)));
+    await page.keyboard.type('0'.repeat(14)); // 20 digits that begin with the old PIN
     await page.waitForFunction(() => /Wrong PIN/.test(document.querySelector('.lock-msg').textContent), null, { timeout: 30000 });
-    ok('the old PIN no longer opens it, and counts as a wrong attempt (9 tries left before the erase that was switched on)', (await cfg(page)).attempts === 1 && /9 tries left before this device is erased/.test(await page.locator('.lock-msg').innerText()), await page.locator('.lock-msg').innerText());
+    ok('the old PIN no longer opens it, and a full-length wrong PIN counts as a wrong attempt (9 tries left before the erase that was switched on)', (await cfg(page)).attempts === 1 && /9 tries left before this device is erased/.test(await page.locator('.lock-msg').innerText()), await page.locator('.lock-msg').innerText());
     await page.keyboard.type(P20);
     ok('the new PIN opens it, with no second offer', (await next(page)) === 'app' && (await cfg(page)).attempts === 0);
     ok('…and the data is still readable after the change', (await bookings(page)) === 8 && (await page.evaluate(() => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.length)) === 8);
@@ -351,7 +355,7 @@ const PHONE = { width: 360, height: 740 };
     if (!(await a.locator('.lock:not(.lock-setup)').count())) await lockNow(a);
     await lockUp(a); await sleep(200);
     ok('…and that tab’s lock screen asks for the new PIN: 9 dots', (await dotsOf(a)).n === 9);
-    await a.keyboard.type(OLD); await a.keyboard.press('Enter');
+    await a.keyboard.type(OLD + '000'); // nine digits that begin with the old PIN
     await a.waitForFunction(() => /Wrong PIN/.test(document.querySelector('.lock-msg').textContent), null, { timeout: 30000 });
     await a.keyboard.type(P9);
     ok('…the old PIN no longer opens it, the new one does, and no offer follows', (await next(a)) === 'app' && (await bookings(a)) === 8);

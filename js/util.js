@@ -68,7 +68,15 @@ export function announce(msg) {
   setTimeout(() => { r.textContent = msg; }, 50);
 }
 
-let openSheets = 0;
+// The page (#app) is out of reach while anything is open over it: a sheet, a walkthrough, the menu, the search, or a
+// full screen (the lock, the PIN set-up, the offer of a longer PIN, the terms). Whatever closes one of those calls this,
+// which looks at what is on the page now. A flag remembered from when the thing opened can be out of date by then:
+// what was underneath may have closed meanwhile, and writing the flag back would leave the page dead with nothing open.
+export function settleApp() {
+  const app = document.getElementById('app'); if (!app) return;
+  app.inert = !!document.querySelector('.sheet-back, .tour, body > .lock, body > .terms-gate') || document.body.classList.contains('menu-open') || document.body.classList.contains('search-open');
+}
+
 const sheetStack = []; // open sheets, newest last: only the top one answers Escape and keeps Tab inside it
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"])';
 
@@ -78,20 +86,21 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   const opener = document.activeElement;
   // If a redraw replaces the opener while the sheet is open, its stand-in (same data-fk) gets the focus back.
   const fk = opener && opener.closest && opener.closest('[data-fk]') ? opener.closest('[data-fk]').dataset.fk : null;
-  const app = document.getElementById('app');
   const back = h('div', { class: 'sheet-back' });
   let closed = false;
   const close = () => {
     if (closed) return; closed = true;
     back.remove(); document.removeEventListener('keydown', keys);
     const at = sheetStack.indexOf(back); if (at >= 0) sheetStack.splice(at, 1);
-    if (--openSheets === 0 && app) app.inert = false;
+    settleApp(); // the page comes back only when nothing else is over it: not under a walkthrough, and not behind the lock
     if (opener && opener.isConnected) opener.focus();
     else if (fk) { const twin = document.querySelector(`[data-fk="${CSS.escape(fk)}"]`); if (twin) twin.focus({ preventScroll: true }); }
     onClose && onClose();
   };
   const keys = e => {
-    if (sheetStack[sheetStack.length - 1] !== back) return; // a sheet opened over this one handles it
+    // A sheet opened over this one handles the key. And a sheet that is out of reach answers no keys at all: under the
+    // lock screen or the offer of a longer PIN, Escape belongs to that screen and must not close what is underneath.
+    if (back.inert || sheetStack[sheetStack.length - 1] !== back) return;
     if (e.key === 'Escape') return close();
     if (e.key !== 'Tab') return;
     const items = [...box.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
@@ -108,8 +117,7 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   document.addEventListener('keydown', keys);
   document.body.append(back);
   sheetStack.push(back);
-  openSheets++;
-  if (app) app.inert = true;
+  settleApp();
   return { el: box, close };
 }
 
