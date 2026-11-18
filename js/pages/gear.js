@@ -1,6 +1,6 @@
 import { h, groupBy, empty, fmtShort, todayISO, money, parseISO, ymd, daysUntil, sheet, toast, nodes, uid } from '../util.js';
 import { exportAssetRegister } from '../backup.js';
-import { db, upsert, remove, gearBookings, endOf, qtyOf, usedQty, totalValue, byId } from '../store.js';
+import { db, upsert, remove, gearBookings, endOf, qtyOf, usedQty, totalValue, byId, touch } from '../store.js';
 import { openForm } from '../form.js';
 
 export const CATEGORIES = ['Camera', 'Lens', 'Lighting', 'Audio', 'Support', 'Grip', 'Drone', 'Monitoring', 'Power', 'Media', 'Accessories', 'Other'];
@@ -68,6 +68,16 @@ function kitsView(sym) {
       : empty('No kits yet. Build one for each kind of job you take on.', h('button', { class: 'btn primary', onclick: () => editKit() }, 'Create a kit')));
 }
 
+// Sharing the list with a workmate, and adding one a workmate shared: both load on first use (js/share-out.js, js/share-add.js).
+const shareList = () => import('../share-out.js').then(m => m.openGearShare()).catch(e => toast('Could not open sharing: ' + (e.message || e)));
+const addFromLink = () => import('../share-add.js').then(m => m.openAddFromLink()).catch(e => toast('Could not open that: ' + (e.message || e)));
+// Opens the Items list with nothing filtered away, on the items given: where equipment that was just added lands.
+export async function showItems(ids = []) {
+  Object.assign(S, { q: '', cat: '', loc: '', view: 'items' });
+  await window.logiGo('gear'); touch();
+  setTimeout(() => { const cards = ids.map(id => document.querySelector(`.gear-card[data-id="${CSS.escape(id)}"]`)).filter(Boolean); cards.forEach(c => c.classList.add('just-added')); if (cards[0]) cards[0].scrollIntoView({ block: 'center' }); }, 60);
+}
+
 export const gear = {
   id: 'gear', label: 'Equipment', icon: '🎥',
   render(root) {
@@ -84,7 +94,9 @@ export const gear = {
 
       root.replaceChildren(h('div', null,
         h('div', { class: 'page-head' }, h('h1', null, 'Equipment'), h('button', { class: 'btn primary', onclick: () => (S.view === 'kits' ? editKit() : edit()) }, S.view === 'kits' ? '+ New kit' : '+ Add')),
-        h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => exportAssetRegister() }, '🧾 Asset register (CSV)')),
+        h('div', { class: 'subactions' }, h('button', { class: 'btn ghost small', onclick: () => exportAssetRegister() }, '🧾 Asset register (CSV)'),
+          db.gear.length > 0 && h('button', { class: 'btn ghost small', onclick: shareList, title: 'Share the list, a kit or chosen items with a workmate, by link or QR code' }, '📤 Share…'),
+          h('button', { class: 'btn ghost small', onclick: addFromLink, title: 'Add an equipment list someone shared with you from Vdex' }, '🔗 Add from a link')),
         h('div', { class: 'seg', role: 'tablist' },
           h('button', { class: S.view === 'items' ? 'on' : '', role: 'tab', 'aria-selected': S.view === 'items', onclick: () => { S.view = 'items'; draw(); } }, `Items (${db.gear.reduce((s, g) => s + qtyOf(g), 0)})`),
           h('button', { class: S.view === 'kits' ? 'on' : '', role: 'tab', 'aria-selected': S.view === 'kits', onclick: () => { S.view = 'kits'; draw(); } }, `Kits (${db.kits.length})`)),
@@ -169,7 +181,7 @@ function card(g, today, sym) {
   const all = gearBookings(g.id);
   const ahead = all.filter(b => endOf(b) >= today);
   const past = all.length - ahead.length;
-  return h('div', { class: 'card gear-card' },
+  return h('div', { class: 'card gear-card', 'data-id': g.id },
     h('div', { class: 'card-row' },
       h('div', { class: 'grow' }, h('strong', null, g.name), h('div', { class: 'muted small' }, [qtyOf(g) > 1 && `${qtyOf(g)} owned`, g.serial && 'S/N ' + g.serial, g.value !== '' && g.value != null && money(g.value, sym) + (qtyOf(g) > 1 ? ' each' : '')].filter(Boolean).join(' · ')),
         h('button', { class: 'chip loc-chip' + (g.location ? '' : ' empty'), type: 'button', 'aria-label': `Where ${g.name} is`, title: 'Change where it is', onclick: () => moveItem(g) }, g.location ? '📍 ' + g.location : '📍 Where is it?')),

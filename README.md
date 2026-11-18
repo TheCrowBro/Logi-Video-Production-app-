@@ -32,10 +32,10 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 |---|---|
 | 📅 **Bookings** | Your calendar of shoots. Tap a day, then a shoot, to see everything about it. |
 | 👥 **Crew** | The people you work with and how to reach them. |
-| 🎥 **Equipment** | Everything you own, with serial numbers and where each item is. Make kits for the shoots you do often. |
+| 🎥 **Equipment** | Everything you own, with serial numbers and where each item is. Make kits for the shoots you do often, and share the list or a kit with a workmate. |
 | 📍 **Venues** | The places you film: rules, parking, a map. |
 | 🛡 **Insurance** | Your policies and when they run out. |
-| 🪪 **Me** | Your own details, with a QR code that hands your contact card to anyone who scans it. |
+| 🪪 **Me** | Your own details, with a QR code that hands your contact card to anyone who scans it: they can save it to their phone, or add you to their own Vdex. |
 | ☀️ **Field** | Sunrise and sunset, a white balance reader, a noise meter, a range finder. |
 | 🎬 **TC Notes** | Shoot notes that are stamped with the camera's timecode. |
 | ⚙️ **Settings** | Everything else, including your templates, backups and the lock. |
@@ -44,7 +44,7 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 
 1. **Bookings → + New.** Type the job, the client, the date and the address. Tick the crew and the kit you're taking.
 2. **On the day,** open the booking: its **Hours** box has **Start work**. Tap it when you begin and **Stop work** when you finish, and **Break** for lunch. While the clock runs, a strip under the Rolodex shows it on every page.
-3. **Call sheet.** Open the booking and tap **Call sheet**. It's already filled in from the booking. Tap **Edit sheet** to add the schedule, then **Email crew** or **Print**. Or tap **👥 Share with crew** to send your cast and crew a link to the schedule, location and shot list, with no prices or budgets in it.
+3. **Call sheet.** Open the booking and tap **Call sheet**. It's already filled in from the booking. Tap **Edit sheet** to add the schedule, then **Email crew** or **Print**. Or tap **👥 Share with crew** to send your cast and crew a link to the schedule, location and shot list, with no prices or budgets in it. Crew who use Vdex can add the shoot to their own Bookings from that link.
 4. **Plan the shoot scene by scene** on the booking's **🎬 Stripboard & shot list**: pick the script and every scene becomes a colour-coded strip (white interior day, yellow exterior day, blue interior night, green exterior night) with its cast and page count. Drag the strips into shooting days; each day adds up its pages.
 5. **Plan the costs** in the booking's **Budget**: pick a category for each line (crew, rentals, travel, locations…) and see what's left for you after the quote. Only you see it.
 6. **Afterwards,** open the booking's **Money** block to make the quote or the invoice. Vdex suggests the lines from the shoot, or tick them from your **price list**, which starts from typical freelance rates where you work. Tap **Link for the client** to send a link that opens the invoice with Pay buttons, then **Record a payment** when the money arrives.

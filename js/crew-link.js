@@ -31,6 +31,7 @@ export function crewSnapshot(b, inc = choices()) {
     type: (TYPES.find(t => t[0] === baseType(b.type)) || [, ''])[1], // the built-in type, never the name of the producer's own template
     date: b.date, endDate: endOf(b) > b.date ? endOf(b) : '', start: str(b.start), end: str(b.end),
     producer: [[d.p.name, d.p.business].filter(Boolean).join(' · '), d.p.phone, d.p.email].filter(Boolean).map(str).join(' · '),
+    by: { name: str(d.p.name), business: str(d.p.business), phone: str(d.p.phone), email: str(d.p.email) }, // the same details, apart: someone who adds the shoot to their own Vdex gets "Shared by" and the producer as a contact
     call: { general: str(d.generalCall), lunch: str(cs.lunch), wrap: str(d.wrap), breaks: str(d.breaks), dress: str(cs.dress), weather: str(cs.weather), emergency: str(cs.emergency) },
     location: { venue: str(v && v.name), address: str(d.address), access: str(v && v.access), parking: str(v && v.parking), power: str(v && v.power), hospital: str(v && v.hospital), rules: inc.rules ? str(v && v.rules) : '' },
     schedule: d.schedule.map(r => ({ date: str(r.date), time: str(r.time), item: str(r.item) })),
@@ -86,7 +87,7 @@ export function openCrewShare(b) {
   const toggles = h('div', { class: 'crew-parts' }, PARTS.filter(([k]) => k !== 'scenes' || hasScheduled(byId('bookings', b.id) || b)).map(([k, label]) => h('label', { class: 'check' },
     h('input', { type: 'checkbox', checked: inc[k], onchange: e => { inc[k] = e.target.checked; remember(inc); make(); } }), h('span', null, label))));
   sheet(`Share with crew · ${b.title}`, h('div', { class: 'stack' },
-    h('p', { class: 'small' }, 'A read-only page for your cast and crew: the dates, call times, schedule and location, and whatever you tick below.'),
+    h('p', { class: 'small' }, 'A read-only page for your cast and crew: the dates, call times, schedule and location, and whatever you tick below. Crew who use Vdex can add the shoot to their own Bookings from it.'),
     h('p', { class: 'small muted' }, 'Prices, rates, budgets, quotes, invoices, kit values and your booking notes are never included. Everything is inside the link itself, so there is no server and nothing is stored online. Anyone who has the link can read it, so send it to your cast and crew only. If plans change, send a new link: an old one keeps showing what it had.'),
     toggles,
     area,

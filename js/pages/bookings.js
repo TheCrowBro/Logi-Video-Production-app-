@@ -147,6 +147,8 @@ function month(go) {
     // The tools for every shoot as a grid of even tiles: three to a row on a phone, all five on a wider screen.
     h('div', { class: 'subactions bk-tiles' }, ...[['🗂', 'Pipeline', () => openPipeline(b => go({ view: 'booking', id: b.id, day: b.date }))], ['📋', 'Call sheets', () => openCallSheets(b => go({ view: 'callsheet', id: b.id, day: b.date }))], ['💰', 'Money', () => openMoney(b => go({ view: 'money', id: b.id, kind: b.invoice && !b.quote ? 'invoice' : 'quote', day: b.date }))], ['📊', 'Hours & statistics', () => openHoursSheet()], ['📆', 'Calendar & email', openCalendarSheet]]
       .map(([ico, label, onclick]) => h('button', { class: 'btn ghost small tile', onclick }, h('span', { class: 'tile-ico', 'aria-hidden': 'true' }, ico), h('span', { class: 'tile-label' }, label)))),
+    // A booking someone shared (their "Share with crew" link), pasted or scanned: for the desktop and iPhone apps, which a link cannot open.
+    h('div', { class: 'subactions bk-add-link' }, h('button', { class: 'btn ghost small', title: 'Add a booking someone shared with you from Vdex', onclick: () => import('../share-add.js').then(m => m.openAddFromLink()).catch(e => toast('Could not open that: ' + (e.message || e))) }, '🔗 Add from a link')),
     // The calendar in a frame of its own, apart from the list of what is next.
     h('section', { class: 'cal-panel box-dark', 'aria-label': 'Calendar' },
       h('div', { class: 'cal-nav' },
@@ -252,6 +254,7 @@ function detail(go) {
       h('div', { class: 'card-row' }, h('h2', null, b.title), pill(b.status)),
       h('div', { class: 'muted' }, [dateRange(b, fmtLong), b.start && `${b.start}${b.end ? ' – ' + b.end : ''}`, typeLabel(b.type)].filter(Boolean).join(' · ')),
       ed.length > 0 && h('div', { class: 'small edit-days' }, '✂ Edit days: ' + ed.map(editDayText).join(', ')),
+      b.shared && b.shared.at && h('div', { class: 'muted small shared-by' }, `🔗 ${b.shared.by ? 'Shared by ' + b.shared.by : 'Added from a shared link'} · ${b.shared.updated ? 'updated ' + new Date(b.shared.updated).toLocaleDateString() : 'added ' + new Date(b.shared.at).toLocaleDateString()}`), // js/share-import.js
       (b.stakeholders || []).some(s => s.email) && h('div', { class: 'muted small' }, '✉ ' + b.stakeholders.filter(s => s.email).map(s => s.email).join(', ')),
       b.client && h('div', null, '🏢 ', b.client),
       b.address && h('div', null, '📍 ', h('a', { href: mapsUrl(b.address.replace(/\n/g, ', ')), target: '_blank', rel: 'noopener' }, b.address)),
