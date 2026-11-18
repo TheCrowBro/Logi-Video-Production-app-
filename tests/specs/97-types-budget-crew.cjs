@@ -164,6 +164,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const [ics] = await Promise.all([crew.waitForEvent('download', { timeout: 8000 }), crew.locator('button:has-text("Add to calendar")').click()]);
   const icsText = require('fs').readFileSync(await ics.path(), 'utf8');
   ok('crew can add the shoot to their calendar', /BEGIN:VEVENT/.test(icsText) && icsText.includes('SUMMARY:' + seed.title.replace(/,/g, '\\,')) && /DTSTART:\d{8}T073000/.test(icsText), icsText.split('\r\n').filter(l => /^DT|^SUMMARY/.test(l)).join(' | '));
+  ok('…and the calendar file says when it was made, which every event has to', /^DTSTAMP:\d{8}T\d{6}Z$/m.test(icsText) && icsText.indexOf('DTSTAMP:') > icsText.indexOf('UID:') && icsText.indexOf('DTSTAMP:') < icsText.indexOf('END:VEVENT'), (icsText.match(/^(UID|DTSTAMP|SEQUENCE).*$/gm) || []).join(' | '));
   ok('the page says it is a copy from when it was sent, and who made it', /if plans change, the producer sends a new link/.test(page2) && /cannot confirm who made this link/.test(await crew.locator('.foot').innerText()));
   const packed = o => page.evaluate(x => import('./js/link-pack.js').then(m => m.pack(x)), o);
   const icsOf = async o => { await crew.goto(BASE + 'crew.html#' + await packed(o)); await crew.waitForSelector('.paper h1'); const [d] = await Promise.all([crew.waitForEvent('download', { timeout: 8000 }), crew.locator('button:has-text("Add to calendar")').click()]); return require('fs').readFileSync(await d.path(), 'utf8'); };
@@ -187,6 +188,13 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('with no name in the profile, the crew page never claims the info is from Vdex', anon === '', JSON.stringify(anon));
   const semi = await icsOf({ kind: 'crew', ref: 'r3', title: 'Day 2; pick-ups', date: '2026-11-12', made: 1, call: { general: '09:00' }, location: { address: '12 Dock Rd; Gate B' } });
   ok('semicolons are escaped in the calendar file', /^SUMMARY:Day 2\\; pick-ups$/m.test(semi) && /^LOCATION:12 Dock Rd\\; Gate B$/m.test(semi));
+  // text from a link where an address or a category belongs
+  await crew.goto(BASE + 'crew.html#' + await packed({ kind: 'crew', ref: 'r4', title: 'Odd link', date: '2026-11-12', made: 1, call: {}, location: {}, kit: [{ name: 'Tripod', cat: 'constructor', qty: 1 }, { name: 'Slider', cat: '__proto__', qty: 2 }, { name: 'Monitor', cat: 'Monitoring', qty: 1 }],
+    crew: [{ name: 'Anna Lee', role: 'Gaffer', email: 'anna@studio.example?bcc=someone@elsewhere.example&subject=Hello&body=Wire%20the%20deposit' }, { name: 'Sam Stone', role: 'Sound', email: 'sam@studio.example' }], contacts: [{ name: 'Carl Client', email: 'carl@client.example,other@elsewhere.example' }] }));
+  await crew.waitForSelector('.paper h1', { timeout: 8000 }).catch(() => {});
+  const odd = await crew.evaluate(() => ({ drawn: !!document.querySelector('.paper'), text: (document.querySelector('.paper') || document.body).innerText, mailto: [...document.querySelectorAll('a[href^="mailto:"]')].map(a => a.getAttribute('href')) }));
+  ok('an equipment category that is a word such as “constructor” is just a heading: the page is drawn', odd.drawn && /constructor\s+Tripod/.test(odd.text) && /__proto__\s+Slider × 2/.test(odd.text) && /Monitoring\s+Monitor/.test(odd.text), odd.text.replace(/\s+/g, ' ').slice(0, 200));
+  ok('only a plain address becomes an email link; one with a subject or a second recipient tacked on is shown as text', JSON.stringify(odd.mailto) === JSON.stringify(['mailto:sam@studio.example']) && odd.text.includes('anna@studio.example?bcc=someone@elsewhere.example') && odd.text.includes('carl@client.example,other@elsewhere.example'), JSON.stringify(odd.mailto));
   await crew.goto(BASE + 'crew.html'); await sleep(600);
   ok('a link with nothing after it says so in plain words', /no shoot info in it/.test(await crew.locator('body').innerText()));
   await crew.goto(BASE + 'crew.html#1.garbage'); await sleep(600);

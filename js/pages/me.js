@@ -3,14 +3,19 @@ import { db } from '../store.js';
 
 import { loadQR } from '../qr.js';
 import * as native from '../native.js';
-import { vcard, QR_MAX } from '../share-data.js';
+import { vcard, QR_MAX, qrCaution } from '../share-data.js';
 import { contactLink, openContactShare } from '../share-out.js';
 
 // The QR code hands over one of three things. The card (the usual one) is a link to a small page with your details,
 // which anyone can read, save to their phone's contacts, or add to their own Vdex; it is all inside the link, so no
 // server holds it. "Phone contacts" is the plain vCard a phone's camera adds to its address book with no page between.
-const S = { mode: 'card' };
+// The card's page has to be fetched by the phone that scans it, so it needs a connection there; the vCard needs none.
+// The code last chosen is remembered on this device, so someone who works where there is no signal sets it once.
 const MODES = [['card', 'Contact card'], ['vcard', 'Phone contacts'], ['site', 'Website']];
+const KEY = 'logi-me-code';
+const chosen = () => { let m = ''; try { m = localStorage.getItem(KEY) || ''; } catch { /* the usual one */ } return MODES.some(([k]) => k === m) ? m : 'card'; };
+const S = { mode: chosen() };
+const choose = mode => { S.mode = mode; try { localStorage.setItem(KEY, mode); } catch { /* kept until Vdex is closed */ } };
 
 // The details are changed in one place only: Settings → General → Profile.
 const edit = () => import('./settings.js').then(m => m.openSettingsSection('Profile'));
@@ -26,13 +31,14 @@ export const me = {
 
     async function paintQR() {
       const mode = S.mode;
-      caption.textContent = mode === 'site' ? site || 'Add your website first' : mode === 'vcard' ? 'Scan to save my details straight into a phone’s contacts' : 'Scan to open my contact card: save it to a phone, or add it to Vdex';
+      caption.textContent = mode === 'site' ? site || 'Add your website first' : mode === 'vcard' ? 'Scan to save my details straight into a phone’s contacts. No connection needed.' : 'Scan to open my contact card: save it to a phone, or add it to Vdex. The other phone needs a connection; Phone contacts works without one.';
       caption.classList.toggle('words', mode !== 'site'); // a sentence wraps between words; a web address may break anywhere
       if ((mode === 'site' && !site) || (mode !== 'site' && !hasData)) { qrBox.textContent = 'Add your details to generate a QR code.'; return; }
       try {
         const text = mode === 'site' ? site : mode === 'vcard' ? vcard(p) : await contactLink(p);
         if (mode !== S.mode || !qrBox.isConnected) return; // another code was asked for meanwhile
         if (mode === 'card' && text.length > QR_MAX) throw new Error('too long');
+        if (mode === 'card' && qrCaution(text)) caption.textContent += ' ' + qrCaution(text);
         const qr = (await loadQR())(0, 'M');
         qr.addData(text); qr.make();
         qrBox.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
@@ -57,7 +63,7 @@ export const me = {
           h('div', { class: 'avatar big', 'aria-hidden': 'true' }, (p.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()),
           h('div', null, h('h2', null, p.name || 'Add your name'), h('div', { class: 'muted' }, [p.title, p.business].filter(Boolean).join(' · ') || (p.name ? '' : 'Settings → General → Profile')), p.location && h('div', { class: 'muted small' }, '📍 ' + p.location))),
         h('div', { class: 'seg me-modes', role: 'tablist', 'aria-label': 'What the QR code hands over' },
-          MODES.map(([k, label]) => h('button', { class: S.mode === k ? 'on' : '', role: 'tab', 'aria-selected': S.mode === k, onclick: () => { S.mode = k; me.render(clear(root)); root.querySelector('.me-modes button.on')?.focus(); } }, label))),
+          MODES.map(([k, label]) => h('button', { class: S.mode === k ? 'on' : '', role: 'tab', 'aria-selected': S.mode === k, onclick: () => { choose(k); me.render(clear(root)); root.querySelector('.me-modes button.on')?.focus(); } }, label))),
         qrBox, caption,
         h('div', { class: 'actions center' },
           h('button', { class: 'btn primary', onclick: share, disabled: !hasData }, 'Share contact (.vcf)'),

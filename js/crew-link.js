@@ -8,6 +8,7 @@ import { TYPES, baseType } from './workflow.js';
 import { pack } from './link-pack.js';
 import { SITE } from './version.js';
 import { boardPlan, hasScheduled, ieOf, dnOf, stripClass, fmtEighths } from './board.js';
+import { QR_MAX, QR_LARGE, qrCaution } from './share-data.js';
 
 // What the producer can leave out. Client contacts are off unless chosen: they are the client's details, not the crew's.
 export const PARTS = [
@@ -56,7 +57,8 @@ export function openCrewShare(b) {
   const mail = h('a', { class: 'btn ghost' }, '✉ Email the crew');
   const preview = h('a', { class: 'btn ghost small', target: '_blank', rel: 'noopener' }, 'Open preview');
   const qrBox = h('div', { class: 'share-qr' });
-  const qrNote = h('p', { class: 'small muted', style: 'text-align:center' }, 'Crew can scan this to open it on their phone');
+  const qrNote = h('p', { class: 'small muted share-qr-note', style: 'text-align:center' });
+  const scanIt = 'Crew can scan this to open it on their phone'; // a long link's code is drawn larger, and says when Vdex's own scanner may not read it
   let url = '', seq = 0;
   // While a new link is being made, nothing offers the old one: after unticking a part, the old link still has it.
   const clear = () => { url = ''; area.value = ''; preview.removeAttribute('href'); mail.removeAttribute('href'); qrBox.replaceChildren(); qrNote.hidden = true; acts.forEach(x => { x.disabled = true; }); };
@@ -74,7 +76,8 @@ export function openCrewShare(b) {
     const body = `Hi all,\n\nHere is everything for ${b.title} on ${fmtShort(b.date)}${endOf(b) > b.date ? ' to ' + fmtShort(endOf(b)) : ''}: ${list}.\n\n${long ? '[Paste the link here]' : url}\n\nIf plans change I'll send a new link.\n\nThanks${sign ? ',\n' + sign : ''}`;
     mail.href = `mailto:${emails.join(',')}?` + new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20');
     mail.dataset.long = long ? '1' : '';
-    if (url.length > 2800) { // too long for a QR code: the link still works by copy, share or email
+    qrBox.classList.toggle('large', url.length > QR_LARGE); qrNote.textContent = [scanIt, qrCaution(url)].filter(Boolean).join('. ');
+    if (url.length > QR_MAX) { // too long for a QR code: the link still works by copy, share or email
       const cur = byId('bookings', b.id) || b, big = [inc.scenes && hasScheduled(cur) && 'the scenes', inc.shots && (cur.shots || []).length && 'the shot list', inc.kit && (cur.gear || []).length && 'the equipment list'].filter(Boolean);
       qrBox.replaceChildren(h('p', { class: 'small muted', style: 'text-align:center' }, `This link is too long for a QR code.${big.length ? ` Untick ${big.join(' or ')} to get one, or send the link.` : ' Send the link instead.'}`)); return;
     }

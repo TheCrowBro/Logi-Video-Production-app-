@@ -13,26 +13,38 @@ export async function qrSvg(text, { cellSize = 4, level = 'L' } = {}) {
 }
 
 // Camera scanner: calls onCode(text) once a QR is read. Returns { el, stop }.
-export function scanner(onCode, { hint = 'Point the camera at the code' } = {}) {
+//   hint     the words under the picture while it looks
+//   instead  what to do when the camera cannot be used, in the words of the sheet it sits in
+// It looks at the middle square of the picture, by turns small and at full size. Small (SMALL pixels a side) is quick
+// and takes a short code even from a shaking hand; at full size, up to LARGE pixels a side, the squares of a long code
+// (a shared link of a thousand characters and more) are still more than a pixel each. The camera is asked for a
+// 1080-line picture for the same reason. One look follows the other only when it is done, so a slow phone is never
+// handed a second picture while it is still reading the first.
+export const SCAN = { SMALL: 480, LARGE: 960, PART: 0.9, EVERY: 160 };
+export function scanner(onCode, { hint = 'Point the camera at the code', instead = 'Paste the code instead.' } = {}) {
   const video = h('video', { autoplay: true, playsInline: true, muted: true, class: 'cam' });
   const status = h('div', { class: 'muted small scan-status' }, hint);
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
-  let stream = null, timer = null, done = false;
-  const stop = () => { done = true; clearInterval(timer); stream && stream.getTracks().forEach(t => t.stop()); stream = null; };
+  let stream = null, timer = null, done = false, turn = 0;
+  const stop = () => { done = true; clearTimeout(timer); stream && stream.getTracks().forEach(t => t.stop()); stream = null; };
   (async () => {
     try {
-      const [jsQR] = await Promise.all([loadJsQR(), navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } }, audio: false }).then(s => { stream = s; video.srcObject = s; })]);
-      timer = setInterval(() => {
-        if (done || !video.videoWidth) return;
-        const s = Math.min(video.videoWidth, video.videoHeight) * 0.9; // centre square, downscaled for speed
-        const w = 480; canvas.width = canvas.height = w;
-        ctx.drawImage(video, (video.videoWidth - s) / 2, (video.videoHeight - s) / 2, s, s, 0, 0, w, w);
-        const img = ctx.getImageData(0, 0, w, w);
-        const r = jsQR(img.data, w, w, { inversionAttempts: 'dontInvert' });
-        if (r && r.data) { stop(); status.textContent = 'Code read'; onCode(r.data); }
-      }, 160);
-    } catch (e) { status.textContent = 'Camera unavailable: ' + (e.message || e.name) + '. Paste the code instead.'; }
+      const [jsQR] = await Promise.all([loadJsQR(), navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false }).then(s => { stream = s; video.srcObject = s; })]);
+      if (done) { stream && stream.getTracks().forEach(t => t.stop()); return; } // stopped while the camera was still opening
+      const look = () => {
+        if (done) return;
+        if (video.videoWidth) {
+          const s = Math.min(video.videoWidth, video.videoHeight) * SCAN.PART; // the middle square
+          const w = Math.round(turn++ % 2 ? Math.min(SCAN.LARGE, s) : Math.min(SCAN.SMALL, s)); canvas.width = canvas.height = w;
+          ctx.drawImage(video, (video.videoWidth - s) / 2, (video.videoHeight - s) / 2, s, s, 0, 0, w, w);
+          const r = jsQR(ctx.getImageData(0, 0, w, w).data, w, w, { inversionAttempts: 'dontInvert' });
+          if (r && r.data) { stop(); status.textContent = 'Code read'; onCode(r.data); return; }
+        }
+        timer = setTimeout(look, SCAN.EVERY);
+      };
+      look();
+    } catch (e) { status.textContent = 'Camera unavailable: ' + (e.message || e.name) + '. ' + instead; }
   })();
   const el = h('div', { class: 'scan' }, h('div', { class: 'cam-wrap scan-wrap' }, video, h('div', { class: 'scan-reticle', 'aria-hidden': 'true' })), status);
   return { el, stop };
