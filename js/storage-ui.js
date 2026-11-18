@@ -1,4 +1,4 @@
-// The storage panel (the cloud link and its state) and the backup actions, shared by the menu's Storage, sync and backups sheet and Settings → Storage, sync & backups.
+// The storage panel (the cloud link and its state) and the backup actions, shared by the menu's Storage, sync & backups sheet and Settings → Storage, sync & backups.
 import { h, toast } from './util.js';
 import * as store from './store.js';
 import * as providers from './providers.js';

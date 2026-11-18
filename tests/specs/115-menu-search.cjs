@@ -1,7 +1,8 @@
 // The top bar: its menu, and the search across everything. The bar is one slim row: the brand, the search control, the
 // lock (only when a PIN is set) and the hamburger. Everything else the bar used to hold is a row of the panel that
 // slides in from the side: the page's tutorial, Install (only while Vdex is not installed), text size and theme, and
-// storage, with the sync status in words at its top and the version at its foot. The hamburger carries a dot about the
+// storage, with the sync status in words at its top (plain words when all is well, a button to the storage sheet when
+// it needs the person) and the version at its foot. The hamburger carries a dot about the
 // cloud storage: none when all is well, amber while saving or when it needs the person, red on an error. The panel is
 // a dialog: the keyboard stays inside it, Escape, the ✕ and the backdrop close it, the focus goes back to the
 // hamburger, and a row closes it before doing its work. It is never left open under a sheet, a walkthrough or the lock.
@@ -28,12 +29,13 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const browser = await chromium.launch();
   const errors = [];
   // A page of its own: a phone unless told otherwise, the terms accepted and the first-run tour done.
-  const open = async ({ w = 360, h = 740, installed = false, terms = true, options = {} } = {}) => {
+  const open = async ({ w = 360, h = 740, installed = false, terms = true, options = {}, init = null } = {}) => {
     const ctx = await browser.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, ...options });
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
     await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
     if (terms) await ctx.addInitScript(acceptTerms());
     if (installed) await ctx.addInitScript(() => { Object.defineProperty(Navigator.prototype, 'standalone', { configurable: true, get: () => true }); }); // what an installed iPhone web app reports
+    if (init) await ctx.addInitScript(init);
     const page = await ctx.newPage();
     page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
     await page.goto(URL);
@@ -62,7 +64,9 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 
   await page.locator('#menuBtn').click(); await page.locator('#menu').waitFor({ state: 'visible' }); await sleep(350);
   const r0 = await rows(page);
-  ok('in a browser the menu lists the tutorial, Install, text size and theme, and storage, in that order', JSON.stringify(r0) === JSON.stringify(['Tutorial for this page', 'Install Vdex', 'Text size and theme', 'Storage, sync and backups']), r0.join(' | '));
+  ok('in a browser the menu lists the tutorial, Install, text size and theme, and storage, in that order', JSON.stringify(r0) === JSON.stringify(['Tutorial for this page', 'Install Vdex', 'Text size and theme', 'Storage, sync & backups']), r0.join(' | '));
+  const plain0 = await page.evaluate(() => { const s = document.getElementById('menuStatus'), cs = getComputedStyle(s); return { tag: s.tagName, border: cs.borderTopColor, bg: cs.backgroundColor, cursor: cs.cursor, h: Math.round(s.getBoundingClientRect().height) }; });
+  ok('with nothing to do about the storage, the status at the top is plain words: not a button, and with no box drawn round it like the rows below', plain0.tag === 'DIV' && /rgba\(0, 0, 0, 0\)|transparent/.test(plain0.border) && /rgba\(0, 0, 0, 0\)|transparent/.test(plain0.bg) && plain0.cursor !== 'pointer', JSON.stringify(plain0));
   const top0 = await page.evaluate(() => ({ title: document.getElementById('menuStatusTitle').textContent, text: document.getElementById('menuStatusText').textContent, row: document.getElementById('cloudLabel').textContent, version: document.getElementById('menuVersion').textContent, statusFirst: document.getElementById('menuStatus').getBoundingClientRect().bottom <= document.getElementById('helpBtn').getBoundingClientRect().top, versionLast: document.getElementById('menuVersion').getBoundingClientRect().top >= document.getElementById('cloudBtn').getBoundingClientRect().bottom }));
   ok('its top says in words that everything is kept on this device, and its foot gives the version', top0.title === 'Kept on this device only' && /No cloud storage is linked/.test(top0.text) && top0.row === 'Local' && top0.version === 'Vdex ' + VERSION && top0.statusFirst && top0.versionLast, JSON.stringify(top0));
   const s1 = await menuState(page);
@@ -72,6 +76,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('its rows are large (at least 60 px tall) and the ✕ is a 44 px target, all inside the panel', geo.hit.length === 5 && geo.hit.every(([id, w, h, inside]) => inside && w >= 44 && h >= (id === 'menuClose' ? 44 : 60)), JSON.stringify(geo.hit));
   ok('it slides in, and sits under sheets (100), walkthroughs (150) and the lock (300)', geo.anim === 'menuIn' && geo.z < 100, `${geo.anim}, z ${geo.z}`);
   ok('the menu shows no price, Buy button or link', (await page.locator('#menu a').count()) === 0 && !/\$|£|€|buy/i.test(await page.locator('#menu').innerText()));
+  await page.locator('#menuStatus').click(); await sleep(200);
+  ok('a tap on the plain status does nothing: the menu stays open and no sheet opens', (await menuState(page)).open && (await page.locator('.sheet').count()) === 0);
   // The "new version" and licence bars float above the page (and above sheets): under the open menu they go behind it.
   await page.evaluate(() => { const b = document.createElement('div'); b.className = 'update-bar'; b.id = 'testBar'; b.textContent = 'A new version of Vdex is ready.'; document.body.append(b); });
   const over = () => page.evaluate(() => { const r = document.getElementById('testBar').getBoundingClientRect(), el = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return el.closest('#menuBack') ? 'menu' : el.id; });
@@ -107,13 +113,15 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.keyboard.press('Enter'); await page.waitForSelector('.sheet');
   const s5 = await menuState(page);
   ok('Enter on a row closes the menu and then opens what the row is for', !s5.open && s5.expanded === 'false' && (await page.locator('.sheet[aria-label="Display & accessibility"]').count()) === 1, JSON.stringify(s5));
+  const named = await page.evaluate(() => ({ sheet: document.querySelector('.sheet').getAttribute('aria-label'), row: document.querySelector('#displayBtn .menu-sub').textContent }));
+  ok('the row names the sheet it opens the way the sheet names itself (Display & accessibility)', named.row === named.sheet, JSON.stringify(named));
   await page.keyboard.press('Escape'); await sleep(200);
   const s6 = await menuState(page);
   ok('closing that sheet puts the focus back on the hamburger, and the page is usable again', closed(s6) && s6.focus === 'menuBtn' && (await page.locator('.sheet').count()) === 0, JSON.stringify(s6));
 
   /* ------------------------------------ each row ------------------------------------ */
   await menuClick(page, '#cloudBtn'); await page.waitForSelector('.sheet .storage');
-  ok('Storage, sync and backups closes the menu and opens the storage sheet with the backups', !(await menuState(page)).open && (await page.locator('.sheet[aria-label="Storage, sync & backups"]').count()) === 1 && (await page.locator('.sheet').getByRole('button', { name: 'Export backup' }).count()) === 1);
+  ok('Storage, sync & backups closes the menu and opens the storage sheet with the backups, which carries the same name as the row', !(await menuState(page)).open && (await page.locator('.sheet[aria-label="Storage, sync & backups"]').count()) === 1 && (await page.locator('.sheet').getByRole('button', { name: 'Export backup' }).count()) === 1 && (await page.evaluate(() => document.querySelector('#cloudBtn .menu-name').textContent === document.querySelector('.sheet').getAttribute('aria-label'))));
   await page.keyboard.press('Escape'); await sleep(200);
   await menuClick(page, '#installBtn'); await page.waitForSelector('.sheet');
   ok('Install closes the menu and, with no install prompt from the browser, shows how to install', !(await menuState(page)).open && (await page.locator('.sheet[aria-label="Install Vdex"]').count()) === 1);
@@ -145,14 +153,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await page.waitForSelector('.tour-card h2');
   const seen = [];
   for (let i = 0; i < 10; i++) {
-    await sleep(700);
+    await sleep(1100); // a step that shows the search with results takes a moment longer, and the spotlight glides to its place
     if (!(await page.locator('.tour-card h2').count())) break; // it ended early: the checks below say so
-    const st = await page.evaluate(() => { const back = document.getElementById('menuBack'), sb = document.getElementById('searchBack'), sp = document.getElementById('search'), spot = document.querySelector('.tour-spot'), r = spot.getBoundingClientRect(), m = document.getElementById('menu').getBoundingClientRect(), q = sp ? sp.getBoundingClientRect() : null; return { title: document.querySelector('.tour-card h2').textContent, step: document.querySelector('.tour-step').textContent, button: document.querySelector('.tour-card .btn.primary').textContent, menu: !back.hidden, look: back.inert && back.classList.contains('shown'), onMenu: !spot.classList.contains('center') && r.left >= m.left - 10 && r.right <= m.right + 10 && r.width > 100, search: !!sb && !sb.hidden, searchLook: !!sb && sb.inert && sb.classList.contains('shown'), onSearch: !!q && !spot.classList.contains('center') && r.left >= q.left - 10 && r.right <= q.right + 10 && r.width > 100, spotOn: (() => { const near = el => { if (!el || el.offsetParent === null) return false; const b = el.getBoundingClientRect(); return Math.abs(b.left - 8 - r.left) < 3 && Math.abs(b.top - 8 - r.top) < 3; }; return near(document.getElementById('searchInput')) ? 'searchInput' : near(document.querySelector('#search .search-chips')) ? 'chips' : ''; })(), cardClear: (() => { const c = document.querySelector('.tour-card').getBoundingClientRect(); return c.top >= r.bottom - 1 || c.bottom <= r.top + 1; })(), onButton: !spot.classList.contains('center') && Math.abs(r.left + r.width / 2 - (document.getElementById('searchBtn').getBoundingClientRect().left + document.getElementById('searchBtn').getBoundingClientRect().width / 2)) < 4, focusInCard: !!document.activeElement.closest('.tour-card') }; });
+    const st = await page.evaluate(() => { const back = document.getElementById('menuBack'), sb = document.getElementById('searchBack'), sp = document.getElementById('search'), spot = document.querySelector('.tour-spot'), r = spot.getBoundingClientRect(), m = document.getElementById('menu').getBoundingClientRect(), q = sp ? sp.getBoundingClientRect() : null; return { title: document.querySelector('.tour-card h2').textContent, step: document.querySelector('.tour-step').textContent, button: document.querySelector('.tour-card .btn.primary').textContent, menu: !back.hidden, look: back.inert && back.classList.contains('shown'), onMenu: !spot.classList.contains('center') && r.left >= m.left - 10 && r.right <= m.right + 10 && r.width > 100, search: !!sb && !sb.hidden, searchLook: !!sb && sb.inert && sb.classList.contains('shown'), text: document.querySelector('.tour-card p').textContent, q: (document.getElementById('searchInput') || { value: '' }).value, options: document.querySelectorAll('#searchList [role=option]').length, marks: document.querySelectorAll('#searchList mark').length, counts: [...document.querySelectorAll('#search .chip-n')].map(c => c.textContent).join(''), onSearch: !!q && !spot.classList.contains('center') && r.left >= q.left - 10 && r.right <= q.right + 10 && r.width > 100, spotOn: (() => { const near = el => { if (!el || el.offsetParent === null) return false; const b = el.getBoundingClientRect(); return Math.abs(b.left - 8 - r.left) < 3 && Math.abs(b.top - 8 - r.top) < 3; }; return near(document.getElementById('searchInput')) ? 'searchInput' : near(document.querySelector('#search .search-chips')) ? 'chips' : ''; })(), cardClear: (() => { const c = document.querySelector('.tour-card').getBoundingClientRect(); return c.top >= r.bottom - 1 || c.bottom <= r.top + 1; })(), onButton: !spot.classList.contains('center') && Math.abs(r.left + r.width / 2 - (document.getElementById('searchBtn').getBoundingClientRect().left + document.getElementById('searchBtn').getBoundingClientRect().width / 2)) < 4, focusInCard: !!document.activeElement.closest('.tour-card') }; });
     seen.push(st);
     if (st.title === 'How syncing is going' && !seen.some(x => x.back)) { // Back from the first menu step: the menu closes again, and the step before it shows the search again
-      await page.locator('.tour-card').getByRole('button', { name: 'Back', exact: true }).click(); await sleep(700);
+      await page.locator('.tour-card').getByRole('button', { name: 'Back', exact: true }).click(); await sleep(1100);
       seen.push({ back: true, title: await page.locator('.tour-card h2').innerText(), menu: !(await page.evaluate(() => document.getElementById('menuBack').hidden)), search: !(await page.evaluate(() => (document.getElementById('searchBack') || { hidden: true }).hidden)) });
-      await page.locator('.tour-card .btn.primary').click(); await sleep(700);
+      await page.locator('.tour-card .btn.primary').click(); await sleep(1100);
     }
     if (st.button === 'Done') break;
     await page.locator('.tour-card .btn.primary').click();
@@ -163,6 +171,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const searchSteps = steps.filter(x => x.search);
   ok('its search steps point at the search button, then show the search panel open, to look at and not to use, with the spotlight on its field and then on its chips', steps[2] && steps[2].onButton && !steps[2].search && searchSteps.map(x => x.title).join() === 'What to type,What comes back' && searchSteps.every(x => x.searchLook && x.onSearch && x.focusInCard && x.cardClear) && searchSteps[0].spotOn === 'searchInput' && searchSteps[1].spotOn === 'chips', JSON.stringify(steps.map(x => [x.title, x.search, x.searchLook, x.onSearch, x.onButton, x.spotOn, x.cardClear])));
   ok('going Back to a step outside the menu closes it (and that step shows the search again)', wentBack && wentBack.title === 'What comes back' && wentBack.menu === false && wentBack.search === true, JSON.stringify(wentBack));
+  const typeStep = searchSteps[0] || {}, backStep = searchSteps[1] || {}, word = await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings[0].title.split(/\s+/)[0]));
+  ok('the step about what to type shows the field empty; the step about what comes back shows real results: a word from the first booking looked for, results listed with the word marked, and a count on the chips', typeStep.q === '' && typeStep.options === 0 && backStep.q === word && backStep.options > 0 && backStep.marks > 0 && /[1-9]/.test(backStep.counts) && backStep.text.includes(`looked for “${word}”`), JSON.stringify([word, typeStep.q, typeStep.options, backStep.q, backStep.options, backStep.marks, backStep.counts]));
   await page.screenshot({ path: S + '/menu-tutorial-360.png' });
   if (await page.locator('.tour-card .btn.primary').count()) await page.locator('.tour-card .btn.primary').click();
   await sleep(300);
@@ -174,8 +184,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.keyboard.press('Escape'); await sleep(250);
   ok('Escape on the search step closes the walkthrough and the search together, and the page is usable', onSearchStep.shown && onSearchStep.field === '' && onSearchStep.focusInCard && (await page.locator('.tour').count()) === 0 && (await page.evaluate(() => (document.getElementById('searchBack') || { hidden: false }).hidden && !document.getElementById('app').inert)), JSON.stringify(onSearchStep));
   await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await page.waitForSelector('.tour-card h2');
-  for (let i = 0; i < 6; i++) { await sleep(700); await page.locator('.tour-card .btn.primary').click(); }
-  await sleep(700);
+  for (let i = 0; i < 6; i++) { await sleep(1100); await page.locator('.tour-card .btn.primary').click(); }
+  await sleep(1100);
   const mid = await menuState(page);
   await page.keyboard.press('Escape'); await sleep(250);
   ok('Escape on a menu step closes the walkthrough and the menu together', mid.open && (await page.locator('.tour').count()) === 0 && closed(await menuState(page)), JSON.stringify(mid));
@@ -211,7 +221,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const saving = await setCloud('saving');
   ok('syncing: an amber dot that pulses, and a name that says it is saving', saving.status === 'saving' && saving.dot === 'amber' && saving.shown && saving.amber && saving.pulse === 'pulse' && saving.name === 'Menu. Saving to Google Drive…' && saving.title === saving.name && saving.line === 'Saving to Google Drive…' && saving.row === 'Saving…', JSON.stringify(saving));
   const needs = await setCloud('needs-permission');
-  ok('needs sign-in: a steady amber dot, and the name and the menu say to sign in again and where', needs.status === 'needs-permission' && needs.dot === 'amber' && needs.shown && needs.amber && needs.pulse === 'none' && needs.name === 'Menu. Google Drive needs you to sign in again' && needs.line === 'Google Drive needs you to sign in again' && /Storage, sync and backups.*Sign in again/.test(needs.text) && needs.row === 'Sign in', JSON.stringify(needs));
+  ok('needs sign-in: a steady amber dot, and the name and the menu say to sign in again and where', needs.status === 'needs-permission' && needs.dot === 'amber' && needs.shown && needs.amber && needs.pulse === 'none' && needs.name === 'Menu. Google Drive needs you to sign in again' && needs.line === 'Google Drive needs you to sign in again' && /Storage, sync & backups.*Sign in again/.test(needs.text) && needs.row === 'Sign in', JSON.stringify(needs));
   const error = await setCloud('error');
   ok('error: a red dot, larger and marked with a ! so it is not told by colour alone, and the name and the menu say what went wrong', error.status === 'error' && error.dot === 'red' && error.shown && error.red && error.differ && /!/.test(error.mark) && error.size > needs.size && error.name === 'Menu. Could not sync with Google Drive' && error.line === 'Could not sync with Google Drive' && /Google Drive did not answer · Your changes are safe on this device/.test(error.text) && error.row === 'Sync error' && error.lineState === 'error', JSON.stringify(error));
   const paused = await setCloud('paused');
@@ -221,6 +231,26 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await setCloud('error'); await openMenu(page); await sleep(300);
   await page.screenshot({ path: S + '/menu-error-360.png' });
   ok('with the menu open the status is the first thing in it, readable in full', await page.evaluate(() => { const s = document.getElementById('menuStatus'), m = document.getElementById('menu').getBoundingClientRect(), r = s.getBoundingClientRect(); return r.left >= m.left && r.right <= m.right && s.scrollWidth <= s.clientWidth && r.top < document.getElementById('helpBtn').getBoundingClientRect().top; }));
+  await page.keyboard.press('Escape');
+  // While the storage needs the person, the status is a button to the storage sheet, like the rows under it.
+  await setCloud('needs-permission'); await openMenu(page); await sleep(300);
+  const act = await page.evaluate(() => { const s = document.getElementById('menuStatus'), cs = getComputedStyle(s), row = getComputedStyle(document.getElementById('helpBtn')), r = s.getBoundingClientRect(), m = document.getElementById('menu').getBoundingClientRect(); return { tag: s.tagName, type: s.type, likeRow: cs.borderTopWidth === row.borderTopWidth && cs.borderRadius === row.borderRadius && cs.backgroundColor === row.backgroundColor && cs.cursor === 'pointer', h: Math.round(r.height), inside: r.left >= m.left && r.right <= m.right && s.scrollWidth <= s.clientWidth, arrow: getComputedStyle(s, '::after').content, text: s.innerText, described: document.getElementById('menu').getAttribute('aria-describedby'), focus: document.activeElement.id }; });
+  ok('while the storage needs you to sign in again, the status at the top of the menu is a button that looks like the rows, at least 60 px tall, with an arrow and its words in full', act.tag === 'BUTTON' && act.type === 'button' && act.likeRow && act.h >= 60 && act.inside && /›/.test(act.arrow) && /needs you to sign in again/.test(act.text) && /Tap here to open Storage, sync & backups/.test(act.text) && act.described === 'menuStatus' && act.focus === 'helpBtn', JSON.stringify(act));
+  const viaKeys = [];
+  for (const key of ['ArrowUp', 'ArrowUp', 'Tab', 'Tab']) { await page.keyboard.press(key); viaKeys.push(await focusId(page)); }
+  ok('…and the keyboard reaches it, between the ✕ and the first row', viaKeys.join(' ') === 'menuStatus menuClose menuStatus helpBtn', viaKeys.join(' '));
+  await page.locator('#menuStatus').click(); await page.waitForSelector('.sheet .storage', { timeout: 4000 }).catch(() => {});
+  ok('tapping it closes the menu and opens Storage, sync & backups', !(await menuState(page)).open && (await page.locator('.sheet[aria-label="Storage, sync & backups"]').count()) === 1);
+  await page.keyboard.press('Escape'); await sleep(200);
+  ok('…and closing that sheet leaves the page usable, focus on the hamburger', closed(await menuState(page)) && (await focusId(page)) === 'menuBtn');
+  await openMenu(page); await sleep(250); await page.locator('#menuStatus').focus();
+  // A save going through while the menu is open: the status is a button, then plain words, and the rows stay where they are.
+  const rowAt = () => page.evaluate(() => Math.round(document.getElementById('helpBtn').getBoundingClientRect().top));
+  const during = await page.evaluate(async () => { const s = await import('./js/store.js'); s.cloud.adapter = { id: 'gdrive', label: 'Google Drive', ready: async () => true, read: async () => null, write: () => new Promise(r => { window.__letGo = r; }) }; s.sync(); await new Promise(r => setTimeout(r, 250)); return { tag: document.getElementById('menuStatus').tagName, state: document.getElementById('menuStatus').dataset.state, row: Math.round(document.getElementById('helpBtn').getBoundingClientRect().top) }; });
+  await page.evaluate(() => window.__letGo()); await page.waitForFunction(() => document.getElementById('menuStatus').dataset.state === 'synced', null, { timeout: 5000 }).catch(() => {}); await sleep(100);
+  const settled = await page.evaluate(() => ({ tag: document.getElementById('menuStatus').tagName, focus: document.activeElement.id, title: document.getElementById('menuStatusTitle').textContent, n: document.querySelectorAll('#menuStatus').length }));
+  ok('when all is well again it is plain words once more, and the focus it had goes to the first row', during.tag === 'BUTTON' && during.state === 'saving' && settled.tag === 'DIV' && settled.n === 1 && settled.focus === 'helpBtn' && settled.title === 'Synced with Google Drive', JSON.stringify({ during, settled }));
+  ok('…without the rows moving under a finger as it changes', (await rowAt()) === during.row, `${during.row} → ${await rowAt()}`);
   await page.keyboard.press('Escape'); await setCloud('off');
 
   /* --------------------------- the search control in the bar --------------------------- */
@@ -252,11 +282,31 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('with the PIN removed the lock leaves the bar', await page.locator('#lockBtn').isHidden());
   await ctx.close();
 
+  /* ------------------ the menu's code arriving after something else has opened ------------------ */
+  // The menu's file is fetched on the first tap. On a slow connection a form, or the lock, can be open by the time it
+  // arrives: the menu then stays shut, as the search does, instead of opening underneath and taking the focus.
+  ({ ctx, page } = await open({ options: { serviceWorkers: 'block' } }));
+  await page.evaluate(() => window.logiGo('crew')); await page.waitForSelector('#page .page-head'); await sleep(300);
+  await page.route('**/js/menu.js', async r => { await sleep(1500); await r.continue(); });
+  await page.locator('#menuBtn').click(); // its code is on the way
+  await page.getByRole('button', { name: '+ Add' }).first().click(); await page.waitForSelector('.sheet form');
+  await page.locator('.sheet form input[data-key="name"]').click(); await page.keyboard.type('Ada');
+  await page.waitForFunction(() => performance.getEntriesByType('resource').some(r => /js\/menu\.js/.test(r.name)), null, { timeout: 8000 }).catch(() => {}); await sleep(400);
+  await page.keyboard.type('m');
+  const late = await page.evaluate(() => ({ arrived: performance.getEntriesByType('resource').some(r => /js\/menu\.js/.test(r.name)), menu: !document.getElementById('menuBack').hidden, bodyClass: document.body.classList.contains('menu-open'), expanded: document.getElementById('menuBtn').getAttribute('aria-expanded'), focus: document.activeElement.dataset.key || document.activeElement.id, value: document.querySelector('.sheet form input[data-key="name"]').value }));
+  ok('a menu whose code arrives after a form has opened stays shut: the focus stays in the form’s field and typing carries on there', late.arrived && !late.menu && !late.bodyClass && late.expanded === 'false' && late.focus === 'name' && late.value === 'Adam', JSON.stringify(late));
+  await page.keyboard.press('Escape'); await sleep(250);
+  ok('…Escape closes the form, as usual, and the page is usable', (await page.locator('.sheet').count()) === 0 && closed(await menuState(page)));
+  await page.unroute('**/js/menu.js');
+  await page.locator('#menuBtn').click({ timeout: 4000 }).catch(() => {}); await page.locator('#menu').waitFor({ state: 'visible', timeout: 4000 }).catch(() => {});
+  ok('…and the next tap on the hamburger opens the menu', (await menuState(page)).open);
+  await ctx.close();
+
   /* ---------------------------------- installed: no Install ---------------------------------- */
   ({ ctx, page } = await open({ installed: true }));
   await openMenu(page); await sleep(250);
   const r1 = await rows(page);
-  ok('once installed, Install is not listed', JSON.stringify(r1) === JSON.stringify(['Tutorial for this page', 'Text size and theme', 'Storage, sync and backups']) && (await page.locator('#installBtn').isHidden()), r1.join(' | '));
+  ok('once installed, Install is not listed', JSON.stringify(r1) === JSON.stringify(['Tutorial for this page', 'Text size and theme', 'Storage, sync & backups']) && (await page.locator('#installBtn').isHidden()), r1.join(' | '));
   const k2 = [await focusId(page)];
   for (const key of ['ArrowDown', 'ArrowDown', 'Tab', 'Tab']) { await page.keyboard.press(key); k2.push(await focusId(page)); }
   ok('…and the keyboard skips it', k2.join(' ') === 'helpBtn displayBtn cloudBtn menuClose helpBtn', k2.join(' '));
@@ -272,6 +322,16 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('the panel is 340 px wide against the right edge, the full height', wide.right === 1200 && wide.w === 340 && wide.h === 800 && wide.fits, JSON.stringify(wide));
   ok('with reduced motion asked for, it appears without sliding or fading', wide.anim === 'none' && wide.fade === 'none', JSON.stringify(wide));
   await page.screenshot({ path: S + '/menu-1200.png' });
+  await ctx.close();
+
+  /* ------------------------------ forced colours (Windows high contrast) ------------------------------ */
+  // Forced colours draw every border, a see-through one too, so the plain status would come out boxed in like the rows
+  // under it, which is what it must not look like: there its border takes the colour of the panel behind it.
+  ({ ctx, page } = await open({ options: { forcedColors: 'active' } }));
+  await openMenu(page); await sleep(300);
+  const hc = await page.evaluate(() => { const s = document.getElementById('menuStatus'), col = el => getComputedStyle(el); return { forced: matchMedia('(forced-colors: active)').matches, tag: s.tagName, border: col(s).borderTopColor, panel: col(document.getElementById('menu')).backgroundColor, row: col(document.getElementById('helpBtn')).borderTopColor }; });
+  ok('in forced colours (Windows high contrast) the plain status is still not boxed in like a row: its border is the colour of the panel behind it, and a row’s is not', hc.forced && hc.tag === 'DIV' && hc.border === hc.panel && hc.row !== hc.panel, JSON.stringify(hc));
+  await page.screenshot({ path: S + '/menu-forced-colours-360.png' });
   await ctx.close();
 
   /* ----------------------------------- the terms gate ----------------------------------- */
@@ -379,6 +439,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   res = await say(page, 'rivera');
   ok('a crew member is found by name, with the role, phone and email on the second line', titles(res, 'crew').join() === 'Sam Rivera' && grp(res, 'crew').items[0].meta === 'Sound Recordist · +1 555 0101 · sam@example.com' && grp(res, 'crew').items[0].kind === 'crew', JSON.stringify(res));
   ok('…and so are the bookings that person is on, below, saying they are crew there', res[0].group === 'crew' && titles(res, 'bookings').includes('Harbour Brewing brand film') && grp(res, 'bookings').items.every(i => /^Crew: Sam Rivera/.test(i.snips[0])), JSON.stringify(res.map(g => [g.group, g.items.map(i => [i.title, i.snips])])));
+  res = await say(page, 'focus puller');
+  ok('a crew member is found by another name for their role, as in the Crew page’s own search box: “focus puller” finds the 1st AC, with a line saying where', titles(res, 'crew').join() === 'Jo Chen' && grp(res, 'crew').items[0].snips.join() === 'Also called: Focus Puller, First Assistant Camera, First AC', JSON.stringify(res));
+  res = await say(page, 'cinematographer');
+  ok('…and nobody is found by a name that belongs to someone else’s role', res.length === 0, JSON.stringify(res));
+  res = await say(page, 'lighting');
+  ok('…and by the group their role is filed under: “lighting” finds the Gaffer', titles(res, 'crew').join() === 'Mika Dahl' && grp(res, 'crew').items[0].snips.join() === 'Group: Lighting', JSON.stringify(res.map(g => [g.group, g.items.map(i => [i.title, i.snips])])));
   res = await say(page, 'FX6-120934');
   const fx = (res.find(g => g.group === 'gear') || { items: [] }).items[0] || {};
   ok('a serial number finds the item, with the number marked', res.length === 1 && fx.title === 'Sony FX6 body' && fx.kind === 'gear' && /S\/N FX6-120934/.test(fx.meta) && fx.marks.join() === 'FX6-120934', JSON.stringify(res));
@@ -546,7 +612,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('#searchInput').focus();
   await say(page, 'rivera');
   await page.keyboard.press('Enter'); const e1 = await active(page), e1s = await sState(page);
-  ok('Enter with no result marked marks the first one (so the Search key of a phone’s keyboard never jumps away)', e1.title === 'Sam Rivera' && e1s.open, JSON.stringify(e1));
+  ok('on a keyboard, Enter with no result marked marks the first one', e1.title === 'Sam Rivera' && e1s.open, JSON.stringify(e1));
   await page.keyboard.press('Enter'); await sleep(700);
   const e2 = await page.evaluate(() => { const f = document.querySelector('#page .found'); return { tab: window.logiPage(), found: f ? f.querySelector('strong').textContent : '', focus: !!f && document.activeElement === f }; });
   ok('Enter on a marked result closes the search and opens it: the crew member’s card, on the Crew page', sClosed(await sState(page)) && e2.tab === 'crew' && e2.found === 'Sam Rivera' && e2.focus, JSON.stringify(e2));
@@ -561,7 +627,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('Ctrl+K opens the search from anywhere, even from a field', viaK.open && viaK.focus === 'searchInput', JSON.stringify(viaK));
   await page.keyboard.press('Escape'); await sleep(150);
   const esc = await sState(page);
-  ok('Escape closes it, the page is usable again and the focus is back on the search button', sClosed(esc) && esc.focus === 'searchBtn', JSON.stringify(esc));
+  const backIn = await page.evaluate(() => { const a = document.activeElement; return { inField: a.matches('#page .search'), value: a.value }; });
+  ok('Escape closes it, the page is usable again and the focus is back in the field it was opened from, with what was typed there', sClosed(esc) && backIn.inField && backIn.value === 'a/b', JSON.stringify([esc, backIn]));
   await page.locator('#page .search').fill(''); await page.locator('#page .search').dispatchEvent('input'); await page.evaluate(() => document.activeElement.blur());
   await page.keyboard.press('/'); await sleep(200);
   const viaSlash = await sState(page);
@@ -616,11 +683,25 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   at = await pick(page, 'brewmaster', 'tcnotes', 'Brewery day one, A cam');
   const para = await page.evaluate(() => { const p = document.getElementById('sc-sp2'), r = p ? p.getBoundingClientRect() : null; return { there: !!p, text: p ? p.textContent : '', inView: !!r && r.top >= 0 && r.bottom <= innerHeight }; });
   ok('…and found by its script, on that line of the script', at.tab === 'tcnotes' && para.there && /brewmaster/.test(para.text) && para.inView, JSON.stringify(para));
+  // Settings: the thing found is one among others (a template among templates, a line far down the price list), so
+  // the section alone is not enough. More templates and a longer price list first, to have something to tell apart.
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => {
+    d.projectTemplates = [{ id: 'pt0', name: 'Aerial survey', icon: '🚁', base: 'brand', deliverables: [], shots: '', schedule: [], notes: '' }, ...d.projectTemplates, { id: 'pt2', name: 'Charity gala', icon: '🎗️', base: 'event', deliverables: [], shots: '', schedule: [], notes: '' }];
+    d.priceList = { ...d.priceList, list: [...Array.from({ length: 36 }, (_, i) => ({ id: 'fill' + i, key: '', desc: `Filming line ${i + 1}`, unit: 'day', price: 100 + i, cat: ['Filming and crew', 'Planning', 'Travel'][i % 3] })), ...d.priceList.list], updatedAt: Date.now() };
+  }))); await sleep(300);
   at = await pick(page, 'teaser', 'settings', 'Brewery promo');
-  const section = await page.evaluate(() => { const d = [...document.querySelectorAll('#page details.settings-section')].find(x => x.querySelector(':scope > summary .ss-title').textContent === 'Project templates'); return { open: !!d && d.open, groupOpen: !!d && d.parentElement.closest('details').open, text: d ? d.innerText : '' }; });
+  const section = await page.evaluate(() => { const d = [...document.querySelectorAll('#page details.settings-section')].find(x => x.querySelector(':scope > summary .ss-title').textContent === 'Project templates'); return { open: !!d && d.open, groupOpen: !!d && d.parentElement.closest('details').open, text: d ? d.innerText : '', cards: d ? d.querySelectorAll('.list > .card').length : 0 }; });
   ok('a project template opens Settings on Project templates', at.tab === 'settings' && section.open && section.groupOpen && /Brewery promo/.test(section.text), JSON.stringify({ tab: at.tab, open: section.open }));
+  ok('…on that template’s own card among the others: in view, outlined and focused', section.cards === 3 && /Brewery promo/.test(at.found) && !/Aerial survey|Charity gala/.test(at.found) && /\bcard\b/.test(at.foundClass) && at.inView && at.focusOnFound, JSON.stringify({ cards: section.cards, found: at.found, cls: at.foundClass, inView: at.inView, focus: at.focusOnFound }));
+  await sleep(300);
+  ok('…and what is announced is what is on screen', (await page.evaluate(() => (document.getElementById('sr-live') || {}).textContent)) === 'Brewery promo opened', await page.evaluate(() => (document.getElementById('sr-live') || {}).textContent));
+  at = await pick(page, 'release forms', 'settings', 'Workflow templates');
+  const line = await page.evaluate(() => { const f = document.querySelector('#page .found'), ta = f && f.querySelector('textarea'); return { there: !!f, label: ta ? ta.getAttribute('aria-label') : '', has: !!ta && ta.value.split('\n').includes('Print the release forms'), open: !!f && !!f.closest('details.twirl') && f.closest('details.twirl').open, said: (document.getElementById('sr-live') || {}).textContent }; });
+  ok('a checklist line of your own opens Settings on Workflow templates, with the box that holds the line unfolded, in view and outlined', at.tab === 'settings' && line.there && line.has && line.open && line.label === 'Brand / commercial: Prepped checklist' && at.inView && line.said === 'Workflow templates opened', JSON.stringify({ ...line, inView: at.inView }));
   at = await pick(page, 'underwater', 'settings', 'Price list');
   ok('the price list opens as the price list', at.sheets.join() === 'Price list' && /Underwater housing/.test(await page.evaluate(() => (document.querySelector('.sheet') || {}).textContent || '')), JSON.stringify(at.sheets));
+  const priced = await page.evaluate(() => { const f = document.querySelector('.sheet .found'), body = document.querySelector('.sheet .sheet-body'), r = f ? f.getBoundingClientRect() : null, b = body.getBoundingClientRect(); return { found: f ? f.querySelector('strong').textContent : '', unfolded: !!f && f.closest('details').open, group: f ? f.closest('details').dataset.cat : '', inView: !!r && r.height > 0 && r.top >= b.top && r.bottom <= b.bottom + 1, focus: !!f && document.activeElement === f, lines: document.querySelectorAll('.sheet .price-item').length }; });
+  ok('…on the line that was found, among 37: its group unfolded, the line in view, outlined and focused', priced.found === 'Underwater housing' && priced.unfolded && priced.group === 'Equipment hire' && priced.inView && priced.focus && priced.lines === 37, JSON.stringify(priced));
   await page.keyboard.press('Escape'); await sleep(200);
   at = await pick(page, 'your studio', 'me', 'Your details');
   ok('your own details open the Me page', at.tab === 'me' && /Your Studio/.test(at.text) && !at.search && !at.inert, at.text.slice(0, 80));
@@ -737,11 +818,108 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.evaluate(() => import('./js/lock.js').then(l => l.removePin())); await sleep(300);
   await ctx.close();
 
+  /* ------------------- deep in a long list: the way back to the results ------------------- */
+  // A result can land far down a long page, where the top bar and its search control have scrolled away. The Rolodex
+  // bar stays, and carries a magnifier of its own there; opened again with the same words, the list is as it was left.
+  ({ ctx, page } = await open({ w: 390, h: 800 }));
+  await seed(page);
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { for (let i = 0; i < 400; i++) d.gear.push({ id: 'many' + i, name: `Probe light ${String(i).padStart(3, '0')}`, category: 'Lighting', serial: `ZX-${5000 + i}`, location: 'Van', qty: 1, notes: '', updatedAt: Date.now() }); }))); await sleep(400);
+  const nav0 = await page.evaluate(() => { const b = document.getElementById('navSearch'); return { there: !!b, hidden: !b || b.hidden, top: Math.round(document.getElementById('searchBtn').getBoundingClientRect().top) }; });
+  ok('at the top of a page the search control is the one in the top bar: the Rolodex bar shows no second magnifier', nav0.there && nav0.hidden && nav0.top >= 0, JSON.stringify(nav0));
+  await openIt(page); await say(page, 'probe light');
+  await tap(page.locator('#searchList .sr-group[data-group="gear"] .sr-more')); await sleep(200);
+  await tap(page.locator('#searchList .sr-more')); await sleep(200);
+  await page.evaluate(() => { document.querySelectorAll('#searchList .sr:not(.sr-more)')[99].scrollIntoView({ block: 'center' }); }); await sleep(150);
+  const left = await page.evaluate(() => ({ rows: document.querySelectorAll('#searchList .sr:not(.sr-more)').length, top: Math.round(document.getElementById('searchList').scrollTop), title: document.querySelectorAll('#searchList .sr:not(.sr-more) .sr-title')[99].textContent }));
+  await tap(page.locator('#searchList .sr:not(.sr-more)').nth(99)); await sleep(800);
+  const deep = await page.evaluate(() => { const f = document.querySelector('#page .found'), nav = document.getElementById('rolodex'), b = document.getElementById('navSearch') || document.createElement('i'), r = b.getBoundingClientRect(), n = nav.getBoundingClientRect(), fr = f ? f.getBoundingClientRect() : null, hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2), ico = document.querySelector('#rolodex .tab[aria-selected=true] .tab-ico').getBoundingClientRect(), up = document.querySelector('#rolodex .drum-btn.up').getBoundingClientRect();
+    return { found: f ? f.querySelector('strong').textContent : '', y: Math.round(scrollY), topBar: Math.round(document.getElementById('searchBtn').getBoundingClientRect().bottom), tucked: nav.classList.contains('tucked'), navOnScreen: Math.round(n.top) === 0 && n.bottom > 100, cardClear: !!fr && fr.top >= n.bottom && fr.bottom <= innerHeight, shown: b.isConnected && !b.hidden, box: [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)], inBar: r.top >= n.top && r.bottom <= n.bottom && r.left >= 0 && r.right <= innerWidth, onTop: !!hit && !!hit.closest('#navSearch'), clear: r.right <= ico.left && r.right <= up.left, name: b.getAttribute('aria-label'), popup: b.getAttribute('aria-haspopup'), fits: document.documentElement.scrollWidth <= innerWidth }; });
+  ok('a result far down a long list (400 items) is shown below the Rolodex bar, which stays on screen for it, the top bar long gone', deep.found === left.title && deep.y > 3000 && deep.topBar < 0 && !deep.tucked && deep.navOnScreen && deep.cardClear, JSON.stringify(deep));
+  ok('…and there the Rolodex bar carries a magnifier: a 44 px button named Search everything, inside the bar, clear of the card’s icon and the ▲ ▼ buttons, with no sideways scroll', deep.shown && deep.box[2] >= 44 && deep.box[3] >= 44 && deep.inBar && deep.onTop && deep.clear && deep.name === 'Search everything' && deep.popup === 'dialog' && deep.fits, JSON.stringify(deep));
+  await page.screenshot({ path: S + '/search-nav-magnifier-390.png' });
+  await tap(page.locator('#navSearch')); await page.locator('#search').waitFor({ state: 'visible', timeout: 4000 }).catch(() => {}); await sleep(300);
+  const again = await page.evaluate(() => { const i = document.getElementById('searchInput'); return { open: !document.getElementById('searchBack').hidden, value: i.value, selected: i.selectionStart === 0 && i.selectionEnd === i.value.length, chip: (document.querySelector('#search .chip.on') || { dataset: {} }).dataset.group, rows: document.querySelectorAll('#searchList .sr:not(.sr-more)').length, top: Math.round(document.getElementById('searchList').scrollTop) }; });
+  ok('that magnifier opens the search with the same words, and the list as it was left: the same chip, as many results, scrolled to the same place', again.open && again.value === 'probe light' && again.selected && again.chip === 'gear' && left.rows === 120 && again.rows === 120 && left.top > 1000 && Math.abs(again.top - left.top) <= 2, JSON.stringify({ left, again }));
+  await page.keyboard.press('Escape'); await sleep(200);
+  ok('…and Escape gives the focus back to that magnifier, not to the button that has scrolled away', (await focusId(page)) === 'navSearch' && sClosed(await sState(page)), await focusId(page));
+  const yDeep = await page.evaluate(() => scrollY);
+  await page.evaluate(y => window.scrollTo(0, y + 300), yDeep); await sleep(150); await page.evaluate(y => window.scrollTo(0, y + 600), yDeep); await sleep(400);
+  const down = await page.evaluate(() => ({ tucked: document.getElementById('rolodex').classList.contains('tucked'), bottom: Math.round((document.getElementById('navSearch') || document.body).getBoundingClientRect().bottom) }));
+  await page.evaluate(y => window.scrollTo(0, y + 550), yDeep); await sleep(400);
+  const upAgain = await page.evaluate(() => { const b = document.getElementById('navSearch'), r = b ? b.getBoundingClientRect() : { top: -1 }; return { tucked: document.getElementById('rolodex').classList.contains('tucked'), top: Math.round(r.top), hidden: !b || b.hidden }; });
+  ok('the magnifier goes with its bar: away as the page scrolls down, back the moment it scrolls up', down.tucked && down.bottom <= 2 && !upAgain.tucked && upAgain.top >= 0 && !upAgain.hidden, JSON.stringify({ down, upAgain }));
+  await page.evaluate(() => window.scrollTo(0, 0)); await sleep(400);
+  ok('back at the top of the page the Rolodex bar’s magnifier is gone again', await page.evaluate(() => { const b = document.getElementById('navSearch'); return !!b && b.hidden; }));
+  await ctx.close();
+
+  /* ------------------------------ a phone's own keyboard ------------------------------ */
+  ({ ctx, page } = await open({ w: 390, h: 800, options: { hasTouch: true, isMobile: true } }));
+  await seed(page);
+  await page.locator('#searchBtn').tap(); await page.locator('#search').waitFor({ state: 'visible' }); await sleep(300);
+  await say(page, 'rivera');
+  const hint = await page.evaluate(() => ({ touch: matchMedia('(hover: none) and (pointer: coarse)').matches, key: document.getElementById('searchInput').enterKeyHint, focus: document.activeElement.id }));
+  await page.keyboard.press('Enter'); await sleep(200);
+  const put = await page.evaluate(() => ({ open: !document.getElementById('searchBack').hidden, focus: document.activeElement.id, marked: document.querySelectorAll('#searchList [aria-selected=true]').length, options: document.querySelectorAll('#searchList [role=option]').length, value: document.getElementById('searchInput').value }));
+  ok('on a touch screen the keyboard’s Search key puts the keyboard away (the field lets go of the focus) and leaves the results as they are: nothing marked, nothing opened', hint.touch && hint.key === 'search' && hint.focus === 'searchInput' && put.open && put.focus !== 'searchInput' && put.marked === 0 && put.options > 0 && put.value === 'rivera', JSON.stringify({ hint, put }));
+  await page.locator('#searchList .sr-group[data-group="crew"] .sr').first().tap(); await sleep(700);
+  const tapped = await page.evaluate(() => { const f = document.querySelector('#page .found'); return { tab: window.logiPage(), found: f ? f.querySelector('strong').textContent : '', open: !document.getElementById('searchBack').hidden }; });
+  ok('…and a tap on a result opens it', tapped.tab === 'crew' && tapped.found === 'Sam Rivera' && !tapped.open, JSON.stringify(tapped));
+  await ctx.close();
+
+  /* ---------------- extra large buttons on a touch screen: the bar's magnifier ---------------- */
+  // "Button size: Extra large" makes every button 58 px on a touch screen. The magnifier on the Rolodex bar has only
+  // the room up to the card's icon (56 px): it takes that, and does not reach over the icon.
+  ({ ctx, page } = await open({ options: { hasTouch: true, isMobile: true }, init: () => { localStorage.setItem('logi-prefs', JSON.stringify({ targets: 'large' })); } }));
+  await page.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); s.update(d => { for (let i = 0; i < 60; i++) d.gear.push({ id: 'xl' + i, name: `Probe stand ${String(i).padStart(2, '0')}`, category: 'Grip', serial: '', location: '', qty: 1, notes: '', updatedAt: Date.now() }); }); })); await sleep(300);
+  await page.evaluate(() => window.logiGo('gear')); await page.waitForSelector('#page [data-id="xl59"]', { timeout: 8000 }).catch(() => {}); await sleep(300);
+  // Down the page (the bar slides away), then up a little (it comes back, with the magnifier on it).
+  const barTucked = want => page.waitForFunction(w => document.getElementById('rolodex').classList.contains('tucked') === w, want, { timeout: 4000 }).catch(() => {});
+  await page.evaluate(() => window.scrollTo(0, 2000)); await barTucked(true);
+  await page.evaluate(() => window.scrollTo(0, 1900)); await barTucked(false); await sleep(450);
+  const xl = await page.evaluate(() => { const b = document.getElementById('navSearch'), r = b.getBoundingClientRect(), ico = document.querySelector('#rolodex .tab[aria-selected=true] .tab-ico').getBoundingClientRect(), up = document.querySelector('#rolodex .drum-btn.up').getBoundingClientRect(), nav = document.getElementById('rolodex'), n = nav.getBoundingClientRect(); return { hit: getComputedStyle(document.documentElement).getPropertyValue('--hit').trim(), upW: Math.round(up.width), hidden: b.hidden, tucked: nav.classList.contains('tucked'), w: Math.round(r.width), h: Math.round(r.height), left: Math.round(r.left), right: Math.round(r.right), ico: Math.round(ico.left), inBar: r.top >= n.top && r.bottom <= n.bottom, fits: document.documentElement.scrollWidth <= innerWidth }; });
+  ok('with extra large buttons on a touch screen (58 px) the magnifier takes the room there is beside the card’s icon, at least 44 px each way, and does not reach over the icon', xl.hit === '58px' && xl.upW === 58 && !xl.hidden && !xl.tucked && xl.w >= 44 && xl.h >= 44 && xl.left >= 0 && xl.right <= xl.ico && xl.inBar && xl.fits, JSON.stringify(xl));
+  await page.screenshot({ path: S + '/search-nav-magnifier-large-360.png', clip: { x: 0, y: 0, width: 360, height: 180 } });
+  await ctx.close();
+
+  /* ------------------------------ ⌘K on Apple devices ------------------------------ */
+  ({ ctx, page } = await open({ w: 1200, h: 800, init: () => { Object.defineProperty(Navigator.prototype, 'platform', { configurable: true, get: () => 'MacIntel' }); } }));
+  await seed(page);
+  await page.evaluate(() => window.logiGo('crew')); await page.waitForSelector('#page .search'); await sleep(300);
+  await page.locator('#page .search').click(); await page.keyboard.type('sam');
+  await page.keyboard.press('Control+k'); await sleep(300);
+  const ctrl = await page.evaluate(() => ({ open: !(document.getElementById('searchBack') || { hidden: true }).hidden, inField: document.activeElement.matches('#page .search'), keys: document.getElementById('searchBtn').getAttribute('aria-keyshortcuts') }));
+  ok('on a Mac, Control+K in a text box is left to the system (it deletes to the end of the line there): the search stays closed and the focus stays in the box', !ctrl.open && ctrl.inField && ctrl.keys === '/ Meta+K', JSON.stringify(ctrl));
+  await page.keyboard.press('Meta+k'); await page.locator('#search').waitFor({ state: 'visible', timeout: 4000 }).catch(() => {}); await sleep(200);
+  const cmd = await sState(page);
+  await page.keyboard.press('Control+k'); await page.keyboard.type('x'); await sleep(150);
+  const inside = await page.evaluate(() => ({ focus: document.activeElement.id, value: document.getElementById('searchInput').value }));
+  await page.keyboard.press('Escape'); await sleep(200);
+  const cmdBack = await page.evaluate(() => ({ inField: document.activeElement.matches('#page .search'), value: document.activeElement.value }));
+  ok('…⌘K opens it, and closing it gives the focus back to that box with what was typed', cmd.open && cmd.focus === 'searchInput' && inside.focus === 'searchInput' && cmdBack.inField && cmdBack.value === 'sam', JSON.stringify({ cmd, inside, cmdBack }));
+  await ctx.close();
+
   /* ----------------------------- nothing to search yet ----------------------------- */
   ({ ctx, page } = await open());
   await openIt(page); await sleep(250);
   const bare = await page.evaluate(() => ({ blank: document.querySelector('.search-blank').innerText, chips: document.querySelector('#search .search-chips').hidden || document.querySelectorAll('#search .chip').length === 0 }));
   ok('on a new, empty Vdex the search says there is nothing to search yet, and shows no chips', /Nothing to search yet/.test(bare.blank) && bare.chips, JSON.stringify(bare));
+  // Records that cannot be read as they should be (a hand-edited or foreign backup can hold them): each costs at most
+  // itself. Looked at from a page that lists none of them, since the Bookings page has its own trouble with one.
+  await page.keyboard.press('Escape'); await page.evaluate(() => window.logiGo('field')); await sleep(400);
+  const errorsBefore = errors.length;
+  const odd = await page.evaluate(async () => {
+    const s = await import('./js/store.js'), m = await import('./js/search.js');
+    const base = JSON.parse(s.serialize());
+    base.bookings = [{ id: 'a', title: 'Alpha wedding', date: '2027-01-01' }, { id: 'b', title: 'Bravo wedding', date: '2027-01-02', crew: 'c1', kits: 'k1', gear: 7 }, { id: 'c', title: 'Charlie wedding', date: '2027-01-03', hires: 'someone' }, { id: 'd', title: 'Delta wedding', date: '2027-01-04' }];
+    base.kits = [{ id: 'k1', name: 'Wedding kit', gear: 'g1' }]; base.venues = [{ id: 'v1', name: 'Wedding barn' }];
+    s.replaceAll(base);
+    const found = m.search('wedding').map(r => r.title).sort();
+    s.replaceAll({ ...base, bookings: [], kits: [], venues: [] });
+    return found;
+  });
+  await sleep(200);
+  const logged = errors.splice(errorsBefore);
+  ok('a booking whose crew is not a list, and a kit whose items are not, are found like any other; a booking that cannot be read at all is passed over, and everything after it is still found', odd.join() === 'Alpha wedding,Bravo wedding,Delta wedding,Wedding barn,Wedding kit' && logged.length >= 1 && logged.every(e => /hires|filter is not a function/.test(e)), JSON.stringify({ odd, logged: logged.map(e => e.slice(0, 80)) }));
   await ctx.close();
 
   }

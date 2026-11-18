@@ -60,8 +60,15 @@ self.addEventListener('fetch', e => {
   e.respondWith(caches.open(CACHE).then(async c => {
     if (req.mode === 'navigate' || shellKeys.has(key)) {
       // The app's own files: this build's copy, always. New files come with a new build.
-      const hit = await c.match(key) || await c.match(req, { ignoreSearch: true }) || (req.mode === 'navigate' ? await c.match('./') || await c.match('index.html') : null);
+      const hit = await c.match(key) || await c.match(req, { ignoreSearch: true });
       if (hit) return hit;
+      if (req.mode === 'navigate') {
+        // A page this build does not hold (one a newer build added, opened before this copy has updated): the
+        // server's own answer when it has one, passed on and not kept, so the cache stays one build's files. Only
+        // when the server has no such page, or cannot be reached, is it the app itself.
+        try { const r = await fetch(req); if (r.ok || r.type === 'opaqueredirect') return r; } catch { /* offline */ }
+        return await c.match('./') || await c.match('index.html') || fetch(req);
+      }
       const r = await fetch(req); if (r.ok) c.put(key, r.clone()); return r;
     }
     // Anything else of ours: cached copy at once, refreshed in the background.

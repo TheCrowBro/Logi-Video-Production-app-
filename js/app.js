@@ -37,15 +37,18 @@ const openMenu = opts => import('./menu.js').then(m => { menu = m; m.openMenu(op
 menuBtn.addEventListener('click', () => openMenu());
 window.logiMenu = { open: openMenu, close: () => { if (menu) menu.closeMenu(); }, isOpen: () => !!menu && menu.isOpen() };
 // The search control beside it opens the search across everything (js/search.js, fetched on first use). "/" when not
-// typing, and Ctrl+K or ⌘K, open it too, but only while the page itself can be used: not under a sheet, the menu, a
+// typing, and Ctrl+K, open it too (⌘K on Apple devices, where Control+K in a text box is the system's own "delete to
+// the end of the line" and is left alone), but only while the page itself can be used: not under a sheet, the menu, a
 // walkthrough or the lock, each of which closes the search first, as it does the menu (the lock also makes it forget).
 const searchBtn = document.getElementById('searchBtn');
 let search = null;
 const openSearch = opts => import('./search.js').then(m => { search = m; m.openSearch(opts); }, e => { console.error(e); toast('The search could not be loaded. Check the connection and try again.'); });
 searchBtn.addEventListener('click', () => openSearch());
 window.logiSearch = { open: openSearch, close: forget => { if (search) search.closeSearch(forget); }, isOpen: () => !!search && search.isOpen() };
+const apple = /Mac|iPhone|iPad/.test(navigator.platform || '');
+searchBtn.setAttribute('aria-keyshortcuts', apple ? '/ Meta+K' : '/ Control+K');
 document.addEventListener('keydown', e => {
-  const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey, k = (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key || '').toLowerCase() === 'k';
+  const slash = e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey, k = (apple ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey && (e.key || '').toLowerCase() === 'k';
   if ((!slash && !k) || e.isComposing || e.defaultPrevented || document.getElementById('app').inert || lock.isLocked()) return;
   const t = e.target;
   if (slash && t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable)) return; // a / being typed somewhere
@@ -125,21 +128,32 @@ try { start = Math.min(tabs.length - 1, Math.max(0, Number(localStorage.getItem(
 const nav = document.getElementById('rolodex');
 const rolodex = createRolodex(nav, tabs, { start, onSelect: (i, dir) => { showNav(); show(i, dir); } });
 // The Rolodex bar: hidden by a slide while the page scrolls down, back the moment it scrolls up, and always there near
-// the top, when a section changes, when something in it takes the focus, and when a tour starts.
-function showNav() { nav.classList.remove('tucked'); }
+// the top, when a section changes, when something in it takes the focus, when a tour starts, and when Vdex itself has
+// just jumped down the page to something (a search result): showNav(true) keeps the bar through that jump, which is
+// not the person scrolling down.
+let navHeld = 0;
+function showNav(hold) { nav.classList.remove('tucked'); if (hold === true) navHeld = performance.now() + 600; }
 window.logiShowNav = showNav;
+// The top bar scrolls away with the page and the Rolodex bar does not, so once the top bar's search control is out of
+// sight the Rolodex bar carries a magnifier of its own: the search (and the results just left) stay one tap away from
+// deep in a long list. It comes and goes with the bar it sits on.
+const navSearch = h('button', { id: 'navSearch', class: 'nav-search', type: 'button', hidden: true, 'aria-label': 'Search everything', title: 'Search everything', 'aria-haspopup': 'dialog', onclick: () => openSearch() }, searchBtn.querySelector('svg').cloneNode(true));
+nav.querySelector('.binder').append(navSearch);
 {
   let lastY = window.scrollY, ticking = false;
+  const look = () => { navSearch.hidden = searchBtn.getBoundingClientRect().bottom > 0; };
   window.addEventListener('scroll', () => {
     if (ticking) return; ticking = true;
     requestAnimationFrame(() => {
       ticking = false;
       const y = window.scrollY, dy = y - lastY; lastY = y;
+      look();
       if (y <= nav.offsetHeight || dy < -6) showNav();
-      else if (dy > 6 && !document.querySelector('.sheet-back')) nav.classList.add('tucked');
+      else if (dy > 6 && performance.now() > navHeld && !document.querySelector('.sheet-back')) nav.classList.add('tucked');
     });
   }, { passive: true });
   nav.addEventListener('focusin', showNav);
+  look();
 }
 show(start);
 window.logiGo = i => { rolodex.go(typeof i === 'string' ? Math.max(0, tabs.findIndex(t => t.id === i)) : i); return showing; }; // lets pages jump between sections; resolves once the section is drawn
@@ -172,13 +186,14 @@ const cloudLabel = document.getElementById('cloudLabel');
 // The sync state, in three places: a word on the menu's storage row, the full sentence at the top of the menu, and a
 // dot on the hamburger, since the menu is closed most of the time. No dot when all is well (synced, or kept on this
 // device only), amber while saving or when it needs the person (paused, sign in again), red when a save failed; the
-// hamburger's name says the same in words.
+// hamburger's name says the same in words. The sentence at the top of the menu is plain words when all is well, and
+// a button that opens the storage sheet in every other state, where there is something to see or do there.
 const SYNC = {
-  off: ['Local', '', () => 'Kept on this device only', () => 'No cloud storage is linked. Storage, sync and backups, below, links one.'],
+  off: ['Local', '', () => 'Kept on this device only', () => 'No cloud storage is linked. Storage, sync & backups, below, links one.'],
   synced: ['Synced', '', n => `Synced with ${n}`, () => 'Everything is up to date.'],
   saving: ['Saving…', 'amber', n => `Saving to ${n}…`, () => 'Your changes are being copied.'],
   paused: ['Paused', 'amber', n => `Sync with ${n} is paused`, () => 'Nothing is copied until this device has a licence. Your changes are safe on this device.'],
-  'needs-permission': ['Sign in', 'amber', n => `${n} needs you to sign in again`, () => 'Open Storage, sync and backups, below, and tap Sign in again. Your changes are safe on this device.'],
+  'needs-permission': ['Sign in', 'amber', n => `${n} needs you to sign in again`, () => 'Tap here to open Storage, sync & backups, then tap Sign in again. Your changes are safe on this device.'],
   error: ['Sync error', 'red', n => `Could not sync with ${n}`, c => [c.error, 'Your changes are safe on this device.'].filter(Boolean).join(' · ')],
 };
 function paintCloud() {
@@ -186,7 +201,14 @@ function paintCloud() {
   const headline = title(c.adapter ? c.adapter.label : 'your storage');
   cloudLabel.textContent = word;
   cloudBtn.dataset.state = s;
-  document.getElementById('menuStatus').dataset.state = s;
+  let status = document.getElementById('menuStatus');
+  const tappable = s !== 'synced' && s !== 'off';
+  if ((status.tagName === 'BUTTON') !== tappable) { // the same words in the other kind of element; the menu's own listeners find it by its id
+    const next = h(tappable ? 'button' : 'div', { id: 'menuStatus', class: 'menu-status', type: tappable ? 'button' : null }), focused = document.activeElement === status;
+    next.append(...status.childNodes); status.replaceWith(next); status = next;
+    if (focused) document.querySelector('#menu .menu-row:not([hidden])')?.focus(); // it was the button and is one no longer: the first row takes the focus
+  }
+  status.dataset.state = s;
   document.getElementById('menuStatusTitle').textContent = headline;
   document.getElementById('menuStatusText').textContent = text(c);
   menuBtn.dataset.state = s;
@@ -197,6 +219,8 @@ function paintCloud() {
 paintCloud();
 
 cloudBtn.addEventListener('click', () => openStorage());
+// The status at the top of the menu, while it is a button: the menu has closed by now (js/menu.js), as for a row.
+document.getElementById('menu').addEventListener('click', e => { if (e.target.closest('button.menu-status')) openStorage(); });
 
 function openStorage() {
   const panel = storagePanel();

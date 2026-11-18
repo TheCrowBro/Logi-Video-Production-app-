@@ -1,10 +1,11 @@
 const { chromium } = require('playwright');
 const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
+const { spawnSync } = require('child_process');
 const ROOT = process.env.VDEX_ROOT;
-const swPath = ROOT + '/sw.js', verPath = ROOT + '/js/version.js';
+const swPath = ROOT + '/sw.js', verPath = ROOT + '/js/version.js', laterPath = ROOT + '/later-page.html';
 const origSw = fs.readFileSync(swPath, 'utf8'), origVer = fs.readFileSync(verPath, 'utf8');
-const restore = () => { fs.writeFileSync(swPath, origSw); fs.writeFileSync(verPath, origVer); };
+const restore = () => { fs.writeFileSync(swPath, origSw); fs.writeFileSync(verPath, origVer); fs.rmSync(laterPath, { force: true }); };
 process.on('exit', restore);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -24,6 +25,25 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const cached = await page.evaluate(async () => (await (await caches.open('logi-dev')).keys()).length);
   ok('all app files precached', cached >= 48, cached + ' entries');
   ok('no "updated" bar on a fresh install', (await page.locator('.update-bar').count()) === 0);
+  // A page this installed build does not hold: a newer build added it, and a link to it is opened before this copy has
+  // updated. The worker asks the server for it; only an address the server has nothing for, or no connection, gets the app.
+  const base = process.env.VDEX_URL || 'http://localhost:8123/';
+  fs.writeFileSync(laterPath, '<!doctype html><meta charset="utf-8"><title>A later page</title><p id="later">Added by a later build.</p>');
+  const other = await ctx.newPage();
+  const seen = () => other.evaluate(async () => ({ title: document.title, own: !!document.getElementById('later'), app: !!document.getElementById('rolodex'), controlled: !!navigator.serviceWorker.controller, hash: location.hash, kept: (await (await caches.open('logi-dev')).keys()).filter(r => /later-page|no-such-page/.test(r.url)).length }));
+  await other.goto(base + 'later-page.html#1.abc');
+  const later = await seen();
+  ok('a page the installed build does not hold is fetched from the server and shown as itself, not replaced by the app, with the link’s fragment still in the address', later.controlled && later.title === 'A later page' && later.own && !later.app && later.hash === '#1.abc', JSON.stringify(later));
+  ok('…and it is not added to the offline copy, which stays one build’s files', later.kept === 0 && (await page.evaluate(async () => (await (await caches.open('logi-dev')).keys()).length)) === cached, JSON.stringify(later));
+  await other.goto(base + 'no-such-page.html'); await other.waitForSelector('#rolodex .drum-btn', { timeout: 20000 }).catch(() => {});
+  const none = await seen();
+  ok('an address the server has no page for still opens the app', none.controlled && none.title === 'Vdex' && none.app && none.kept === 0, JSON.stringify(none));
+  await ctx.setOffline(true);
+  await other.goto(base + 'later-page.html').catch(() => {}); await other.waitForSelector('#rolodex .drum-btn', { timeout: 20000 }).catch(() => {});
+  const cut = await seen().catch(e => ({ error: e.message }));
+  await ctx.setOffline(false);
+  ok('…and so does that later page while there is no connection', cut.title === 'Vdex' && cut.app && !cut.own, JSON.stringify(cut));
+  await other.close(); fs.rmSync(laterPath, { force: true });
   fs.writeFileSync(verPath, origVer.replace(/VERSION = '[^']+'/, "VERSION = '9.9.9'"));
   const served = await page.evaluate(() => fetch('js/version.js', { cache: 'no-store' }).then(r => r.text()));
   ok('cache-first: a changed file on the server is not mixed into the running version', !/9\.9\.9/.test(served) && /VERSION = /.test(served));
@@ -53,4 +73,13 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('About shows the running version is up to date', /Up to date/.test(about2) && /9\.9\.9/.test(about2));
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
+  // The stamp a deploy puts on these two files (tools/stamp-build.mjs), run here on the scratch copy.
+  restore();
+  const stamp = () => spawnSync(process.execPath, [ROOT + '/tools/stamp-build.mjs'], { env: { ...process.env, BUILD_SHA: 'abc1234def', GITHUB_SHA: '' }, encoding: 'utf8' });
+  const good = stamp(), sw1 = fs.readFileSync(swPath, 'utf8'), ver1 = fs.readFileSync(verPath, 'utf8');
+  ok('stamping a deploy writes the build into both files and lists the published files for offline use, the newest pages and modules among them', good.status === 0 && sw1.includes("const BUILD = 'abc1234';") && ver1.includes("export const BUILD = 'abc1234';") && ["'shared.html'", "'js/menu.js'", "'js/search.js'", "'js/roles.js'", "'js/role-picker.js'"].every(f => sw1.includes(f)), (good.stdout + good.stderr).trim());
+  fs.writeFileSync(swPath, origSw.replace('const SHELL = [', 'const FILES = [')); fs.writeFileSync(verPath, origVer);
+  const bad = stamp();
+  ok('…and when a line it stamps is no longer there, it stops with an error and writes nothing, instead of publishing a half-stamped build', bad.status === 1 && /SHELL list in sw\.js/.test(bad.stderr) && fs.readFileSync(verPath, 'utf8') === origVer && !fs.readFileSync(swPath, 'utf8').includes('abc1234'), `exit ${bad.status}: ${(bad.stdout + bad.stderr).trim()}`);
+  restore();
 })().catch(e => { console.error('TEST CRASHED', e); process.exit(1); });
