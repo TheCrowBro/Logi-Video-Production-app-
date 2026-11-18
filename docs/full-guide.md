@@ -63,7 +63,7 @@ If you tapped **Don't Allow** by mistake: the camera and microphone are asked fo
 
 ### The first time you open it
 
-1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
+1. **Set a PIN.** Vdex asks for one before anything else (4 to 20 digits) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
 3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage, sync and backups) and **🔒** once a PIN is set.
 
@@ -206,7 +206,7 @@ Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 ### Lock it: PIN, Face ID and Touch ID
 
-1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
+1. Vdex asked for the PIN before it could be used (4 to 20 digits); **Change PIN…** under Settings → **Security** sets a new one. The lock screen shows a dot for each digit, in two rows when the PIN has more than ten, and opens by itself at the last digit. If your PIN was set while PINs stopped at 8 digits, Vdex asks once, after you next unlock, whether to **Set a new PIN** or **Keep my current PIN**; either way it does not ask again.
 2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On an iPhone that is Face ID or Touch ID, and it works in Safari and in the installed app on iOS 16.4 or later (not yet in the App Store app, which opens with the PIN). If the switch doesn't appear, your iPhone or browser doesn't offer it to web apps, and the PIN is the way in.
 3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
 
@@ -311,7 +311,7 @@ If you tapped **Don't allow** by mistake: long-press the Vdex icon → **App inf
 
 ### The first time you open it
 
-1. **Set a PIN.** Vdex asks for one before anything else (4 to 8 digits; 6 is a good length) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
+1. **Set a PIN.** Vdex asks for one before anything else (4 to 20 digits) and locks with it from then on. A forgotten PIN cannot be recovered, so keep a cloud storage linked or a backup current. **The set-up walkthrough** then starts by itself: a look around the deck, your name, business, phone, email and website (they go on your call sheets, quotes, invoices and contact card), your calendar, and two sample people on the Crew page with how to remove them. Replay it any time from **Aa → Take the tour again**, or tap **?** at the top for the tutorial of the page you're on.
 2. **Want to see it full of data first?** Settings → *Storage, sync & backups* → **Load sample data** fills it with example bookings, crew, kit and venues. It replaces what's there, so only do this on a fresh install.
 3. **Tap ? at the top on any page** for a short tutorial of that page: it highlights each box with a line about what it does, and “Other pages…” on its first card opens any other page's tutorial. The rest of the top bar: **Install** (until it's installed), **Aa** (text size, theme, accessibility), **☁** (storage, sync and backups) and **🔒** once a PIN is set.
 
@@ -453,7 +453,7 @@ Tap **Aa** (or Settings → *General* → *Display & accessibility*):
 
 ### Lock it: PIN, fingerprint and face
 
-1. Vdex asked for the PIN before it could be used (4 to 8 digits; 6 is a good length); **Change PIN…** under Settings → **Security** sets a new one.
+1. Vdex asked for the PIN before it could be used (4 to 20 digits); **Change PIN…** under Settings → **Security** sets a new one. The lock screen shows a dot for each digit, in two rows when the PIN has more than ten, and opens by itself at the last digit. If your PIN was set while PINs stopped at 8 digits, Vdex asks once, after you next unlock, whether to **Set a new PIN** or **Keep my current PIN**; either way it does not ask again.
 2. Switch on **Unlock with fingerprint, face or Windows Hello** if the switch appears. On Android that is the fingerprint, face or screen-lock check Chrome already uses. If the switch doesn't appear, your phone or browser doesn't offer it to web apps, and the PIN is the way in.
 3. Choose **Lock when you leave the app**: straight away, after 1, 5 or 15 minutes, or only when Vdex is closed. The 🔒 button in the top bar locks it right now, for instance before handing the phone to someone.
 
@@ -539,7 +539,7 @@ The installed app opens in its own window, works offline, and keeps its data on 
 - There is no GPS in a computer, so set your location by hand: Field → **Enter**, or Settings → *Field tool defaults*. The sun, Polaris and call-sheet times then work as usual.
 - Break notifications pop up like any other app's. They have no buttons; clicking one brings Vdex to the front.
 - Backups, call sheets and exports save through a normal Save dialog instead of a share sheet.
-- The PIN lock works the same way (every computer has a PIN too; Settings → *Security* changes it), with Windows Hello or Touch ID where the browser offers it. It locks when the window goes to the background or when you press 🔒.
+- The PIN lock works the same way (every computer has a PIN too, 4 to 20 digits; Settings → *Security* changes it), with Windows Hello or Touch ID where the browser offers it. On the lock screen you can type the PIN on the keyboard, or paste it. It locks when the window goes to the background or when you press 🔒.
 - **Updates:** the desktop app checks download.crowmade.app for a new version when it starts and every few hours. Windows, Linux and a signed Mac download it in the background and install it on the next restart (Settings → *General* → *About & Licence* shows progress and has **Restart to update**). On an unsigned Mac, Settings → *General* → *About & Licence* shows the new version with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
 - To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 - Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.

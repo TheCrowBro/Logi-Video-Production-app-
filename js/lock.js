@@ -11,8 +11,9 @@ const SEALED = ['logi-dbx-token', 'logi-ms-token', 'logi-google-tokens', 'logi-w
 export const AUTO_LOCK = [[0, 'Straight away'], [1, 'After 1 minute'], [5, 'After 5 minutes'], [15, 'After 15 minutes'], [-1, 'Only when Vdex is closed']];
 const WAITS = [[12, 900], [9, 300], [7, 60], [5, 30]]; // wrong attempts → seconds before the next try
 export const WIPE_AT = 10;
+export const PIN_MIN = 4, PIN_MAX = 20; // digits in a PIN; any PIN within the length is accepted
 
-const S = { cfg: null, key: null, raw: null, locked: false, screen: null, hiddenAt: 0, timer: null, vaultRev: -1, extras: {}, extrasJson: '', vaultExtras: null, pending: null, op: Promise.resolve(), resolveBoot: null, listeners: new Set(), entry: '', checking: false, keys: null };
+const S = { cfg: null, key: null, raw: null, locked: false, screen: null, hiddenAt: 0, timer: null, vaultRev: -1, extras: {}, extrasJson: '', vaultExtras: null, pending: null, op: Promise.resolve(), resolveBoot: null, listeners: new Set(), entry: '', checking: false, keys: null, paste: null, byPin: false, offer: null, dropOffer: null };
 const lsGet = k => { try { return localStorage.getItem(k); } catch { return null; } };
 const lsSet = (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); return true; } catch { return false; } }; // false: the browser's storage is full or blocked
 const FULL = 'Not enough storage to keep the encrypted copy of your data: free some space, or erase old logs and bookings. Until then the data is kept in plain.';
@@ -112,7 +113,7 @@ export async function setPin(pin) { // first PIN makes a new data key; a later o
   if (minting && readCfg()) { const e = new Error(ELSEWHERE); e.code = 'elsewhere'; throw e; } // …or made while the key was being derived
   const before = S.cfg, hadKey = !!S.key;
   await adopt(raw);
-  saveCfg({ ...(S.cfg || { v: 1, autoLock: 1, wipe: false, bio: null }), salt: C.toB64(salt), iter, pin: wrap, len: pin.length, attempts: 0, until: 0 });
+  saveCfg({ ...(S.cfg || { v: 1, autoLock: 1, wipe: false, bio: null }), salt: C.toB64(salt), iter, pin: wrap, len: pin.length, max: PIN_MAX, attempts: 0, until: 0 }); // max: the longest PIN allowed when this one was chosen (offerLongerPin below)
   try { await writeVault(true); } catch (e) { saveCfg(before); if (!hadKey) { S.key = null; S.raw = null; } throw e; } // no vault, no PIN: the plain copy stays as it was
 }
 export async function checkPin(pin) { const raw = await openWithPin(pin); if (!raw) return false; await adopt(raw); return true; }
@@ -221,12 +222,16 @@ function derToRaw(sig) { // ECDSA signature: DER sequence of two integers → 64
 /* ---------------------------------- lock screen ---------------------------------- */
 // Everything on the page but the lock (the app, sheets, the update and licence bars, the skip link) goes inert while a
 // lock screen is up, and comes back as it was.
-function coverAll(screen) { const was = [...document.body.children].filter(el => el !== screen).map(el => [el, el.inert]); was.forEach(([el]) => { el.inert = true; }); const app = document.getElementById('app'); if (app) app.setAttribute('aria-hidden', 'true'); document.querySelectorAll('.sheet-back').forEach(el => el.classList.add('behind-lock')); return () => { was.forEach(([el, inert]) => { if (el.isConnected) el.inert = inert; }); if (app) app.removeAttribute('aria-hidden'); document.querySelectorAll('.sheet-back.behind-lock').forEach(el => el.classList.remove('behind-lock')); }; }
+export function coverAll(screen) { const was = [...document.body.children].filter(el => el !== screen).map(el => [el, el.inert]); was.forEach(([el]) => { el.inert = true; }); const app = document.getElementById('app'); if (app) app.setAttribute('aria-hidden', 'true'); document.querySelectorAll('.sheet-back').forEach(el => el.classList.add('behind-lock')); return () => { was.forEach(([el, inert]) => { if (el.isConnected) el.inert = inert; }); if (app) app.removeAttribute('aria-hidden'); document.querySelectorAll('.sheet-back.behind-lock').forEach(el => el.classList.remove('behind-lock')); }; }
 function showLock(notice = '') {
   if (S.screen) return;
   S.locked = true; S.entry = '';
   const len = S.cfg.len || 6;
   const dots = h('div', { class: 'pin-dots', role: 'img', 'aria-label': `0 of ${len} digits entered` });
+  // One dot for each digit, however long the PIN: its length is no secret this screen could keep (it sends the PIN by
+  // itself at that many digits, and the config beside the vault states it), and the dots are how the owner of a long
+  // PIN sees how far along they are. More than ten go in even rows, so twenty fit the narrowest phone.
+  if (len > 10) { dots.classList.add('rows'); dots.style.setProperty('--cols', String(Math.ceil(len / Math.ceil(len / 10)))); }
   const msg = h('div', { class: 'lock-msg', role: 'status', 'aria-live': 'polite' }, notice);
   const forgot = h('div', { class: 'lock-forgot', id: 'lock-forgot', hidden: true },
     h('p', { class: 'small' }, 'The PIN is the only key to the data on this device, so it cannot be recovered. You can erase this device and start again: if you linked a cloud storage or exported a backup, link it or import it afterwards and everything comes back.'),
@@ -247,7 +252,7 @@ function showLock(notice = '') {
     S.checking = true; msg.textContent = 'Checking…';
     const ok = await checkPin(pin);
     S.checking = false;
-    if (ok) { recordSuccess(); return unlocked(); }
+    if (ok) { recordSuccess(); return unlocked(true); }
     haptic(60); S.screen.classList.remove('shake'); void S.screen.offsetWidth; S.screen.classList.add('shake');
     if (recordFailure()) return;
     if (waitLeft() > 0) return showWait();
@@ -256,7 +261,7 @@ function showLock(notice = '') {
   }
   async function tryBio() {
     if (busy()) return;
-    try { if (await unlockBio()) { recordSuccess(); unlocked(); } } catch (e) { msg.textContent = e.name === 'NotAllowedError' ? 'Biometric check cancelled. Use the PIN.' : (e.message || 'Biometric unlock failed'); }
+    try { if (await unlockBio()) { recordSuccess(); unlocked(false); } } catch (e) { msg.textContent = e.name === 'NotAllowedError' ? 'Biometric check cancelled. Use the PIN.' : (e.message || 'Biometric unlock failed'); }
   }
   const key = (label, fn, cls = '') => h('button', { type: 'button', class: 'key ' + cls, onclick: fn, 'aria-label': label === '⌫' ? 'Delete' : label }, label);
   const bio = !!S.cfg.bio;
@@ -272,8 +277,20 @@ function showLock(notice = '') {
       forgotBtn,
       forgot));
   // Enter submits once four digits are in and otherwise does nothing: it must never press the keypad key that has the focus.
-  S.keys = e => { if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (/^\d$/.test(e.key)) { press(e.key); e.preventDefault(); } else if (e.key === 'Backspace') { back(); e.preventDefault(); } else if (e.key === 'Enter') { e.preventDefault(); if (S.entry.length >= 4) submit(); } };
+  S.keys = e => { if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return; if (/^\d$/.test(e.key)) { press(e.key); e.preventDefault(); } else if (e.key === 'Backspace') { back(); e.preventDefault(); } else if (e.key === 'Enter') { e.preventDefault(); if (S.entry.length >= PIN_MIN) submit(); } };
+  // A pasted PIN (a long one kept in a password manager) goes in as if typed. Anything but digits, or more of them
+  // than the PIN has, is left out and said: it is never cut to fit and tried as a guess.
+  S.paste = e => {
+    if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    e.preventDefault();
+    if (busy()) return;
+    const text = ((e.clipboardData && e.clipboardData.getData('text')) || '').replace(/\s+/g, '');
+    if (!/^\d+$/.test(text) || S.entry.length + text.length > len) { msg.textContent = 'Not pasted: that is longer than your PIN, or not all digits.'; return; }
+    for (const d of text) press(d);
+  };
   document.addEventListener('keydown', S.keys);
+  document.addEventListener('paste', S.paste);
+  if (S.dropOffer) S.dropOffer(); // the offer of a longer PIN, if it is up, goes: it comes back after this unlock
   document.body.append(S.screen);
   S.uncover = coverAll(S.screen);
   paint();
@@ -287,6 +304,7 @@ function hideLock() {
   if (!S.screen) return;
   S.hideLock && S.hideLock();
   document.removeEventListener('keydown', S.keys); S.keys = null;
+  document.removeEventListener('paste', S.paste); S.paste = null;
   S.screen.remove(); S.screen = null;
   if (S.uncover) { S.uncover(); S.uncover = null; }
   const main = document.getElementById('page'); main && main.focus({ preventScroll: true });
@@ -298,14 +316,46 @@ function hiddenNow() {
   sealSoon();
   if (m === 0) S.locked = true; else if (m > 0) S.timer = setTimeout(() => { S.locked = true; }, m * 60000);
 }
-function unlocked() {
-  hideLock(); S.locked = false;
-  if (S.resolveBoot) { const r = S.resolveBoot; S.resolveBoot = null; r(); }
+function unlocked(byPin) {
+  hideLock(); S.locked = false; S.byPin = byPin;
+  const boot = S.resolveBoot;
+  if (boot) { S.resolveBoot = null; boot(); }
   else chain(() => unseal());
   if (document.hidden) hiddenNow(); // put away while the PIN was being checked: the usual rule applies from now
   announce('Unlocked');
+  if (!boot) offerLongerPin(); // at the start of the app it waits for ensurePin(), after the terms
+}
+// PINs stopped at 8 digits until they could be 20. A config carries max, the longest PIN allowed when its PIN was chosen;
+// one without it was made under the old rule, and its owner is told once, after the next unlock, that a PIN can be
+// longer now, with the choice of setting a new one or keeping theirs (js/pin-offer.js, fetched only when it is due).
+// Either answer writes max, so the offer never comes back; the config is not secret and is not in the vault. Until
+// there is an answer the offer stays due: a lock screen coming up over it takes it away, and the next unlock, which
+// may be by fingerprint where this one was by PIN, brings it back.
+const offerDue = () => !!S.cfg && (S.cfg.max || 8) < PIN_MAX;
+function offerLongerPin() {
+  if (!offerDue() || S.offer || S.locked) return Promise.resolve();
+  const knowsPin = S.byPin; // the PIN was typed a moment ago; after a fingerprint or face it is asked for, as Change PIN… does
+  // The start of the app waits for the answer, but never long for the file: one that cannot be fetched (offline, with
+  // no offline copy yet) or takes over five seconds is left for the next unlock.
+  const slow = new Promise((_, no) => setTimeout(() => no(new Error('the offer of a longer PIN could not be fetched in time')), 5000));
+  S.offer = Promise.race([import('./pin-offer.js'), slow]).then(m => {
+    if (!offerDue() || S.locked) return null;
+    const o = m.show({ knowsPin }); S.dropOffer = o.drop; return o.done;
+  }).catch(e => console.warn('lock:', e)).then(() => { S.offer = null; S.dropOffer = null; });
+  return S.offer;
 }
 export function lockNow() { if (!S.cfg || S.screen) return; showLock(); sealSoon(); }
+// Another tab changed the PIN, a lock setting or the count of wrong tries: this tab takes the config as it now stands,
+// so it asks for the PIN there is now and never writes its older copy back over the change. The data key is the same
+// one (a new key only follows an erase, which init() handles). An offer answered in that tab is answered in this one,
+// and a lock screen that is up is drawn again when the PIN's length or the fingerprint unlock changed under it.
+function takeConfig() {
+  const c = readCfg(); if (!c) return;
+  const redraw = !!S.screen && !S.checking && (c.len !== S.cfg.len || !c.bio !== !S.cfg.bio);
+  S.cfg = c; S.listeners.forEach(f => f());
+  if (S.dropOffer && !offerDue()) S.dropOffer();
+  if (redraw) { hideLock(); showLock(); }
+}
 
 /* --------------------------------- boot & events --------------------------------- */
 // Called before the app draws anything: with a PIN set, the lock screen must be passed first.
@@ -313,6 +363,7 @@ export function lockNow() { if (!S.cfg || S.screen) return; showLock(); sealSoon
 // sessionStorage by the tab that caused it: the gate that shows first says it, else a toast once the app is up.
 export const notice = (take = true) => { try { const n = sessionStorage.getItem('logi-wiped'); if (n && take) sessionStorage.removeItem('logi-wiped'); return n || ''; } catch { return ''; } };
 export async function gate() {
+  window.addEventListener('storage', e => { if (e.key === CFG && e.newValue && S.cfg) takeConfig(); }); // from the lock screen on, not only once the app is up
   S.cfg = readCfg();
   if (!S.cfg) { if (lsGet(VAULT)) lsSet(VAULT, null); return; }
   store.setSealed(true); // nothing is written in plain until the vault is open
@@ -328,11 +379,11 @@ const restart = why => { try { if (why) sessionStorage.setItem('logi-wiped', why
 // The automated tests boot with 'logi-lock-setup' = 'skip', which skips only this set-up: a PIN that exists always
 // locks, because gate() above never looks at the flag.
 export function ensurePin() {
-  if (S.cfg || lsGet(SETUP) === 'skip') return Promise.resolve();
+  if (S.cfg) return offerLongerPin(); // a PIN from before longer PINs: the one-time offer, ahead of the app
+  if (lsGet(SETUP) === 'skip') return Promise.resolve();
   if (readCfg()) return restart('A PIN was just set in another tab: enter it here.'); // made since gate() looked: this tab has no key for it
   let firstRun = false; try { firstRun = !localStorage.getItem('logi-tour'); } catch { /* ignore */ }
-  const input = (label, hint) => h('input', { type: 'password', inputMode: 'numeric', pattern: '[0-9]*', maxLength: 8, autocomplete: 'one-time-code', enterKeyHint: hint, 'aria-label': label, placeholder: label, class: 'pin-input' }); // one-time-code: never offered to a password manager
-  const a = input('New PIN', 'next'), b = input('Repeat the PIN', 'done');
+  const a = pinField('New PIN', 'next'), b = pinField('Repeat the PIN', 'done');
   const err = h('div', { class: 'lock-msg', role: 'alert' });
   const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save the PIN and continue');
   const card = h('form', { class: 'lock-card stack', noValidate: true });
@@ -380,7 +431,7 @@ export function ensurePin() {
       h('p', { class: 'small' }, firstRun
         ? 'Vdex keeps your bookings, contacts, kit serials and insurance details on this device, so it locks with a PIN. The PIN opens it, and everything it stores is encrypted whenever it is locked, in the background or closed.'
         : 'Vdex now locks with a PIN on every device. The PIN opens it, and everything it stores here is encrypted whenever it is locked, in the background or closed. Your data stays exactly where it is.'),
-      h('p', { class: 'small muted' }, '4 to 8 digits; 6 or more is a good length. Avoid your birthday or phone number.'),
+      h('p', { class: 'small muted' }, PIN_RULE),
       a, b, err,
       h('p', { class: 'warn small' }, 'A forgotten PIN cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current.'),
       h('p', { class: 'small muted' }, `Settings → Security sets when Vdex locks, adds fingerprint or face unlock, and has a switch to erase this device after ${WIPE_AT} wrong PINs: it stays off unless you turn it on.`),
@@ -420,26 +471,32 @@ export function init() {
 }
 
 /* ------------------------------------ settings ------------------------------------ */
-// The rules a PIN must meet, the same on the set-up screen, in Settings and for Change PIN: the problem, or ''.
-export const pinProblem = (v, again = null, confirm = true) => (!/^\d{4,8}$/.test(v) ? 'Use 4 to 8 digits.' : confirm && /^(\d)\1+$/.test(v) ? 'Not all the same digit, please.' : again != null && again !== v ? 'The two PINs differ.' : '');
+// The one rule a PIN must meet, the same on the set-up screen, in Settings, for Change PIN and on the offer of a longer
+// one: digits, and how many. Nothing within the length is refused. pinProblem gives the problem, or ''.
+export const PIN_RULE = `${PIN_MIN} to ${PIN_MAX} digits.`;
+const PIN_OK = new RegExp(`^\\d{${PIN_MIN},${PIN_MAX}}$`);
+export const pinProblem = (v, again = null) => (!PIN_OK.test(v) ? `Use ${PIN_RULE}` : again != null && again !== v ? 'The two PINs differ.' : '');
+// The field a PIN is typed into. It holds more than a PIN may, so that one typed or pasted too long is refused in words
+// rather than cut short unseen behind the dots. one-time-code: a PIN is a code, never offered to a password manager.
+export const pinField = (label, hint) => h('input', { type: 'password', inputMode: 'numeric', pattern: '[0-9]*', maxLength: 64, autocomplete: 'one-time-code', enterKeyHint: hint, 'aria-label': label, placeholder: label, class: 'pin-input' });
 // A small sheet asking for a PIN or a passphrase, optionally typed twice. Resolves with the value or null.
 export function askSecret({ title, confirm = false, numeric = true, intro = '', minLength = 4 } = {}) {
   return new Promise(resolve => {
     let done = false;
-    const input = label => h('input', { type: 'password', inputMode: numeric ? 'numeric' : 'text', pattern: numeric ? '[0-9]*' : undefined, maxLength: numeric ? 8 : 128, autocomplete: numeric ? 'one-time-code' : 'new-password', 'aria-label': label, placeholder: label, class: 'pin-input' }); // a PIN is a code: never offered to a password manager
+    const input = label => (numeric ? pinField(label) : h('input', { type: 'password', inputMode: 'text', maxLength: 128, autocomplete: 'new-password', 'aria-label': label, placeholder: label, class: 'pin-input' }));
     const a = input(confirm ? (numeric ? 'New PIN' : 'Passphrase') : (numeric ? 'PIN' : 'Passphrase')), b = confirm ? input(numeric ? 'Repeat the PIN' : 'Repeat the passphrase') : null;
     const err = h('div', { class: 'lock-msg', role: 'alert' });
     let close = () => {};
     const submit = e => {
       e.preventDefault();
       const v = a.value;
-      const problem = numeric ? pinProblem(v, b ? b.value : null, confirm) : v.length < minLength ? `Use at least ${minLength} characters.` : b && b.value !== v ? 'The two passphrases differ.' : '';
+      const problem = numeric ? pinProblem(v, b ? b.value : null) : v.length < minLength ? `Use at least ${minLength} characters.` : b && b.value !== v ? 'The two passphrases differ.' : '';
       if (problem) { err.textContent = problem; return; }
       done = true; close(); resolve(v);
     };
     const form = h('form', { class: 'stack', onsubmit: submit },
       intro && h('p', { class: 'small muted' }, intro),
-      numeric && confirm && h('p', { class: 'small muted' }, '4 to 8 digits; 6 or more is a good length. Avoid your birthday or phone number.'),
+      numeric && confirm && h('p', { class: 'small muted' }, PIN_RULE),
       a, b, err,
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'submit' }, confirm ? 'Save' : 'Continue'), h('button', { class: 'btn ghost', type: 'button', onclick: () => close() }, 'Cancel')));
     ({ close } = sheet(title, form, { dismissOnBackdrop: false, onClose: () => { if (!done) resolve(null); } }));
@@ -467,7 +524,7 @@ export function securityPanel() {
     el.replaceChildren(...nodes(
       c ? h('p', { class: 'status-line', 'data-state': 'synced' }, `🔒 PIN set${c.bio ? ' · fingerprint / face on' : ''} · locks ${lockWhen}`)
         : h('p', { class: 'warn small' }, '🔓 No PIN. Anyone who picks up this device with Vdex open can read your bookings, contacts, kit serials and insurance details. Vdex asks for a PIN the next time it starts.'),
-      h('p', { class: 'small muted' }, 'Vdex locks its screen with your PIN and keeps your work and your sign-ins encrypted (AES-256) whenever it is locked, in the background or closed. Only your PIN, or your fingerprint or face, opens it. Every device that runs Vdex has a PIN; Change PIN… sets a new one.'),
+      h('p', { class: 'small muted' }, `Vdex locks its screen with your PIN and keeps your work and your sign-ins encrypted (AES-256) whenever it is locked, in the background or closed. Only your PIN, or your fingerprint or face, opens it. Every device that runs Vdex has a PIN; Change PIN… sets a new one, ${PIN_MIN} to ${PIN_MAX} digits long.`),
       h('div', { class: 'actions' },
         c ? [h('button', { class: 'btn primary', onclick: () => lockNow() }, '🔒 Lock now'), h('button', { class: 'btn ghost', onclick: changePin }, 'Change PIN…')]
           : h('button', { class: 'btn primary', onclick: createPin }, '🔒 Set a PIN…')),

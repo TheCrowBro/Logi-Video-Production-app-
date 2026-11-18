@@ -502,6 +502,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .pin-dots { display: flex; justify-content: center; gap: 12px; margin: 14px 0 6px; min-height: 18px; }
 .pin-dots i { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--muted); display: inline-block; }
 .pin-dots i.on { background: var(--accent); border-color: var(--accent); }
+.pin-dots.rows { display: grid; grid-template-columns: repeat(var(--cols, 10), auto); } /* a PIN of 11 to 20 digits: two even rows, filled left to right */
 .lock-msg { min-height: 1.4em; color: var(--danger); font-size: .9rem; margin: 4px 0 8px; }
 .keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 10px auto 14px; max-width: 320px; }
 .keypad .key { min-height: max(64px, var(--hit)); font: inherit; font-size: 1.5rem; border-radius: 16px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
@@ -760,6 +761,7 @@ html[data-motion=off] .back-btn::after, html[data-motion=bar] .back-btn::after {
 .lock-setup .lock-msg { margin: 0; }
 .lock-setup .btn.primary { width: 100%; }
 .lock-setup .actions .btn { width: auto; flex: 1 1 auto; }
+.pin-offer .btn { width: 100%; } /* the one-time offer of a longer PIN: its two answers one above the other */
 .tour-card { max-height: calc(100% - 32px); overflow: auto; }
 .tour-form { margin: 0 0 12px; }
 .tour-fields { display: grid; gap: 8px; }

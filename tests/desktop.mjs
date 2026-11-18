@@ -13,7 +13,9 @@ await win.waitForLoadState('domcontentloaded');
 const { TERMS_RECORD } = createRequire(import.meta.url)('./helpers.cjs');
 await win.evaluate(t => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); localStorage.setItem('logi-lock-setup', 'skip'); }, TERMS_RECORD); // no tour, terms agreed, no PIN set-up (a PIN left in the profile still asks below)
 await win.reload();
-if (await win.locator('.lock').count()) await win.keyboard.type('2468');
+// A PIN left in this computer's test profile asks first; one from before longer PINs is then offered a new one, once, and is kept.
+const pastLock = async () => { if (!(await win.locator('.lock').count())) return; await win.keyboard.type('2468'); await win.waitForSelector('.pin-offer, #rolodex .drum-btn', { timeout: 30000 }); if (await win.locator('.pin-offer').count()) await win.getByRole('button', { name: 'Keep my current PIN' }).click(); };
+await pastLock();
 await win.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
 const info = await win.evaluate(async () => ({ url: location.href, bridge: !!window.vdexDesktop, state: window.vdexDesktop && (await window.vdexDesktop.updateState()).status, serviceWorkers: (await navigator.serviceWorker.getRegistrations()).length, licence: window.vdexDesktop && window.vdexDesktop.licence && (await window.vdexDesktop.licence.state()) }));
 // Sign-ins open in the web browser and come back through the local server, only for sign-ins the app started.
@@ -28,7 +30,7 @@ const back = await fetch(base + '/?state=vdex-desktoptest&code=abc');
 signin.tellsTab = back.ok && /close this tab/.test(await back.text());
 await win.waitForURL(u => /code=abc/.test(u.toString()) || !/state=/.test(u.toString()), { timeout: 15000 }).catch(() => {});
 await win.waitForLoadState('domcontentloaded'); await new Promise(r => setTimeout(r, 800));
-if (await win.locator('.lock').count()) await win.keyboard.type('2468'); // a PIN left in this computer's test profile asks again after the reload
+await pastLock(); // the PIN asks again after the reload
 await win.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
 signin.handsBack = !/state=vdex-desktoptest/.test(win.url()) && /out of date/.test(await win.evaluate(() => import('./js/store.js').then(s => s.cloud.notice))); 
 signin.onceOnly = /has expired/.test(await (await fetch(base + '/?state=vdex-desktoptest&code=abc')).text());

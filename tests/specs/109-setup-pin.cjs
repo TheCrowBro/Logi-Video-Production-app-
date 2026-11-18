@@ -24,9 +24,9 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     ok('the first PIN field has the focus, and the only button is Save', (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'New PIN' && (await page.locator('.lock-setup button').allInnerTexts()).join('|') === 'Save the PIN and continue');
     const a = page.locator('.lock-setup .pin-input').nth(0), b = page.locator('.lock-setup .pin-input').nth(1), save = page.locator('.lock-setup button[type=submit]'), msg = page.locator('.lock-setup .lock-msg');
     await a.fill('12'); await b.fill('12'); await save.click(); await sleep(150);
-    ok('too short is refused', /Use 4 to 8 digits/.test(await msg.innerText()), await msg.innerText());
-    await a.fill('1111'); await b.fill('1111'); await save.click(); await sleep(150);
-    ok('all the same digit is refused', /Not all the same digit/.test(await msg.innerText()), await msg.innerText());
+    ok('too short is refused', /Use 4 to 20 digits/.test(await msg.innerText()), await msg.innerText());
+    await a.fill('1111'); await b.fill('1112'); await save.click(); await sleep(150);
+    ok('a PIN of one repeated digit is no longer refused: 1111 gets as far as its repeat being checked', (await msg.innerText()) === 'The two PINs differ.' && (await ls(page, 'logi-lock')) === null, await msg.innerText());
     await a.fill('246810'); await b.fill('246811'); await save.click(); await sleep(150);
     ok('two different PINs are refused, and the repeat field gets the focus', /The two PINs differ/.test(await msg.innerText()) && (await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('aria-label'))) === 'Repeat the PIN');
     ok('the set-up cannot be got around: still no app behind it', (await page.locator('#rolodex .drum-btn').count()) === 0 && (await page.locator('.lock-setup').count()) === 1);
@@ -54,11 +54,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     await page.getByRole('button', { name: 'Change PIN…' }).click(); await page.waitForSelector('.sheet .pin-input');
     await page.locator('.sheet .pin-input').fill('246810'); await page.locator('.sheet button[type=submit]').click();
     await page.waitForFunction(() => document.querySelectorAll('.sheet .pin-input').length === 2, null, { timeout: 15000 });
-    await page.locator('.sheet .pin-input').nth(0).fill('2222'); await page.locator('.sheet .pin-input').nth(1).fill('2222'); await page.locator('.sheet button[type=submit]').click(); await sleep(150);
-    ok('Change PIN… refuses the same weak PINs as the set-up screen', /Not all the same digit/.test(await page.locator('.sheet .lock-msg').innerText()));
-    await page.locator('.sheet .pin-input').nth(0).fill('135790'); await page.locator('.sheet .pin-input').nth(1).fill('135790'); await page.locator('.sheet button[type=submit]').click();
+    await page.locator('.sheet .pin-input').nth(0).fill('123'); await page.locator('.sheet .pin-input').nth(1).fill('123'); await page.locator('.sheet button[type=submit]').click(); await sleep(150);
+    ok('Change PIN… refuses what the set-up screen refuses', /Use 4 to 20 digits/.test(await page.locator('.sheet .lock-msg').innerText()));
+    await page.locator('.sheet .pin-input').nth(0).fill('2222'); await page.locator('.sheet .pin-input').nth(1).fill('2222'); await page.locator('.sheet button[type=submit]').click();
     await page.waitForFunction(() => !document.querySelector('.sheet'), null, { timeout: 15000 }); await sleep(800);
-    await page.reload(); await page.waitForSelector('.lock'); await page.keyboard.type('135790'); await page.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
+    ok('…and takes what it takes: a PIN of one repeated digit', JSON.parse(await ls(page, 'logi-lock')).len === 4);
+    await page.reload(); await page.waitForSelector('.lock'); await page.keyboard.type('2222'); await page.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
     ok('…and the new PIN opens Vdex, with the data intact', (await page.evaluate(() => import('./js/store.js').then(s => Array.isArray(s.db.bookings)))));
     await ctx.close(); }
 
