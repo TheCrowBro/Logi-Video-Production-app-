@@ -1,0 +1,8 @@
+Name,Category,Location,Kind,Brand,Model,Serial Number,Purchase Price,Purchase Date,Warranty Date,Residual Value,Barcode,Kit Name,Flag
+A-cam,Cameras,Studio,Individual,Sony,FX6,FX6-120934,5999.00,03/14/2023,03/14/2026,3600.00,CQ-00001,Interview kit,
+B-cam,Cameras,Studio,Individual,Sony,A7S III,A7S3-778201,3499.00,11/02/2022,11/02/2024,1750.00,CQ-00002,Interview kit,
+Sony FE 24-70mm f/2.8 GM II,Lenses,Studio,Individual,Sony,FE 24-70mm f/2.8 GM II,L2470-55102,2299.00,03/14/2023,,1500.00,CQ-00003,Interview kit,
+Key light,Lighting,Van,Individual,Aputure,600d Pro,6DP-0044871,1890.00,01/20/2024,01/20/2026,1500.00,CQ-00004,Interview kit,
+Shotgun mic,Mics,Audio bag,Individual,Sennheiser,MKH 416,MKH-2219004,999.00,06/30/2021,,500.00,CQ-00005,,
+Sticks,Tripods & Heads,Van,Individual,Sachtler,Flowtech 75,FT75-330218,1395.00,06/30/2021,,800.00,CQ-00006,,Needs service
+AA batteries,Consumables,Studio,Bulk,Eneloop,Pro AA,,3.50,,,,,,

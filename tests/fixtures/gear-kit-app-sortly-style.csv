@@ -1,0 +1,14 @@
+Entry Name,Entry Type,Quantity,Min Level,Price,Value,Unit,Notes,Tags,Barcode/QR1-Data,Barcode/QR1-Type,Sortly ID (SID),Primary Folder,Subfolder-level1,Photo URLs,Serial Number,Purchase Date
+Cameras,Folder,,,,,,,,,,S0A1T0001,,,,,
+Sony FX6 body,Item,1,,"$6,000.00","$6,000.00",each,"Cage and top handle fitted. ""A cam""",a-cam,VDX000101,qr,S0A1T0002,Cameras,Flight case 1,https://example.com/p/1.jpg,FX6-120934,2023-03-14
+Sony A7S III,Item,1,,"$3,500.00","$3,500.00",each,,b-cam,VDX000102,qr,S0A1T0003,Cameras,Flight case 1,,A7S3-778201,2022-11-02
+Lenses,Folder,,,,,,,,,,S0A1T0004,,,,,
+Sony FE 24-70mm f/2.8 GM II,Item,1,,"$2,300.00","$2,300.00",each,,,VDX000103,qr,S0A1T0005,Lenses,Flight case 1,,L2470-55102,2023-03-14
+Sigma 18-35mm f/1.8 Art,Item,1,,$800.00,$800.00,each,"Front element has a light mark, no effect on image",,VDX000104,qr,S0A1T0006,Lenses,Flight case 2,,,
+Aputure MC RGB pocket light,Item,4,2,$125.00,$500.00,each,,,VDX000105,qr,S0A1T0007,Lights,Lighting bag,,,2024-01-20
+Aputure 600d Pro,Item,1,,"$1,900.00","$1,900.00",each,,,VDX000106,qr,S0A1T0008,Lights,Van,,6DP-0044871,2024-01-20
+Sennheiser MKH 416,Item,1,,"$1,000.00","$1,000.00",each,,,VDX000107,qr,S0A1T0009,Mics,Audio bag,,MKH-2219004,
+Rode Wireless GO II,Item,2,1,$300.00,$600.00,each,One receiver has a cracked clip,,VDX000108,qr,S0A1T0010,Mics,Audio bag,,,
+Sachtler Flowtech 75,Item,1,,"$1,400.00","$1,400.00",each,,,VDX000109,qr,S0A1T0011,Tripods,Van,,FT75-330218,
+Ikan PT4500 teleprompter,Item,1,,$950.00,$950.00,each,,,VDX000110,qr,S0A1T0012,Teleprompters,Studio shelf B,,PT45-9001,n/a
+V-mount battery 98Wh,Item,6,4,$220.00,"$1,320.00",each,,,VDX000111,qr,S0A1T0013,Batteries & Chargers,Flight case 2,,,

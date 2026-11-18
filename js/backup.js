@@ -127,7 +127,9 @@ export async function restoreFromCloud() {
 export async function exportAssetRegister() {
   if (!store.requirePaid('export')) return;
   const sym = store.db.profile.currency || '$';
-  const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  // A cell that starts like a formula would be run by the spreadsheet that opens the file (a name or a note can come
+  // from someone else's list): an apostrophe in front keeps it text, and Vdex's own import takes it off again.
+  const q = v => { const t = String(v == null ? '' : v); return '"' + (/^[=+\-@\t\r]/.test(t) ? "'" + t : t).replace(/"/g, '""') + '"'; };
   const lastService = g => (g.log || []).filter(e => ['service', 'clean', 'calibration', 'check'].includes(e.kind) && e.date).map(e => e.date).sort().pop() || '';
   const rows = [['Item', 'Category', 'Serial number', 'Where', 'Quantity', `Value each (${sym})`, `Total (${sym})`, 'Purchased', 'Warranty until', 'Firmware', 'Last service', 'Notes'].map(q).join(',')];
   let total = 0;

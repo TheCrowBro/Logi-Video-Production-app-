@@ -75,7 +75,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 |------|---------------|
 | **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, its call sheet, and its pre/post-production checklist. |
 | **Crew** | The freelancers you trust: role, phone, email, a link to their work, and which of your bookings they're on. A contact card someone shared from their Vdex goes in with **Add from a link**. |
-| **Equipment** | Everything you own, with serial numbers, values, quantities and where each item is, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). **Share…** hands the list, a kit or chosen items to a workmate. |
+| **Equipment** | Everything you own, with serial numbers, values, quantities and where each item is, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). **Import…** brings in the kit list you already keep in a spreadsheet or another app. **Share…** hands the list, a kit or chosen items to a workmate. |
 | **Venues** | Places you shoot: map pin and directions, access and parking notes, nearest hospital, contact, and the rules (tripods, lighting, haze, drones… allowed, needs approval, or not allowed). |
 | **Insurance** | Your policies, claims lines and renewal dates, with a warning if your kit is worth more than it's insured for. |
 | **Me** | Your details and a QR code that hands your contact card, or your website, to anyone who scans it: they can save you to their phone, or add you to their own Vdex. |
@@ -140,6 +140,30 @@ Up to 16 days ahead, the booking page and the call sheet show the forecast for t
 Each item on the Equipment page has a **🔧 service log**: services, sensor and lens cleans, calibrations, checks, repairs and firmware updates, with dates, notes and costs. Give an item a service interval and a warranty date (Edit) and the page warns when a service is overdue or a warranty is about to end; Vdex also reminds you once in a while at start-up. The asset register export includes the warranty, firmware and last service.
 
 Each item also has a **Where it is** field: a shelf, a case, the van, a person or the repair shop. It shows on the item's card (tap it to move the item in one go), in search, as 📍 filter chips, on the booking page's equipment list, and in the asset register. Places you have typed before are offered as you type.
+
+### Bring in the kit list you already have
+
+If your kit is already listed somewhere, you do not have to type it again. Equipment → **📥 Import…** takes:
+
+- **a file**: CSV, or Excel (**.xlsx**). That covers your own spreadsheet, an export from another kit or inventory app, a rental house's list, an insurer's equipment schedule, and Vdex's own **asset register**. From Numbers or Google Sheets, export or download the sheet as CSV or Excel first. On an iPhone the file is chosen in the Files app, so save an email attachment to Files first.
+- **pasted text**: rows copied out of a spreadsheet, or a plain list with one item on each line (`2x Aputure 600d` and `Sony FX6 (S/N 4512345)` are understood; a line ending in a colon, such as `Lenses:`, heads the lines under it).
+
+Everything is read on your device. Nothing is uploaded.
+
+1. **Check the columns.** Vdex shows each column with a few of its entries and what it takes it for: Name, Make or brand, Model, Category, Serial number, Quantity, Value, Where it is, Purchased, Warranty until, Service every, Firmware, Last service, Notes, or **Skip this column**. It goes by the heading and by what is in the column, so most files come out right first time; change any that is wrong. A Make and a Model join into the name. If the file has no row of headings, untick **The first row holds the headings**. A workbook with several sheets lets you choose the sheet.
+2. **Read what would happen.** Under the columns are the first items as Vdex read them, the categories it changed (**Mics** becomes Audio, **Tripods** becomes Support; a category Vdex does not know is kept as you typed it), and a list of **rows to look at**: a row with no name, a value or date it could not read, text it had to shorten. Total lines and group headings are passed over, and a group heading such as **LENSES** gives the rows under it their category.
+3. **Items you already have** are found by their **serial number** (capitals, spaces and hyphens do not matter); an item with no serial number is found by its name. For each one, or for all of them at once, choose **Skip it**, **Update mine with these details** (nothing of yours is blanked, and its service log stays) or **Add anyway**. Unless you choose otherwise they are skipped.
+4. **Add.** The line above the button says exactly what will happen, for example *Adds 42, updates 3, skips 5*. Nothing is added before you tap that button.
+
+Afterwards the new items are outlined on the Equipment page and a bar at the bottom offers **Undo** for a short while; after that, **Undo that import** is at the bottom of the Import sheet until you close Vdex or import something else. Undo removes what the import added and puts back what it updated, except items you have changed or put on a booking or in a kit since.
+
+Good to know:
+
+- Values are read with or without a currency sign, with either kind of thousands and decimal mark (`£1,299.00`, `1.299,00 €`), and `n/a` or a dash counts as empty. A quantity that is missing is 1. Dates are read in the usual forms; for a date such as 03/04/2024 Vdex looks at the rest of the column to tell the day from the month, and otherwise goes by your device's setting, so glance at the dates in the preview.
+- The value Vdex keeps is the **replacement value of one item**. When a file has several money columns it takes the replacement value first, then a plain value or price, then what you paid; a column of line totals is left out.
+- A formula in a cell is never worked out: Vdex keeps what the cell showed when the file was saved, as plain text.
+- An old **.xls** file cannot be read: open it and save it as .xlsx or CSV. A file over 20 MB, or the rows after the first 10,000, are not read: import a big list in parts.
+- Importing needs no licence. Like every change, it is not possible while Vdex is read-only.
 
 ### Keep track of a project
 
@@ -235,7 +259,7 @@ A stolen, lost or broken phone should cost you a phone, not your business record
 - **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Storage, sync & backups* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
 - **Export a backup** now and then (Settings → *Storage, sync & backups*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
-- **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
+- **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing. Equipment → **Import…** reads it back in, on this device or another.
 - **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
 
 ### iPhone questions and answers
@@ -337,7 +361,7 @@ The spinning drum at the top is how you move between sections: **swipe it** up o
 |------|---------------|
 | **Bookings** | Your calendar of shoots. Each booking holds the client, times, address, contacts, crew, kit, venue, notes, hours, its call sheet, and its pre/post-production checklist. |
 | **Crew** | The freelancers you trust: role, phone, email, a link to their work, and which of your bookings they're on. A contact card someone shared from their Vdex goes in with **Add from a link**. |
-| **Equipment** | Everything you own, with serial numbers, values, quantities and where each item is, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). **Share…** hands the list, a kit or chosen items to a workmate. |
+| **Equipment** | Everything you own, with serial numbers, values, quantities and where each item is, and which shoots each item is booked on. The **Kits** tab saves sets of gear for the jobs you do most (an interview set, a car-shoot set…). **Import…** brings in the kit list you already keep in a spreadsheet or another app. **Share…** hands the list, a kit or chosen items to a workmate. |
 | **Venues** | Places you shoot: map pin and directions, access and parking notes, nearest hospital, contact, and the rules (tripods, lighting, haze, drones… allowed, needs approval, or not allowed). |
 | **Insurance** | Your policies, claims lines and renewal dates, with a warning if your kit is worth more than it's insured for. |
 | **Me** | Your details and a QR code that hands your contact card, or your website, to anyone who scans it: they can save you to their phone, or add you to their own Vdex. |
@@ -402,6 +426,30 @@ Up to 16 days ahead, the booking page and the call sheet show the forecast for t
 Each item on the Equipment page has a **🔧 service log**: services, sensor and lens cleans, calibrations, checks, repairs and firmware updates, with dates, notes and costs. Give an item a service interval and a warranty date (Edit) and the page warns when a service is overdue or a warranty is about to end; Vdex also reminds you once in a while at start-up. The asset register export includes the warranty, firmware and last service.
 
 Each item also has a **Where it is** field: a shelf, a case, the van, a person or the repair shop. It shows on the item's card (tap it to move the item in one go), in search, as 📍 filter chips, on the booking page's equipment list, and in the asset register. Places you have typed before are offered as you type.
+
+### Bring in the kit list you already have
+
+If your kit is already listed somewhere, you do not have to type it again. Equipment → **📥 Import…** takes:
+
+- **a file**: CSV, or Excel (**.xlsx**). That covers your own spreadsheet, an export from another kit or inventory app, a rental house's list, an insurer's equipment schedule, and Vdex's own **asset register**. From Numbers or Google Sheets, export or download the sheet as CSV or Excel first. The phone's file chooser opens: pick it from Downloads, Drive or wherever it is.
+- **pasted text**: rows copied out of a spreadsheet, or a plain list with one item on each line (`2x Aputure 600d` and `Sony FX6 (S/N 4512345)` are understood; a line ending in a colon, such as `Lenses:`, heads the lines under it).
+
+Everything is read on your device. Nothing is uploaded.
+
+1. **Check the columns.** Vdex shows each column with a few of its entries and what it takes it for: Name, Make or brand, Model, Category, Serial number, Quantity, Value, Where it is, Purchased, Warranty until, Service every, Firmware, Last service, Notes, or **Skip this column**. It goes by the heading and by what is in the column, so most files come out right first time; change any that is wrong. A Make and a Model join into the name. If the file has no row of headings, untick **The first row holds the headings**. A workbook with several sheets lets you choose the sheet.
+2. **Read what would happen.** Under the columns are the first items as Vdex read them, the categories it changed (**Mics** becomes Audio, **Tripods** becomes Support; a category Vdex does not know is kept as you typed it), and a list of **rows to look at**: a row with no name, a value or date it could not read, text it had to shorten. Total lines and group headings are passed over, and a group heading such as **LENSES** gives the rows under it their category.
+3. **Items you already have** are found by their **serial number** (capitals, spaces and hyphens do not matter); an item with no serial number is found by its name. For each one, or for all of them at once, choose **Skip it**, **Update mine with these details** (nothing of yours is blanked, and its service log stays) or **Add anyway**. Unless you choose otherwise they are skipped.
+4. **Add.** The line above the button says exactly what will happen, for example *Adds 42, updates 3, skips 5*. Nothing is added before you tap that button.
+
+Afterwards the new items are outlined on the Equipment page and a bar at the bottom offers **Undo** for a short while; after that, **Undo that import** is at the bottom of the Import sheet until you close Vdex or import something else. Undo removes what the import added and puts back what it updated, except items you have changed or put on a booking or in a kit since.
+
+Good to know:
+
+- Values are read with or without a currency sign, with either kind of thousands and decimal mark (`£1,299.00`, `1.299,00 €`), and `n/a` or a dash counts as empty. A quantity that is missing is 1. Dates are read in the usual forms; for a date such as 03/04/2024 Vdex looks at the rest of the column to tell the day from the month, and otherwise goes by your device's setting, so glance at the dates in the preview.
+- The value Vdex keeps is the **replacement value of one item**. When a file has several money columns it takes the replacement value first, then a plain value or price, then what you paid; a column of line totals is left out.
+- A formula in a cell is never worked out: Vdex keeps what the cell showed when the file was saved, as plain text.
+- An old **.xls** file cannot be read: open it and save it as .xlsx or CSV. A file over 20 MB, or the rows after the first 10,000, are not read: import a big list in parts.
+- Importing needs no licence. Like every change, it is not possible while Vdex is read-only.
 
 ### Keep track of a project
 
@@ -496,7 +544,7 @@ A stolen, lost or broken phone should cost you a phone, not your business record
 - **Link a cloud storage** (Google Drive, iCloud, Dropbox, OneDrive or WebDAV). Besides syncing, Vdex writes a dated backup next to its database once a day after a change: one file per weekday and one per month. Settings → *Storage, sync & backups* → **Restore an automatic cloud backup…** brings any of them back, which also undoes a mistake from earlier in the week.
 - **Export a backup** now and then (Settings → *Storage, sync & backups*). The **Encrypted backup…** option protects the file with a passphrase, so it can sit in email or a shared drive safely. Both kinds import on any device.
 - Settings shows the **last off-device copy** and Vdex reminds you, at most every few days, when there has been none for a week.
-- **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing.
+- **Equipment → Asset register (CSV)** (with a licence) exports everything you own with serial numbers and values. Keep a copy with your insurer and at home: it is what the police and the insurer ask for when kit goes missing. Equipment → **Import…** reads it back in, on this device or another.
 - **If the phone is stolen:** with a PIN set, the Vdex data on it is encrypted. Change the password of the cloud account you linked, install Vdex on the new phone, link the same storage or import a backup, and set a new PIN.
 
 ### Android questions and answers

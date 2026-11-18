@@ -32,7 +32,7 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 |---|---|
 | 📅 **Bookings** | Your calendar of shoots. Tap a day, then a shoot, to see everything about it. |
 | 👥 **Crew** | The people you work with and how to reach them. |
-| 🎥 **Equipment** | Everything you own, with serial numbers and where each item is. Make kits for the shoots you do often, and share the list or a kit with a workmate. |
+| 🎥 **Equipment** | Everything you own, with serial numbers and where each item is. Bring in the list you already keep (a spreadsheet, another app's export, pasted text), make kits for the shoots you do often, and share the list or a kit with a workmate. |
 | 📍 **Venues** | The places you film: rules, parking, a map. |
 | 🛡 **Insurance** | Your policies and when they run out. |
 | 🪪 **Me** | Your own details, with a QR code that hands your contact card to anyone who scans it: they can save it to their phone, or add you to their own Vdex. |

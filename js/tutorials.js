@@ -220,7 +220,7 @@ export const TUTORIALS = {
   ] },
   gear: { name: 'Equipment', page: 'gear', steps: [
     T('Items and kits', 'Items is everything you own. Kits are named sets of gear for the shoots you do most; tick a kit on a booking to load its gear.', '.seg[role=tablist]'),
-    T('Asset register, sharing and adding', 'Asset register exports everything with serial numbers, values, warranty and last service: for the insurer, and for the police if kit goes missing. Share… hands the whole list, a kit or the items you tick to a workmate as a link or QR code, serial numbers and values included. Add from a link takes in a list someone shared with you, and asks what to do with serial numbers you already have.', '.subactions'),
+    T('Asset register, importing, sharing and adding', 'Asset register exports everything with serial numbers, values, warranty and last service: for the insurer, and for the police if kit goes missing. Import… brings in the kit list you already keep, from a CSV or Excel file or pasted text: Vdex shows what it takes each column for, you correct it, and nothing is added until you say so. Share… hands the whole list, a kit or the items you tick to a workmate as a link or QR code, serial numbers and values included. Add from a link takes in a list someone shared with you, and asks what to do with serial numbers you already have.', '.subactions'),
     T('Due for service', 'Items whose service is overdue or whose warranty is about to end.', '#page .warn'),
     T('Totals', 'How many items, what they are worth, and how many are booked ahead.', '.stats'),
     T('Find an item', 'Search by name, serial number or place; the chips filter by category, and the 📍 chips by where things are.', '.search', '.chips'),
