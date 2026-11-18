@@ -3,13 +3,13 @@
 // Only the fields js/share-data.js allows are ever shown. "Add to my Vdex" hands the same packed link to the app
 // (index.html#add=…), which shows what would be added and asks before adding anything (js/share-add.js).
 import { h, telUrl } from './util.js';
-import { readShared, packedOf, vcard, fromLine } from './share-data.js';
+import { readShared, addHref, elsewhere, vcard, fromLine, GEAR_MAX } from './share-data.js';
 
 const bar = document.getElementById('bar'), box = document.getElementById('doc');
 addEventListener('hashchange', () => location.reload()); // another shared link opened in this same tab
 const fail = msg => { box.replaceChildren(h('div', { class: 'msg' }, h('h1', null, 'This link does not open'), h('p', null, msg))); };
 const save = (text, name, type) => { const a = h('a', { href: URL.createObjectURL(new File([text], name, { type })), download: name }); document.body.append(a); a.click(); a.remove(); };
-const addBtn = what => h('a', { class: 'btn primary', href: 'index.html#add=' + packedOf(location.hash), title: `Opens Vdex and shows what would be added to your ${what}, before anything is` }, '＋ Add to my Vdex');
+const addBtn = what => h('a', { class: 'btn primary', href: addHref(location.hash, document.referrer), title: `Opens Vdex and shows what would be added to your ${what}, before anything is` }, '＋ Add to my Vdex');
 const sent = made => (made ? new Date(made).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -18,14 +18,15 @@ function contact(c) {
   document.title = `${name} — contact card`;
   bar.replaceChildren(
     h('div', { class: 'who' }, 'Contact card', h('small', null, 'shared with Vdex')),
-    h('div', { class: 'acts' }, addBtn('Crew list'), h('button', { class: 'btn', type: 'button', onclick: () => save(vcard(c), `${name.replace(/[^\p{L}\p{N}]+/gu, '_').slice(0, 40) || 'contact'}.vcf`, 'text/vcard') }, 'Save to my phone’s contacts')));
+    h('div', { class: 'acts' }, addBtn('Crew list'), h('button', { class: 'btn', type: 'button', onclick: () => save(vcard(c), `${name.replace(/[^\p{L}\p{N}]+/gu, '_').slice(0, 40) || 'contact'}.vcf`, 'text/vcard') }, 'Save to my contacts (.vcf)')),
+    elsewhere('Crew'));
   const rows = [['Phone', c.phone && h('a', { href: telUrl(c.phone) }, c.phone)], ['Email', c.email && h('a', { href: 'mailto:' + c.email }, c.email)], ['Website', c.website && h('a', { href: c.website, target: '_blank', rel: 'noopener noreferrer' }, c.website.replace(/^https?:\/\//, '').replace(/\/$/, ''))], ['Based in', c.location]].filter(r => r[1]);
   box.replaceChildren(h('div', { class: 'paper card' },
     h('div', { class: 'top' },
       h('div', { class: 'avatar', 'aria-hidden': 'true' }, name.split(/\s+/).map(w => [...w][0] || '').slice(0, 2).join('').toUpperCase()),
       h('div', null, h('h1', null, name), h('p', { class: 'sub' }, [c.title, c.name && c.business].filter(Boolean).join(' · ')))),
     rows.length > 0 && h('dl', { class: 'kv' }, rows.flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)])),
-    h('p', { class: 'note' }, 'Add to my Vdex puts this card in your Crew list, after showing you what it holds. Save to my phone’s contacts downloads it as a contact file (.vcf).')));
+    h('p', { class: 'note' }, 'Add to my Vdex puts this card in your Crew list, after showing you what it holds. Save to my contacts downloads it as a contact file (.vcf), which a phone or a computer opens in its own contacts.')));
 }
 
 function gear(g) {
@@ -35,7 +36,8 @@ function gear(g) {
   document.title = `${title}${from ? ' — ' + from : ''}`;
   bar.replaceChildren(
     h('div', { class: 'who' }, 'Equipment list', from && h('small', null, 'from ' + from)),
-    h('div', { class: 'acts' }, addBtn('Equipment'), h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, 'Print')));
+    h('div', { class: 'acts' }, addBtn('Equipment'), h('button', { class: 'btn', type: 'button', onclick: () => window.print() }, 'Print')),
+    elsewhere('Equipment'));
   const groups = new Map(); g.items.forEach(x => { const c = x.category || 'Other'; groups.set(c, [...(groups.get(c) || []), x]); });
   const item = x => h('li', null,
     h('span', { class: 'name' }, x.name, x.qty > 1 && ` × ${x.qty}`),
@@ -45,6 +47,7 @@ function gear(g) {
   box.replaceChildren(h('div', { class: 'paper' },
     h('h1', null, title),
     h('p', { class: 'sub' }, [plural(units, 'item'), total > 0 && 'worth ' + worth(total), from && 'from ' + from].filter(Boolean).join(' · ')),
+    g.cut > 0 && h('p', { class: 'note cut' }, `This list is longer than one link carries: only its first ${GEAR_MAX.toLocaleString()} items are here, and ${plural(g.cut, 'more item')} ${g.cut === 1 ? 'is' : 'are'} not. Ask ${from || 'the sender'} for the rest in a second link.`),
     ...[...groups].flatMap(([cat, items]) => [h('h2', null, cat), h('ul', { class: 'items' }, items.map(item))]),
     ...(g.kits.length ? [h('h2', null, g.kits.length === 1 ? 'Kit' : 'Kits'), ...g.kits.map(k => h('div', { class: 'kit' }, h('strong', null, k.name), k.description && ` — ${k.description}`,
       h('p', null, k.items.map(([i, n]) => g.items[i].name + (n > 1 ? ` × ${n}` : '')).join(', ')), k.notes && h('p', { class: 'notes' }, k.notes)))] : []),

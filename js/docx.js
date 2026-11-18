@@ -8,9 +8,13 @@ const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 // One entry of a zip file, as text. js/table-read.js reads .xlsx files with it too (a zip of XML like .docx): `kind`
 // names the file type in the messages, a missing entry is an error with code 'missing', and `max` stops unpacking an
 // entry that grows past that many bytes (code 'big'), since a small file can be made to unpack into gigabytes.
-export async function zipEntry(buf, wanted, { kind = '.docx', max = 0 } = {}) {
+// `budget` ({ left: bytes }) is one allowance for all the entries read from a file: each entry may unpack into what
+// is left of it at most, and takes what it unpacked off it, so many entries just under `max` cannot add up to more.
+export async function zipEntry(buf, wanted, { kind = '.docx', max = 0, budget = null } = {}) {
   const dv = new DataView(buf), u8 = new Uint8Array(buf);
   const big = () => Object.assign(new Error(`This ${kind} file holds too much to open`), { code: 'big' });
+  if (budget) { if (budget.left <= 0) throw big(); max = max ? Math.min(max, budget.left) : budget.left; }
+  const spend = n => { if (budget) budget.left -= n; };
   // End-of-central-directory record sits in the last 64KB.
   let eocd = -1;
   for (let i = buf.byteLength - 22; i >= Math.max(0, buf.byteLength - 65557); i--) if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
@@ -27,17 +31,19 @@ export async function zipEntry(buf, wanted, { kind = '.docx', max = 0 } = {}) {
     if (off + 30 > buf.byteLength) throw new Error(`Damaged ${kind} file`);
     const dn = dv.getUint16(off + 26, true), de = dv.getUint16(off + 28, true);
     const data = u8.subarray(off + 30 + dn + de, off + 30 + dn + de + csize);
-    if (method === 0) { if (max && data.length > max) throw big(); return dec.decode(data); }
+    if (method === 0) { if (max && data.length > max) throw big(); spend(data.length); return dec.decode(data); }
     if (method !== 8) throw new Error(`Unsupported ${kind} compression`);
     if (typeof DecompressionStream !== 'function') throw new Error(`This browser cannot read ${kind} files. Paste the text instead.`);
     const stream = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
     if (!max) return new Response(stream).text();
     const reader = stream.getReader(), parts = [];
-    for (let n = 0; ;) {
+    let n = 0;
+    for (;;) {
       const { done, value } = await reader.read(); if (done) break;
-      n += value.length; if (n > max) { reader.cancel().catch(() => {}); throw big(); }
+      n += value.length; if (n > max) { reader.cancel().catch(() => {}); spend(n); throw big(); }
       parts.push(value);
     }
+    spend(n);
     return new Blob(parts).text();
   }
   throw Object.assign(new Error('No document text found in this file'), { code: 'missing' });
@@ -63,8 +69,9 @@ function paragraphText(p) {
   return out;
 }
 
+const DOCX_MAX = 60e6; // bytes the text of a Word document may unpack into: far more than any script, far less than a zip bomb
 export async function docxToLines(file) {
-  const xml = await zipEntry(await file.arrayBuffer(), 'word/document.xml');
+  const xml = await zipEntry(await file.arrayBuffer(), 'word/document.xml', { max: DOCX_MAX });
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) throw new Error('Could not read the document text');
   const lines = [];

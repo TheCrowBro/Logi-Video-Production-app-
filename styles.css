@@ -683,7 +683,9 @@ body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
 .cs-paper .paid-stamp { display: inline-block; margin: 8px 0; padding: 6px 12px; border: 2px solid #2a8a4a; border-radius: 8px; color: #2a8a4a; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 .pay-list .card-row + .card-row { border-top: 1px solid var(--line); padding-top: 8px; margin-top: 8px; }
 .share-link { width: 100%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
+.share-link:not([readonly]) { font-size: 1rem; } /* the box a link is pasted into follows the text size, and a phone does not zoom in on it */
 .share-qr svg { width: 180px; height: 180px; background: #fff; padding: 6px; border-radius: 10px; display: block; margin: 0 auto; }
+.share-qr.large svg { width: min(100%, 340px); height: auto; } /* a long link: more squares, so a larger code */
 
 /* Where an item is */
 .loc-chip { margin-top: 6px; }
@@ -877,6 +879,11 @@ html[data-motion=off] .back-btn::after, html[data-motion=bar] .back-btn::after {
 .add-why { font-weight: 700; }
 .add-group h4 { margin: 6px 0 4px; } .add-all { display: grid; gap: 4px; margin: 0 0 8px; }
 .add-sum { font-weight: 700; margin: 4px 0 0; }
+/* the foot of a preview (what would happen, then Add and Cancel) stays in view while a long list scrolls above it */
+.add-preview > .add-foot { position: sticky; bottom: -20px; bottom: calc(-20px - env(safe-area-inset-bottom)); z-index: 1; display: grid; gap: 6px; background: var(--bg); padding: 8px 0 20px; padding-bottom: calc(20px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); }
+.add-foot .actions { margin-top: 0; } .add-foot .warn { margin: 0; }
+.sheet-body:has(.add-foot) { scroll-padding-bottom: calc(3 * var(--hit) + 72px); } /* a choice reached with Tab is never under the foot */
+.add-maybe .add-who { margin-bottom: 6px; } .add-rules p { margin: 0; }
 .add-who { justify-content: flex-start; }
 .card.just-added { outline: 3px solid var(--accent); outline-offset: 2px; }
 .share-picks { max-height: 300px; } .share-warn { margin: 0; }
@@ -900,4 +907,4 @@ html[data-motion=off] .back-btn::after, html[data-motion=bar] .back-btn::after {
 .undo-bar { position: fixed; left: 0; right: 0; margin-inline: auto; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 320; display: flex; align-items: center; gap: 6px; width: max-content; max-width: calc(100vw - 24px); padding: 4px 4px 4px 16px; border-radius: 999px; background: var(--text); color: var(--bg); font-size: .9rem; box-shadow: 0 6px 20px #0005; animation: rise .25s cubic-bezier(.2, .9, .3, 1); }
 .undo-bar > span { min-width: 0; overflow-wrap: anywhere; } .undo-bar .btn { min-height: var(--hit); background: var(--bg); color: var(--text); border-color: transparent; font-weight: 700; } .undo-bar .icon-btn { color: inherit; }
 .undo-bar .icon-btn:hover { background: transparent; color: inherit; } .undo-bar :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-body:has(.sheet-back) .undo-bar { display: none; } /* never over a sheet's buttons */
+body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .undo-bar, body:has(.lock) .undo-bar { display: none; } /* never over a sheet's buttons, the menu, the search or the lock screen; it is back when they close, and Undo stays under Import… */

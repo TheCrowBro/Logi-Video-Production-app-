@@ -123,13 +123,18 @@ export async function restoreFromCloud() {
     h('p', { class: 'small muted' }, 'Vdex keeps one backup per weekday and one per month, so a mistake can be undone for about a week, or a month.')));
 }
 
+// One cell of a CSV file, for every spreadsheet Vdex writes (this register, the invoices, the budget, the hours).
+// csvCell quotes a value as it is: for numbers and dates. csvText is for words. A cell that starts like a formula
+// would be run by the spreadsheet that opens the file, and a name, a title or a note can come from someone else's
+// list or link: an apostrophe in front keeps it text (Vdex's own import takes it off again).
+export const csvCell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+export const csvText = v => { const t = String(v == null ? '' : v); return csvCell(/^[=+\-@\t\r]/.test(t) ? "'" + t : t); };
+
 // Everything you own, with serial numbers and values: keep a copy with your insurer, and hand it to the police if kit goes missing.
 export async function exportAssetRegister() {
   if (!store.requirePaid('export')) return;
   const sym = store.db.profile.currency || '$';
-  // A cell that starts like a formula would be run by the spreadsheet that opens the file (a name or a note can come
-  // from someone else's list): an apostrophe in front keeps it text, and Vdex's own import takes it off again.
-  const q = v => { const t = String(v == null ? '' : v); return '"' + (/^[=+\-@\t\r]/.test(t) ? "'" + t : t).replace(/"/g, '""') + '"'; };
+  const q = csvText;
   const lastService = g => (g.log || []).filter(e => ['service', 'clean', 'calibration', 'check'].includes(e.kind) && e.date).map(e => e.date).sort().pop() || '';
   const rows = [['Item', 'Category', 'Serial number', 'Where', 'Quantity', `Value each (${sym})`, `Total (${sym})`, 'Purchased', 'Warranty until', 'Firmware', 'Last service', 'Notes'].map(q).join(',')];
   let total = 0;

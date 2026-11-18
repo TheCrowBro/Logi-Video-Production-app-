@@ -4,6 +4,10 @@
 // corners of the format, pasted text of each shape, correcting a column, duplicates by serial number with each
 // choice, categories, decimal commas, a list with no headings, an old .xls turned down kindly, the numbers in the
 // summary, Undo, read-only mode, the PIN lock, hostile and silly files, 5,000 rows, and the layout at 360 px and 1200 px.
+// And what a review found afterwards: quantities a list does not give, a row holding only a word (item or heading),
+// number cells of an .xlsx, workbooks and lists made to waste time, a list made from one's own items and kits, room
+// in the browser's storage (with and without a PIN) and saying so when a save is refused, a tap beside the sheet,
+// where Undo goes, and a spreadsheet shared to the installed web app.
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const { acceptTerms } = require('../helpers.cjs');
@@ -113,6 +117,8 @@ const ODD_XLSX = zip({
     Object.assign(d.gear[0], { serial: 'FX6-120934', location: 'Flight case 1', value: 6000.5, purchased: '2024-03-01', warranty: '2027-03-01', firmware: '5.01', notes: 'Cage, "top handle"\nand a spare plate', log: [{ id: 'l1', date: '2026-01-10', kind: 'service', note: 'sensor', cost: 80 }, { id: 'l2', date: '2026-03-02', kind: 'repair', note: 'not a service' }] });
     Object.assign(d.gear[4], { qty: 4, value: 125 });
     d.gear.push({ id: 'odd1', name: '=SUM(1+1)*cmd|x', category: 'Teleprompters', serial: '+44-7700', location: '@home', qty: 2, value: '', notes: '-not a formula', updatedAt: 1 });
+    // categories of one's own that Vdex would otherwise file under its own (Power, Grip), and an item that happens to be called Total
+    d.gear.push({ id: 'odd2', name: 'V-mount 98Wh', category: 'Batteries', serial: '', location: 'Flight case 2', qty: 6, value: 220, notes: '', updatedAt: 1 }, { id: 'odd3', name: 'Total', category: 'Stands', serial: '', location: '', qty: 2, value: 50, notes: '', updatedAt: 1 });
   })));
   const [dl] = await Promise.all([A.page.waitForEvent('download'), A.page.getByRole('button', { name: 'Asset register (CSV)' }).click()]);
   const register = fs.readFileSync(await dl.path(), 'utf8'), regLines = register.replace(/^\uFEFF/, '').split('\r\n');
@@ -127,8 +133,10 @@ const ODD_XLSX = zip({
   ok('every column of the register is recognised, and its Total column is left out', same(regCols, { Item: 'name', Category: 'category', 'Serial number': 'serial', Where: 'location', Quantity: 'qty', 'Value each (£)': 'value', 'Total (£)': '', Purchased: 'purchased', 'Warranty until': 'warranty', Firmware: 'firmware', 'Last service': 'lastService', Notes: 'notes' }), JSON.stringify(regCols));
   ok('the summary counts every item, and the register’s total line is passed over', (await sum(B.page)) === `Adds ${mine.length}.` && /1 total row/.test(await text(B.page, '.sheet .gi-passed')), (await sum(B.page)) + ' ' + await text(B.page, '.sheet .gi-passed'));
   ok('nothing is added while the list is only being looked at, and nothing is said about currency when the list’s is this Vdex’s', (await gear(B.page)).length === 0 && (await B.page.locator('.sheet .gi-money').count()) === 0);
+  const regCats = await text(B.page, '.sheet .gi-cats');
   await add(B.page);
   const theirs = await gear(B.page);
+  ok('the register’s categories come back as they were written, also where Vdex knows the word (Batteries, Stands), and an item called “Total” comes back as an item', byName(theirs, 'V-mount 98Wh').category === 'Batteries' && byName(theirs, 'Total').category === 'Stands' && byName(theirs, 'Total').qty === 2 && byName(theirs, 'Total').value === 50 && !/becomes/.test(regCats) && /Kept as typed: /.test(regCats) && /Batteries/.test(regCats) && /Stands/.test(regCats), regCats + ' ' + JSON.stringify([byName(theirs, 'V-mount 98Wh'), byName(theirs, 'Total')]));
   const carried = g => ({ name: g.name, category: g.category || '', serial: g.serial || '', location: g.location || '', qty: Math.max(1, Number(g.qty) || 1), value: Number(g.value) || 0, purchased: g.purchased || '', warranty: g.warranty || '', firmware: g.firmware || '', notes: (g.notes || '').replace(/\r?\n/g, ' '), lastService: (g.log || []).filter(e => ['service', 'clean', 'calibration', 'check'].includes(e.kind) && e.date).map(e => e.date).sort().pop() || '' });
   const sorted = list => list.map(carried).sort((a, b) => a.name.localeCompare(b.name));
   ok('importing the register gives back every item with everything the register carries', theirs.length === mine.length && same(sorted(theirs), sorted(mine)), JSON.stringify(sorted(theirs).filter((x, i) => !same(x, sorted(mine)[i]))).slice(0, 400));
@@ -173,6 +181,7 @@ const ODD_XLSX = zip({
   ok('…and since its values are in another currency than this Vdex shows, it says the numbers are kept as they are', /The values in this list are in €\. Vdex keeps the numbers as they are and shows them with your own currency sign \(\$\): nothing is converted\./.test(r.money), r.money);
   ok('…7 items; its group headings give the categories; the total is passed over; “n/a” is no serial number; the Windows text comes out right',
     r.sum === 'Adds 7.' && r.gear.length === 7 && /1 total row/.test(r.passed) && /4 headings/.test(r.passed) && fx9.category === 'Camera' && byName(r.gear, 'Zeiss CP.3 35mm T2.1').category === 'Lens' && sd.category === 'Audio' && sd.name === 'Sound Devices 833 – 8 track mixer/recorder' && byName(r.gear, 'Sanken COS-11D lavalier').serial === '' && byName(r.gear, 'Zeiss CP.3 35mm T2.1').serial === '51234567', r.sum + ' ' + r.passed + ' ' + sd.name);
+  ok('…and the headings it passed over are named, each with its row, so a line wrongly taken for one can be seen', /4 headings \(row 5 “CAMERA”, row 8 “LENSES”, row 11 “LIGHTING”, row 13 “SOUND”\)/.test(r.passed), r.passed);
   // an insurer's schedule as .xlsx (written by openpyxl: inline strings, real date cells, a formula with no saved result)
   await seed(C.page, []);
   await openImport(C.page); await give(C.page, path.join(FIX, 'gear-insurer-schedule.xlsx')); await previewed(C.page);
@@ -200,10 +209,10 @@ const ODD_XLSX = zip({
     return t.sheets.map(s => ({ name: s.name, hidden: s.hidden, rows: s.rows }));
   }, ODD_XLSX.toString('base64'));
   const kit = (odd2[1] || {}).rows || [];
-  ok('.xlsx: every sheet is read by its name, hidden or not, at a relative or an absolute path, with or without a tag prefix', odd2.length === 3 && odd2[0].name === 'Old list' && odd2[0].hidden === true && odd2[1].name === 'Kit & cases' && odd2[1].hidden === false && odd2[2].name === 'Lenses' && same(odd2[2].rows, [{ n: 1, cells: ['Lens', '', 'Replacement value'] }, { n: 2, cells: ['Zeiss CP.3 35mm', '', '4390'] }, { n: 3, cells: ['Zeiss CP.3 85mm', '', '4390.5'] }]), JSON.stringify(odd2[2]));
+  ok('.xlsx: every sheet is read by its name, hidden or not, at a relative or an absolute path, with or without a tag prefix', odd2.length === 3 && odd2[0].name === 'Old list' && odd2[0].hidden === true && odd2[1].name === 'Kit & cases' && odd2[1].hidden === false && odd2[2].name === 'Lenses' && same(odd2[2].rows, [{ n: 1, cells: ['Lens', '', 'Replacement value'] }, { n: 2, cells: ['Zeiss CP.3 35mm', '', '4390'], nums: [2] }, { n: 3, cells: ['Zeiss CP.3 85mm', '', '4390.5'], nums: [2] }]), JSON.stringify(odd2[2]));
   ok('.xlsx: shared strings (in runs, with an entity, without the phonetic guide, with Excel’s own line break), a formula’s saved result, an inline string', same(kit[0], { n: 1, cells: ['Item', 'Serial number', 'Bought', 'Value', 'Notes', 'Quantity'] }) && kit[1].cells[0] === 'Sony FX6 & cage' && kit[1].cells[1] === 'FX6-1' && kit[1].cells[4] === 'Line one\r\nline <two>' && kit[2].cells[0] === 'Sigma 18-35', JSON.stringify(kit.slice(0, 3)));
   ok('.xlsx: day numbers under a built-in or a custom date format become dates (counted from 1904 here); other numbers stay numbers, tidied', kit[1].cells[2] === '2023-03-15' && kit[2].cells[2] === '2024-06-19' && kit[1].cells[3] === '6100.1' && kit[2].cells[3] === '0.3' && kit[2].cells[1] === '4512345', JSON.stringify([kit[1].cells, kit[2].cells]));
-  ok('.xlsx: an error is an empty cell, a boolean is a word, a skipped row keeps the numbering, cells with no reference fall in order', kit[2].cells[4] === '' && kit[2].cells[5] === 'TRUE' && kit.length === 4 && same(kit[3], { n: 5, cells: ['Zoom H6', '7'] }), JSON.stringify(kit.slice(2)));
+  ok('.xlsx: an error is an empty cell, a boolean is a word, a skipped row keeps the numbering, cells with no reference fall in order', kit[2].cells[4] === '' && kit[2].cells[5] === 'TRUE' && kit.length === 4 && same(kit[3], { n: 5, cells: ['Zoom H6', '7'], nums: [1] }), JSON.stringify(kit.slice(2)));
   // the Word reader shares the zip code that was widened for this: it still reads a document, and still says what is wrong
   const docx = await C.page.evaluate(async ([good, stored]) => {
     const D = await import('./js/docx.js'), file = b64 => new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], 'script.docx');
@@ -234,6 +243,7 @@ const ODD_XLSX = zip({
   await seed(C.page, []);
   await openImport(C.page); await paste(C.page, 'Kit list:\n- 2x Aputure 600d\n• Sony FX6 (S/N 4512345)\nSachtler Flowtech 75 x 2\n4x5 camera\n\nLenses:\n1. Sigma 18-35mm f/1.8\n'); await previewed(C.page);
   ok('pasted list, one item on each line: it is read as a list, with a quantity and a serial number where the lines have them', same(await columns(C.page), { Item: 'name', Quantity: 'qty', 'Serial number': 'serial' }) && (await sum(C.page)) === 'Adds 5.' && (await C.page.locator('.sheet .gi-header').count()) === 0 && /2 headings/.test(await text(C.page, '.sheet .gi-passed')) && /7 lines/.test(await text(C.page, '.sheet .gi-source')), JSON.stringify(await columns(C.page)) + await sum(C.page) + await text(C.page, '.sheet .gi-source'));
+  ok('…and the two headings are named by their lines', (await text(C.page, '.sheet .gi-passed')) === 'Not items, so passed over: 2 headings (line 1 “Kit list”, line 7 “Lenses”).', await text(C.page, '.sheet .gi-passed'));
   await add(C.page); g = await gear(C.page);
   ok('…bullets and numbering go, “2x” and “x 2” are quantities, “4x5 camera” is a name, a serial number named as one is kept, “Lenses:” heads the lines under it',
     g.length === 5 && byName(g, 'Aputure 600d').qty === 2 && byName(g, 'Sony FX6').serial === '4512345' && byName(g, 'Sachtler Flowtech 75').qty === 2 && byName(g, '4x5 camera').qty === 1 && byName(g, 'Sigma 18-35mm f/1.8').category === 'Lens' && !byName(g, 'Aputure 600d').category, JSON.stringify(g.map(x => [x.name, x.qty, x.serial, x.category])));
@@ -523,6 +533,325 @@ const ODD_XLSX = zip({
   ok('a spreadsheet handed to Vdex by another app can be imported as the kit list: it opens on the preview, and still nothing is added before the last button', offered.includes('🎥 Kit list for Equipment') && offered.includes('🎬 Script for TC Notes') && (await sum(I.page)) === 'Adds 3.' && /my kit\.csv: 3 rows/.test(await text(I.page, '.sheet .gi-source')) && (await gear(I.page)).length === 0, offered.join('|') + ' ' + await sum(I.page));
   await I.ctx.close();
 
+  /* ============================== a list that says nothing about quantities ============================== */
+  const Q = await open({ width: 1200, height: 800 });
+  const OWNED_QTY = [{ id: 'q1', name: 'Aputure MC', category: 'Lighting', serial: '', location: '', qty: 4, value: 90, notes: '', updatedAt: 1 }, { id: 'q2', name: 'Sony FX6', category: 'Camera', serial: 'FX6-1', location: '', qty: 2, value: 5000, notes: '', updatedAt: 1 }];
+  await seed(Q.page, OWNED_QTY);
+  await openImport(Q.page); await paste(Q.page, 'Item\tCategory\tSerial number\tReplacement value\nAputure MC\tLighting\t\t95\nSony FX6\tCamera\tFX6-1\t6000\nRode NTG\tAudio\tRD-11\t300\n'); await previewed(Q.page);
+  await Q.page.locator('.sheet .gi-dups select.gi-all').selectOption('update'); await sleep(100);
+  const noQtyGo = await Q.page.locator('.sheet .gi-go').innerText();
+  await add(Q.page); g = await gear(Q.page);
+  ok('updating owned items from a list with no Quantity column leaves their quantities alone (4 and 2 stay 4 and 2) and takes the new values; a new item is added as 1', noQtyGo === 'Add 1 and update 2' && byName(g, 'Aputure MC').qty === 4 && byName(g, 'Aputure MC').value === 95 && byName(g, 'Sony FX6').qty === 2 && byName(g, 'Sony FX6').value === 6000 && byName(g, 'Rode NTG').qty === 1, noQtyGo + ' ' + JSON.stringify(g.map(x => [x.name, x.qty, x.value])));
+  await Q.page.locator('.undo-bar button', { hasText: 'Undo' }).click(); await sleep(250);
+  ok('…and Undo has nothing to put right in the quantities', same((await gear(Q.page)).map(x => [x.name, x.qty, x.value]), [['Aputure MC', 4, 90], ['Sony FX6', 2, 5000]]), JSON.stringify((await gear(Q.page)).map(x => [x.name, x.qty, x.value])));
+  await seed(Q.page, [OWNED_QTY[0], { id: 'q3', name: 'Rode NTG', category: 'Audio', serial: '', location: '', qty: 2, value: 280, notes: '', updatedAt: 1 }]);
+  await openImport(Q.page); await paste(Q.page, 'Item\tCategory\tQty\tValue\nAputure MC\tLighting\t\t99\nRode NTG\tAudio\t3\t310\nZoom H6\tAudio\tn/a\t300\n'); await previewed(Q.page);
+  await Q.page.locator('.sheet .gi-dups select.gi-all').selectOption('update'); await sleep(100);
+  await add(Q.page); g = await gear(Q.page);
+  ok('…the same where the Quantity column is there but a row leaves it empty: an empty cell changes nothing (4 stays 4), a quantity the list gives is taken (2 becomes 3)', byName(g, 'Aputure MC').qty === 4 && byName(g, 'Aputure MC').value === 99 && byName(g, 'Rode NTG').qty === 3 && byName(g, 'Rode NTG').value === 310 && byName(g, 'Zoom H6').qty === 1, JSON.stringify(g.map(x => [x.name, x.qty, x.value])));
+  const shared = await Q.page.evaluate(async () => {
+    const T = await import('./js/table-read.js'), G = await import('./js/gear-columns.js');
+    const t = await T.readTableText('Item,Qty,Total\nBatteries,4,400\nCharger,,90\n'), L = G.layout(t.sheets[0].rows), b = G.buildItems(L, G.guessColumns(L));
+    return b.items.map(x => [x.name, 'qty' in x ? x.qty : 'none', x.value]);
+  });
+  ok('a value of the whole row is still shared over the quantity the row gives, and over 1 when it gives none', same(shared, [['Batteries', 4, 100], ['Charger', 'none', 90]]), JSON.stringify(shared));
+
+  /* ============================== a row with only a word: an item, or a heading over a group ============================== */
+  await Q.page.locator('.undo-bar button[aria-label="Dismiss"]').click().catch(() => {});
+  await seed(Q.page, []);
+  await openImport(Q.page); await paste(Q.page, 'Item\tCategory\tSerial number\tReplacement value\nAputure MC\tLighting\t\t95\nSony FX6\tCamera\tFX6-1\t6000\nTripod\t\t\t\nRode NTG\t\tRD-11\t300\n'); await previewed(Q.page);
+  const loneSel = Q.page.locator('.sheet .gi-lone select');
+  const lone0 = { sum: await sum(Q.page), found: await Q.page.locator('.sheet .gi-sample h4').textContent(), passed: await Q.page.locator('.sheet .gi-passed').count(), label: await Q.page.locator('.sheet .gi-lone').evaluate(e => e.firstChild.textContent), value: await loneSel.inputValue(), options: await loneSel.locator('option').allTextContents(), name: await loneSel.getAttribute('aria-label'), fits: await loneSel.evaluate(e => { const r = e.getBoundingClientRect(), sh = e.closest('.sheet').getBoundingClientRect(); return r.height >= 43.5 && r.left >= sh.left && r.right <= sh.right; }) };
+  ok('a row holding only a one-word name such as Tripod is an item, not a heading: it is counted and nothing is passed over', lone0.sum === 'Adds 4.' && lone0.found === 'The 4 items found' && lone0.passed === 0, JSON.stringify(lone0));
+  ok('…and the sheet says which rows it means and how it took them, with a control to say otherwise', lone0.label === '1 row with only a name, such as “Tripod”: ' && lone0.name === '1 row with only a name, such as “Tripod”' && lone0.value === 'items' && same(lone0.options, ['Group headings, not items', 'Items of their own']) && lone0.fits, JSON.stringify(lone0));
+  await loneSel.focus(); await loneSel.selectOption('headings'); await sleep(150);
+  const lone1 = { sum: await sum(Q.page), passed: await text(Q.page, '.sheet .gi-passed'), value: await Q.page.locator('.sheet .gi-lone select').inputValue(), focused: await Q.page.evaluate(() => !!(document.activeElement && document.activeElement.closest('.gi-lone'))) };
+  ok('…saying they are group headings rebuilds the plan: the heading is named with its row, and the focus stays on the control', lone1.sum === 'Adds 3.' && lone1.passed === 'Not items, so passed over: 1 heading (row 4 “Tripod”).' && lone1.value === 'headings' && lone1.focused, JSON.stringify(lone1));
+  await Q.page.locator('.sheet .gi-lone select').selectOption('items'); await sleep(150);
+  await add(Q.page); g = await gear(Q.page);
+  ok('…and as items, the Tripod is added and the row under it does not take “Support” from it', g.length === 4 && !!byName(g, 'Tripod').id && byName(g, 'Rode NTG').category === '' && byName(g, 'Rode NTG').serial === 'RD-11', JSON.stringify(g.map(x => [x.name, x.category])));
+  await Q.page.locator('.undo-bar button[aria-label="Dismiss"]').click().catch(() => {});
+  await seed(Q.page, []);
+  await openImport(Q.page); await paste(Q.page, 'Item\tSerial number\tValue\nCAMERAS\t\t\nSony FX6\tFX6-1\t6000\nTripod\t\t\nLenses:\t\t\nSigma 18-35\tS-1\t800\n'); await previewed(Q.page);
+  const mixed = { sum: await sum(Q.page), passed: await text(Q.page, '.sheet .gi-passed'), value: await Q.page.locator('.sheet .gi-lone select').inputValue(), options: await Q.page.locator('.sheet .gi-lone select option').allTextContents() };
+  ok('where some such rows are written as headings (CAMERAS, Lenses:) and one is not, the headings are named and the control says how the rows were told apart', mixed.sum === 'Adds 3.' && mixed.passed === 'Not items, so passed over: 2 headings (row 2 “CAMERAS”, row 5 “Lenses:”).' && mixed.value === 'auto' && same(mixed.options, ['Headings only where written as one', 'Group headings, not items', 'Items of their own']), JSON.stringify(mixed));
+  await Q.page.keyboard.press('Escape'); await sleep(200);
+  const shapes = await Q.page.evaluate(async () => {
+    const T = await import('./js/table-read.js'), G = await import('./js/gear-columns.js');
+    const read = async (text, opt) => { const t = await T.readTableText(text), L = G.layout(t.sheets[0].rows), b = G.buildItems(L, G.guessColumns(L), opt); return { items: b.items.map(x => [x.name, x.category || '']), sections: b.left.sections, headings: b.left.headings, passed: (b.passed || []).map(x => `${x.n} ${x.text} > ${x.to}`), lone: b.lone }; };
+    const groups = 'Item,Serial number,Value\nCameras,,\nSony FX6,FX6-1,6000\nLenses,,\nSigma 18-35,S-1,800\n';
+    return {
+      plain: await read('Item,Serial number,Value\nSony FX6,4512345,5999\nTripod,,\nGimbal,,\nAputure 600d,AP123456,1890\nSmallHD 502,,\nHeadphones,,\n'),
+      withCategory: await read('Item,Qty,Category\nSony FX6,1,Cameras\nMonitor,,\nDrone,,\nBig Light,1,\n'),
+      written: await read('Item,Serial number,Value\nCAMERAS,,\nSony FX6,FX6-1,6000\nTripod,,\nLenses:,,\nSigma 18-35,S-1,800\n'),
+      acronym: await read('Item,Serial number,Value\nSony FX6,FX6-1,6000\nSSD,,\nLED,,\nSigma 18-35,S-1,800\n'),
+      opens: await read(groups), opensAsItems: await read(groups, { lone: 'items' }),
+      list: await read('2x Aputure 600d\nSony FX6 (S/N 4512345)\nTripod\n3x Batteries\n'),
+      titled: await read('Kit list for the insurer 2026,,,\nSony FX6,FX6-0001,Cameras,6000\nZoom H6,H6-00003,Mics,300\nSigma 18-35,SIG-0002,Lenses,800\n'),
+      // no row of headings: the first group's heading is among the lines taken for titles above the table
+      bare: await read('Kit list 2026\nCameras\nSony FX6\tFX6-1\t6000\nSony A7S\tA7-2\t2900\nLenses\nSigma 18-35\tS-1\t800\nSigma 50\tS-2\t600\nAudio\nRode NTG\tR-1\t300\n'),
+      bareAsItems: await read('Cameras\nSony FX6\tFX6-1\t6000\nSony A7S\tA7-2\t2900\nLenses\nSigma 18-35\tS-1\t800\n', { lone: 'items' }),
+      bareCapitals: await read('CAMERAS\nSony FX6\tFX6-1\t6000\nSony A7S\tA7-2\t2900\nTripod\nLENSES\nSigma 18-35\tS-1\t800\n'),
+    };
+  });
+  ok('with no Category column either, one-word names stay items (Tripod, Gimbal, Headphones) and give no category to the rows under them', same(shapes.plain.items, [['Sony FX6', ''], ['Tripod', ''], ['Gimbal', ''], ['Aputure 600d', ''], ['SmallHD 502', ''], ['Headphones', '']]) && shapes.plain.sections === 0 && same(shapes.plain.lone, { rows: 3, headings: 0, example: 'Tripod' }), JSON.stringify(shapes.plain));
+  ok('with a Category column, “Monitor” and “Drone” on rows of their own are items, and a later row with no category stays without one', same(shapes.withCategory.items, [['Sony FX6', 'Camera'], ['Monitor', ''], ['Drone', ''], ['Big Light', '']]) && shapes.withCategory.lone.headings === 0, JSON.stringify(shapes.withCategory));
+  ok('a word written as a heading (LENSES, Lenses:) still heads the rows under it and is named; a plain word among them is an item', same(shapes.written.items, [['Sony FX6', 'Camera'], ['Tripod', 'Camera'], ['Sigma 18-35', 'Lens']]) && same(shapes.written.passed, ['2 CAMERAS > Camera', '5 Lenses: > Lens']) && same(shapes.written.lone, { rows: 3, headings: 2, example: 'CAMERAS' }), JSON.stringify(shapes.written));
+  ok('…and capitals do not make a heading of a word that is always written in them (SSD, LED)', same(shapes.acronym.items.map(x => x[0]), ['Sony FX6', 'SSD', 'LED', 'Sigma 18-35']) && shapes.acronym.sections === 0, JSON.stringify(shapes.acronym));
+  ok('a list that plainly opens with a group heading keeps its headings, each named with its row; the person’s answer turns them all into items', same(shapes.opens.items, [['Sony FX6', 'Camera'], ['Sigma 18-35', 'Lens']]) && same(shapes.opens.passed, ['2 Cameras > Camera', '4 Lenses > Lens']) && same(shapes.opensAsItems.items, [['Cameras', ''], ['Sony FX6', ''], ['Lenses', ''], ['Sigma 18-35', '']]) && shapes.opensAsItems.passed.length === 0, JSON.stringify([shapes.opens, shapes.opensAsItems]));
+  ok('in a pasted list with counts and serial numbers, a line that is only “Tripod” is an item too', same(shapes.list.items.map(x => x[0]), ['Aputure 600d', 'Sony FX6', 'Tripod', 'Batteries']) && shapes.list.sections === 0, JSON.stringify(shapes.list));
+  ok('a title line passed over above a list with no headings is named as well', same(shapes.titled.passed, ['1 Kit list for the insurer 2026 > ']) && shapes.titled.headings === 1 && shapes.titled.items.length === 3, JSON.stringify(shapes.titled));
+  ok('a list with no row of headings, divided by plain group headings, keeps them: “Cameras” is taken for a title above the table, and “Lenses” and “Audio” still head their rows and are not added as items', same(shapes.bare.items, [['Sony FX6', ''], ['Sony A7S', ''], ['Sigma 18-35', 'Lens'], ['Sigma 50', 'Lens'], ['Rode NTG', 'Audio']]) && same(shapes.bare.passed, ['1 Kit list 2026 > ', '2 Cameras > ', '5 Lenses > Lens', '8 Audio > Audio']) && same(shapes.bare.lone, { rows: 2, headings: 2, example: 'Lenses' }), JSON.stringify(shapes.bare));
+  ok('…the person’s answer still makes items of them, and where the opening one is written as a heading (CAMERAS) a plain “Tripod” further down is an item', same(shapes.bareAsItems.items.map(x => x[0]), ['Sony FX6', 'Sony A7S', 'Lenses', 'Sigma 18-35']) && same(shapes.bareCapitals.items, [['Sony FX6', ''], ['Sony A7S', ''], ['Tripod', ''], ['Sigma 18-35', 'Lens']]), JSON.stringify([shapes.bareAsItems, shapes.bareCapitals]));
+
+  /* ============================== guesses and values put right ============================== */
+  const fixes = await Q.page.evaluate(async () => {
+    const T = await import('./js/table-read.js'), G = await import('./js/gear-columns.js');
+    const read = async text => { const t = await T.readTableText(text), L = G.layout(t.sheets[0].rows), cols = G.guessColumns(L), b = G.buildItems(L, cols); return { cols, items: b.items, problems: b.problems.map(p => p.text) }; };
+    return {
+      numbered: await read('Item,Description,Serial Number,Sum Insured\n1,Sony FX6 body,FX6-1,6000\n2,Sigma 18-35 lens,SG-2,800\n3,Rode NTG mic,RD-3,300\n4,Sachtler tripod,ST-4,900\n'),
+      described: (await read('Item,Description,Value\nSony FX6,Cinema camera body,6000\nSigma 18-35,Zoom lens,800\nRode NTG,Mic,300\n')).cols,
+      months: ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf'].map(w => G.parseMonths(w)),
+      interval: await read('Item,Service every\nSony FX6,constructor\nZoom H6,annually\n'),
+      dinars: [G.numberStyle(['450.500', '125.000'], { heading: 'Value (KWD)' }).dotThousands, G.numberStyle(['450.500 KWD', '125.000 KWD']).dotThousands, G.numberStyle(['1.299', '2.500']).dotThousands, G.parseAmount('KWD 450.500'), G.parseAmount('450.500 BHD')],
+      dinarList: (await read('Item,Value (KWD)\nSony FX6,450.500\nZoom H6,125.000\n')).items.map(x => x.value),
+      long: [Number.isNaN(G.parseAmount('-'.repeat(1999) + 'x')), G.parseQty('2' + ' '.repeat(1990) + 'q').n, G.parseDate('1' + ' /'.repeat(900)), G.parseMonths("1" + " ".repeat(1990) + "zz")],
+    };
+  });
+  ok('an “Item” column of line numbers beside “Description” is left out, and the descriptions are the names (not the notes)', same(fixes.numbered.cols, ['', 'name', 'serial', 'value']) && same(fixes.numbered.items.map(x => [x.name, x.notes || '']), [['Sony FX6 body', ''], ['Sigma 18-35 lens', ''], ['Rode NTG mic', ''], ['Sachtler tripod', '']]), JSON.stringify(fixes.numbered));
+  ok('…while an “Item” column of words beside “Description” is still the name, with the description as notes', same(fixes.described, ['name', 'notes', 'value']), JSON.stringify(fixes.described));
+  ok('a service interval that is a word such as “constructor” is simply not understood: no interval is set, and the row says so', fixes.months.every(x => x === null) && !('serviceEvery' in fixes.interval.items[0]) && fixes.interval.items[1].serviceEvery === 12 && /“constructor” is not a number of months/.test(fixes.interval.problems.join(' ')), JSON.stringify([fixes.months.map(x => typeof x), fixes.interval]));
+  ok('money written to three decimal places keeps its point as the decimal mark when the column names such a currency (KWD, BHD…); elsewhere 1.299 is still thousands', same(fixes.dinars, [false, false, true, 450.5, 450.5]) && same(fixes.dinarList, [450.5, 125]), JSON.stringify([fixes.dinars, fixes.dinarList]));
+  ok('text far too long to be a number, a quantity, a date or an interval is not one, without a pattern being tried on it', same(fixes.long, [true, 1, null, null]), JSON.stringify(fixes.long));
+
+  /* ============================== number cells of an .xlsx, and workbooks made to waste time ============================== */
+  const RELS = targets => XML + `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${targets.map((t, i) => `<Relationship Id="rId${i + 1}" Type="x" Target="${t}"/>`).join('')}</Relationships>`;
+  const BOOK = sheets => XML + `<workbook ${NS} xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheets.map(([name, rid], i) => `<sheet name="${name}" sheetId="${i + 1}" r:id="${rid}"/>`).join('')}</sheets></workbook>`;
+  const SHEET = rows => XML + `<worksheet ${NS}><sheetData>${rows}</sheetData></worksheet>`;
+  const cT = (ref, s) => `<c r="${ref}" t="inlineStr"><is><t>${s}</t></is></c>`, cN = (ref, v, style) => `<c r="${ref}"${style ? ` s="${style}"` : ''}><v>${v}</v></c>`;
+  // real number cells (6000, 2300, 308.625) under "Value", and codes kept as numbers under a format of zeros
+  const NUM_XLSX = zip({
+    'xl/workbook.xml': BOOK([['Kit', 'rId1']]), 'xl/_rels/workbook.xml.rels': RELS(['worksheets/sheet1.xml']),
+    'xl/styles.xml': XML + `<styleSheet ${NS}><numFmts count="1"><numFmt numFmtId="164" formatCode="000000"/></numFmts><cellXfs count="2"><xf numFmtId="0"/><xf numFmtId="164"/></cellXfs></styleSheet>`,
+    'xl/worksheets/sheet1.xml': SHEET(`<row r="1">${cT('A1', 'Item')}${cT('B1', 'Serial number')}${cT('C1', 'Value')}</row><row r="2">${cT('A2', 'Sony FX6')}${cN('B2', 123, 1)}${cN('C2', 6000)}</row><row r="3">${cT('A3', 'Sigma 18-35')}${cN('B3', 45, 1)}${cN('C3', 2300)}</row><row r="4">${cT('A4', 'Filter set')}${cN('B4', 7, 1)}${cN('C4', 308.625)}</row>`),
+  });
+  const SAME_SIX = zip({ 'xl/workbook.xml': BOOK([1, 2, 3, 4, 5, 6].map(i => [`Copy ${i}`, 'rId1'])), 'xl/_rels/workbook.xml.rels': RELS(['worksheets/sheet1.xml']), 'xl/worksheets/sheet1.xml': SHEET(`<row r="1">${cT('A1', 'Item')}</row><row r="2">${cT('A2', 'Sony FX6')}</row>`) });
+  const blankSheet = bytes => Buffer.concat([Buffer.from(`<worksheet ${NS}><sheetData>`), Buffer.alloc(bytes, 0x20), Buffer.from('</sheetData></worksheet>')]);
+  const TWO_BIG = zip({ 'xl/workbook.xml': BOOK([['One', 'rId1'], ['Two', 'rId2']]), 'xl/_rels/workbook.xml.rels': RELS(['worksheets/sheet1.xml', 'worksheets/sheet2.xml']), 'xl/worksheets/sheet1.xml': blankSheet(45e6), 'xl/worksheets/sheet2.xml': blankSheet(45e6) });
+  // 400,000 rows that hold nothing, then one that does: slow to get through, and nothing wrong with it
+  let hollow = ''; for (let i = 1; i <= 400000; i++) hollow += `<row r="${i}"><c r="A${i}"><v></v></c></row>`;
+  const SLOW_XLSX = zip({ 'xl/workbook.xml': BOOK([['Slow', 'rId1']]), 'xl/_rels/workbook.xml.rels': RELS(['worksheets/sheet1.xml']), 'xl/worksheets/sheet1.xml': SHEET(hollow + `<row r="400001">${cT('A400001', 'Item')}</row><row r="400002">${cT('A400002', 'SLOW ITEM')}</row>`) });
+  const BIG_DOCX = zip({ 'word/document.xml': Buffer.concat([Buffer.from('<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>'), Buffer.alloc(70e6, 0x20), Buffer.from('</w:body></w:document>')]) });
+  const books = await Q.page.evaluate(async ([num, six, big, slow, docx]) => {
+    const T = await import('./js/table-read.js'), G = await import('./js/gear-columns.js'), D = await import('./js/docx.js');
+    const file = (b64, name) => new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], name), why = async f => { try { await f(); return 'read'; } catch (e) { return (e.code || '') + ': ' + e.message; } };
+    const t = await T.readTableFile(file(num, 'numbers.xlsx')), L = G.layout(t.sheets[0].rows), b = G.buildItems(L, G.guessColumns(L));
+    const typed = await T.readTableText('Item,Value\nSony FX6,6000\nSigma 18-35,2300\nFilter set,308.625\n'), TL = G.layout(typed.sheets[0].rows);
+    let stop = false; setTimeout(() => { stop = true; }, 40);
+    return {
+      rows: t.sheets[0].rows, values: b.items.map(x => [x.name, x.serial, x.value]), typed: G.buildItems(TL, G.guessColumns(TL)).items.map(x => x.value),
+      six: (await T.readTableFile(file(six, 'six.xlsx'))).sheets.map(s => s.name),
+      stopped: await why(() => T.readTableFile(file(slow, 'slow.xlsx'), { abandoned: () => stop })),
+      big: await why(() => T.readTableFile(file(big, 'two-big.xlsx'))),
+      docx: await why(() => D.docxToLines(file(docx, 'huge.docx'))),
+    };
+  }, [NUM_XLSX, SAME_SIX, TWO_BIG, SLOW_XLSX, BIG_DOCX].map(b => b.toString('base64')));
+  ok('.xlsx: a number cell is the number it holds: 308.625 under “Value” is 308.63, not 308,625, and the row says which of its cells were numbers', same(books.values.map(x => x[2]), [6000, 2300, 308.63]) && same(books.rows[3], { n: 4, cells: ['Filter set', '000007', '308.625'], nums: [2] }) && same(books.rows[0], { n: 1, cells: ['Item', 'Serial number', 'Value'] }), JSON.stringify([books.values, books.rows[3]]));
+  ok('…the same figures typed into a CSV are still read the way the column writes its numbers (the rule for text is unchanged)', same(books.typed, [6000, 2300, 308625]), JSON.stringify(books.typed));
+  ok('.xlsx: a code kept as a number under a format of zeros keeps its zeros (000123), as text', same(books.values.map(x => x[1]), ['000123', '000045', '000007']), JSON.stringify(books.values));
+  ok('.xlsx: a worksheet the workbook names six times is read once', same(books.six, ['Copy 1']), JSON.stringify(books.six));
+  ok('.xlsx: two worksheets that each unpack to less than the limit for one, but together to more than a workbook may, are stopped', /^big: This file unpacks into more than Vdex will read\./.test(books.big), books.big);
+  ok('.xlsx: a read that nobody waits for any more stops instead of running to its end', /^abandoned: /.test(books.stopped), books.stopped);
+  ok('a Word file whose text unpacks into far more than a script is stopped too', /^big: This \.docx file holds too much to open$/.test(books.docx), books.docx);
+  // choosing another list while a slow one is still being read: the later choice is the one shown, and it stays
+  await openImport(Q.page); await Q.page.locator('#gi-paste').fill('Item\nQuick one\n');
+  await give(Q.page, named('slow.xlsx', SLOW_XLSX, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'));
+  await Q.page.locator('.sheet .gi-use').click(); await previewed(Q.page);
+  const quick0 = await text(Q.page, '.sheet .gi-source'); await sleep(5000);
+  const quick1 = { source: await text(Q.page, '.sheet .gi-source'), sample: await text(Q.page, '.sheet .gi-sample'), sum: await sum(Q.page) };
+  ok('a list chosen while a slower one is still being read is the one shown, and the slower one does not push it aside when it arrives', /^the pasted text: 2 lines/.test(quick0) && /^the pasted text: 2 lines/.test(quick1.source) && /Quick one/.test(quick1.sample) && !/SLOW ITEM/.test(quick1.sample) && quick1.sum === 'Adds 1.', JSON.stringify([quick0, quick1]));
+  await Q.page.keyboard.press('Escape'); await sleep(200);
+
+  /* ============================== lists made to be slow ============================== */
+  const slow = await Q.page.evaluate(async () => {
+    const T = await import('./js/table-read.js'), G = await import('./js/gear-columns.js');
+    const gaps = []; let last = performance.now(); const beat = setInterval(() => { const now = performance.now(); gaps.push(now - last); last = now; }, 10);
+    const timed = async f => { gaps.length = 0; last = performance.now(); const t0 = performance.now(), got = await f(); return { ms: Math.round(performance.now() - t0), pause: Math.round(Math.max(0, ...gaps)), got }; };
+    const out = {};
+    // 2,000 lines of a letter, 1,990 spaces and another letter; then the same with commas and with brackets
+    out.spaces = await timed(async () => (await T.readTableText(Array.from({ length: 2000 }, (_, i) => 'x' + i + ' '.repeat(1990) + 'y').join('\n'))).sheets[0].rows.length);
+    out.commas = await timed(async () => (await T.listLines(Array.from({ length: 1000 }, (_, i) => ({ n: i + 1, cells: ['a' + i + ','.repeat(1990) + 'b'] })))).length);
+    out.brackets = await timed(async () => (await T.listLines(Array.from({ length: 1000 }, (_, i) => ({ n: i + 1, cells: ['a' + i + '(('.repeat(990) + 'b'] })))).length);
+    // a table whose cells are made to trip the value patterns, against one with ordinary text of the same length
+    const table = cells => { let s = 'Item,Qty,Value,Notes\n'; for (let i = 0; i < 600; i++) s += `Thing ${i},${cells.map(c => '"' + c + '"').join(',')}\n`; return s; };
+    const build = async cells => { const t = await T.readTableText(table(cells)); return timed(async () => { const L = G.layout(t.sheets[0].rows); return G.buildItems(L, G.guessColumns(L)).items.length; }); };
+    out.plain = await build(['a'.repeat(1992), 'b'.repeat(1996), 'c'.repeat(1990)]);
+    out.nasty = await build(['2' + ' '.repeat(1990) + 'q', '-'.repeat(1995) + 'x', 'sub' + ' '.repeat(1990) + 'x']);
+    clearInterval(beat);
+    return out;
+  });
+  ok('2,000 lines of 2,000 characters, almost all spaces, are read in a moment, and the page keeps answering meanwhile', slow.spaces.got === 2001 && slow.spaces.ms < 6000 && slow.spaces.pause < 1500, JSON.stringify(slow.spaces));
+  ok('…as are 1,000 lines that are runs of commas or of brackets', slow.commas.got === 1001 && slow.commas.ms < 2500 && slow.brackets.got === 1001 && slow.brackets.ms < 2500, JSON.stringify([slow.commas, slow.brackets]));
+  ok('cells made to trip the patterns for numbers and totals take about as long as ordinary text of the same length', slow.nasty.got === 600 && slow.nasty.ms <= slow.plain.ms * 4 + 250, `made to be slow ${slow.nasty.ms} ms, ordinary ${slow.plain.ms} ms`);
+
+  /* ============================== one's own items and kits, when a list was made from them ============================== */
+  const own = await Q.page.evaluate(async () => {
+    const s = await import('./js/store.js'), M = await import('./js/gear-import.js');
+    const mine = () => [{ id: 'g1', name: 'Sony FX6', category: 'Camera', serial: '4512345', location: 'Van', qty: 1, value: 6500, notes: 'edited since', updatedAt: 5 }, { id: 'g2', name: 'Aputure 600d', category: 'Lighting', serial: '', location: '', qty: 4, value: 1900, notes: '', updatedAt: 5 }, { id: 'g3', name: 'Rode NTG', category: 'Audio', serial: '', location: '', qty: 1, value: 300, notes: '', updatedAt: 5 }];
+    const snap = () => JSON.stringify([s.db.gear.map(({ updatedAt, ...x }) => x), s.db.kits.map(({ updatedAt, ...x }) => x)]);
+    // a list made from g1 and g2 as they once were, with the kit as it once was (two items)
+    const old = [{ ref: 'g1', name: 'Sony FX6', category: 'Camera', serial: '4512345', location: 'Shelf A', qty: 1, value: 5000, notes: 'march' }, { ref: 'g2', name: 'Aputure 600d', category: 'Lighting', serial: '', location: '', qty: 2, value: 1900, notes: '' }];
+    const kits = [{ ref: 'k1', name: 'Interview set', description: '', notes: '', items: [[0, 1], [1, 2]] }];
+    s.update(d => { d.gear = mine(); d.kits = [{ id: 'k1', name: 'Interview set', description: '', gear: ['g1', 'g2', 'g3'], gearQty: { g2: 4 }, notes: '', updatedAt: 5 }]; d.bookings = []; });
+    const before = snap(), plan = M.planGearImport(old), out = {};
+    out.ownRows = plan.rows.map(r => [r.why, r.action, r.match && r.match.id]); out.ownCounts = M.planCounts(plan);
+    const done = M.applyGearImport(plan, { kits, from: 'Me' });
+    out.ownUntouched = snap() === before; out.ownDone = [done.added.length, done.updated.length, done.skipped, done.kits.length, done.kitsBefore.length];
+    // the person may still choose Update for one of them: then that item, and the kit that names it, take the list's
+    plan.rows[0].action = 'update'; M.applyGearImport(plan, { kits, from: 'Me' });
+    out.chosen = [s.db.gear[0].location, s.db.gear[0].value, s.db.gear[1].qty, s.db.kits[0].gear];
+    // copies added from someone else's list before are still updated by default; skipping them all leaves their kit alone
+    s.update(d => { d.gear = []; d.kits = []; });
+    const theirs = [{ ref: 'x1', name: 'Sony FX6', category: 'Camera', serial: '9000001', location: '', qty: 1, value: 5000, notes: '' }, { ref: 'x2', name: 'Sigma 24-70', category: 'Lens', serial: '9000002', location: '', qty: 1, value: 1100, notes: '' }], theirKit = [{ ref: 'xk', name: 'Interview kit', description: '', notes: '', items: [[0, 1], [1, 1]] }];
+    M.applyGearImport(M.planGearImport(theirs), { kits: theirKit, from: 'Pat Producer' });
+    s.update(d => { d.gear.push({ id: 'light', name: 'My light', category: 'Lighting', serial: '', qty: 1, value: 100, updatedAt: 1 }); d.kits[0].gear.push('light'); });
+    const again = M.planGearImport(theirs);
+    out.againRows = again.rows.map(r => [r.why, r.action]);
+    again.rows.forEach(r => { r.action = 'skip'; });
+    const skipped = M.applyGearImport(again, { kits: theirKit, from: 'Pat Producer' });
+    out.skippedKit = [s.db.kits.length, s.db.kits[0].gear.length, s.db.kits[0].gear.includes('light'), skipped.kits.length, skipped.skipped];
+    const third = M.planGearImport(theirs); M.applyGearImport(third, { kits: theirKit, from: 'Pat Producer' });
+    out.updatedKit = [s.db.kits.length, s.db.kits[0].gear.length, s.db.kits[0].gear.includes('light')];
+    // a new kit whose items were all skipped as duplicates is still made, of the owned items
+    s.update(d => { d.kits = []; });
+    const fourth = M.planGearImport(theirs); fourth.rows.forEach(r => { r.action = 'skip'; });
+    M.applyGearImport(fourth, { kits: [{ ref: 'other', name: 'Second kit', description: '', notes: '', items: [[0, 1], [1, 1]] }], from: 'Pat Producer' });
+    out.newKit = [s.db.kits.length, (s.db.kits[0] || {}).name, ((s.db.kits[0] || {}).gear || []).length];
+    s.update(d => { d.gear = []; d.kits = []; });
+    return out;
+  });
+  ok('a list made from one’s own items is found as such, and every row starts on Skip: one’s own item is at least as new as a list made from it', same(own.ownRows, [['ref', 'skip', 'g1'], ['ref', 'skip', 'g2']]) && same(own.ownCounts, { add: 0, update: 0, skip: 2 }), JSON.stringify([own.ownRows, own.ownCounts]));
+  ok('…so adding it as it stands changes nothing: not the items edited since, and not the kit, which keeps the item added to it since', own.ownUntouched && same(own.ownDone, [0, 0, 2, 0, 0]), JSON.stringify(own.ownDone));
+  ok('…while choosing Update for a row still updates that item, and then the kit that names it', same(own.chosen, ['Shelf A', 5000, 4, ['g1', 'g2']]), JSON.stringify(own.chosen));
+  ok('items added from someone else’s list before still start on Update; with every row skipped, the kit made from that list is left as it is (an item put into it since stays)', same(own.againRows, [['ref', 'update'], ['ref', 'update']]) && same(own.skippedKit, [1, 3, true, 0, 2]), JSON.stringify([own.againRows, own.skippedKit]));
+  ok('…with the rows updated, that kit is the list’s again; and a new kit whose rows were all skipped is still made of the owned items', same(own.updatedKit, [1, 2, false]) && same(own.newKit, [1, 'Second kit', 2]), JSON.stringify([own.updatedKit, own.newKit]));
+
+  /* ============================== a tap beside the sheet, and where Undo goes ============================== */
+  await seed(Q.page, []);
+  await openImport(Q.page); await paste(Q.page, 'Sony FX6,FX6-0001,Van\nZoom H6,H6-00003,Shelf A\nSigma 18-35,SIG-0002,Shelf B\nRode NTG,RD-00011,Shelf A\n'); await previewed(Q.page);
+  await setColumn(Q.page, 'Column C', 'notes'); await sleep(120);
+  await Q.page.mouse.click(20, 400); await sleep(300);
+  ok('a tap beside the Import sheet does not close it: the columns that were set are still there', (await Q.page.locator('.sheet .gi-cols').count()) === 1 && (await columns(Q.page))['Column C'] === 'notes', JSON.stringify(await columns(Q.page).catch(() => 'closed')));
+  await Q.page.locator('.sheet button', { hasText: 'Choose another list' }).click(); await Q.page.waitForSelector('.sheet .gi-choose');
+  await Q.page.mouse.click(20, 400); await sleep(300);
+  ok('…nor on the first step, where the pasted list is still in its box; Escape still closes it', (await Q.page.locator('#gi-paste').inputValue().catch(() => '')).startsWith('Sony FX6,FX6-0001,Van') && await (async () => { await Q.page.keyboard.press('Escape'); await sleep(250); return (await Q.page.locator('.sheet').count()) === 0; })());
+  // the bar's time is run on a clock the test can move
+  await openImport(Q.page); await paste(Q.page, 'Item,Serial number\nSony FX6,FX6-1\nZoom H6,H6-1\nRode NTG,NTG-9\n'); await previewed(Q.page);
+  await Q.page.clock.install();
+  await add(Q.page);
+  const said = await Q.page.evaluate(() => (document.getElementById('sr-live') || {}).textContent || '');
+  ok('after an import a screen reader hears the numbers and where Undo will be: under Import… until Vdex is closed', said === '3 added. Undo is offered for a short while, and under Import… until Vdex is closed.', said);
+  await Q.page.clock.fastForward(21000); await sleep(150);
+  ok('the Undo bar does not leave while the focus is on it', (await Q.page.locator('.undo-bar').count()) === 1 && await Q.page.evaluate(() => document.activeElement.textContent === 'Undo'));
+  await Q.page.evaluate(() => document.activeElement.blur()); await Q.page.clock.fastForward(5000); await sleep(150);
+  const gone = { bar: await Q.page.locator('.undo-bar').count(), toasts: await Q.page.locator('.toast').allInnerTexts() };
+  ok('once the focus has left it and its time is up, the bar goes and a line on the page says where Undo is now', gone.bar === 0 && same(gone.toasts, ['Undo is still under Import… until Vdex is closed']), JSON.stringify(gone));
+  await openImport(Q.page);
+  ok('…and it is there', /The last import \(3 added, from the pasted text\) can still be undone/.test(await text(Q.page, '.sheet .gi-last')), await text(Q.page, '.sheet .gi-last'));
+  await Q.page.locator('.sheet .gi-last button').click(); await sleep(300);
+  await Q.page.keyboard.press('Escape'); await sleep(200);
+  await Q.ctx.close();
+
+  /* ============================== room in the browser's storage, and saying so when a save is refused ============================== */
+  const F = await open();
+  // how many more characters this browser will keep for the app, found by trying; pad() grows or shrinks the database by that many
+  const room = page => page.evaluate(() => { let lo = 0, hi = 12e6; while (hi - lo > 256) { const mid = (lo + hi) >> 1; try { localStorage.setItem('zz-room', 'x'.repeat(mid)); lo = mid; } catch { hi = mid; } } localStorage.removeItem('zz-room'); return lo; });
+  const pad = (page, by) => page.evaluate(n => import('./js/store.js').then(s => { s.update(d => { const bio = d.profile.bio || ''; d.profile = { ...d.profile, bio: n >= 0 ? bio + 'b'.repeat(n) : bio.slice(0, n) }; }); }), by);
+  const stored = page => page.evaluate(() => import('./js/store.js').then(s => { const d = JSON.parse(localStorage.getItem('logi-db-v1') || '{}'); return { gear: (d.gear || []).length, bio: ((d.profile || {}).bio || '').length, inMemory: (s.db.profile.bio || '').length }; }));
+  const fullLine = page => page.evaluate(() => { const p = document.querySelector('.sheet .gi-sum + p.warn'); return p && !p.hidden ? p.textContent : ''; });
+  await F.page.evaluate(() => window.logiGo('gear'));
+  await pad(F.page, (await room(F.page)) - 90000); await sleep(200);
+  const left90 = await room(F.page);
+  let shortLines = ''; for (let i = 0; i < 600; i++) shortLines += `Thing ${i}\n`;
+  await openImport(F.page); await paste(F.page, shortLines); await previewed(F.page);
+  await F.page.locator('.sheet .gi-go').click(); await sleep(500);
+  const tooBig = { line: await fullLine(F.page), open: await F.page.locator('.sheet .gi-cols').count(), gear: (await gear(F.page)).length, bar: await F.page.locator('.undo-bar').count(), stored: (await stored(F.page)).gear, probe: await F.page.evaluate(() => localStorage.getItem('logi-import-room')) };
+  ok('a list that needs more room than the browser has left is turned down before anything is added: 600 short lines are about 120,000 characters once they are items, and 90,000 are free', left90 > 80000 && left90 < 95000 && tooBig.line === 'This list is bigger than the space Vdex has on this device, so nothing was added. Import it in parts, or leave out a column such as Notes.' && tooBig.open === 1 && tooBig.gear === 0 && tooBig.bar === 0 && tooBig.stored === 0 && tooBig.probe === null, JSON.stringify({ left90, ...tooBig }));
+  await pad(F.page, -200000); await sleep(200);
+  await add(F.page);
+  const fits = { bar: await bar(F.page), stored: (await stored(F.page)).gear };
+  await F.page.reload(); await F.page.waitForSelector('#rolodex .drum-btn');
+  ok('…with room made, the same list goes in, is saved, and is still there after a reload', /^600 added/.test(fits.bar) && fits.stored === 600 && (await gear(F.page)).length === 600, JSON.stringify(fits));
+  // rows that update what is owned take room too
+  await F.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.gear = Array.from({ length: 300 }, (_, i) => ({ id: 'own' + i, name: 'Owned ' + i, category: '', serial: '', location: '', qty: 1, value: '', notes: '', updatedAt: 1 })); d.deleted = {}; })));
+  await F.page.evaluate(() => window.logiGo('gear'));
+  await pad(F.page, (await room(F.page)) - 40000); await sleep(200);
+  let noted = 'Item\tNotes\n'; for (let i = 0; i < 300; i++) noted += `Owned ${i}\t${'n'.repeat(300)}\n`;
+  await openImport(F.page); await paste(F.page, noted); await previewed(F.page);
+  await F.page.locator('.sheet .gi-dups select.gi-all').selectOption('update'); await sleep(100);
+  const updates = await F.page.locator('.sheet .gi-go').innerText();
+  await F.page.locator('.sheet .gi-go').click(); await sleep(500);
+  ok('…an import that only updates is measured as well: 300 notes of 300 characters do not fit into 40,000, so nothing is changed', updates === 'Update 300 items' && /^This list is bigger than the space Vdex has on this device, so nothing was added\./.test(await fullLine(F.page)) && (await gear(F.page)).every(x => x.notes === ''), updates + ' / ' + await fullLine(F.page));
+  await F.page.keyboard.press('Escape'); await sleep(250);
+  // any other change the browser refuses to save is said, once, and saved with the next one that fits
+  await pad(F.page, 80000); await sleep(300);
+  const unsaved = { toasts: await F.page.locator('.toast').allInnerTexts(), spoken: await F.page.evaluate(() => (document.getElementById('sr-live') || {}).textContent || ''), ...(await stored(F.page)) };
+  const NOT_SAVED = 'Not enough storage to save your last change: free some space, or erase old logs and bookings. Until then, changes may be gone when Vdex is closed.';
+  ok('a change the browser will not save is said at once, on the page and to a screen reader, instead of being lost without a word', unsaved.toasts.filter(x => x === NOT_SAVED).length === 1 && unsaved.spoken === NOT_SAVED && unsaved.inMemory === unsaved.bio + 80000, JSON.stringify(unsaved));
+  await sleep(3000); await pad(F.page, 10); await sleep(300);
+  ok('…once a minute at most, however many changes follow', !(await F.page.locator('.toast').allInnerTexts()).includes(NOT_SAVED) && (await stored(F.page)).inMemory === unsaved.bio + 80010);
+  await pad(F.page, -300000); await sleep(300);
+  const savedAgain = await stored(F.page);
+  ok('…and the next change that fits saves everything as it is now', savedAgain.bio === savedAgain.inMemory && savedAgain.gear === 300, JSON.stringify(savedAgain));
+  await F.ctx.close();
+  // with a PIN the encrypted copy lives in the same storage and grows with the list, so it is counted too
+  const N = await open();
+  await N.page.evaluate(() => import('./js/lock.js').then(l => l.setPin('246810'))); await N.page.waitForFunction(() => !!localStorage.getItem('logi-vault'), null, { timeout: 60000 });
+  const vault = page => page.evaluate(() => (localStorage.getItem('logi-vault') || '').length);
+  const leave = async (page, want) => { // both copies written, and about `want` characters free
+    for (let k = 0; k < 4; k++) { const free = await room(page); if (Math.abs(free - want) < 12000) break; const v0 = await vault(page); await pad(page, Math.round((free - want) / 2.34)); await page.waitForFunction(v => (localStorage.getItem('logi-vault') || '').length !== v, v0, { timeout: 20000 }); await sleep(150); }
+    return room(page);
+  };
+  await N.page.evaluate(() => window.logiGo('gear'));
+  const left200 = await leave(N.page, 200000);
+  await openImport(N.page); await paste(N.page, shortLines); await previewed(N.page);
+  await N.page.locator('.sheet .gi-go').click(); await sleep(600);
+  const pinFull = { line: await fullLine(N.page), gear: (await gear(N.page)).length, toasts: await N.page.locator('.toast').allInnerTexts() };
+  ok('with a PIN, a list whose items would fit but whose encrypted copy would not is turned down too: 200,000 characters are free, the items need 120,000 and the encrypted copy about 180,000 more', Math.abs(left200 - 200000) < 12000 && /^This list is bigger than the space Vdex has on this device/.test(pinFull.line) && pinFull.gear === 0 && pinFull.toasts.length === 0, JSON.stringify({ left200, ...pinFull }));
+  await N.page.keyboard.press('Escape'); await sleep(250);
+  const left600 = await leave(N.page, 600000), vaultBefore = await vault(N.page);
+  await openImport(N.page); await paste(N.page, shortLines); await previewed(N.page);
+  await add(N.page); await N.page.waitForFunction(v => (localStorage.getItem('logi-vault') || '').length > v + 100000, vaultBefore, { timeout: 20000 }).catch(() => {});
+  const pinFits = { grew: (await vault(N.page)) - vaultBefore, stored: (await stored(N.page)).gear, toasts: (await N.page.locator('.toast').allInnerTexts()).filter(x => /storage/i.test(x)), probe: await N.page.evaluate(() => localStorage.getItem('logi-import-room')) };
+  ok('…and with room for both copies it goes in, and both are written', Math.abs(left600 - 600000) < 12000 && pinFits.stored === 600 && pinFits.grew > 150000 && pinFits.toasts.length === 0 && pinFits.probe === null, JSON.stringify({ left600, ...pinFits }));
+  await N.page.locator('#lockBtn').click(); await N.page.waitForSelector('.lock'); await sleep(150);
+  ok('the Undo bar is not drawn on the lock screen', (await N.page.locator('.undo-bar').count()) === 1 && !(await N.page.locator('.undo-bar').isVisible()));
+  await N.ctx.close();
+
+  /* ============================== a spreadsheet shared to the installed web app ============================== */
+  const manifest = JSON.parse(fs.readFileSync(path.join(process.env.VDEX_ROOT || path.join(__dirname, '..', '..'), 'manifest.webmanifest'), 'utf8')), accepted = manifest.share_target.params.files[0].accept;
+  ok('the web app’s share target lists CSV, tab-separated and Excel files beside scripts, under the field the service worker reads', manifest.share_target.params.files[0].name === 'file' && ['.csv', '.tsv', '.xlsx', 'text/csv', 'text/comma-separated-values', 'text/tab-separated-values', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.docx', 'text/plain'].every(x => accepted.includes(x)), accepted.join(' '));
+  const SW = await browser.newContext({ viewport: { width: 420, height: 900 } }); // this one keeps the service worker: it is what receives a shared file
+  await SW.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await SW.addInitScript(acceptTerms().content);
+  const sp = watch(await SW.newPage());
+  await sp.goto(BASE); await sp.waitForSelector('#rolodex .drum-btn'); await sp.waitForFunction(() => !!(navigator.serviceWorker && navigator.serviceWorker.controller), null, { timeout: 60000 });
+  // the phone's share sheet posts the file to ./share as a form, the way the manifest says
+  await sp.evaluate(() => { const f = document.createElement('form'), i = document.createElement('input'), dt = new DataTransfer(); f.method = 'POST'; f.action = './share'; f.enctype = 'multipart/form-data'; i.type = 'file'; i.name = 'file'; dt.items.add(new File(['Item,Serial number,Value\nSony FX6,FX6-1,6000\nZoom H6,H6-1,300\n'], 'my kit.csv', { type: 'text/csv' })); i.files = dt.files; f.append(i); document.body.append(f); f.submit(); });
+  await sp.waitForSelector('.sheet', { timeout: 30000 }); await sleep(200);
+  const sharedIn = { title: await sp.locator('.sheet').getAttribute('aria-label'), buttons: await sp.locator('.sheet button.btn').allInnerTexts(), url: sp.url() };
+  await sp.locator('.sheet button', { hasText: 'Kit list for Equipment' }).click(); await previewed(sp);
+  ok('a CSV posted to the share target is parked by the service worker, picked up by the app and offered as the kit list; it opens on the preview with nothing added', sharedIn.title === 'A file for Vdex' && sharedIn.buttons.includes('🎥 Kit list for Equipment') && sharedIn.buttons.includes('🎬 Script for TC Notes') && !/share/.test(sharedIn.url) && (await sum(sp)) === 'Adds 2.' && /my kit\.csv: 2 rows/.test(await text(sp, '.sheet .gi-source')) && (await gear(sp)).length === 0, JSON.stringify(sharedIn) + ' ' + await sum(sp));
+  await sp.keyboard.press('Escape'); await sleep(250);
+  await sp.evaluate(b64 => import('./js/share-in.js').then(m => m.arrived(new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], 'kit list.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))), NUM_XLSX.toString('base64')); await sp.waitForSelector('.sheet'); await sleep(150);
+  const workbookIn = await sp.locator('.sheet button.btn').allInnerTexts();
+  await sp.locator('.sheet button', { hasText: 'Kit list for Equipment' }).click(); await previewed(sp);
+  ok('an Excel workbook handed to Vdex is offered as the kit list only (it cannot be a script or a shot list), and opens on the preview', same(workbookIn, ['🎥 Kit list for Equipment']) && (await sum(sp)) === 'Adds 3.', workbookIn.join('|') + ' ' + await sum(sp));
+  await sp.keyboard.press('Escape'); await sleep(250);
+  await sp.evaluate(() => import('./js/share-in.js').then(m => m.arrived(new File(['Item,Serial number\nSony FX6,FX6-1\n'], 'shared', { type: 'text/csv' })))); await sp.waitForSelector('.sheet'); await sleep(150);
+  ok('a spreadsheet that arrives without a name that says so is known by its type', (await sp.locator('.sheet button.btn').allInnerTexts()).includes('🎥 Kit list for Equipment'));
+  await sp.keyboard.press('Escape'); await sleep(200);
+  await SW.close();
+
   /* ============================== how it looks: 360 px and 1200 px ============================== */
   for (const [width, height, light] of [[360, 740, false], [1200, 800, true]]) {
     const V = await open({ width, height, light });
@@ -555,6 +884,12 @@ const ODD_XLSX = zip({
     ok(`${width} px: the Undo bar is on screen, centred, with buttons big enough to tap`, ub.inside && ub.centred && ub.small === 0 && /^8 added, 3 skipped Undo/.test(ub.text), JSON.stringify(ub));
     await V.page.locator('#page .subactions button', { hasText: 'Share…' }).click(); await V.page.waitForSelector('.sheet'); await sleep(150);
     ok(`${width} px: the Undo bar steps aside while a sheet is open, and comes back`, !(await V.page.locator('.undo-bar').isVisible()) && await (async () => { await V.page.keyboard.press('Escape'); await sleep(200); return V.page.locator('.undo-bar').isVisible(); })());
+    const aside = {};
+    await V.page.locator('#menuBtn').click(); await V.page.locator('#menu').waitFor({ state: 'visible' }); await sleep(120); aside.menu = await V.page.locator('.undo-bar').isVisible();
+    await V.page.keyboard.press('Escape'); await V.page.locator('#menu').waitFor({ state: 'hidden' }); await sleep(120); aside.afterMenu = await V.page.locator('.undo-bar').isVisible();
+    await V.page.locator('#searchBtn').click(); await V.page.waitForFunction(() => document.body.classList.contains('search-open')); await sleep(120); aside.search = await V.page.locator('.undo-bar').isVisible();
+    await V.page.keyboard.press('Escape'); await V.page.waitForFunction(() => !document.body.classList.contains('search-open')); await sleep(120); aside.afterSearch = await V.page.locator('.undo-bar').isVisible();
+    ok(`${width} px: it steps aside for the menu and for the search as well, and comes back each time`, same(aside, { menu: false, afterMenu: true, search: false, afterSearch: true }), JSON.stringify(aside));
     await V.ctx.close();
   }
 

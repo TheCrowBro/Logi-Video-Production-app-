@@ -1,13 +1,19 @@
 // Rows and columns out of whatever a kit list is kept in: a CSV or tab-separated file, an Excel .xlsx workbook, or
 // text pasted from a spreadsheet, a notes app or an email. Everything is read here, on the device: nothing is
 // uploaded and no library is used (an .xlsx is a zip of XML, opened with the zip reader in js/docx.js). What comes
-// out is plain text cells only: a formula is never worked out, and what a cell shows is all that is kept of it.
+// out is plain text cells only. A formula is never worked out: the result saved with it is taken. Of an .xlsx cell
+// the stored value is kept, not the way its format shows it: text as it is, a day number under a date format as a
+// date, and any other number as the plain number (no currency sign, no fixed count of decimals), except that a format
+// made of zeros alone is applied, so a code shown as 000123 stays 000123. A row says which of its cells were number
+// cells (nums: their columns), so a number is never guessed at again as if it had been typed.
 // Files from strangers are expected: sizes, rows, columns and cell lengths are capped, a zip that unpacks too far is
-// stopped, and a file that is not text says so. Long work gives the page a turn every few milliseconds, so a list of
-// thousands of rows does not freeze it. Loaded on first use (js/gear-import-ui.js).
+// stopped (each part, and all the parts of a workbook together), a worksheet is read once however often the workbook
+// names it, and a file that is not text says so. Long work gives the page a turn every few milliseconds, so a list
+// of thousands of rows does not freeze it, and stops when the caller says nobody is waiting for it any more
+// (abandoned). Loaded on first use (js/gear-import-ui.js).
 import { zipEntry } from './docx.js';
 
-export const LIMITS = { fileBytes: 20e6, unpacked: 60e6, rows: 10000, cols: 60, cell: 2000 };
+export const LIMITS = { fileBytes: 20e6, unpacked: 60e6, workbook: 80e6, rows: 10000, cols: 60, cell: 2000 };
 
 const fail = (code, message) => Object.assign(new Error(message), { code });
 const NOT_READ = 'Nothing was read from it.';
@@ -17,6 +23,11 @@ const SAVE_AS = 'Open it in Excel, Numbers or Google Sheets, save it as Excel (.
 function breather() {
   let last = performance.now();
   return async () => { if (performance.now() - last < 12) return; await new Promise(r => setTimeout(r)); last = performance.now(); };
+}
+// The same turn, and the end of the work (an error with the code 'abandoned') once nobody is waiting for it.
+function pauser(abandoned) {
+  const rest = breather(), gone = () => { if (abandoned && abandoned()) throw fail('abandoned', 'The reading was stopped.'); };
+  return async () => { gone(); await rest(); gone(); };
 }
 const clip = s => (s.length > LIMITS.cell ? s.slice(0, LIMITS.cell) : s);
 // A row with a cell that was cut at the limit says so (cut: true), so the person can be told which row lost text.
@@ -57,10 +68,10 @@ export function sniffSeparator(text) {
 // Text → [{ n, cells }], n being the record's place in the file, counted from 1. Quoted fields may hold the
 // separator, line breaks and doubled quotes; a quote in the middle of an unquoted field is just a quote; lines end
 // the Windows, Unix or old Mac way; a byte-order mark and wholly empty records are dropped.
-export async function parseSeparated(text, sep) {
+export async function parseSeparated(text, sep, { abandoned = null } = {}) {
   text = String(text || '').replace(/^\uFEFF/, '');
   if (sep == null) sep = sniffSeparator(text);
-  const rows = [], rest = breather(), L = text.length;
+  const rows = [], rest = pauser(abandoned), L = text.length;
   let cells = [], cell = '', quoted = false, wasQuoted = false, n = 1, more = false, truncated = false;
   const endCell = () => { if (cells.length < LIMITS.cols) cells.push(clip(wasQuoted ? cell : cell.trim())); cell = ''; wasQuoted = false; }; // a line of a million separators is still 60 cells
   const endRow = () => {
@@ -94,22 +105,30 @@ export async function parseSeparated(text, sep) {
 // A list with one item on each line, as typed in a notes app or an email: "2x Aputure 600d", "- Sony FX6 (S/N
 // 4512345)", "Sachtler Flowtech 75 x 2". The bullet or number in front goes, a count becomes a quantity and a serial
 // number named as one becomes the serial. A line that ends in a colon ("Lenses:") is a heading over the lines under
-// it, not an item: its row says so (heading: true). The rows come back under headings of their own, like a small table.
+// A line is read in time that grows with its length and no faster, whatever it is made of: runs of white space are
+// made single spaces before any pattern sees them, and what trails a name is cut by counting back from its end, not
+// by a pattern that would try again from every character of a run. A list of thousands of long lines gives the page
+// its turns like the other readers (so it returns a promise).
 const BULLET = /^\s*(?:[-*•·–—▪◦☐☑✓✔]+|\[[ xX]?\]|\(?\d{1,3}[.)](?=\s))\s*/;
-const SERIAL_IN_LINE = /[\s,;(\[]*\b(?:s\/n|sn|serial(?:\s+(?:number|no\.?))?)\s*[:#]?\s*([A-Za-z0-9][A-Za-z0-9\-\/_.]{2,39})\s*[)\]]?/i;
-export function listLines(rows) {
+const SERIAL_IN_LINE = /\b(?:s\/n|sn|serial(?: (?:number|no\.?))?) ?[:#]? ?([A-Za-z0-9][A-Za-z0-9\-\/_.]{2,39}) ?[)\]]?/i;
+const cutEnd = (s, chars) => { let e = s.length; while (e > 0 && chars.includes(s[e - 1])) e--; return e < s.length ? s.slice(0, e) : s; };
+export async function listLines(rows, { abandoned = null } = {}) {
   let anyQty = false, anySerial = false;
-  const out = rows.map(r => {
-    let s = (r.cells[0] || '').replace(BULLET, '').trim(), qty = '', serial = '';
-    if (/[:：]$/.test(s)) return { n: r.n, cells: [s.replace(/[\s:：]+$/, ''), '', ''], heading: true };
+  const out = [], rest = pauser(abandoned);
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    if ((i & 63) === 63) await rest();
+    let s = (r.cells[0] || '').replace(/\s+/g, ' ').replace(BULLET, '').trim(), qty = '', serial = '';
+    if (/[:：]$/.test(s)) { s = cutEnd(s, ' :：'); if (s) out.push({ n: r.n, cells: [s, '', ''], heading: true }); continue; }
     const sm = s.match(SERIAL_IN_LINE);
-    if (sm && /\d/.test(sm[1])) { serial = sm[1]; s = (s.slice(0, sm.index) + ' ' + s.slice(sm.index + sm[0].length)).trim(); anySerial = true; }
+    if (sm && /\d/.test(sm[1])) { serial = sm[1]; s = (cutEnd(s.slice(0, sm.index), ' ,;([') + ' ' + s.slice(sm.index + sm[0].length)).trim(); anySerial = true; }
     // "4x5 camera" and "1.4x converter" are names, not counts: the x of a count is followed by a space or a letter
     const front = s.match(/^(\d{1,3})\s*[x×](?:\s+|(?=[^\d\s]))/i), back = s.match(/\s+(?:[x×]\s*(\d{1,3})|\((\d{1,3})\))\s*$/i);
     if (front) { qty = front[1]; s = s.slice(front[0].length); anyQty = true; }
     else if (back) { qty = back[1] || back[2]; s = s.slice(0, back.index); anyQty = true; }
-    return { n: r.n, cells: [s.replace(/[\s,;:–—-]+$/, '').trim(), qty, serial], ...(r.cut ? { cut: true } : {}) };
-  }).filter(r => r.cells[0]);
+    s = cutEnd(s, ' ,;:–—-').trim();
+    if (s) out.push({ n: r.n, cells: [s, qty, serial], ...(r.cut ? { cut: true } : {}) });
+  }
   const keep = [true, anyQty, anySerial], head = ['Item', 'Quantity', 'Serial number'];
   return [{ n: 0, cells: head.filter((_, i) => keep[i]), made: true }, ...out.map(r => ({ ...r, cells: r.cells.filter((_, i) => keep[i]) }))];
 }
@@ -161,8 +180,9 @@ export function serialToISO(serial, date1904 = false) {
 // 0.1 + 0.2 is stored as 0.30000000000000004: show what the spreadsheet shows.
 const tidyNumber = v => { const n = Number(v); return Number.isFinite(n) ? String(Number(n.toPrecision(15))) : v; };
 
-async function readXlsx(buf) {
-  const opt = { kind: 'Excel', max: LIMITS.unpacked }, rest = breather();
+async function readXlsx(buf, { abandoned = null } = {}) {
+  // budget: what all the parts of this workbook may unpack into together; each part takes its share off it.
+  const opt = { kind: 'Excel', max: LIMITS.unpacked, budget: { left: LIMITS.workbook } }, rest = pauser(abandoned);
   const entry = async (name, optional) => { try { return await zipEntry(buf, name, opt); } catch (e) { if (optional && e.code === 'missing') return ''; throw e; } };
   let book;
   try { book = await entry('xl/workbook.xml'); }
@@ -174,51 +194,60 @@ async function readXlsx(buf) {
   try {
     const rels = await entry('xl/_rels/workbook.xml.rels', true), strings = await entry('xl/sharedStrings.xml', true), styles = await entry('xl/styles.xml', true);
     let date1904 = false; for (const [a] of tags(book, 'workbookPr')) date1904 = /^(1|true)$/.test(attr(a, 'date1904') || '');
-    const target = {};
-    for (const [a] of tags(rels, 'Relationship')) { const id = attr(a, 'Id'), t = attr(a, 'Target'); if (id && t) target[id] = t.startsWith('/') ? t.slice(1) : 'xl/' + t.replace(/^\.\//, ''); }
+    const target = new Map(); // by the id the file gives: a Map, so no id finds anything that was not put there
+    for (const [a] of tags(rels, 'Relationship')) { const id = attr(a, 'Id'), t = attr(a, 'Target'); if (id && t) target.set(id, t.startsWith('/') ? t.slice(1) : 'xl/' + t.replace(/^\.\//, '')); }
     const shared = [];
     for (const [, inner] of tags(strings, 'si')) { shared.push(clip(textOf(inner))); if (shared.length >= 2e6) break; if ((shared.length & 1023) === 0) await rest(); }
-    // Which cell styles show a date: the style's number format, by its id.
-    const custom = new Map(), dateStyle = [];
+    // Which cell styles show a date: the style's number format, by its id. And which pad a number with zeros: a
+    // format made of zeros alone ("000000" shows 123 as 000123, the way asset and serial numbers are kept).
+    const custom = new Map(), dateStyle = [], zeros = [];
     for (const [a] of tags(styles, 'numFmt')) custom.set(Number(attr(a, 'numFmtId')), attr(a, 'formatCode') || '');
-    for (const [, xfs] of tags(styles, 'cellXfs')) for (const [a] of tags(xfs, 'xf')) { const id = Number(attr(a, 'numFmtId')) || 0; dateStyle.push(custom.has(id) ? isDateFormat(custom.get(id)) : BUILTIN_DATES.has(id)); }
+    for (const [, xfs] of tags(styles, 'cellXfs')) for (const [a] of tags(xfs, 'xf')) { const id = Number(attr(a, 'numFmtId')) || 0, code = custom.get(id) || ''; dateStyle.push(custom.has(id) ? isDateFormat(code) : BUILTIN_DATES.has(id)); zeros.push(/^0{2,40}$/.test(code) ? code.length : 0); }
 
-    const sheets = [];
+    const sheets = [], read = new Set();
     let i = 0;
     for (const [a] of tags(book, 'sheet')) {
       i++;
       const name = attr(a, 'name') || `Sheet ${i}`, rid = attr(a, 'r:id') || attr(a, 'id'), hidden = /hidden/i.test(attr(a, 'state') || '');
-      const path = target[rid] || `xl/worksheets/sheet${i}.xml`;
+      const path = target.get(rid) || `xl/worksheets/sheet${i}.xml`;
       if (sheets.length >= 30 || !/worksheets\//.test(path)) continue; // chart sheets and the like hold no rows
+      if (read.has(path)) continue; // a worksheet is read once, however many sheets the workbook says it is
+      read.add(path);
+      await rest();
       const xml = await entry(path, true); if (!xml) continue;
-      const rows = []; let truncated = false, auto = 0;
+      const rows = []; let truncated = false, auto = 0, seen = 0;
       for (const [ra, inside] of tags(xml, 'row')) {
         const n = Number(attr(ra, 'r')) || auto + 1; auto = n;
+        if ((++seen & 127) === 0) await rest(); // by rows met, not rows kept: thousands of rows that hold nothing still give the page its turn
         if (!inside) continue;
-        const cells = []; let next = 0, any = false;
+        const cells = [], nums = []; let next = 0, any = false;
         for (const [ca, body] of tags(inside, 'c')) {
           const ref = attr(ca, 'r'), at = ref ? colIndex(ref) : next; next = at + 1;
           if (at < 0 || at >= LIMITS.cols || !body) continue;
           const t = attr(ca, 't') || 'n';
           let raw = ''; for (const [, v] of tags(body, 'v')) { raw = unxml(v); break; }
-          let v = '';
+          let v = '', num = false;
           if (t === 's') v = shared[Number(raw)] ?? '';
           else if (t === 'inlineStr') v = textOf(body);
           else if (t === 'str') v = raw;                       // what a formula gave when the file was saved
           else if (t === 'b') v = raw === '1' ? 'TRUE' : 'FALSE';
           else if (t === 'e') v = '';                          // #N/A, #REF! and the like
           else if (t === 'd') v = raw.slice(0, 10);
-          else if (raw !== '') v = dateStyle[Number(attr(ca, 's')) || 0] ? serialToISO(raw, date1904) || tidyNumber(raw) : tidyNumber(raw);
+          else if (raw !== '') {
+            const style = Number(attr(ca, 's')) || 0, day = dateStyle[style] ? serialToISO(raw, date1904) : '';
+            if (day) v = day;
+            else { v = tidyNumber(raw); if (zeros[style] && /^\d+$/.test(v)) v = v.padStart(zeros[style], '0'); else num = Number.isFinite(Number(raw)); }
+          }
           v = clip(String(v).trim());
-          if (v !== '') { cells[at] = v; any = true; }
+          if (v !== '') { cells[at] = v; any = true; if (num) nums.push(at); }
         }
-        if (any) { if (rows.length >= LIMITS.rows) { truncated = true; break; } for (let k = 0; k < cells.length; k++) if (cells[k] == null) cells[k] = ''; rows.push(marked({ n, cells })); }
-        if ((rows.length & 127) === 0) await rest();
+        if (any) { if (rows.length >= LIMITS.rows) { truncated = true; break; } for (let k = 0; k < cells.length; k++) if (cells[k] == null) cells[k] = ''; rows.push(marked(nums.length ? { n, cells, nums } : { n, cells })); }
       }
       sheets.push({ name: String(name).slice(0, 80), rows, truncated, hidden });
     }
     return sheets;
   } catch (e) {
+    if (e.code === 'abandoned') throw e;
     if (e.code === 'big') throw fail('big', `This file unpacks into more than Vdex will read. ${NOT_READ} Save only the sheet with your kit as CSV and try that.`);
     throw fail('damaged', `This Excel file could not be read all the way through: it looks damaged. ${NOT_READ} Saving it again as .xlsx or CSV usually helps.`);
   }
@@ -232,15 +261,17 @@ function decode(u8) {
   try { return new TextDecoder('utf-8', { fatal: true }).decode(u8); }
   catch { return new TextDecoder('windows-1252').decode(u8); } // a CSV saved by Excel on Windows in its "ANSI" form
 }
-const textSheets = async (text, name) => {
-  const { rows, truncated, sep } = await parseSeparated(text);
+const textSheets = async (text, name, opt) => {
+  const { rows, truncated, sep } = await parseSeparated(text, null, opt);
   const width = rows.reduce((w, r) => Math.max(w, r.cells.length), 0);
-  return { sep, sheets: [{ name, rows: width <= 1 ? listLines(rows) : rows, truncated, list: width <= 1 }] };
+  return { sep, sheets: [{ name, rows: width <= 1 ? await listLines(rows, opt) : rows, truncated, list: width <= 1 }] };
 };
 
 // A chosen file → { name, kind: 'xlsx' | 'text', sheets: [{ name, rows: [{ n, cells }], truncated }] }, or an Error
 // whose message can be shown as it is. What the file is comes from its first bytes, not from its name.
-export async function readTableFile(file) {
+// abandoned: a function that says true once nobody is waiting for the answer (the sheet was closed, another list was
+// chosen); the reading then stops at its next turn with an error whose code is 'abandoned'.
+export async function readTableFile(file, { abandoned = null } = {}) {
   const name = String(file && file.name || 'file').slice(0, 120), ext = (name.match(/\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
   if (!file || !file.size) throw fail('empty', `“${name}” is empty. ${NOT_READ}`);
   if (file.size > LIMITS.fileBytes) throw fail('big', `“${name}” is ${Math.round(file.size / 1e6)} MB, more than Vdex will read (${LIMITS.fileBytes / 1e6} MB). ${NOT_READ} Save only the sheet with your kit as CSV and try that.`);
@@ -248,7 +279,7 @@ export async function readTableFile(file) {
   if (starts(u8, 0xD0, 0xCF, 0x11, 0xE0)) throw fail('xls', `“${name}” is in the older Excel format (.xls), which Vdex cannot read. ${NOT_READ} ${SAVE_AS}`);
   if (starts(u8, 0x50, 0x4B)) {
     if (ext === 'numbers' || ext === 'pages' || ext === 'ods') throw fail('kind', `“${name}” is a ${ext === 'ods' ? 'OpenDocument' : ext === 'numbers' ? 'Numbers' : 'Pages'} file, which Vdex cannot read. ${NOT_READ} ${ext === 'numbers' ? 'In Numbers, choose File → Export To → CSV or Excel, and pick that file.' : SAVE_AS}`);
-    const sheets = (await readXlsx(buf)).filter(s => s.rows.length);
+    const sheets = (await readXlsx(buf, { abandoned })).filter(s => s.rows.length);
     if (!sheets.length) throw fail('empty', `“${name}” has no rows in it. ${NOT_READ}`);
     return { name, kind: 'xlsx', sheets };
   }
@@ -260,17 +291,17 @@ export async function readTableFile(file) {
     for (let i = 0; i < look; i++) { const b = u8[i]; if (b === 0) { odd = look; break; } if (b < 9 || (b > 13 && b < 32 && b !== 27)) odd++; }
     if (odd > look / 50) throw fail('binary', `“${name}” is not a list Vdex can read: it is not text and not an Excel .xlsx file. ${NOT_READ} Choose a CSV or .xlsx file, or paste the rows instead.`);
   }
-  const { sheets } = await textSheets(decode(u8), name);
+  const { sheets } = await textSheets(decode(u8), name, { abandoned });
   if (!sheets[0].rows.length || sheets[0].list && sheets[0].rows.length < 2) throw fail('empty', `“${name}” has no rows in it. ${NOT_READ}`);
   return { name, kind: 'text', sheets };
 }
 
 // Pasted text → the same shape. Rows copied out of a spreadsheet arrive tab-separated; a list arrives a line an item.
-export async function readTableText(text) {
+export async function readTableText(text, { abandoned = null } = {}) {
   text = String(text || '');
   if (!text.trim()) throw fail('empty', 'Nothing is pasted yet.');
   if (text.length > LIMITS.fileBytes) throw fail('big', `That is more text than Vdex will read in one go. ${NOT_READ} Paste it in parts, or save it as a file and choose that.`);
-  const { sheets } = await textSheets(text, 'the pasted text');
+  const { sheets } = await textSheets(text, 'the pasted text', { abandoned });
   if (!sheets[0].rows.length || sheets[0].list && sheets[0].rows.length < 2) throw fail('empty', 'No rows were found in the pasted text.');
   return { name: 'the pasted text', kind: 'text', sheets };
 }

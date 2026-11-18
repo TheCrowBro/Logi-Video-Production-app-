@@ -8,7 +8,7 @@ import { h, sheet, toast, groupBy, money } from './util.js';
 import { db, byId, qtyOf, usedQty, totalValue } from './store.js';
 import { pack } from './link-pack.js';
 import { SITE } from './version.js';
-import { QR_MAX, fromLine } from './share-data.js';
+import { QR_MAX, QR_LARGE, GEAR_MAX, qrCaution, fromLine } from './share-data.js';
 import { GEAR_FIELDS } from './gear-import.js';
 
 const str = v => (v == null ? '' : String(v));
@@ -17,6 +17,7 @@ const siteBase = () => (window.vdexDesktop || !/^https?:$/.test(location.protoco
 
 // A finished link and the ways to hand it over: copy, the share sheet, an email (a very long link does not fit in an
 // email link, so it is copied to be pasted in), a preview, and with `qr` a QR code when the link is short enough to scan.
+// A long link's code is drawn larger, and one longer than Vdex's own scanner reads says so under it (qrCaution).
 function linkPanel(url, { label, title, subject, body, qr = '', tooLong = '' }) {
   const long = url.length > 1700;
   const area = h('textarea', { class: 'share-link', readonly: true, rows: 4, 'aria-label': label }, url);
@@ -24,7 +25,7 @@ function linkPanel(url, { label, title, subject, body, qr = '', tooLong = '' }) 
   const share = async () => { if (navigator.share) { try { await navigator.share({ title, url }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const mailTo = h('a', { class: 'btn ghost', href: 'mailto:?' + new URLSearchParams({ subject, body: body(long ? '[Paste the link here]' : url) }).toString().replace(/\+/g, '%20'),
     onclick: () => { if (long) navigator.clipboard?.writeText(url).then(() => toast('The link is long, so it was copied: paste it into the email'), () => toast('Copy the link above and paste it into the email')); } }, '✉ Email it');
-  const qrBox = h('div', { class: 'share-qr' }), qrNote = h('p', { class: 'small muted', style: 'text-align:center', hidden: true }, qr);
+  const qrBox = h('div', { class: 'share-qr' + (url.length > QR_LARGE ? ' large' : '') }), qrNote = h('p', { class: 'small muted share-qr-note', style: 'text-align:center', hidden: true }, [qr, qrCaution(url)].filter(Boolean).join('. '));
   if (qr && url.length > QR_MAX) qrBox.replaceChildren(h('p', { class: 'small muted', style: 'text-align:center' }, tooLong));
   else if (qr) import('./qr.js').then(m => m.qrSvg(url, { cellSize: 2 })).then(svg => { if (qrBox.isConnected) { qrBox.innerHTML = svg; qrNote.hidden = false; } }).catch(() => {}); // not into a panel that has been taken away since
   return { area, nodes: [area, h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onclick: copy }, '📋 Copy link'), h('button', { class: 'btn ghost', type: 'button', onclick: share }, '📤 Share…'), mailTo, h('a', { class: 'btn ghost small', href: url, target: '_blank', rel: 'noopener' }, 'Open preview')), ...(qr ? [qrBox, qrNote] : [])] };
@@ -90,6 +91,8 @@ export function openGearShare() {
 
   const make = async () => {
     const n = ++seq, c = chosen(S); if (!c.items.length) return;
+    // One link carries GEAR_MAX items (js/share-data.js cuts a longer list on the other side), so a longer list is not made into one.
+    if (c.items.length > GEAR_MAX) return void result.replaceChildren(h('p', { class: 'warn small share-many', role: 'alert' }, `One link carries ${GEAR_MAX.toLocaleString()} items at most, and this is ${c.items.length.toLocaleString()}. Share it in parts: one kit at a time, or pick items.`));
     makeBtn.disabled = true;
     let url; try { url = await gearLink(c); } catch (e) { if (n === seq) { makeBtn.disabled = false; toast('Could not make the link: ' + (e.message || e)); } return; }
     if (n !== seq) return; // the choice changed while the link was being made

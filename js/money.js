@@ -9,7 +9,7 @@ import { db, byId, upsert, update, endOf, requirePaid } from './store.js';
 import { openForm } from './form.js';
 import { setCheck, itemId, hiredPeople, rentalsOf } from './workflow.js';
 import { stats, workedMs, standardDay } from './hours.js';
-import { saveOrShare } from './backup.js';
+import { saveOrShare, csvCell, csvText } from './backup.js';
 import { printElement, htmlDocument } from './callsheet.js';
 import { KINDS, calc, renderDoc, docText, pdfBlocks, docTitle, payButtons } from './money-doc.js';
 import { CURRENCIES, codeFor, amountStr, PAY_TYPES, typeOf, summaryOf, methodsOf } from './pay.js';
@@ -44,6 +44,12 @@ const num = v => (v === '' || v == null ? '' : Number(v));
 // standard day's hours (Settings → Work & billing → Hours & breaks) per shoot day.
 export const rateOf = r => parseRate(r).amount;
 
+// The people hired for a job who belong in its money. A booking added from someone's shared link (js/share-import.js)
+// carries that producer's whole crew as its hires, to read and to call: they are not one's own costs or charges, so
+// the ones the link made are left out until one is given a rate. (To count them all again, return hiredPeople(b).)
+const linkMade = (b, hr) => hr.shared === true || !!(b.shared && b.shared.rows && (b.shared.rows.hires || []).includes(hr.id));
+const paidHires = b => hiredPeople(b).filter(hr => !(linkMade(b, hr) && (hr.rate === '' || hr.rate == null)));
+
 // Suggested lines: from the booking, from the quote, or from the hours logged.
 export function suggestLines(b, kind, source = 'booking') {
   const bl = billing(), days = shootDays(b), lines = [];
@@ -62,7 +68,7 @@ export function suggestLines(b, kind, source = 'booking') {
   }
   line(`Shoot day${days === 1 ? '' : 's'} — ${b.title}`, days, 'day', bl.dayRate);
   for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const r = personRate(c); line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, r.hourly ? days * standardDay() : days, r.hourly ? 'hour' : 'day', r.amount); } }
-  for (const hr of hiredPeople(b)) { const r = personRate(hr), n = Number(hr.days) || days; line(`Crew: ${hr.name}${hr.role ? ' (' + hr.role + ')' : ''}`, r.hourly ? n * standardDay() : n, r.hourly ? 'hour' : 'day', r.amount); }
+  for (const hr of paidHires(b)) { const r = personRate(hr), n = Number(hr.days) || days; line(`Crew: ${hr.name}${hr.role ? ' (' + hr.role + ')' : ''}`, r.hourly ? n * standardDay() : n, r.hourly ? 'hour' : 'day', r.amount); }
   if ((b.gear || []).length || (b.kits || []).length) line('Equipment package', days, 'day', bl.kitRate);
   for (const dl of b.deliverables || []) line(`${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
   if (kind === 'invoice') for (const hr of rentalsOf(b)) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
@@ -108,13 +114,34 @@ export function editMoney(b, kind, onDone, preset) {
 /* --------------------------------- documents --------------------------------- */
 const dateLabel = b => (endOf(b) > b.date ? `${fmtLong(b.date)} → ${fmtLong(endOf(b))}` : fmtLong(b.date));
 const partyLines = () => { const p = db.profile; return [p.business || p.name, p.business && p.name ? p.name : null, p.phone, p.email, p.website, p.location].filter(Boolean); };
+// Who a quote or an invoice goes to: the name it is headed to, and the booking's contacts who are named under it and
+// emailed. Usually the booking's client and all its contacts. A booking added from someone's shared link is different:
+// the person who shared it (the producer) hired you, so your quote and invoice go to them, not to their client. On
+// such a booking the contacts the link brought, other than the producer, are left out (b.shared.contacts names them);
+// contacts added by hand count as always; and while the client is still the one the link supplied, the document is
+// headed to the producer (their business when the link gave one, else their name). Change the client on the booking
+// and it heads the document again. The client's name stays on the booking and the call sheet either way.
+// (To go back to billing the booking's client whatever its origin, make the first line of the function the only one.)
+const lowName = v => String(v == null ? '' : v).trim().toLowerCase();
+export function billTo(b) {
+  const all = (b.stakeholders || []).filter(Boolean), named = all.filter(s => s.name), sh = b.shared && b.shared.ref ? b.shared : null;
+  if (!sh) return { head: b.client || (named[0] && named[0].name) || '—', contacts: all };
+  const brought = new Set(sh.contacts || []);
+  // A booking added before Vdex recorded the producer apart: they are the contact the link brought as "Producer".
+  const old = !sh.producer && named.find(s => brought.has(lowName(s.name)) && /^Producer( · |$)/.test(s.role || ''));
+  const producer = sh.producer || (old ? { name: old.name, business: (old.role.split(' · ')[1] || '') } : null), who = producer ? lowName(producer.name) : '';
+  const contacts = all.filter(s => !brought.has(lowName(s.name)) || lowName(s.name) === who), mine = contacts.filter(s => s.name);
+  const linkClient = sh.sent ? sh.sent.client || '' : b.client || ''; // no record of what the link supplied: it counts as unchanged
+  const own = (b.client || '') !== linkClient ? b.client : '';
+  return { head: own || (producer && (producer.business || producer.name)) || (mine[0] && mine[0].name) || '—', contacts };
+}
 // A self-contained copy of a quote or invoice: the document, the PDF, the email text and the client's link are all
 // made from it, and the public invoice page renders it without the app.
 export function snapshot(b, kind) {
-  const doc = docOf(b, kind), bl = billing(), p = db.profile, contacts = (b.stakeholders || []).filter(s => s.name);
+  const doc = docOf(b, kind), bl = billing(), p = db.profile, to = billTo(b), contacts = to.contacts.filter(s => s.name);
   return {
     v: 1, kind, number: doc.number, date: doc.date, due: doc.due, until: doc.until, status: doc.status, title: b.title, when: dateLabel(b),
-    from: partyLines(), to: [b.client || (contacts[0] && contacts[0].name) || '—', ...contacts.slice(0, 3).map(s => [s.name, s.role, s.email || s.phone].filter(Boolean).join(' · '))],
+    from: partyLines(), to: [to.head, ...contacts.slice(0, 3).map(s => [s.name, s.role, s.email || s.phone].filter(Boolean).join(' · '))],
     lines: (doc.lines || []).map(({ desc, qty, unit, price }) => ({ desc, qty, unit, price })), taxLabel: doc.taxLabel || bl.taxLabel, taxRate: doc.taxRate, deposit: doc.deposit,
     payments: (doc.payments || []).map(({ date, amount, method }) => ({ date, amount, method: methodLabel(method) })), notes: doc.notes,
     currency: sym(), code: code(), payee: p.business || p.name || '', email: p.email || '',
@@ -137,7 +164,7 @@ export async function shareLink(b, kind) { return siteBase() + 'invoice.html#' +
 export function mailtoFor(b, kind, url, mode = 'send') {
   b = current(b);
   const K = KINDS[kind], doc = docOf(b, kind), snap = snapshot(b, kind), t = calc(snap), payee = snap.payee || 'Vdex';
-  const emails = (b.stakeholders || []).map(s => (s.email || '').trim()).filter(Boolean);
+  const emails = billTo(b).contacts.map(s => (s.email || '').trim()).filter(Boolean);
   const subject = mode === 'remind' ? `Reminder: invoice ${doc.number} — ${fmtMoney(t.balance)} due${doc.due ? ' ' + fmtShort(doc.due) : ''}` : `${K.label} ${doc.number} — ${b.title}`;
   const body = mode === 'remind'
     ? `Hi,\n\nA quick reminder that invoice ${doc.number} for ${b.title} (${fmtMoney(t.total)}) ${doc.due ? (doc.due < todayISO() ? 'was due on ' : 'is due on ') + fmtShort(doc.due) : 'is due'}. The balance of ${fmtMoney(t.balance)} is still open.\n\nView it and pay here:\n${url}\n\nThank you,\n${payee}`
@@ -201,7 +228,7 @@ export function moneyNudge() {
 const slug = s => String(s || 'doc').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 export function moneyPage(b, kind, go) {
   const K = KINDS[kind], doc = docOf(b, kind), refresh = () => go({});
-  const emails = (b.stakeholders || []).map(s => (s.email || '').trim()).filter(Boolean);
+  const emails = billTo(b).contacts.map(s => (s.email || '').trim()).filter(Boolean);
   const text = () => moneyText(byId('bookings', b.id), kind);
   const share = async () => { if (navigator.share) { try { await navigator.share({ title: `${K.label} ${doc.number}`, text: text() }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const copy = async () => { try { await navigator.clipboard.writeText(text()); toast('Copied'); } catch { toast('Select the text and copy it'); } };
@@ -305,14 +332,14 @@ export function fillBudget(b) {
   b = current(b);
   const have = new Set([...((b.budget && b.budget.lines) || []).map(l => l.src).filter(Boolean), ...((b.budget && b.budget.skip) || [])]), add = [], days = shootDays(b);
   for (const id of b.crew || []) { const c = byId('crew', id); if (c && !have.has('crew:' + id)) { const r = personRate(c), hourly = r.hourly; add.push({ cat: 'Crew', desc: c.name + (c.role ? ` (${c.role})` : '') + (hourly ? ' — check the hours' : ''), qty: hourly ? days * standardDay() : days, unit: hourly ? 'hour' : 'day', rate: r.amount, src: 'crew:' + id }); } }
-  for (const hr of hiredPeople(b)) if (!have.has('person:' + hr.id)) { const r = personRate(hr), hourly = r.hourly, n = Number(hr.days) || days; add.push({ cat: 'Crew', desc: hr.name + (hr.role ? ` (${hr.role})` : '') + ' — hired' + (hourly ? ', check the hours' : ''), qty: hourly ? n * standardDay() : n, unit: hourly ? 'hour' : 'day', rate: r.amount, src: 'person:' + hr.id }); }
+  for (const hr of paidHires(b)) if (!have.has('person:' + hr.id)) { const r = personRate(hr), hourly = r.hourly, n = Number(hr.days) || days; add.push({ cat: 'Crew', desc: hr.name + (hr.role ? ` (${hr.role})` : '') + ' — hired' + (hourly ? ', check the hours' : ''), qty: hourly ? n * standardDay() : n, unit: hourly ? 'hour' : 'day', rate: r.amount, src: 'person:' + hr.id }); }
   for (const hr of rentalsOf(b)) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
   for (const lc of b.licences || []) if (!have.has('lic:' + lc.id)) add.push({ cat: 'Music & licences', desc: [lc.kind, lc.title].filter(Boolean).join(': '), qty: 1, unit: 'item', rate: rateOf(lc.cost), src: 'lic:' + lc.id });
   if (add.length) patchBooking(b, bd => { bd.lines.push(...add.map(l => ({ ...l, id: uid(), actual: '', supplier: '' }))); });
   return add.length;
 }
 function budgetCsv(b) {
-  const t = budgetTotals(b), q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"', tx = v => q(String(v == null ? '' : v).replace(/^[=+\-@\t\r]/, "'$&")); // tx: text a spreadsheet must not run as a formula
+  const t = budgetTotals(b), q = csvCell, tx = csvText; // tx: text, which a spreadsheet must not run as a formula
   const rows = [['Category', 'What it is', 'Quantity', 'Per', 'Cost each', 'Estimate', 'Actual', 'Paid to'].map(q).join(',')];
   for (const c of t.byCat) for (const l of c.lines) rows.push([tx(c.cat), tx(l.desc), q(l.qty), tx(l.unit), q(l.rate), q(lineEst(l).toFixed(2)), q(hasActual(l) ? Number(l.actual).toFixed(2) : ''), tx(l.supplier)].join(','));
   rows.push(['Total', '', '', '', '', t.est.toFixed(2), t.spent.toFixed(2), ''].map(q).join(','));
@@ -358,9 +385,11 @@ export function openMoney(onOpen) {
   let close = () => {};
   const stat = (v, l, cls = '') => h('div', { class: 'stat ' + cls }, h('b', null, v), h('span', null, l));
   const csv = () => {
-    const q = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    // Text cells (a title or a client can come from someone's shared link) are written so that a spreadsheet does not
+    // run them as formulas; amounts and dates stay plain, so a negative balance is still a number.
+    const q = csvCell, tx = csvText;
     const rows = [['Number', 'Date', 'Due', 'Client', 'Project', 'Subtotal', 'Tax', 'Total', 'Paid', 'Balance', 'Status', 'Paid on'].map(q).join(',')];
-    for (const b of list.filter(x => x.invoice).sort((x, y) => String(x.invoice.number).localeCompare(String(y.invoice.number)))) { const t = totals(b.invoice); rows.push([b.invoice.number, b.invoice.date, b.invoice.due, b.client, b.title, t.subtotal.toFixed(2), t.tax.toFixed(2), t.total.toFixed(2), t.paid.toFixed(2), t.balance.toFixed(2), b.invoice.status, b.invoice.paidAt ? ymd(new Date(b.invoice.paidAt)) : ''].map(q).join(',')); }
+    for (const b of list.filter(x => x.invoice).sort((x, y) => String(x.invoice.number).localeCompare(String(y.invoice.number)))) { const t = totals(b.invoice); rows.push([tx(b.invoice.number), q(b.invoice.date), q(b.invoice.due), tx(b.client), tx(b.title), q(t.subtotal.toFixed(2)), q(t.tax.toFixed(2)), q(t.total.toFixed(2)), q(t.paid.toFixed(2)), q(t.balance.toFixed(2)), tx(b.invoice.status), q(b.invoice.paidAt ? ymd(new Date(b.invoice.paidAt)) : '')].join(',')); }
     if (!requirePaid('export')) return; // spreadsheets come with a licence
     saveOrShare('﻿' + rows.join('\r\n'), `vdex-invoices-${today}.csv`, 'text/csv').then(ok => ok && toast('Invoices exported'));
   };

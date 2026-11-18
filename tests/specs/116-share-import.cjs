@@ -3,6 +3,11 @@
 // with "Add to my Vdex" after a preview; adding again updates instead of copying. Also: the card's .vcf download,
 // serial-number duplicates (skip, update, add anyway) and a kit, the notice about serial numbers and values, hostile
 // and oversized links, read-only mode, and a link that arrives while Vdex is locked, on the terms or in the tour.
+// Then what a review of all that found: an update that keeps what was changed and added by hand (and says exactly what
+// it replaces), money on a booking that came from a producer, cards that only look like someone on the Crew list, one's
+// own card and one's own equipment, Undo after an equipment link, lists and shoots longer than a link may bring, a
+// link too big for the browser's storage, one preview at a time, the scanner on a long code, and the shared pages'
+// line for people whose Vdex is an app.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const { acceptTerms } = require('../helpers.cjs');
@@ -80,7 +85,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   await B.page.goto(uiLink); await B.page.waitForSelector('.paper h1');
   const addHref = await B.page.locator('a.btn.primary').getAttribute('href');
   ok('the crew page offers Add to my Vdex, and the button carries the very same packed link into the app', (await B.page.locator('a.btn.primary').innerText()).includes('Add to my Vdex') && addHref === 'index.html#add=' + hashOf(uiLink));
-  ok('…beside what was there before: Add to calendar and Print, and the shoot to read with no Vdex at all', (await B.page.locator('.bar button').count()) === 2 && /Harbour Brewing brand film/.test(await B.page.locator('.paper').innerText()));
+  ok('…beside what was there before: Add to calendar and Print, and the shoot to read with no Vdex at all', (await B.page.locator('.bar .acts button').count()) === 2 && /Harbour Brewing brand film/.test(await B.page.locator('.paper').innerText()));
   const crewFits = await B.page.evaluate(() => ({ page: document.documentElement.scrollWidth <= innerWidth, hit: [...document.querySelectorAll('.bar .btn')].every(b => b.getBoundingClientRect().height >= 44) }));
   ok('…fitting a 360-pixel phone with full-size buttons', crewFits.page && crewFits.hit, JSON.stringify(crewFits));
 
@@ -89,7 +94,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('the app opens with a preview, and the link is gone from the address bar', at1.hash === '' && !at1.href.includes('#') && /index\.html$/.test(at1.href), at1.href);
   const pv = await sheetText(B.page);
   ok('the preview says what it is and who shared it', /Add this booking\?/.test(pv) && /Harbour Brewing brand film/.test(pv) && /Shared by Pat Producer · Quay Films/.test(pv));
-  ok('…and lists what will be added: when, place, venue, call sheet, crew, contacts, scenes, shots, deliverables', /When/.test(pv) && /07:30–17:00/.test(pv) && /12 Dock Road, Portside/.test(pv) && new RegExp(`“${seed.venue}” goes into your Venues`).test(pv) && /general call 07:30, lunch 12:30, wrap 18:00, 2 schedule lines/.test(pv) && /3 people \(Sam Rivera, Jo Chen, Dee Driver\), kept on this booking/.test(pv) && /2 contacts on the booking \(Pat Producer, Ana Ruiz\)/.test(pv) && /2 scenes on its stripboard, over 1 shooting day/.test(pv) && /2 shots/.test(pv) && /Main cut 9:16/.test(pv), pv.replace(/\s+/g, ' ').slice(0, 300));
+  ok('…and lists what will be added: when, place, venue, call sheet, crew, contacts, scenes, shots, deliverables', /When/.test(pv) && /07:30–17:00/.test(pv) && /12 Dock Road, Portside/.test(pv) && new RegExp(`“${seed.venue}” goes into your Venues`).test(pv) && /general call 07:30, lunch 12:30, wrap 18:00, 2 schedule lines/.test(pv) && /3 people \(Sam Rivera, Jo Chen, Dee Driver\), kept on this booking/.test(pv) && /2 contacts on the booking \(Pat Producer, Ana Ruiz\)/.test(pv) && /2 scenes and 1 banner on its stripboard, over 1 shooting day/.test(pv) && /2 shots/.test(pv) && /Main cut 9:16/.test(pv), pv.replace(/\s+/g, ' ').slice(0, 300));
   ok('…with the crew kept on the booking, not put on the Crew list, and no prices', /not added to your Crew list/.test(pv) && /never carries prices/.test(pv) && !/450|2500|9876|Q-0099|£|\$/.test(pv));
   ok('nothing is added before the tap', (await db(B.page)).bookings.length === 0 && (await db(B.page)).venues.length === 0);
   const pvFits = await B.page.evaluate(() => { const s = document.querySelector('.sheet').getBoundingClientRect(); return { page: document.documentElement.scrollWidth <= innerWidth, sheet: s.left >= 0 && s.right <= innerWidth, hit: [...document.querySelectorAll('.sheet .add-actions .btn')].every(b => b.getBoundingClientRect().height >= 44), modal: document.querySelector('.sheet').getAttribute('aria-modal') === 'true' && document.getElementById('app').inert }; });
@@ -142,7 +147,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const link2 = await crewLink();
   await viaPage(B.page, link2);
   const pv2 = await sheetText(B.page);
-  ok('adding the same shoot again offers an update and says what stays yours', /Update this booking\?/.test(pv2) && /is in your Bookings already/.test(pv2) && /anything you added by hand stay as they are/.test(pv2) && (await B.page.locator('.sheet button:has-text("Update the booking")').count()) === 1);
+  ok('adding the same shoot again offers an update and says what stays yours', /Update this booking\?/.test(pv2) && /is in your Bookings already/.test(pv2) && /Replaced: each of these while it is still as the link left it/.test(pv2) && /Stays: any of those details you changed yourself, and everything you added by hand/.test(pv2) && (await B.page.locator('.sheet button:has-text("Update the booking")').count()) === 1);
   await B.page.locator('.sheet button:has-text("Update the booking")').click();
   await B.page.waitForSelector('.bk-detail'); await sleep(400);
   const d2 = await db(B.page), b2 = d2.bookings[0];
@@ -187,9 +192,9 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const cardFits = await B.page.evaluate(() => ({ page: document.documentElement.scrollWidth <= innerWidth, hit: [...document.querySelectorAll('.bar .btn')].every(b => b.getBoundingClientRect().height >= 44) }));
   ok('…fitting a 360-pixel phone with full-size buttons', cardFits.page && cardFits.hit, JSON.stringify(cardFits));
   await B.page.screenshot({ path: OUT + '/share-card-page-360.png', fullPage: true });
-  const [vcf] = await Promise.all([B.page.waitForEvent('download', { timeout: 8000 }), B.page.locator('button:has-text("Save to my phone’s contacts")').click()]);
+  const [vcf] = await Promise.all([B.page.waitForEvent('download', { timeout: 8000 }), B.page.locator('button:has-text("Save to my contacts (.vcf)")').click()]);
   const vcfText = fs.readFileSync(await vcf.path(), 'utf8');
-  ok('Save to my phone’s contacts downloads the card as a .vcf file', /\.vcf$/.test(vcf.suggestedFilename()) && /^BEGIN:VCARD\r\nVERSION:3\.0\r\n/.test(vcfText) && /\r\nFN:Pat Producer\r\n/.test(vcfText) && /\r\nN:Producer;Pat;;;\r\n/.test(vcfText) && /\r\nORG:Quay Films\r\n/.test(vcfText) && /\r\nTEL;TYPE=CELL:\+44 20 7946 0100\r\n/.test(vcfText) && /\r\nEMAIL:pat@quayfilms\.example\r\n/.test(vcfText) && /\r\nURL:https:\/\/quayfilms\.example\/\r\n/.test(vcfText) && /END:VCARD$/.test(vcfText), vcf.suggestedFilename());
+  ok('Save to my contacts (.vcf) downloads the card as a .vcf file, and does not claim this is a phone', /\.vcf$/.test(vcf.suggestedFilename()) && /^BEGIN:VCARD\r\nVERSION:3\.0\r\n/.test(vcfText) && /\r\nFN:Pat Producer\r\n/.test(vcfText) && /\r\nN:Producer;Pat;;;\r\n/.test(vcfText) && /\r\nORG:Quay Films\r\n/.test(vcfText) && /\r\nTEL;TYPE=CELL:\+44 20 7946 0100\r\n/.test(vcfText) && /\r\nEMAIL:pat@quayfilms\.example\r\n/.test(vcfText) && /\r\nURL:https:\/\/quayfilms\.example\/\r\n/.test(vcfText) && /END:VCARD$/.test(vcfText), vcf.suggestedFilename());
 
   await viaPage(B.page, cardLink);
   const pc = await sheetText(B.page);
@@ -265,7 +270,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('…offers skip, update or add anyway, and says what will happen', (await B.page.locator('.sheet .add-dup select option').allInnerTexts()).join('|') === 'Skip it: leave mine as it is|Update mine with these details|Add anyway, as another item' && new RegExp(`${seed.kitGear - 1} to add · 1 left as it is`).test(await B.page.locator('.sheet .add-sum').innerText()) && new RegExp(`“${seed.kitName}” \\(${seed.kitGear} items\\) is made as a kit`).test(pg));
   ok('…a same-named item with no serial number is not taken for a duplicate', !/Same name/.test(pg));
   await sleep(400); await B.page.screenshot({ path: OUT + '/share-add-gear-360.png' });
-  await B.page.locator('.sheet button:has-text("Add to my Equipment")').click();
+  await B.page.locator('.sheet .add-go').click();
   await B.page.waitForSelector('.gear-card.just-added', { timeout: 8000 });
   const g1 = await db(B.page), mine = g1.gear.find(x => x.id === 'mine1'), kit1 = g1.kits[0];
   ok('skip: the new items are added and the one already owned is untouched', g1.gear.length === before + seed.kitGear - 1 && mine.name === 'My FX6' && mine.value === 5000 && mine.location === 'My shelf' && !mine.shared && (await B.page.evaluate(() => window.logiPage())) === 'gear' && (await B.page.locator('.gear-card.just-added').count()) === seed.kitGear - 1, `${g1.gear.length} items`);
@@ -278,15 +283,17 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('the same list again: what was added before is found and set to update, nothing is new', new RegExp(`Already in your Equipment \\(${seed.kitGear}\\)`).test(pg2) && /Added from this list before/.test(pg2) && !/New \(/.test(pg2) && new RegExp(`${seed.kitGear - 1} to update · 1 left as it is`).test(await B.page.locator('.sheet .add-sum').innerText()) && /is updated/.test(pg2));
   await B.page.locator('.sheet .add-dup', { hasText: 'Same serial number' }).locator('select').selectOption('update');
   ok('…choosing Update for the duplicate changes the count', new RegExp(`${seed.kitGear} to update`).test(await B.page.locator('.sheet .add-sum').innerText()));
-  await B.page.locator('.sheet button:has-text("Add to my Equipment")').click(); await B.page.waitForSelector('.gear-card.just-added'); await sleep(200);
+  await B.page.locator('.sheet .add-go').click(); await B.page.waitForSelector('.gear-card.just-added'); await sleep(200);
   const g2 = await db(B.page), mine2 = g2.gear.find(x => x.id === 'mine1');
   ok('update: no copies are made, the owned camera takes the list’s details and keeps its own service log, and the kit is not doubled', g2.gear.length === g1.gear.length && g2.kits.length === 1 && mine2.name === 'Sony FX6 body' && mine2.value === 9876 && mine2.location === 'Flight case 1' && mine2.serial === 'FX6-120934' && mine2.log.length === 1 && mine2.log[0].note === 'my own log', `${g2.gear.length} items, ${g2.kits.length} kits`);
 
   await viaPage(B.page, kitLink);
   await B.page.locator('.sheet .add-all select').selectOption('skip');
   ok('one choice can be set for every duplicate at once', (await B.page.locator('.sheet .add-dup select').evaluateAll(els => els.every(s => s.value === 'skip'))) && new RegExp(`${seed.kitGear} left as they are`).test(await B.page.locator('.sheet .add-sum').innerText()));
+  ok('…and with every item skipped there is nothing to do: the button says so and is off, and the kit that is already there stays as it is', (await B.page.locator('.sheet .add-go').innerText()) === 'Nothing to add' && await B.page.locator('.sheet .add-go').isDisabled() && /stays as it is: every item of it is skipped/.test(await B.page.locator('.sheet .add-kits').innerText()), await B.page.locator('.sheet .add-kits').innerText());
   await B.page.locator('.sheet .add-dup', { hasText: 'Sony FX6 body' }).locator('select').selectOption('add');
-  await B.page.locator('.sheet button:has-text("Add to my Equipment")').click(); await B.page.waitForSelector('.gear-card.just-added'); await sleep(200);
+  ok('…one item set to Add anyway names the button after it, and the kit it is in is updated again', (await B.page.locator('.sheet .add-go').innerText()) === 'Add 1 item to my Equipment' && !(await B.page.locator('.sheet .add-go').isDisabled()) && /is updated$/.test(await B.page.locator('.sheet .add-kits').innerText()));
+  await B.page.locator('.sheet .add-go').click(); await B.page.waitForSelector('.gear-card.just-added'); await sleep(200);
   const g3 = await db(B.page);
   ok('add anyway: the item is added as another one beside the one already there', g3.gear.length === g2.gear.length + 1 && g3.gear.filter(x => x.serial === 'FX6-120934').length === 2 && (await B.page.locator('.gear-card.just-added').count()) === 1);
   const plans = await B.page.evaluate(() => import('./js/gear-import.js').then(m => {
@@ -352,7 +359,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   await H.page.goto(BASE + 'shared.html#' + evilCard); await H.page.waitForSelector('.paper.card h1');
   const hc = await H.page.evaluate(() => ({ pwned: window.__pwned, bad: document.querySelectorAll('.paper img, .paper script, .paper a[href^="javascript"]').length, links: [...document.querySelectorAll('.paper a')].map(a => a.getAttribute('href')), name: document.querySelector('.paper h1').textContent }));
   ok('a hostile card’s page draws text only: no script, no javascript: link, no smuggled email header', hc.pwned === undefined && hc.bad === 0 && hc.name.startsWith('<img src=x') && hc.links.join() === 'tel:+1555000', JSON.stringify(hc.links));
-  const [evilVcf] = await Promise.all([H.page.waitForEvent('download', { timeout: 8000 }), H.page.locator('button:has-text("Save to my phone’s contacts")').click()]);
+  const [evilVcf] = await Promise.all([H.page.waitForEvent('download', { timeout: 8000 }), H.page.locator('button:has-text("Save to my contacts (.vcf)")').click()]);
   const evilText = fs.readFileSync(await evilVcf.path(), 'utf8');
   ok('…and its .vcf file is one card with nothing slipped in', (evilText.match(/^BEGIN:VCARD/gm) || []).length === 1 && (evilText.match(/^END:VCARD/gm) || []).length === 1 && !/^URL:/m.test(evilText) && !/^EMAIL:/m.test(evilText) && !/^Bcc/mi.test(evilText), evilText.replace(/\r\n/g, ' | ').slice(0, 200));
   // a few thousand characters that unpack into megabytes, and a link far longer than any honest one
@@ -387,7 +394,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('…but Add is refused with the usual explanation, nothing is added, and the preview stays', /Vdex is read-only/.test(await R.page.locator('.sheet.licence-readonly').innerText()) && (await db(R.page)).crew.length === 0 && (await R.page.locator('.sheet .add-preview').count()) === 1 && (await R.page.locator('.toast').count()) === 0);
   await R.page.keyboard.press('Escape'); await sleep(200); await R.page.keyboard.press('Escape'); await sleep(200);
   await R.page.goto(BASE + 'index.html#add=' + hashOf(kitLink)); await R.page.waitForSelector('.sheet .add-preview', { timeout: 15000 });
-  await R.page.locator('.sheet button:has-text("Add to my Equipment")').click(); await R.page.waitForSelector('.sheet.licence-readonly', { timeout: 8000 });
+  await R.page.locator('.sheet .add-go').click(); await R.page.waitForSelector('.sheet.licence-readonly', { timeout: 8000 });
   const noGear = (await db(R.page)).gear.length === 0 && (await db(R.page)).kits.length === 0;
   await R.page.keyboard.press('Escape'); await sleep(200); await R.page.keyboard.press('Escape'); await sleep(200);
   ok('…the same for equipment and for a booking', noGear && (await R.page.locator('.sheet').count()) === 0 && await (async () => { await R.page.goto(BASE + 'index.html#add=' + hashOf(link1)); await R.page.waitForSelector('.sheet .add-preview', { timeout: 15000 }); await R.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await R.page.waitForSelector('.sheet.licence-readonly', { timeout: 8000 }); const d = await db(R.page); return d.bookings.length === 0 && d.venues.length === 0; })());
@@ -435,6 +442,341 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   await N2.locator('.tour-card button:has-text("Skip")').click(); await N2.waitForSelector('.sheet .add-preview', { timeout: 15000 });
   ok('a link not shown yet survives a reload of its tab', /Add this equipment\?/.test(await sheetText(N2)));
   await N.ctx.close();
+
+  /* ============================== an update keeps what was changed and added by hand ============================== */
+  // A shoot written out by hand, so each link differs from the last in known ways.
+  const arrive = async (page, packed, what = '.sheet .add-preview') => { await page.goto(BASE + 'index.html#add=' + packed); await page.waitForSelector(what, { timeout: 15000 }); await sleep(150); };
+  const shoot = (over = {}) => ({ v: 1, kind: 'crew', ref: 'REF-U1', made: Date.now(), title: 'Quay film', date: day(10), endDate: day(11), start: '09:00', end: '18:00', client: 'Northwind Ltd',
+    by: { name: 'Pat Producer', business: 'Quay Films', phone: '+44 20 7946 0100', email: 'pat@quayfilms.example' },
+    call: { general: '09:00', lunch: '13:00', wrap: '18:00', dress: 'Black', weather: 'Dry', emergency: 'Medic 555 0111', breaks: '45 min approved · lunch on the quay' },
+    location: { venue: 'Quay House', address: '1 Quay Road, Portside', access: 'Gate B', parking: 'Bay 4', power: '16A', hospital: 'Portside General', rules: 'No drones' },
+    schedule: [{ date: day(10), time: '10:00', item: 'First set-up' }],
+    crew: [{ name: 'Anna Lee', role: 'Gaffer', phone: '+1 555 0100', email: 'anna@example.com', call: '08:30' }, { name: 'Sam Stone', role: 'Sound', phone: '', email: '', call: '09:00' }],
+    contacts: [{ name: 'Carl Client', role: 'Marketing', phone: '+1 555 0142', email: 'carl@northwind.example' }], onSet: 'Client arrives 11:00',
+    scenes: [{ n: 1, date: day(10), pages: '1 4/8', items: [{ scene: '1', ie: 'EXT', set: 'QUAY', tod: 'DAY', desc: 'Boats', cast: ['ANA'], pages: '1', kind: 'sb-ext-day' }, { banner: 'Company move' }, { scene: '2', ie: 'INT', set: 'OFFICE', tod: 'DAY', desc: 'Meeting', cast: ['ANA', 'TOM'], pages: '4/8', kind: 'sb-int-day' }] },
+      { n: 2, date: day(11), pages: '1', items: [{ scene: '3', ie: 'INT', set: 'BAR', tod: 'NIGHT', desc: 'Last orders', cast: ['TOM'], pages: '1', kind: 'sb-int-night' }] }],
+    shots: [{ text: 'Wide of the quay', done: false }], kit: [{ name: 'Sony FX6', cat: 'Camera', qty: 1 }, { name: 'Aputure 600d', cat: 'Lighting', qty: 2 }],
+    deliverables: [{ name: 'Main film', duration: '90 s', due: day(20), status: 'Planned' }], notes: 'Park at the quay gate.', ...over });
+  const U = await open();
+  await U.page.goto(BASE); await U.page.waitForSelector('#rolodex .drum-btn');
+  await arrive(U.page, await pack(shoot()));
+  const upv = await sheetText(U.page);
+  ok('the preview of a shared booking says who a quote or an invoice on it would go to: the person who shared it, not their client', /A quote or an invoice you make on it goes to Quay Films, who shared it with you, not to their client/.test(upv), upv.replace(/\s+/g, ' ').slice(-260));
+  await U.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await U.page.waitForSelector('.bk-detail'); await sleep(300);
+  const u1 = (await db(U.page)).bookings[0], ids1 = u1.board.list.map(x => x.id);
+  ok('the booking remembers what the link supplied and which lines the link made', u1.shared.sent.client === 'Northwind Ltd' && u1.shared.sent.times === '09:00–18:00' && u1.shared.sent['cs.notes'] === 'Park at the quay gate.' && u1.shared.rows.strips.length === 4 && u1.shared.rows.hires.length === 2 && u1.shared.rows.deliverables.length === 1 && u1.shared.producer.business === 'Quay Films' && u1.breakMinutes === 45, JSON.stringify(u1.shared.sent).slice(0, 200));
+
+  // ---- money on a booking that came from a link (the producer hired you) ----
+  const bill = () => U.page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => { const b = s.db.bookings[0]; return { to: m.snapshot(b, 'invoice').to, mail: decodeURIComponent(m.mailtoFor(b, 'invoice', 'https://x.example/i').split('?')[0]), lines: m.suggestLines(b, 'invoice').map(l => l.desc), head: m.billTo(b).head }; }));
+  await U.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings[0]; x.invoice = { number: 'INV-0007', date: x.date, lines: [{ id: 'l1', desc: 'Shoot day', qty: 1, unit: 'day', price: 500 }], status: 'Draft' }; x.stakeholders.push({ name: 'My Billing Contact', role: 'Accounts', email: 'accounts@quayfilms.example' }); x.updatedAt = Date.now(); })));
+  const m1 = await bill();
+  ok('an invoice on it is headed to the producer’s business, with the producer and a contact added by hand under it, and never the producer’s client or the client’s contact', m1.to[0] === 'Quay Films' && m1.to.length === 3 && /^Pat Producer · Producer · Quay Films · pat@quayfilms\.example$/.test(m1.to[1]) && /^My Billing Contact/.test(m1.to[2]) && !m1.to.join().includes('Carl') && !m1.to.join().includes('Northwind'), JSON.stringify(m1.to));
+  ok('…and its email goes to the producer and that contact, not to the client’s contact', m1.mail === 'mailto:pat@quayfilms.example,accounts@quayfilms.example', m1.mail);
+  ok('the producer’s crew are not suggested as lines of one’s own quote or invoice while they have no rate', !m1.lines.some(l => /^Crew:/.test(l)) && m1.lines.some(l => /^Shoot days/.test(l)), JSON.stringify(m1.lines));
+  // a rate given through the form: the form writes the person anew, without the mark the link put on the line
+  await U.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings[0], form = ({ shared, ...rest }, patch) => ({ ...rest, ...patch }); x.hires = x.hires.map(hr => (hr.name === 'Sam Stone' ? form(hr, { rate: 300, rateUnit: 'day', notes: 'worked with Sam before' }) : hr)); x.hires.push({ id: 'myhire', name: 'My Own Runner', role: 'Runner', rate: 120, rateUnit: 'day' }); x.updatedAt = Date.now(); })));
+  const m2 = await bill();
+  const budget = await U.page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => { m.fillBudget(s.db.bookings[0]); return s.db.bookings[0].budget.lines.map(l => l.desc); }));
+  ok('…one given a rate is, with the people one hired oneself; the budget follows the same rule', m2.lines.filter(l => /^Crew:/.test(l)).join('|') === 'Crew: Sam Stone (Sound)|Crew: My Own Runner (Runner)' && budget.length === 2 && budget.every(l => /Sam Stone|My Own Runner/.test(l)), JSON.stringify([m2.lines, budget]));
+
+  // ---- by hand, the way the app's own pages write: forms write a line anew, the stripboard keeps only a strip's own fields ----
+  await U.page.evaluate(() => import('./js/store.js').then(s => s.update(d => {
+    const x = d.bookings[0], form = ({ shared, ...rest }, patch) => ({ ...rest, ...patch }), v = d.venues.find(y => y.id === x.venueId), l = x.board.list;
+    x.client = 'Quay Films (my client)'; x.callSheet.notes += '\nMY NOTE: gate code 4411'; v.hospital = 'St Mary’s, 5 Hill Road'; v.updatedAt = Date.now();
+    l.find(y => y.scene === '1').notes = 'MY STRIP NOTE: long lens';
+    l.splice(l.findIndex(y => y.id === 'day-1'), 0, { id: 'mine-1', type: 'scene', scene: 'PU1', ie: 'EXT', set: 'QUAY', tod: 'DAY', dn: 'D', desc: 'My own pick-up', cast: [], eighths: 2, notes: 'mine' });
+    l.splice(l.findIndex(y => y.id === 'day-2'), 0, { id: 'mine-2', type: 'banner', text: 'MY OWN BANNER' });
+    x.board = { list: l.map(({ shared, ...strip }) => strip), cast: x.board.cast, updatedAt: Date.now() };
+    x.deliverables = x.deliverables.map(dl => form(dl, { link: 'https://my.example/cut' }));
+    x.shots[0].done = true; x.shots.push({ id: 'myshot', text: 'My own extra shot', done: false });
+    x.callSheet.schedule.push({ id: 'myrow', date: '', time: '06:00', item: 'My own early start' }); x.notes = 'MY OWN BOOKING NOTE\n\n' + x.notes; x.status = 'Prepped'; x.updatedAt = Date.now();
+  })));
+  ok('…and once the client is changed by hand, that client heads the invoice again', (await bill()).to[0] === 'Quay Films (my client)');
+  // link 2: an earlier call, no start and end times, Anna gone and Dee new, scene 1 rewritten, scene 2 gone, scene 4 new
+  const two = shoot({ made: Date.now() + 1000, notes: 'Park at the quay gate. Bring wet weather gear.', crew: [{ name: 'Sam Stone', role: 'Sound Recordist', phone: '+1 555 0155', email: '', call: '08:00' }, { name: 'Dee Driver', role: 'Runner', phone: '', email: '', call: '08:00' }],
+    scenes: [{ n: 1, date: day(10), pages: '1', items: [{ scene: '1', ie: 'EXT', set: 'QUAY', tod: 'DAWN', desc: 'Boats come in at first light', cast: ['ANA'], pages: '1', kind: 'sb-ext-day' }, { banner: 'Company move' }] },
+      { n: 2, date: day(11), pages: '1 2/8', items: [{ scene: '3', ie: 'INT', set: 'BAR', tod: 'NIGHT', desc: 'Last orders', cast: ['TOM'], pages: '1', kind: 'sb-int-night' }, { scene: '4', ie: 'INT', set: 'CELLAR', tod: 'NIGHT', desc: 'The barrels', cast: ['ZOE'], pages: '2/8', kind: 'sb-int-night' }] }] });
+  two.call.general = '08:00'; delete two.start; delete two.end;
+  await arrive(U.page, await pack(two));
+  const upv2 = await sheetText(U.page);
+  ok('the update preview says exactly what is replaced and what stays', /Update this booking\?/.test(upv2) && /Replaced: each of these while it is still as the link left it: title, client, dates, times, address/.test(upv2) && /one the link no longer has is removed/.test(upv2) && /Stays: any of those details you changed yourself, and everything you added by hand/.test(upv2) && /Your notes on scenes, the rate, days and notes you gave a person/.test(upv2) && /A part this link does not carry is left as it is/.test(upv2) && !/anything you added by hand stay as they are/.test(upv2), upv2.replace(/\s+/g, ' ').slice(0, 400));
+  ok('…names the details changed by hand, which stay, and counts the strips of one’s own', /You changed: the client, the venue’s nearest hospital, the call sheet’s instructions\. They stay as you have them\./.test(upv2) && /Your strips: 2 strips of your own stay on the stripboard\./.test(upv2), (upv2.match(/You changed[^\n]*/) || [''])[0]);
+  ok('…and says nothing about the sender when the link is from the same person', (await U.page.locator('.sheet .add-other').count()) === 0);
+  await U.page.locator('.sheet button:has-text("Update the booking")').click(); await U.page.waitForSelector('.bk-detail'); await sleep(300);
+  const ud = await db(U.page), u2 = ud.bookings[0], uv = ud.venues.find(v => v.id === u2.venueId), l2 = u2.board.list;
+  ok('a detail changed by hand is kept: the client, the call sheet’s instructions, the venue’s hospital', ud.bookings.length === 1 && u2.client === 'Quay Films (my client)' && /MY NOTE: gate code 4411/.test(u2.callSheet.notes) && !/wet weather/.test(u2.callSheet.notes) && uv.hospital === 'St Mary’s, 5 Hill Road', JSON.stringify([u2.client, u2.callSheet.notes, uv.hospital]));
+  ok('…one not touched takes the link’s new value, and the start and end stay when the link has none', u2.callSheet.generalCall === '08:00' && u2.start === '09:00' && u2.end === '18:00' && u2.shared.sent.times === '09:00–18:00' && u2.shared.sent.client === 'Northwind Ltd' && u2.shared.sent['cs.notes'] === 'Park at the quay gate. Bring wet weather gear.', JSON.stringify([u2.callSheet.generalCall, u2.start, u2.end]));
+  const s1 = l2.find(x => x.scene === '1'), day1 = l2.slice(0, l2.findIndex(x => x.id === 'day-1')).map(x => x.scene || x.text), day2 = l2.slice(l2.findIndex(x => x.id === 'day-1') + 1, l2.findIndex(x => x.id === 'day-2')).map(x => x.scene || x.text);
+  ok('the stripboard is merged, not replaced: a note written on the link’s strip stays on it, with the strip’s id, while its details follow the link', s1.id === ids1[0] && s1.notes === 'MY STRIP NOTE: long lens' && s1.desc === 'Boats come in at first light' && s1.tod === 'DAWN', JSON.stringify(s1));
+  ok('…a scene and a banner of one’s own stay in their day, a scene the link no longer has is gone, a new one comes in', JSON.stringify(day1) === JSON.stringify(['1', 'Company move', 'PU1']) && JSON.stringify(day2) === JSON.stringify(['3', '4', 'MY OWN BANNER']) && l2.find(x => x.id === 'mine-1').notes === 'mine' && !l2.some(x => x.scene === '2') && l2.filter(x => x.type === 'break').map(x => x.id).join() === 'day-1,day-2' && u2.board.cast.join() === 'ANA,TOM,ZOE', JSON.stringify(l2.map(x => x.scene || x.text || x.id)));
+  const sam = u2.hires.filter(h => h.name === 'Sam Stone');
+  ok('a person still on the link is one line, with the rate and notes given by hand (through a form, which drops the line’s mark) and the link’s new role and number; one no longer on the link is removed; one’s own stays', sam.length === 1 && sam[0].id === u1.hires[1].id && sam[0].rate === 300 && sam[0].notes === 'worked with Sam before' && sam[0].role === 'Sound Recordist' && sam[0].phone === '+1 555 0155' && u2.crewCall[sam[0].id] === '08:00' && !u2.hires.some(h => h.name === 'Anna Lee') && u2.hires.some(h => h.name === 'Dee Driver') && u2.hires.some(h => h.id === 'myhire') && u2.hires.length === 3, JSON.stringify(u2.hires.map(h => [h.name, h.rate])));
+  ok('…a deliverable edited in its form is still one deliverable, with its link; shots, schedule lines, notes and the stage of one’s own stay', u2.deliverables.length === 1 && u2.deliverables[0].link === 'https://my.example/cut' && u2.shots.length === 2 && u2.shots[0].done === true && u2.shots.some(s => s.id === 'myshot') && u2.callSheet.schedule.some(r => r.id === 'myrow') && u2.callSheet.schedule.filter(r => r.shared).length === 1 && /^MY OWN BOOKING NOTE/.test(u2.notes) && u2.status === 'Prepped', JSON.stringify(u2.deliverables));
+
+  // ---- an empty part of a link changes nothing ----
+  const three = shoot({ made: Date.now() + 2000, crew: two.crew, scenes: two.scenes }); delete three.contacts; delete three.onSet; delete three.kit; delete three.start; delete three.end;
+  await arrive(U.page, await pack(three));
+  ok('a link without the contacts part counts only the contact it brings (the producer)', /Contacts\s+1 contact on the booking \(Pat Producer\)/.test(await sheetText(U.page)));
+  await U.page.locator('.sheet button:has-text("Update the booking")').click(); await U.page.waitForSelector('.bk-detail'); await sleep(300);
+  const u3 = (await db(U.page)).bookings[0];
+  ok('…and leaves the contacts an earlier link brought, and the equipment list an earlier link put in the notes', u3.stakeholders.map(s => s.name).join('|') === 'Pat Producer|Carl Client|My Billing Contact' && u3.callSheet.attendees === 'Client arrives 11:00' && /Camera: Sony FX6/.test(u3.notes) && /Lighting: Aputure 600d ×2/.test(u3.notes) && (u3.notes.match(/Equipment on this shoot/g) || []).length === 1 && u3.shared.contacts.join('|') === 'pat producer|carl client', JSON.stringify([u3.stakeholders.map(s => s.name), u3.notes]));
+  const four = shoot({ made: Date.now() + 3000, crew: two.crew, scenes: two.scenes, contacts: [{ name: 'Dana New', role: 'Brand lead', phone: '', email: 'dana@northwind.example' }], kit: [{ name: 'Sony FX3', cat: 'Camera', qty: 1 }], by: { name: 'Robin Other', business: '', phone: '', email: 'robin@elsewhere.example' } });
+  await arrive(U.page, await pack(four));
+  ok('a link for the same shoot from someone else says so before the update', /This link is from Robin Other; the booking in your Bookings came from Pat Producer · Quay Films\. Check that it is the same shoot/.test(await U.page.locator('.sheet .add-other').innerText()));
+  await U.page.locator('.sheet button:has-text("Update the booking")').click(); await U.page.waitForSelector('.bk-detail'); await sleep(300);
+  const u4 = (await db(U.page)).bookings[0];
+  ok('…and a later link that does carry contacts and equipment replaces the ones a link brought, never one’s own', u4.stakeholders.map(s => s.name).join('|') === 'Robin Other|Dana New|My Billing Contact' && /Camera: Sony FX3/.test(u4.notes) && !/Sony FX6/.test(u4.notes) && /^MY OWN BOOKING NOTE/.test(u4.notes), JSON.stringify([u4.stakeholders.map(s => s.name), u4.notes]));
+
+  // ---- a booking shared on is still one's own ----
+  const onward = await U.page.evaluate(inc => Promise.all([import('./js/store.js'), import('./js/crew-link.js')]).then(([s, m]) => m.crewLink(s.db.bookings[0], inc)), EVERYTHING);
+  await arrive(U.page, hashOf(onward), '.sheet');
+  ok('a booking that came from a link and is shared on is known as one’s own when its link comes back: nothing to add, no copy', /This booking is yours/.test(await sheetText(U.page)) && (await U.page.locator('.sheet .add-actions').count()) === 0 && (await db(U.page)).bookings.length === 1);
+  await U.page.keyboard.press('Escape'); await sleep(200);
+
+  // ---- a booking from before Vdex kept what a link supplied ----
+  await U.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings[0], sh = x.shared; x.shared = { ref: sh.ref, by: sh.by, at: sh.at, updated: sh.updated, made: sh.made, note: sh.note, contacts: sh.contacts }; const v = d.venues.find(y => y.id === x.venueId); v.shared = { ref: v.shared.ref, by: v.shared.by, at: v.shared.at }; x.board.list.find(y => y.scene === '3').notes = 'NOTE ON THREE'; x.updatedAt = Date.now(); })));
+  await arrive(U.page, await pack(shoot({ made: Date.now() + 4000, crew: two.crew, scenes: two.scenes })));
+  const upv5 = await sheetText(U.page);
+  ok('for such a booking the preview says that this once every detail the link holds comes in', /Replaced: this booking was added before Vdex kept track of what a link supplied, so this once every detail the link holds comes in/.test(upv5) && /Stays: your notes on scenes/.test(upv5) && !/You changed/.test(upv5), upv5.replace(/\s+/g, ' ').slice(0, 300));
+  await U.page.locator('.sheet button:has-text("Update the booking")').click(); await U.page.waitForSelector('.bk-detail'); await sleep(300);
+  const u5 = (await db(U.page)).bookings[0];
+  ok('…and it does: the client and the venue’s hospital are the link’s again, the strips are the link’s with their notes kept, and from now on the booking keeps the record', u5.client === 'Northwind Ltd' && (await db(U.page)).venues[0].hospital === 'Portside General' && (await db(U.page)).venues[0].shared.sent.hospital === 'Portside General' && !u5.board.list.some(x => x.id === 'mine-1') && u5.board.list.find(x => x.scene === '3').notes === 'NOTE ON THREE' && u5.shared.sent.client === 'Northwind Ltd' && u5.shared.rows.strips.length === 4, JSON.stringify([u5.client, u5.board.list.map(x => x.scene || x.text || x.id)]));
+  await U.ctx.close();
+
+  /* ============================== a card that only looks like someone on the Crew list ============================== */
+  const C = await open();
+  await C.page.goto(BASE); await C.page.waitForSelector('#rolodex .drum-btn');
+  await C.page.evaluate(d => import('./js/store.js').then(s => s.update(x => {
+    x.profile = { ...x.profile, name: 'Uma Owner', business: 'Owner Films', email: 'uma@ownerfilms.example', phone: '+1 555 0500', updatedAt: Date.now() };
+    x.crew.push({ id: 'c1', name: 'Anna Lee', role: 'Gaffer', phone: '+1 555 010 0100', email: 'anna@acme.example', rate: 450, rateUnit: 'day', notes: 'Prefers morning calls' },
+      { id: 'cx', name: 'Alex', role: 'Editor', phone: '', email: 'alex.the.editor@example.com', rate: 350, rateUnit: 'day', notes: '' },
+      { id: 'ck', name: 'Kim Vale', role: 'Gaffer', phone: '', email: 'bookings@quay.example', rate: 400, rateUnit: 'day', notes: 'Great with HMIs' });
+    x.bookings.push({ id: 'b1', title: 'Anna job', client: '', type: 'other', date: d, status: 'Confirmed', crew: ['c1'], gear: [], stakeholders: [], notes: '' });
+  })), day(5));
+  const cardOf = o => pack({ v: 1, kind: 'contact', ...o });
+  const crewOf = async () => (await db(C.page)).crew;
+  await arrive(C.page, await cardOf({ name: 'Bob Stone', title: 'Gaffer', phone: '+1 (555) 010-0100', email: 'bob@acme.example' }));
+  const cp1 = await sheetText(C.page), cb1 = await C.page.locator('.sheet .add-actions .btn').allInnerTexts();
+  ok('a card that shares only a phone number with someone is not taken for them: both are shown, with the detail that matched', /Add this contact\?/.test(cp1) && /On your Crew list, with the same phone number/.test(cp1) && /Anna Lee/.test(cp1) && /anna@acme\.example/.test(cp1) && /Two people can share a phone number/.test(cp1) && !/again/.test(cp1), cp1.replace(/\s+/g, ' ').slice(0, 300));
+  ok('…adding a new person is the first button, updating the one found the second', cb1.join('|') === 'Add as a new person|Update Anna Lee|Cancel' && await C.page.locator('.sheet .add-actions .btn').first().evaluate(b => b.classList.contains('primary')), cb1.join('|'));
+  await C.page.locator('.sheet button:has-text("Add as a new person")').click(); await C.page.waitForSelector('.crew-card.just-added'); await sleep(200);
+  const cr1 = await crewOf(), anna = cr1.find(x => x.id === 'c1');
+  ok('…and then Anna stays Anna, on her booking, and Bob is a person of his own', cr1.length === 4 && anna.name === 'Anna Lee' && anna.email === 'anna@acme.example' && anna.role === 'Gaffer' && anna.rate === 450 && cr1.some(x => x.name === 'Bob Stone' && x.id !== 'c1' && x.email === 'bob@acme.example') && (await db(C.page)).bookings[0].crew.join() === 'c1', JSON.stringify(cr1.map(x => [x.id, x.name])));
+  await arrive(C.page, await cardOf({ name: 'Alex', title: 'Drone pilot', phone: '+1 555 0777', email: 'alex.flies@example.org' }));
+  ok('the same for a card that shares only a name', /On your Crew list, with the same name/.test(await sheetText(C.page)) && /Two people can share a name/.test(await sheetText(C.page)));
+  await C.page.locator('.sheet button:has-text("Add as a new person")').click(); await C.page.waitForSelector('.crew-card.just-added'); await sleep(200);
+  const cr2 = await crewOf();
+  ok('…two people called Alex, the first untouched', cr2.filter(x => x.name === 'Alex').length === 2 && cr2.find(x => x.id === 'cx').role === 'Editor' && cr2.find(x => x.id === 'cx').email === 'alex.the.editor@example.com' && cr2.find(x => x.id === 'cx').rate === 350);
+  await arrive(C.page, await cardOf({ name: 'Robin Vale', title: 'Editor', phone: '+1 555 0999', email: 'bookings@quay.example' }));
+  ok('…and for one that shares an email address under another name', /On your Crew list, with the same email address/.test(await sheetText(C.page)) && (await C.page.locator('.sheet .add-actions .btn').allInnerTexts()).join('|') === 'Add as a new person|Update Kim Vale|Cancel');
+  await C.page.locator('.sheet button:has-text("Update Kim Vale")').click(); await C.page.waitForSelector('.crew-card.just-added'); await sleep(200);
+  const kim = (await crewOf()).find(x => x.id === 'ck');
+  ok('Update, when chosen, puts the card on the person found and keeps their rate and notes', (await crewOf()).length === 5 && kim.name === 'Robin Vale' && kim.role === 'Editor' && kim.rate === 400 && /Great with HMIs/.test(kim.notes), JSON.stringify(kim));
+  await arrive(C.page, await cardOf({ name: 'Bob Stone', title: 'Best boy', phone: '+1 (555) 010-0100', email: 'bob@acme.example' }));
+  const cp4 = await sheetText(C.page);
+  ok('a card that came in before is certainly the same person: Update and Cancel only, and “again”', /Update this contact\?/.test(cp4) && /Bob Stone is on your Crew list already, from this card\. Adding the card again updates/.test(cp4) && (await C.page.locator('.sheet .add-actions .btn').allInnerTexts()).join('|') === 'Update the contact|Cancel' && (await C.page.locator('.sheet .add-maybe').count()) === 0, cp4.replace(/\s+/g, ' ').slice(0, 200));
+  await C.page.locator('.sheet button:has-text("Update the contact")').click(); await C.page.waitForSelector('.crew-card.just-added'); await sleep(200);
+  ok('…updated in place', (await crewOf()).length === 5 && (await crewOf()).find(x => x.name === 'Bob Stone').role === 'Best boy');
+  await arrive(C.page, await cardOf({ name: 'anna  LEE', title: 'Chief lighting technician', email: 'ANNA@acme.example' }));
+  const cp5 = await sheetText(C.page);
+  ok('the same name and email address is certain too, and “again” is not said of someone who never came from a card', /Update this contact\?/.test(cp5) && /Anna Lee is on your Crew list already, with this name and email address\. Adding the card updates/.test(cp5) && !/again/.test(cp5), cp5.replace(/\s+/g, ' ').slice(0, 200));
+  await C.page.keyboard.press('Escape'); await sleep(200);
+  const before5 = (await crewOf()).length;
+  await arrive(C.page, await cardOf({ name: 'Uma Owner', title: 'Director', business: 'Owner Films', phone: '+1 555 0500', email: 'uma@ownerfilms.example' }), '.sheet');
+  ok('one’s own contact card says it is one’s own, with nothing to add', /This is your own card/.test(await sheetText(C.page)) && (await C.page.locator('.sheet .add-actions').count()) === 0 && (await C.page.locator('.sheet .actions .btn').allInnerTexts()).join() === 'Close');
+  const ownApplied = await C.page.evaluate(() => import('./js/share-import.js').then(m => m.applyContact({ kind: 'contact', name: 'Uma Owner', email: 'uma@ownerfilms.example', phone: '', title: '', business: '', website: '', location: '' })));
+  ok('…and one is never put on one’s own Crew list', ownApplied === false && (await crewOf()).length === before5 && !(await crewOf()).some(x => x.name === 'Uma Owner'));
+  await C.page.locator('.sheet button:has-text("Close")').click(); await sleep(200);
+
+  // ---- one link at a time ----
+  const three3 = [await cardOf({ name: 'Ann Test', phone: '555 0001 01' }), await cardOf({ name: 'Ben Test', phone: '555 0001 02' }), await cardOf({ name: 'Cy Test', phone: '555 0001 03' })];
+  await C.page.evaluate(async links => { for (const l of links) { location.hash = 'add=' + l; await new Promise(r => setTimeout(r, 30)); } }, three3);
+  await C.page.waitForSelector('.sheet .add-preview', { timeout: 15000 }); await sleep(1500);
+  ok('links that arrive one after another do not pile up: one preview, of the last', (await C.page.locator('.sheet').count()) === 1 && /Cy Test/.test(await C.page.locator('.sheet .add-title').innerText()), `${await C.page.locator('.sheet').count()} sheets`);
+  await C.page.evaluate(l => { location.hash = 'add=' + l; }, three3[0]); await sleep(1500);
+  ok('…and a link that arrives while a preview is open takes its place', (await C.page.locator('.sheet').count()) === 1 && /Ann Test/.test(await C.page.locator('.sheet .add-title').innerText()) && (await C.page.evaluate(() => document.getElementById('app').inert)) === true);
+  await C.page.keyboard.press('Escape'); await sleep(200);
+  ok('…leaving the page usable when it is closed', (await C.page.locator('.sheet').count()) === 0 && (await C.page.evaluate(() => document.getElementById('app').inert)) === false);
+
+  // ---- Add from a link: the box, and a QR code that is not a link ----
+  await C.page.evaluate(() => window.logiGo('crew')); await sleep(300);
+  // a camera that shows a picture of ours: a QR code drawn on a canvas, moved a little all the time, as a hand does
+  // fill: how much of the picture's height the code takes, at its middle size (it swings a little, as a hand does)
+  const fakeCamera = (page, text, fill = 0.72) => page.evaluate(async ([t, fill]) => {
+    const { qrSvg } = await import('./js/qr.js'), img = new Image();
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(await qrSvg(t, { cellSize: 4 })); await img.decode();
+    const c = document.createElement('canvas'); c.width = 1920; c.height = 1080; const g = c.getContext('2d'); let k = 0;
+    const draw = () => { const d = 1080 * 0.9 * (fill + (fill < 0.6 ? 0.03 : 0.06) * Math.sin(k / 3)), x = 960 - d / 2 + 6 * Math.sin(k / 2), y = 540 - d / 2 + 6 * Math.cos(k / 2); k++; g.filter = 'none'; g.fillStyle = '#cfcfcf'; g.fillRect(0, 0, 1920, 1080); g.filter = 'blur(1px)'; g.fillStyle = '#fff'; g.fillRect(x - 12, y - 12, d + 24, d + 24); g.drawImage(img, x, y, d, d); };
+    draw(); clearInterval(window.__cam); window.__cam = setInterval(draw, 100);
+    const stream = c.captureStream(10); navigator.mediaDevices.getUserMedia = async () => stream;
+  }, [text, fill]);
+  await C.page.locator('#page button', { hasText: 'Add from a link' }).click(); await C.page.waitForSelector('.sheet textarea');
+  const boxSize = await C.page.evaluate(() => ({ box: parseFloat(getComputedStyle(document.querySelector('.sheet textarea.share-link')).fontSize), root: parseFloat(getComputedStyle(document.documentElement).fontSize) }));
+  ok('the box a link is pasted into is as large as the page’s text, not 12 pixels', boxSize.box === boxSize.root && boxSize.box >= 16, JSON.stringify(boxSize));
+  await C.page.evaluate(() => { navigator.mediaDevices.getUserMedia = async () => { throw new Error('no camera here'); }; });
+  await C.page.locator('.sheet button:has-text("Scan a QR code")').click(); await C.page.waitForFunction(() => /Camera unavailable/.test((document.querySelector('.sheet .scan-status') || {}).textContent || ''), null, { timeout: 8000 });
+  ok('with no camera, the scanner says to paste the link (not a code)', /Camera unavailable: no camera here\. Paste the link instead\./.test(await C.page.locator('.sheet .scan-status').innerText()));
+  await C.page.locator('.sheet button:has-text("Stop the camera")').click();
+  await fakeCamera(C.page, 'BEGIN:VCARD\r\nVERSION:3.0\r\nN:Producer;Pat;;;\r\nFN:Pat Producer\r\nTEL;TYPE=CELL:+44 20 7946 0100\r\nEND:VCARD');
+  await C.page.locator('.sheet button:has-text("Scan a QR code")').click();
+  await C.page.waitForFunction(() => { const a = document.querySelector('.sheet [role=alert]'); return a && !a.hidden; }, null, { timeout: 30000 });
+  ok('scanning the Phone contacts code says it is a QR code that is not a Vdex link, and which code to scan', /That QR code is not a Vdex link\. On their Me page the code has to be set to Contact card/.test(await C.page.locator('.sheet [role=alert]').innerText()) && !/long run of letters/.test(await C.page.locator('.sheet [role=alert]').innerText()), await C.page.locator('.sheet [role=alert]').innerText());
+  const own = await C.page.evaluate(() => import('./js/share-data.js').then(m => m.QR_OWN));
+  const longCard = n => C.page.evaluate(async ([n, base]) => { const { pack } = await import('./js/link-pack.js'), o = { v: 1, kind: 'contact', name: 'Long Link Lou', phone: '555 0190', location: '' }, link = async () => base + 'shared.html#' + await pack(o); let l = await link();
+    while (l.length <= n) { o.location += Math.random().toString(36).slice(2); l = await link(); } while (l.length > n) { o.location = o.location.slice(0, -2); l = await link(); } return l; }, [n, BASE]);
+  const ownLink = await longCard(own);
+  await fakeCamera(C.page, ownLink);
+  await C.page.locator('.sheet button:has-text("Scan a QR code")').click();
+  const scanned = await C.page.waitForSelector('.sheet .add-preview', { timeout: 60000 }).then(() => true, () => false);
+  ok(`Vdex’s own scanner reads a link of the longest length it is said to read (${ownLink.length} characters, held at about three quarters of the frame, slightly blurred)`, scanned && own >= 1000 && ownLink.length > own - 12 && /Long Link Lou/.test(await sheetText(C.page)), `${ownLink.length} of ${own}`);
+  await C.page.evaluate(() => clearInterval(window.__cam)); await C.page.keyboard.press('Escape'); await sleep(200);
+  // Held further away, so the code takes about half of the picture: its squares are then too fine for the small
+  // sample alone (1.5 pixels each), and only the look at full size reads it.
+  await C.page.locator('#page button', { hasText: 'Add from a link' }).click(); await C.page.waitForSelector('.sheet textarea');
+  const farLink = await longCard(own);
+  await fakeCamera(C.page, farLink, 0.5);
+  await C.page.locator('.sheet button:has-text("Scan a QR code")').click();
+  const far = await C.page.waitForSelector('.sheet .add-preview', { timeout: 60000 }).then(() => true, () => false);
+  ok('…and reads it held further away, at about half of the frame, which takes the look at full size', far && /Long Link Lou/.test(await sheetText(C.page)), `${farLink.length} characters`);
+  await C.page.evaluate(() => clearInterval(window.__cam)); await C.page.keyboard.press('Escape'); await sleep(200);
+  await C.ctx.close();
+
+  /* ============================== equipment by link: one's own list, Undo, long lists ============================== */
+  // the sender opens an old link to their own list, after changing an item and a kit since
+  const ownAll = await A.page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/share-out.js')]).then(async ([s, m]) => {
+    const link = await m.gearLink({ items: [...s.db.gear], kits: s.db.kits });
+    const g = s.db.gear[0], k = s.db.kits[0], other = s.db.gear.find(x => !k.gear.includes(x.id)), was = g.value, kitSize = k.gear.length + 1;
+    s.update(d => { Object.assign(d.gear.find(x => x.id === g.id), { value: 12345, location: 'NEW PLACE', updatedAt: Date.now() }); const kk = d.kits.find(x => x.id === k.id); kk.gear = [...kk.gear, other.id]; kk.updatedAt = Date.now(); });
+    return { link, id: g.id, was, kit: k.id, kitSize, n: s.db.gear.length };
+  }));
+  await arrive(A.page, hashOf(ownAll.link));
+  const og = await sheetText(A.page), goBtn = A.page.locator('.sheet .add-go');
+  ok('one’s own equipment link: the list says the items are one’s own and leaves them as they are', /These are your own items: the list was made from them\. They are left as they are unless you choose otherwise/.test(og) && (await A.page.locator('.sheet .add-dup select').evaluateAll(els => els.every(s => s.value === 'skip'))) && new RegExp(`${ownAll.n} left as they are`).test(await A.page.locator('.sheet .add-sum').innerText()), og.replace(/\s+/g, ' ').slice(0, 260));
+  ok('…with nothing to do, the button says so and cannot be tapped, and each kit stays as it is', (await goBtn.innerText()) === 'Nothing to add' && await goBtn.isDisabled() && (await A.page.locator('.sheet .add-kits li').allInnerTexts()).every(t => /stays as it is: every item of it is skipped/.test(t)), await goBtn.innerText());
+  await A.page.locator('.sheet .add-dup select').first().selectOption('update');
+  ok('choosing Update for one item names the button after what it will do', (await goBtn.innerText()) === 'Update 1 item' && !(await goBtn.isDisabled()) && /1 to update/.test(await A.page.locator('.sheet .add-sum').innerText()), await goBtn.innerText());
+  await A.page.locator('.sheet .add-all select').selectOption('update');
+  ok('…and for all of them, with the kits they are in now said to be updated', (await goBtn.innerText()) === `Update ${ownAll.n} items` && (await A.page.locator('.sheet .add-kits li').allInnerTexts()).every(t => /is updated$/.test(t)), await goBtn.innerText());
+  await goBtn.click(); await A.page.waitForSelector('.undo-bar', { timeout: 15000 }); await sleep(300);
+  const rolled = await A.page.evaluate(o => import('./js/store.js').then(s => ({ value: s.byId('gear', o.id).value, kit: s.byId('kits', o.kit).gear.length, bar: document.querySelector('.undo-bar').innerText, focus: document.activeElement && document.activeElement.textContent })), ownAll);
+  ok('an equipment link is followed by the same Undo as a file import, with the focus on it', /updated/.test(rolled.bar) && rolled.focus === 'Undo' && rolled.value === ownAll.was && rolled.kit === ownAll.kitSize - 1, JSON.stringify(rolled));
+  await A.page.locator('.undo-bar button', { hasText: 'Undo' }).click(); await sleep(400);
+  const undone = await A.page.evaluate(o => import('./js/store.js').then(s => ({ value: s.byId('gear', o.id).value, location: s.byId('gear', o.id).location, kit: s.byId('kits', o.kit).gear.length, bar: document.querySelectorAll('.undo-bar').length })), ownAll);
+  ok('…and Undo puts back what the link overwrote: the item and the kit as they were before it', undone.value === 12345 && undone.location === 'NEW PLACE' && undone.kit === ownAll.kitSize && undone.bar === 0, JSON.stringify(undone));
+
+  // ---- how a link's QR code is drawn ----
+  const qrOf = async () => { await A.page.evaluate(() => window.logiGo('gear')); await sleep(300); await A.page.locator('#page .subactions button', { hasText: 'Share…' }).click(); await A.page.locator('.sheet button:has-text("Make the link")').click(); await A.page.waitForSelector('.sheet .share-qr svg', { timeout: 8000 }); await sleep(200);
+    const r = await A.page.evaluate(() => ({ len: document.querySelector('.sheet textarea.share-link').value.length, large: document.querySelector('.sheet .share-qr').classList.contains('large'), width: Math.round(document.querySelector('.sheet .share-qr svg').getBoundingClientRect().width), note: document.querySelector('.sheet .share-qr-note').textContent })); await A.page.keyboard.press('Escape'); await sleep(200); return r; };
+  const limits = await A.page.evaluate(() => import('./js/share-data.js').then(m => ({ own: m.QR_OWN, large: m.QR_LARGE, max: m.QR_MAX })));
+  const keepGear = await A.page.evaluate(() => import('./js/store.js').then(s => { const all = JSON.stringify(s.db.gear); s.update(d => { d.gear = d.gear.slice(0, 2).map(g => ({ ...g, notes: '', location: '' })); }); return all; }));
+  const q1 = await qrOf();
+  ok('a short link’s code is drawn at the usual size, with no caution', q1.len <= limits.large && !q1.large && q1.width <= 200 && /^A workmate can scan this to open the list on their phone$/.test(q1.note), JSON.stringify(q1));
+  await A.page.evaluate(async own => { const s = await import('./js/store.js'), m = await import('./js/share-out.js'); for (let i = 0; i < 80 && (await m.gearLink()).length <= own + 60; i++) s.update(d => { d.gear.push({ id: 'qr' + i, name: 'Lens ' + Math.random().toString(36).slice(2), category: 'Lenses', serial: 'SN' + Math.random().toString(36).slice(2, 12), qty: 1, value: 100 + i, notes: Math.random().toString(36).slice(2) }); }); }, limits.own);
+  const q2 = await qrOf();
+  ok('a long link’s code is drawn larger, and one longer than Vdex’s own scanner reads says a phone’s camera may read it and to send the link if it will not scan', q2.len > limits.own && q2.len <= limits.max && q2.large && q2.width > 250 && q2.width <= 352 && /A workmate can scan this to open the list on their phone\. This is a long code\. A phone’s camera may read it; the scanner inside Vdex may not\. If it will not scan, send the link instead\.$/.test(q2.note), JSON.stringify(q2));
+  await A.page.evaluate(all => import('./js/store.js').then(s => s.update(d => { d.gear = JSON.parse(all); })), keepGear);
+
+  // a list longer than one link carries
+  const many = n => ({ v: 1, kind: 'gear', made: Date.now(), title: '', currency: '$', by: { name: 'Pat Producer' }, items: Array.from({ length: n }, (_, i) => ({ ref: 'r' + i, name: 'Item ' + i, category: i < n - 300 ? 'Camera' : 'Support', value: i })) });
+  const bigList = { ...many(2400), kits: [{ ref: 'kk', name: 'Late kit', items: [[5, 1], [2100, 1], [2399, 2]] }] };
+  const E = await open({ width: 390, height: 800 });
+  await E.ctx.grantPermissions(['clipboard-read', 'clipboard-write']);
+  const bigPacked = await pack(bigList);
+  const bigRead = await E.page.goto(BASE + 'shared.html#' + bigPacked).then(() => E.page.waitForSelector('.paper h1')).then(() => E.page.evaluate(() => import('./js/share-data.js').then(m => m.readShared(location.hash)).then(g => ({ items: g.items.length, cut: g.cut, kit: g.kits[0].items.length, max: null }))));
+  ok('a list of 2,400 items is read as its first 2,000, and says how many were left out', bigRead.items === 2000 && bigRead.cut === 400 && bigRead.kit === 1, JSON.stringify(bigRead));
+  ok('…on its page', /only its first 2,000 items are here, and 400 more items are not\. Ask Pat Producer for the rest in a second link/.test(await E.page.locator('.paper').innerText()));
+  await arrive(E.page, bigPacked);
+  ok('…and in the preview before adding', /only its first 2,000 items are here, and 400 more items are not/.test(await E.page.locator('.sheet .add-cut').innerText()) && (await E.page.locator('.sheet .add-go').innerText()) === 'Add 2,000 items to my Equipment');
+  const foot = await E.page.evaluate(() => { const r = el => el.getBoundingClientRect(), go = r(document.querySelector('.sheet .add-go')), sum = r(document.querySelector('.sheet .add-sum')), cancel = r([...document.querySelectorAll('.sheet .add-actions .btn')].pop()), body = document.querySelector('.sheet .sheet-body'); return { go: go.top >= 0 && go.bottom <= innerHeight, sum: sum.top >= 0 && sum.bottom <= innerHeight && sum.bottom <= go.top + 1, cancel: cancel.bottom <= innerHeight, long: body.scrollHeight > body.clientHeight * 5, top: body.scrollTop }; });
+  ok('in a long list the count, Add and Cancel stay in view from the start, with every item still listed above them', foot.go && foot.sum && foot.cancel && foot.long && foot.top === 0 && (await E.page.locator('.sheet .add-items li').count()) === 2000, JSON.stringify(foot));
+  await E.page.keyboard.press('Escape'); await sleep(200);
+  const places = await E.page.evaluate(async () => { const lp = await import('./js/link-pack.js'), sd = await import('./js/share-data.js'); const g = await sd.readShared('#' + await lp.pack({ v: 1, kind: 'gear', items: Array.from({ length: 100 }, (_, i) => ({ name: 'I' + i })), kits: Array.from({ length: 200 }, (_, k) => ({ name: 'K' + k, items: Array.from({ length: 100 }, (_, i) => [i, 1]) })) })); return g.kits.reduce((n, k) => n + k.items.length, 0); });
+  ok('all the kits of one link together name 5,000 places at most (a hand-built link asked for 20,000)', places === 5000, String(places));
+  // the sender is told before a link like that is made
+  await E.page.goto(BASE); await E.page.waitForSelector('#rolodex .drum-btn');
+  await E.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { for (let i = 0; i < 2001; i++) d.gear.push({ id: 'm' + i, name: 'Thing ' + i, category: 'Accessories', serial: '', qty: 1, value: 1, notes: '' }); })));
+  await E.page.evaluate(() => window.logiGo('gear')); await sleep(600);
+  await E.page.locator('#page .subactions button', { hasText: 'Share…' }).click(); await E.page.locator('.sheet button:has-text("Make the link")').click(); await sleep(600);
+  ok('sharing more than 2,000 items makes no link and says to share in parts', /One link carries 2,000 items at most, and this is 2,001\. Share it in parts: one kit at a time, or pick items/.test(await E.page.locator('.sheet .share-many').innerText()) && (await E.page.locator('.sheet textarea.share-link').count()) === 0);
+  await E.page.keyboard.press('Escape'); await sleep(200);
+
+  // ---- the shared pages: for someone whose Vdex is an app, and for the Play app ----
+  for (const [name, link, where] of [['a contact card', cardLink, 'Crew'], ['an equipment list', kitLink, 'Equipment'], ['a shoot', link1, 'Bookings']]) {
+    await E.page.goto(link); await E.page.waitForSelector('.paper h1');
+    const line = await E.page.locator('.bar .elsewhere').innerText();
+    await E.page.locator('.bar .elsewhere button', { hasText: 'Copy link' }).click(); await sleep(200);
+    const copied = await E.page.evaluate(() => navigator.clipboard.readText());
+    ok(`the page of ${name} says that Add to my Vdex opens this browser’s Vdex, and gives the link to copy for an app’s Add from a link`, new RegExp(`Add to my Vdex opens Vdex in this browser\\. A Vdex on an iPhone’s Home Screen, the iPhone app and the desktop app are each a separate copy: for one of those, copy this link and use Add from a link on its ${where} page`).test(line) && copied === link && /Link copied\./.test(await E.page.locator('.bar .elsewhere [role=status]').innerText()) && (await E.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)), line);
+  }
+  const hrefs = await E.page.evaluate(() => import('./js/share-data.js').then(m => [m.addHref('#1.abc', 'android-app://app.crowmade.vdex/'), m.addHref('#1.abc', 'android-app://app.crowmade.vdex'), m.addHref('#1.abc', ''), m.addHref('#1.abc', 'https://vdex.crowmade.app/'), m.addHref('#1.abc', 'android-app://app.crowmade.vdex.evil/')]));
+  ok('opened by the Play app, Add to my Vdex carries the app’s mark into the app; from anywhere else it does not', JSON.stringify(hrefs) === JSON.stringify(['index.html?src=play#add=1.abc', 'index.html?src=play#add=1.abc', 'index.html#add=1.abc', 'index.html#add=1.abc', 'index.html#add=1.abc']) && (await E.page.locator('a.btn.primary').getAttribute('href')) === 'index.html#add=' + hashOf(link1), JSON.stringify(hrefs));
+  await E.page.goto(BASE + 'index.html?src=play#add=' + hashOf(cardLink)); await E.page.waitForSelector('.sheet .add-preview', { timeout: 15000 });
+  ok('…and the app keeps that mark in its address while the link itself is taken out of it', (await E.page.evaluate(() => location.search + '|' + location.hash)) === '?src=play|' && /Add this contact\?/.test(await sheetText(E.page)));
+  await E.page.keyboard.press('Escape'); await sleep(200);
+
+  // ---- the Me page's code ----
+  await E.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'Uma Owner', phone: '+1 555 0500', email: 'uma@ownerfilms.example', updatedAt: Date.now() }; })));
+  await E.page.evaluate(() => window.logiGo('me')); await E.page.waitForSelector('#page .qr svg', { timeout: 8000 });
+  ok('the Contact card code says the other phone needs a connection, and which code works without one', /The other phone needs a connection; Phone contacts works without one\./.test(await E.page.locator('#page .qr-cap').innerText()));
+  await E.page.locator('#page .me-modes button', { hasText: 'Phone contacts' }).click(); await E.page.waitForSelector('#page .qr svg'); await sleep(200);
+  await E.page.reload(); await E.page.waitForSelector('#rolodex .drum-btn'); await E.page.evaluate(() => window.logiGo('me')); await E.page.waitForSelector('#page .qr svg', { timeout: 8000 });
+  ok('the code chosen is remembered on this device: after a reload it is still Phone contacts', (await E.page.locator('#page .me-modes button.on').innerText()) === 'Phone contacts' && /No connection needed/.test(await E.page.locator('#page .qr-cap').innerText()) && (await E.page.evaluate(() => localStorage.getItem('logi-me-code'))) === 'vcard');
+
+  // ---- text from a link in the spreadsheets Vdex writes ----
+  await arrive(E.page, await pack(shoot({ ref: 'REF-CSV', title: '=HYPERLINK("https://evil.example","Open")', client: '+SUM(1,2)' })));
+  await E.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await E.page.waitForSelector('.bk-detail'); await sleep(300);
+  await E.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings[0]; x.invoice = { number: 'INV-0009', date: x.date, due: x.date, lines: [{ id: 'l', desc: 'Day', qty: 1, unit: 'day', price: 100 }], taxRate: 0, deposit: 150, status: 'Sent' };
+    d.shifts.push({ id: 'sh1', bookingId: x.id, date: x.date, kind: 'shoot', start: Date.now() - 8 * 36e5, end: Date.now() - 36e5, breaks: [], note: '@cmd' }); x.updatedAt = Date.now(); })));
+  await E.page.evaluate(() => import('./js/money.js').then(m => m.openMoney(() => {}))); await E.page.waitForSelector('.sheet .stats');
+  const [inv] = await Promise.all([E.page.waitForEvent('download', { timeout: 15000 }), E.page.locator('.sheet button:has-text("Invoices (CSV)")').click()]);
+  const invText = fs.readFileSync(await inv.path(), 'utf8').split('\r\n')[1];
+  const cells = await E.page.evaluate(() => import('./js/backup.js').then(m => [m.csvText('=1+1'), m.csvText('-5 gels'), m.csvText('@x'), m.csvText('Plain "quoted"'), m.csvCell(-50), m.csvCell('2026-11-28')]));
+  ok('the invoices spreadsheet keeps a title and a client from a link as text (an apostrophe in front of = and +), and its amounts and dates as they are', invText.includes(`"'+SUM(1,2)","'=HYPERLINK(""https://evil.example"",""Open"")","100.00"`) && invText.startsWith('"INV-0009","') && !/"'\d/.test(invText) && JSON.stringify(cells) === JSON.stringify([`"'=1+1"`, `"'-5 gels"`, `"'@x"`, '"Plain ""quoted"""', '"-50"', '"2026-11-28"']), invText + ' ' + cells.join(' '));
+  await E.page.keyboard.press('Escape'); await sleep(200);
+  await E.page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/hours.js')]).then(([s, m]) => m.openHoursSheet(s.db.bookings[0].id))); await E.page.waitForSelector('.sheet button:has-text("CSV")');
+  const [hrs] = await Promise.all([E.page.waitForEvent('download', { timeout: 15000 }), E.page.locator('.sheet button:has-text("CSV")').click()]);
+  const hrsText = fs.readFileSync(await hrs.path(), 'utf8').split('\n')[1];
+  ok('…and so does the hours spreadsheet, for the project, the client and the note', hrsText.includes(`"'=HYPERLINK(""https://evil.example"",""Open"")","'+SUM(1,2)"`) && hrsText.endsWith(`"'@cmd"`), hrsText);
+  await E.page.keyboard.press('Escape'); await sleep(200);
+  await E.ctx.close();
+
+  /* ============================== a link too big for the browser's storage ============================== */
+  const big = await pack({ ...shoot({ ref: 'REF-BIG', title: 'Too big' }), scenes: Array.from({ length: 200 }, (_, d) => ({ n: d + 1, items: Array.from({ length: 400 }, (_, i) => ({ banner: 'A banner of twenty ch' })) })) });
+  const G = await open();
+  await G.page.goto(BASE); await G.page.waitForSelector('#rolodex .drum-btn');
+  const bigSnap = await G.page.evaluate(l => import('./js/share-data.js').then(m => m.readShared(l)).then(s => ({ strips: s.scenes.reduce((n, d) => n + d.items.length, 0), cut: s.cut })), '#' + big);
+  ok('a hand-built link of 200 days of 400 banners brings 2,500 strips at most, and counts the rest as left out', bigSnap.strips === 2500 && bigSnap.cut === 77500 && big.length < 20000, JSON.stringify(bigSnap));
+  const manyCast = await G.page.evaluate(async () => { const lp = await import('./js/link-pack.js'), sd = await import('./js/share-data.js'), si = await import('./js/share-import.js'); let n = 0;
+    const snap = await sd.readShared('#' + await lp.pack({ v: 1, kind: 'crew', ref: 'REF-CAST', title: 'Cast', date: '2027-01-05', scenes: Array.from({ length: 40 }, (_, d) => ({ n: d + 1, items: Array.from({ length: 12 }, () => ({ scene: String(n), cast: Array.from({ length: 100 }, () => 'N' + n++) })) })) }));
+    const t = performance.now(), p = si.planBooking(snap); return { names: p.booking.board.cast.length, ms: Math.round(performance.now() - t), strips: p.booking.board.list.filter(x => x.type === 'scene').length }; });
+  ok('…and 1,000 different cast names at most (a link asked for 48,000), so its preview is worked out at once', manyCast.names === 1000 && manyCast.strips === 480 && manyCast.ms < 1500, JSON.stringify(manyCast));
+  // nearly full: about 150,000 characters free, and the capped booking needs about twice that
+  const room = page => page.evaluate(() => { let lo = 0, hi = 12e6; while (hi - lo > 256) { const mid = (lo + hi) >> 1; try { localStorage.setItem('zz-room', 'x'.repeat(mid)); lo = mid; } catch { hi = mid; } } localStorage.removeItem('zz-room'); return lo; });
+  const pad = (page, by) => page.evaluate(n => import('./js/store.js').then(s => { s.update(d => { d.profile = { ...d.profile, bio: (d.profile.bio || '') + 'b'.repeat(n) }; }); }), by);
+  const onDisk = page => page.evaluate(() => { const d = JSON.parse(localStorage.getItem('logi-db-v1') || '{}'); return { bookings: (d.bookings || []).length, gear: (d.gear || []).length, name: (d.profile || {}).name || '' }; });
+  await pad(G.page, (await room(G.page)) - 150000); await sleep(300);
+  const free = await room(G.page);
+  await arrive(G.page, big);
+  const bigPv = await sheetText(G.page);
+  ok('its preview counts the banners and says strips were left out', /2,500 banners on its stripboard, over 7 shooting days\. The link holds more than one shoot may bring: 77,500 more strips are left out/.test(bigPv), (bigPv.match(/Scenes[^\n]*\n[^\n]*/) || [''])[0]);
+  await G.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await sleep(800);
+  const refused = await G.page.evaluate(() => { const p = document.querySelector('.sheet .add-refused'); return { text: p && !p.hidden ? p.textContent : '', sheets: document.querySelectorAll('.sheet .add-preview').length, toasts: [...document.querySelectorAll('.toast')].map(t => t.textContent).join('|') }; });
+  const inMem = (await db(G.page)).bookings.length;
+  ok(`with ${free.toLocaleString()} characters free, a booking that would not fit is turned down in a sentence before anything is changed`, /This booking is bigger than the space Vdex has on this device, so nothing was added\. Free some space first \(erase old logs and bookings\), or ask for a link with fewer parts ticked\./.test(refused.text) && refused.sheets === 1 && !/Added/.test(refused.toasts) && inMem === 0 && (await onDisk(G.page)).bookings === 0, JSON.stringify(refused));
+  await G.page.keyboard.press('Escape'); await sleep(200);
+  await G.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'Still Saving' }; }))); await sleep(400);
+  ok('…so the next change is saved as always, and survives a reload', (await onDisk(G.page)).name === 'Still Saving' && await (async () => { await G.page.reload(); await G.page.waitForSelector('#rolodex .drum-btn'); return (await db(G.page)).profile.name === 'Still Saving' && (await db(G.page)).bookings.length === 0; })());
+  const fatList = await pack({ v: 1, kind: 'gear', by: { name: 'Pat Producer' }, items: Array.from({ length: 900 }, (_, i) => ({ ref: 'f' + i, name: 'Fat item ' + i, notes: 'n'.repeat(300) + i })), kits: [{ ref: 'fk', name: 'Fat kit', items: [[0, 1], [1, 1]] }] });
+  await arrive(G.page, fatList);
+  await G.page.locator('.sheet .add-go').click(); await sleep(800);
+  const refused2 = await G.page.evaluate(() => { const p = document.querySelector('.sheet .add-refused'); return p && !p.hidden ? p.textContent : ''; });
+  ok('the same for an equipment list from a link: turned down, nothing added, no kit made', /This list is bigger than the space Vdex has on this device, so nothing was added\. Free some space first \(erase old logs and bookings\), or ask for the list in parts\./.test(refused2) && (await db(G.page)).gear.length === 0 && (await db(G.page)).kits.length === 0 && (await onDisk(G.page)).gear === 0 && (await G.page.locator('.undo-bar').count()) === 0, refused2);
+  await G.page.keyboard.press('Escape'); await sleep(200);
+  await G.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, bio: '' }; }))); await sleep(300);
+  await arrive(G.page, fatList);
+  await G.page.locator('.sheet .add-go').click(); await G.page.waitForSelector('.undo-bar', { timeout: 20000 });
+  ok('…and with room again it is added, with Undo offered', (await db(G.page)).gear.length === 900 && (await onDisk(G.page)).gear === 900 && /900 added/.test(await G.page.locator('.undo-bar').innerText()));
+  await G.ctx.close();
 
   /* ============================== a wide screen, the light theme, and nothing sent ============================== */
   const W = await open({ width: 1200, height: 800, init: `try { localStorage.setItem('logi-prefs', JSON.stringify({ scheme: 'light' })); } catch (e) {}` });
