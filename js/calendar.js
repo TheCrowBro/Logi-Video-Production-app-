@@ -337,7 +337,7 @@ export function calendarPanel() {
         h('button', { class: 'btn ghost', onclick: () => store.requirePaid('export') && shareAll() }, '📤 Share bookings (.ics)')),
       h('div', { class: 'card' }, h('strong', null, 'Live feed (any calendar app)'),
         h('p', { class: 'small muted' }, 'Vdex keeps a vdex-bookings.ics file in your linked cloud storage up to date. Subscribe to its link once and your calendar follows every change by itself. One-way, from Vdex to the calendar.'),
-        !a ? h('p', { class: 'note' }, 'Link a cloud storage first (the menu ☰ at the top, then Storage, sync and backups).')
+        !a ? h('p', { class: 'note' }, 'Link a cloud storage first (the menu ☰ at the top, then Storage, sync & backups).')
           : cloud.paused ? h('p', { class: 'note' }, `${a.label} is paused: cloud storage comes with a licence, so the feed is not updated until then.`)
           : !a.writeAux ? h('p', { class: 'note' }, `${a.label} keeps Vdex’s copy private, so it can’t give your calendar a link to follow. Use Two-way sync below, or Export once.`)
           : [h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cs.feed, onchange: async e => { await store.setFeed(e.target.checked); draw(); } }), h('span', null, `Publish the feed to ${a.label}`)),

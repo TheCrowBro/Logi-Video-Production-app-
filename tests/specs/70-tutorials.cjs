@@ -40,8 +40,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     const closed = (await page.locator('.tour').count()) === 0;
     return { cards, spots, closed, titles, counter, label };
   };
-  const expect = async (name, min, btn) => { const r = await walk(btn); ok(`${name}: ${r.cards} steps, ${r.spots} highlighted, ends on Done at ${r.cards} / ${r.cards}`, r.cards >= min && r.spots >= min && r.closed && r.label === 'Done' && r.counter === `${r.cards} / ${r.cards}`, `${r.counter} · ${r.label} · ` + r.titles.join(' · ')); };
-  await page.evaluate(() => window.logiGo('bookings')); await sleep(400); await expect('Bookings calendar', 4);
+  // must: steps that have to be among those walked. A step whose box is not on the page is skipped without a word
+  // (js/tour.js), so a count alone would not notice one of these losing its target.
+  const expect = async (name, min, btn, must = []) => {
+    const r = await walk(btn); ok(`${name}: ${r.cards} steps, ${r.spots} highlighted, ends on Done at ${r.cards} / ${r.cards}`, r.cards >= min && r.spots >= min && r.closed && r.label === 'Done' && r.counter === `${r.cards} / ${r.cards}`, `${r.counter} · ${r.label} · ` + r.titles.join(' · '));
+    if (must.length) ok(`${name}: the walkthrough shows ${must.map(t => `“${t}”`).join(', ')}`, must.every(t => r.titles.includes(t)), 'missing: ' + (must.filter(t => !r.titles.includes(t)).join(' · ') || 'none') + ' — walked: ' + r.titles.join(' · '));
+  };
+  const MUST = { Crew: ['Add from a link', 'Filter by group, then by role', 'Roles'], Equipment: ['Asset register, importing, sharing and adding'] };
+  await page.evaluate(() => window.logiGo('bookings')); await sleep(400); await expect('Bookings calendar', 4, '#helpBtn', ['Add from a link']);
   await page.evaluate(() => document.querySelector('.bk-month .cal .day.has')?.click()); await sleep(400); await expect('A day', 2);
   // open the Harbour booking whatever today's date is: back to the month, then its card in Next up (or its day)
   await page.evaluate(() => { const back = [...document.querySelectorAll('#page .page-head button')].find(b => /Calendar/.test(b.textContent)); if (back) back.click(); }); await sleep(300);
@@ -55,7 +61,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('…as a Guide button on the first card', (await page.locator('.tour-card button:has-text("Guide")').count()) === 1);
   await page.keyboard.press('Escape'); await sleep(200);
   for (const [tab, name, min] of [['crew', 'Crew', 3], ['gear', 'Equipment', 5], ['venues', 'Venues', 3], ['insurance', 'Insurance', 3], ['me', 'Me', 3], ['field', 'Field', 2], ['settings', 'Settings', 10]]) {
-    await page.evaluate(t => window.logiGo(t), tab); await sleep(450); await expect(name, min);
+    await page.evaluate(t => window.logiGo(t), tab); await sleep(450); await expect(name, min, '#helpBtn', MUST[name]);
   }
   // Timecode notes: the logs list, then a log made through the UI, then the sheets' own ? buttons
   await page.evaluate(() => window.logiGo('tcnotes')); await sleep(450); await expect('Timecode logs', 3);

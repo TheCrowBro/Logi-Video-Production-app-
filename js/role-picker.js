@@ -1,6 +1,7 @@
 // The role menu: a sheet over the form that asked for it, listing the roles of js/roles.js in fold-down groups, one
 // department each. The person's own roles come first, the group holding the current role starts open, a search box
-// finds a role by any of its names, and a box at the end takes a role that is not in the list. Opened by the form's
+// finds a role by any of its names (a line under it says so: the other names shown under a role are not buttons, and
+// searching for one is how it is picked), and a box at the end takes a role that is not in the list. Opened by the form's
 // "role" field (js/form.js) on the Crew page and when hiring someone for a booking. Loaded on first use.
 import { h, sheet, toast, announce, nodes } from './util.js';
 import { ROLE_GROUPS, MY_ROLES, MY_ROLES_ICON, fold, findRole, myRoles, resolveRole, rememberRole, forgetRole, searchRoles } from './roles.js';
@@ -13,7 +14,7 @@ export function pickRole({ current = '', onPick }) {
   const opener = document.activeElement;
   const under = opener && opener.closest ? opener.closest('.sheet-back') : null; // the form's own sheet stays out of reach meanwhile
   const now = String(current || '').trim(), listed = findRole(now);
-  let close = () => {};
+  let close = () => {}, said = 0;
   const choose = role => { close(); onPick(role); };
 
   const option = (label, sub, on) => h('button', { type: 'button', class: 'role-opt' + (on ? ' on' : ''), 'aria-current': on ? 'true' : null, onclick: () => choose(label) },
@@ -53,8 +54,8 @@ export function pickRole({ current = '', onPick }) {
   const search = h('input', { type: 'search', class: 'search', placeholder: 'Search roles…', 'aria-label': 'Search roles', autocomplete: 'off', enterKeyHint: 'search' });
   const useTyped = text => { const role = resolveRole(text); if (role) choose(role); };
   const drawResults = () => {
-    const typed = search.value.trim(), on = !!fold(typed);
-    groups.hidden = on; results.hidden = !on;
+    const typed = search.value.trim(), on = !!fold(typed), turn = ++said;
+    groups.hidden = hint.hidden = on; results.hidden = !on;
     const body = menu.closest('.sheet-body'); if (body) body.scrollTop = 0; // a new list starts at its top
     if (!on) { results.replaceChildren(); return; }
     const { hits, more } = searchRoles(typed);
@@ -63,7 +64,8 @@ export function pickRole({ current = '', onPick }) {
       more && h('p', { class: 'muted small' }, 'More roles match: keep typing to narrow them down.'),
       !hits.length && h('p', { class: 'muted small' }, `No role like “${typed}” in the list.`),
       !hits.length && h('button', { type: 'button', class: 'btn ghost', onclick: () => useTyped(typed) }, `Use “${resolveRole(typed)}” as the role`)));
-    announce(hits.length ? `${hits.length}${more ? ' or more' : ''} role${hits.length === 1 ? '' : 's'} found` : 'No role found');
+    // Said once typing has paused, not at every letter (as the search across everything does).
+    setTimeout(() => { if (turn === said && menu.isConnected) announce(hits.length ? `${hits.length}${more ? ' or more' : ''} role${hits.length === 1 ? '' : 's'} found` : 'No role found'); }, 500);
   };
   search.addEventListener('input', drawResults);
   // Enter takes the first role found, or what was typed when nothing matches. Escape empties the box first, and
@@ -79,10 +81,11 @@ export function pickRole({ current = '', onPick }) {
   const useOwn = () => { if (!resolveRole(own.value)) { toast('Type the role first'); own.focus(); return; } useTyped(own.value); };
   own.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); useOwn(); } });
 
+  const hint = h('p', { class: 'muted small role-hint' }, 'Prefer another name, such as DP or Sound Mixer? Search for it and pick it.');
   const menu = h('div', { class: 'role-menu' },
     h('div', { class: 'role-head' }, search,
       now && h('div', { class: 'role-now' }, h('span', null, 'Chosen: ', h('strong', null, now)), h('button', { type: 'button', class: 'btn ghost small', onclick: () => choose('') }, 'Clear the role'))),
-    groups, results,
+    hint, groups, results,
     h('div', { class: 'field role-own' }, h('label', { for: 'role-own' }, 'Not in the list? Type another role'),
       h('div', { class: 'row-edit' }, own, h('button', { type: 'button', class: 'btn ghost', onclick: useOwn }, 'Use this role')),
       h('small', { class: 'muted' }, 'It is kept under My roles for next time, once the form is saved.')));

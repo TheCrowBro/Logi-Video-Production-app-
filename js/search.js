@@ -12,6 +12,7 @@ import { sheetOf, sheetState } from './callsheet.js';
 import { boardOf, ieOf } from './board.js';
 import { KINDS, methodLabel } from './money.js';
 import { PERMS } from './pages/venues.js';
+import { findRole, groupOf } from './roles.js';
 
 /* ---------------------------------- matching ---------------------------------- */
 // Text is compared folded: lower case, accents and other marks dropped, curly quotes straightened, and a few letters
@@ -61,13 +62,20 @@ function entry(out, group, kind, id, icon, title, meta, fields, when) {
     near: isDay(when) ? Math.abs(parseISO(when) - parseISO(todayISO())) : Infinity });
 }
 const list = v => (Array.isArray(v) ? v.filter(x => x && typeof x === 'object') : []);
+const ids = v => (Array.isArray(v) ? v : []); // a list of ids (a booking's crew, kits and equipment, a kit's items)
+// Goes through a list one record at a time: a record that cannot be read (a hand-edited or foreign backup can hold
+// one) is passed over, and everything after it is still indexed.
+const each = (rows, fn) => { for (const x of list(rows)) { try { fn(x); } catch (e) { console.error(e); } } };
+// A role as the role list knows it (js/roles.js): the group it is filed under and the other names the same job goes
+// by, so "cinematographer" or "camera" finds the DOP here as it does in the Crew page's own search box.
+const roleFields = role => { const hit = findRole(role), group = groupOf(role); return group ? [['Group', group, 15], ['Also called', hit && [hit.role.name, ...hit.role.aka].filter(n => n !== hit.label).join(', '), 15]] : []; };
 
 function bookingEntries(out, db) {
   const byId = rows => new Map(list(rows).map(x => [x.id, x])), crew = byId(db.crew), gear = byId(db.gear), kits = byId(db.kits), venues = byId(db.venues);
   const notes = new Map(); for (const s of list(db.shifts)) if (s.note && s.bookingId) notes.set(s.bookingId, [...(notes.get(s.bookingId) || []), s.note]);
-  for (const b of list(db.bookings)) {
-    if (!b.id) continue;
-    const venue = venues.get(b.venueId), people = (b.crew || []).map(id => crew.get(id)).filter(Boolean);
+  each(db.bookings, b => {
+    if (!b.id) return;
+    const venue = venues.get(b.venueId), people = ids(b.crew).map(id => crew.get(id)).filter(Boolean);
     entry(out, 'bookings', 'booking', b.id, '📅', b.title, join(span(b), b.client, b.status), [
       ['Project', b.title, 100, { shown: true }], ['Client', b.client, 70, { shown: true }], ['Stage', b.status, 40, { shown: true }], ['Job type', b.type && typeLabel(b.type), 35],
       ['Date', join(dayText(b.date), dayText(b.endDate)), 30], ['Address', b.address, 45], ['Venue', venue && venue.name, 30],
@@ -83,7 +91,7 @@ function bookingEntries(out, db) {
       ...store.editDaysOf(b).map(d => ['Edit day', join(dayText(d.date), d.start && `${d.start}${d.end ? '–' + d.end : ''}`), 30]),
       ['Break terms', b.breakNote, 20], ...(notes.get(b.id) || []).map(n => ['Hours', n, 15]),
       ...people.map(c => ['Crew', join(c.name, c.role), 15, { at: 'bk-crew' }]),
-      ...(b.kits || []).map(id => ['Kit', kits.get(id) && kits.get(id).name, 12, { at: 'bk-kit' }]), ...(b.gear || []).map(id => ['Equipment', gear.get(id) && gear.get(id).name, 12, { at: 'bk-kit' }]),
+      ...ids(b.kits).map(id => ['Kit', kits.get(id) && kits.get(id).name, 12, { at: 'bk-kit' }]), ...ids(b.gear).map(id => ['Equipment', gear.get(id) && gear.get(id).name, 12, { at: 'bk-kit' }]),
       ['Notes', b.notes, 20],
     ], b.date);
     // The booking's own documents are things of their own: each is found under its page and opens as itself.
@@ -106,57 +114,59 @@ function bookingEntries(out, db) {
         ...bd.list.filter(x => x.type === 'banner').map(x => ['Banner', x.text, 25, { at: x.id }]), ['Cast', bd.cast.join(', '), 30]].filter(f => txt(f[1]));
       if (own.length) entry(out, 'strips', 'strips', b.id, '🎬', b.title, join('Stripboard', `${scenes.length} scene${scenes.length === 1 ? '' : 's'}`, span(b)), [...about, ...own], b.date);
     }
-  }
+  });
 }
 
 function listEntries(out, db) {
-  const kitsOf = new Map(); for (const k of list(db.kits)) for (const id of k.gear || []) kitsOf.set(id, [...(kitsOf.get(id) || []), k.name]);
-  for (const c of list(db.crew)) entry(out, 'crew', 'crew', c.id, '👥', c.name, join(c.role, c.phone, c.email), [
-    ['Name', c.name, 100, { shown: true }], ['Role', c.role, 60, { shown: true }], ['Phone', c.phone, 50, { shown: true, tel: c.phone }], ['Email', c.email, 50, { shown: true }], ['Link to their work', c.link, 30], ['Notes', c.notes, 20]]);
-  for (const g of list(db.gear)) entry(out, 'gear', 'gear', g.id, '🎥', g.name, join(g.category, g.serial && 'S/N ' + g.serial, g.location && '📍 ' + g.location), [
+  const kitsOf = new Map(); for (const k of list(db.kits)) for (const id of ids(k.gear)) kitsOf.set(id, [...(kitsOf.get(id) || []), k.name]);
+  each(db.crew, c => entry(out, 'crew', 'crew', c.id, '👥', c.name, join(c.role, c.phone, c.email), [
+    ['Name', c.name, 100, { shown: true }], ['Role', c.role, 60, { shown: true }], ['Phone', c.phone, 50, { shown: true, tel: c.phone }], ['Email', c.email, 50, { shown: true }], ['Link to their work', c.link, 30], ['Notes', c.notes, 20],
+    ...roleFields(c.role)]));
+  each(db.gear, g => entry(out, 'gear', 'gear', g.id, '🎥', g.name, join(g.category, g.serial && 'S/N ' + g.serial, g.location && '📍 ' + g.location), [
     ['Item', g.name, 100, { shown: true }], ['Serial number', g.serial, 80, { shown: true }], ['Category', g.category, 40, { shown: true }], ['Where it is', g.location, 45, { shown: true }], ['Firmware', g.firmware, 25],
-    ...list(g.log).map(e => ['Service log', join(e.note, shortDay(e.date)), 20, { at: 'service' }]), ...(kitsOf.get(g.id) || []).map(n => ['Kit', n, 12]), ['Notes', g.notes, 20]]);
+    ...list(g.log).map(e => ['Service log', join(e.note, shortDay(e.date)), 20, { at: 'service' }]), ...(kitsOf.get(g.id) || []).map(n => ['Kit', n, 12]), ['Notes', g.notes, 20]]));
   const gear = new Map(list(db.gear).map(g => [g.id, g]));
-  for (const k of list(db.kits)) entry(out, 'gear', 'kit', k.id, '🧰', k.name, join('Kit', k.description, `${(k.gear || []).length} item${(k.gear || []).length === 1 ? '' : 's'}`), [
-    ['Kit', k.name, 100, { shown: true }], ['Type of shoot', k.description, 50, { shown: true }], ...(k.gear || []).map(id => ['In this kit', gear.get(id) && gear.get(id).name, 25]), ['Notes', k.notes, 20]]);
-  for (const v of list(db.venues)) entry(out, 'venues', 'venue', v.id, '📍', v.name, join(v.type, txt(v.address).replace(/\s*\n\s*/g, ', ')), [
+  each(db.kits, k => entry(out, 'gear', 'kit', k.id, '🧰', k.name, join('Kit', k.description, `${ids(k.gear).length} item${ids(k.gear).length === 1 ? '' : 's'}`), [
+    ['Kit', k.name, 100, { shown: true }], ['Type of shoot', k.description, 50, { shown: true }], ...ids(k.gear).map(id => ['In this kit', gear.get(id) && gear.get(id).name, 25]), ['Notes', k.notes, 20]]));
+  each(db.venues, v => entry(out, 'venues', 'venue', v.id, '📍', v.name, join(v.type, txt(v.address).replace(/\s*\n\s*/g, ', ')), [
     ['Venue', v.name, 100, { shown: true }], ['Type', v.type, 40, { shown: true }], ['Address', txt(v.address).replace(/\s*\n\s*/g, ', '), 60, { shown: true }], ['Contact', join(v.contact, v.phone, v.email), 50, { tel: v.phone }],
     ['Rules', v.rules, 30], ...PERMS.filter(([k]) => v.perms && PERM[v.perms[k]]).map(([k, l]) => ['Equipment rules', `${l}: ${PERM[v.perms[k]]}`, 20]),
-    ['Permit', join(v.permit !== 'Unknown' && v.permit, v.permitNotes), 30], ['Access', v.access, 30], ['Parking', v.parking, 30], ['Power', v.power, 25], ['Hospital', v.hospital, 25], ['Notes', v.notes, 20]]);
-  for (const p of list(db.insurance)) entry(out, 'insurance', 'policy', p.id, '🛡️', p.type || 'Policy', join(p.provider, p.policy && '#' + p.policy, isDay(p.renewal) && 'renews ' + shortDay(p.renewal)), [
+    ['Permit', join(v.permit !== 'Unknown' && v.permit, v.permitNotes), 30], ['Access', v.access, 30], ['Parking', v.parking, 30], ['Power', v.power, 25], ['Hospital', v.hospital, 25], ['Notes', v.notes, 20]]));
+  each(db.insurance, p => entry(out, 'insurance', 'policy', p.id, '🛡️', p.type || 'Policy', join(p.provider, p.policy && '#' + p.policy, isDay(p.renewal) && 'renews ' + shortDay(p.renewal)), [
     ['Type of cover', p.type, 90, { shown: true }], ['Provider', p.provider, 80, { shown: true }], ['Policy number', p.policy, 80, { shown: true }], ['Provider phone', p.phone, 40, { tel: p.phone }], ['Claims line', p.claims, 40, { tel: p.claims }],
-    ['Renewal', dayText(p.renewal), 25], ['Link to policy document', p.link, 20], ['Notes', p.notes, 25]]);
+    ['Renewal', dayText(p.renewal), 25], ['Link to policy document', p.link, 20], ['Notes', p.notes, 25]]));
   const titles = new Map(list(db.bookings).map(b => [b.id, b.title]));
-  for (const l of list(db.logs)) {
+  each(db.logs, l => {
     const sc = l.script && Array.isArray(l.script.paras) ? l.script : null;
     entry(out, 'tcnotes', 'log', l.id, '⏱️', l.title, join(l.camera, titles.get(l.bookingId), `${list(l.notes).length} note${list(l.notes).length === 1 ? '' : 's'}`, sc && 'script'), [
       ['Log', l.title, 100, { shown: true }], ['Camera / card', l.camera, 50, { shown: true }], ['Booking', titles.get(l.bookingId), 30, { shown: true }],
       ...list(l.notes).flatMap(n => [['Note', n.text, 35, { at: { note: n.id } }], ['Marked line', n.quote, 15, { at: { note: n.id } }]]),
       ['Script', sc && sc.name, 30], ...(sc ? list(sc.paras).map(p => ['Script', p.text, 12, { at: { para: p.id } }]) : [])], l.created);
-  }
+  });
 }
 
 function ownEntries(out, db) {
-  const p = db.profile || {};
-  entry(out, 'me', 'me', 'me', '🪪', 'Your details', join(p.name, p.business), [['Name', p.name, 70, { shown: true }], ['Business', p.business, 70, { shown: true }], ['Title', p.title, 40], ['Phone', p.phone, 40, { tel: p.phone }],
-    ['Email', p.email, 40], ['Website', p.website, 40], ['Location', p.location, 40], ['About', p.bio, 20]]);
-  for (const t of list(db.projectTemplates)) {
-    if (!t.id) continue;
+  // One thing each (your details, each template, the checklists, the price list, the billing texts), kept apart like
+  // the records above: an odd one costs only itself.
+  each([db.profile || {}], p => entry(out, 'me', 'me', 'me', '🪪', 'Your details', join(p.name, p.business), [['Name', p.name, 70, { shown: true }], ['Business', p.business, 70, { shown: true }], ['Title', p.title, 40], ['Phone', p.phone, 40, { tel: p.phone }],
+    ['Email', p.email, 40], ['Website', p.website, 40], ['Location', p.location, 40], ['About', p.bio, 20]]));
+  each(db.projectTemplates, t => {
+    if (!t.id) return;
     entry(out, 'settings', 'template', t.id, '📐', t.name, 'Project template', [['Template', t.name, 80, { shown: true }], ...list(t.deliverables).map(d => ['Deliverable', join(d.name, d.duration), 30]),
       ...txt(t.shots).split('\n').map(s => ['Shot', s, 25]), ...list(t.schedule).map(r => ['Schedule', [r.time, r.item].map(txt).filter(Boolean).join(' '), 25]), ['Instructions', t.instructions, 20], ['Notes', t.notes, 20]]);
-  }
-  const custom = Object.entries(db.templates || {}).filter(([, v]) => v && typeof v === 'object').flatMap(([, stages]) => Object.entries(stages).filter(([, lines]) => Array.isArray(lines)).flatMap(([stage, lines]) => lines.map(t => [stage, t, 25])));
-  entry(out, 'settings', 'checklists', 'checklists', '✅', 'Workflow templates', 'Your checklist lines for each stage', custom);
-  const pl = db.priceList && Array.isArray(db.priceList.list) ? db.priceList.list : [];
-  entry(out, 'settings', 'pricelist', 'pricelist', '🏷️', 'Price list', 'The lines you pick into quotes and invoices', pl.filter(l => l && typeof l === 'object').map(l => [txt(l.cat) || 'Line', l.desc, 30]));
-  const bl = db.billing || {};
-  entry(out, 'settings', 'billing', 'billing', '🧾', 'Quotes & invoices', 'Payment terms and how to pay', [['Payment terms', bl.terms, 30], ['How to pay', bl.payment, 30], ['Account name', bl.accountName, 30], ['Pay link', join(bl.payLinkLabel, bl.payLink), 20]]);
+  });
+  each([db.templates || {}], all => {
+    const custom = Object.entries(all).filter(([, v]) => v && typeof v === 'object').flatMap(([type, stages]) => Object.entries(stages).filter(([, lines]) => Array.isArray(lines)).flatMap(([stage, lines]) => lines.map(t => [stage, t, 25, { at: { type, stage, line: txt(t) } }])));
+    entry(out, 'settings', 'checklists', 'checklists', '✅', 'Workflow templates', 'Your checklist lines for each stage', custom);
+  });
+  each([db.priceList || {}], pl => entry(out, 'settings', 'pricelist', 'pricelist', '🏷️', 'Price list', 'The lines you pick into quotes and invoices', list(pl.list).map(l => [txt(l.cat) || 'Line', l.desc, 30, { at: l.id && { line: String(l.id) } }])));
+  each([db.billing || {}], bl => entry(out, 'settings', 'billing', 'billing', '🧾', 'Quotes & invoices', 'Payment terms and how to pay', [['Payment terms', bl.terms, 30], ['How to pay', bl.payment, 30], ['Account name', bl.accountName, 30], ['Pay link', join(bl.payLinkLabel, bl.payLink), 20]]));
 }
 
 let index = null; // { rev, entries, groups: the pages that have something }
 export function buildIndex() {
   const db = store.db, entries = [];
-  for (const part of [bookingEntries, listEntries, ownEntries]) { try { part(entries, db); } catch (e) { console.error(e); } } // one odd record must not take the whole search away
+  for (const part of [bookingEntries, listEntries, ownEntries]) { try { part(entries, db); } catch (e) { console.error(e); } } // each record is guarded by itself (each()); this is for whatever a part does before its records
   index = { rev: store.revision(), entries, groups: GROUPS.filter(([id]) => entries.some(e => e.group === id)).map(([id]) => id) };
   return index;
 }
@@ -195,14 +205,17 @@ async function land(tab, prepare) {
   if (here) store.redraw();
   await tick();
 }
-const underNav = el => { const nav = document.getElementById('rolodex'); el.style.scrollMarginTop = `${(nav ? nav.getBoundingClientRect().height : 0) + 12}px`; };
+// Scrolls to something, clear of the Rolodex bar, and keeps that bar on screen: the jump is Vdex's own, not the person
+// scrolling down, and the bar is the way on from here (the sections, and the magnifier back to the results).
+const jump = (el, block) => { const nav = document.getElementById('rolodex'); el.style.scrollMarginTop = `${(nav ? nav.getBoundingClientRect().height : 0) + 12}px`; el.scrollIntoView({ block }); window.logiShowNav?.(true); };
 const toPage = () => document.getElementById('page')?.focus({ preventScroll: true });
 // Shows one card or box among others: scrolled to, outlined for a moment, and given the focus so a keyboard or a
 // screen reader carries on from it.
 function spot(el, block = 'center') {
   if (!el) return false;
   for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) d.open = true;
-  underNav(el); el.scrollIntoView({ block });
+  jump(el, block);
+  for (const was of document.querySelectorAll('.found')) if (was !== el) was.classList.remove('found'); // one thing outlined at a time
   el.classList.add('found'); setTimeout(() => el.classList.remove('found'), 2600);
   if (!el.matches('a[href], button, input, [tabindex]')) el.tabIndex = -1;
   el.focus({ preventScroll: true });
@@ -218,6 +231,9 @@ async function booking(id, patch, at) {
   else if (typeof at === 'string') spot(document.getElementById(at), 'start');
   return true;
 }
+// Settings: the section is opened, and then the thing itself is shown in it where it can be told apart (a template's
+// card, the box holding a checklist line). A handler that could only open the section answers with the section's
+// name, so that is what gets announced, not the name of something that is not on screen.
 const settings = async title => (await import('./pages/settings.js')).openSettingsSection(title);
 const OPEN = {
   booking: (id, at) => booking(id, {}, at),
@@ -235,21 +251,35 @@ const OPEN = {
     if (!(await m.openLog(id, at && at.para ? 'script' : 'notes'))) return false;
     await tick(); toPage();
     if (at && at.note) spot(card(at.note));
-    if (at && at.para) { const el = document.getElementById('sc-' + at.para); if (el) { underNav(el); el.scrollIntoView({ block: 'center' }); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } }
+    if (at && at.para) { const el = document.getElementById('sc-' + at.para); if (el) { jump(el, 'center'); el.classList.add('flash'); setTimeout(() => el.classList.remove('flash'), 1500); } }
     return true;
   },
   me: async () => { await land('me'); window.scrollTo({ top: 0 }); toPage(); return true; },
-  template: () => settings('Project templates'),
-  checklists: () => settings('Workflow templates'),
+  template: async id => { if (!(await settings('Project templates'))) return false; return spot((await import('./pages/settings.js')).templateCard(id)) || 'Project templates'; },
+  checklists: async (id, at) => {
+    if (!(await settings('Workflow templates'))) return false;
+    // The box of that job type and stage (js/workflow.js names each "<type>: <stage> checklist", a type of your own with "(yours)").
+    const name = at && at.line ? typeLabel(at.type) : '', plain = `${name}: ${at && at.stage} checklist`, own = ` ${name} (yours): ${at && at.stage} checklist`;
+    const box = name && [...document.querySelectorAll('#page details[data-s="Workflow templates"] textarea')].find(t => { const a = t.getAttribute('aria-label') || ''; return (a === plain || a.endsWith(own)) && t.value.split('\n').some(l => l.trim() === at.line); });
+    if (box) spot(box.closest('.field') || box);
+    return true;
+  },
   billing: () => settings('Quotes & invoices'),
-  pricelist: async () => { (await import('./price-list.js')).openPriceList(); return true; },
+  pricelist: async (id, at) => {
+    (await import('./price-list.js')).openPriceList();
+    if (at && at.line) spot(document.querySelector(`.sheet .price-list [data-id="${CSS.escape(at.line)}"]`)); // its group is unfolded and the line scrolled to
+    return true;
+  },
 };
+// What a handler answered: false when the thing is no longer there, otherwise true, or the name of what was opened
+// when that is not the thing asked for.
+async function reach(kind, id, at) {
+  closeSearch();
+  try { const got = await OPEN[kind](id, at); return got === undefined ? true : got; } catch (e) { console.error(e); return false; }
+}
 // Opens a record where it lives: openRecord('booking', id), 'quote' | 'invoice' | 'callsheet' | 'strips' (a booking's
 // id), 'crew', 'gear', 'kit', 'venue', 'policy', 'log', 'me'. Resolves false when it is no longer there.
-export async function openRecord(kind, id, at = null) {
-  closeSearch();
-  try { return (await OPEN[kind](id, at)) !== false; } catch (e) { console.error(e); return false; }
-}
+export const openRecord = async (kind, id, at = null) => (await reach(kind, id, at)) !== false;
 
 /* ----------------------------------- the panel ----------------------------------- */
 const PER_GROUP = 5, PAGE = 60; // with every page shown, the best few of each; with one page chosen, a screenful at a time
@@ -257,7 +287,15 @@ const btn = document.getElementById('searchBtn'), app = document.getElementById(
 let back = null, panel, input, chips, status, listbox, blank; // built the first time the panel opens
 let open = false, shown = false, wasInert = false, unsub = null, timer = 0, said = 0;
 let filter = '', limit = PAGE, options = [], active = -1, last = null;
+let opener = null; // what had the focus when the panel opened: it gets the focus back (the box someone was typing in, the magnifier that was tapped)
+let place = null;  // where the list stood when the panel closed: its words, chip, length and scroll, for coming back to the same results
 export const isOpen = () => open;
+// Ctrl+K, or ⌘K on Apple devices, where Control+K in a text box is the system's own "delete to the end of the line"
+// and is left to it. The same rule as the listener in js/app.js that opens the panel.
+const APPLE = /Mac|iPhone|iPad/.test(navigator.platform || '');
+const isK = e => (APPLE ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey && (e.key || '').toLowerCase() === 'k';
+// A phone or a tablet in the hand: its keyboard covers the results, and its Search key is not a way to move among them.
+const byTouch = () => !!window.matchMedia && matchMedia('(hover: none) and (pointer: coarse)').matches;
 
 // The text as nodes, each place a word matched inside a <mark>. Built from text nodes, so nothing typed or stored is
 // ever read as HTML. The folded text is made letter by letter here, to know where each folded letter came from.
@@ -400,16 +438,19 @@ function setActive(i) {
 async function choose(i) {
   const r = options[i]; if (!r) return;
   if (r.more) return r.more(); // the focus stays where it is: in the field, or nowhere on a touch screen, where the keyboard is away
-  if (await openRecord(r.e.kind, r.e.id, r.at)) announce(`${r.e.title} opened`); else toast('That could not be opened. It may have been removed.');
+  const got = await reach(r.e.kind, r.e.id, r.at);
+  if (got === false) toast('That could not be opened. It may have been removed.'); else announce(`${typeof got === 'string' ? got : r.e.title} opened`);
 }
 
 // The keyboard, taken before the page sees it (the Rolodex behind turns on the arrow keys): the arrows move through
-// the results, Enter opens the one marked (or marks the first), Escape closes, and Tab stays inside the panel.
+// the results, Enter opens the one marked (or marks the first), Escape closes, and Tab stays inside the panel. On a
+// touch screen Enter is the on-screen keyboard's Search key: with nothing marked it puts the keyboard away, so the
+// results can be seen and one of them tapped.
 const keys = e => {
   const key = e.key || '';
   if (e.isComposing) return; // a word still being put together on the keyboard keeps its keys
   if (key === 'Escape') { e.preventDefault(); e.stopPropagation(); return closeSearch(); }
-  if ((e.ctrlKey || e.metaKey) && key.toLowerCase() === 'k') { e.preventDefault(); e.stopPropagation(); input.focus(); input.select(); return; }
+  if (isK(e)) { e.preventDefault(); e.stopPropagation(); input.focus(); input.select(); return; }
   if (key === 'ArrowDown' || key === 'ArrowUp') {
     e.preventDefault(); e.stopPropagation();
     if (document.activeElement !== input) input.focus();
@@ -417,7 +458,7 @@ const keys = e => {
     return;
   }
   if (key.startsWith('Arrow')) return e.stopPropagation();
-  if (key === 'Enter' && e.target === input) { e.preventDefault(); if (active >= 0) choose(active); else if (options.length) setActive(0); return; }
+  if (key === 'Enter' && e.target === input) { e.preventDefault(); if (active >= 0) choose(active); else if (byTouch()) input.blur(); else if (options.length) setActive(0); return; }
   if (key !== 'Tab') return;
   const items = [...panel.querySelectorAll('input, button:not([disabled])')].filter(el => el.offsetParent !== null), at = items.indexOf(document.activeElement);
   if (at >= 0 && at !== (e.shiftKey ? 0 : items.length - 1)) return; // inside the panel the browser's own Tab does it
@@ -426,11 +467,18 @@ const keys = e => {
 const onData = () => { if (open && (!index || index.rev !== store.revision())) { clearTimeout(timer); timer = setTimeout(run, 150); } }; // something changed underneath: search again
 
 // Opens the panel with the field ready to type in. What was last typed in this sitting is still there, selected, so
-// typing replaces it. show: a walkthrough is pointing at the panel, so it is there to look at and not to use.
+// typing replaces it, and with the same words the list is as it was left: the same chip, as many results, scrolled to
+// the same place. show: a walkthrough is pointing at the panel, so it is there to look at and not to use; query: the
+// words it shows (a walkthrough step may change them while the panel stays open).
 export function openSearch({ show = false, query = null } = {}) {
-  if (open) { if (shown === show) { if (!show) input.focus(); return; } closeSearch(); }
+  if (open) {
+    if (shown !== show) closeSearch();
+    else { if (!show) input.focus(); else if (query != null && query !== input.value) { input.value = query; filter = ''; limit = PAGE; run(); } return; }
+  }
   if (app && app.inert && !show) return; // the page is out of reach (a sheet, the menu, a walkthrough, the lock): so is the search
   if (!back) build();
+  const had = document.activeElement;
+  opener = !show && had && had !== document.body ? had : null;
   open = true; shown = show;
   if (query != null) input.value = query;
   back.classList.toggle('shown', show); back.inert = show;
@@ -438,25 +486,30 @@ export function openSearch({ show = false, query = null } = {}) {
   btn.setAttribute('aria-expanded', 'true'); document.body.classList.add('search-open');
   wasInert = !!(app && app.inert); if (app) app.inert = true; // the page behind is out of reach, as under a sheet
   if (last && (last.q !== input.value)) filter = '';
-  limit = PAGE; run();
+  const again = !show && place && place.q === input.value && place.filter === filter ? place : null;
+  limit = again ? again.limit : PAGE; run();
+  if (again) listbox.scrollTop = again.top;
   if (show) return;
   unsub = store.subscribe(onData);
   document.addEventListener('keydown', keys, true);
   input.focus({ preventScroll: true }); input.select();
 }
 
-// Closes at once; the focus goes back to the search button. forget: Vdex is locking, so what was typed, what was
-// found and the index all go.
+// Closes at once; the focus goes back to where it was when the panel opened (the box someone was typing in, the
+// magnifier they tapped), or to the search button in the top bar when that is gone. forget: Vdex is locking, so what
+// was typed, what was found and the index all go.
 export function closeSearch(forget = false) {
   if (open) {
     open = false; clearTimeout(timer); said++;
+    place = shown || !last ? null : { q: last.q, filter: last.filter, limit, top: listbox.scrollTop }; // read while the list is still laid out
     back.hidden = true; back.inert = false; back.classList.remove('shown');
     btn.setAttribute('aria-expanded', 'false'); document.body.classList.remove('search-open');
     document.removeEventListener('keydown', keys, true);
     if (unsub) { unsub(); unsub = null; }
     if (app) app.inert = wasInert;
-    if (!shown) btn.focus({ preventScroll: true });
+    if (!shown) { const to = opener && opener.isConnected ? opener : btn; to.focus({ preventScroll: true }); if (document.activeElement !== to) btn.focus({ preventScroll: true }); }
     if (shown) { input.value = ''; filter = ''; }
+    opener = null;
   }
-  if (forget) { index = null; last = null; filter = ''; options = []; active = -1; if (back) { input.value = ''; input.removeAttribute('aria-activedescendant'); listbox.replaceChildren(); chips.replaceChildren(); blank.replaceChildren(); status.textContent = ''; } }
+  if (forget) { index = null; last = null; place = null; filter = ''; options = []; active = -1; if (back) { input.value = ''; input.removeAttribute('aria-activedescendant'); listbox.replaceChildren(); chips.replaceChildren(); blank.replaceChildren(); status.textContent = ''; } }
 }

@@ -115,7 +115,7 @@ Before the upload in point 3, go through this list on the phone. Each item is so
 - Everything on the website, at once. Install, Add to Home Screen and the browser's own buttons do not show.
 - The lock: the PIN works as everywhere. Fingerprint and face unlock through the web standard (WebAuthn) is not available inside an iPhone app's web view, so the first version has no Face ID; a native Face ID unlock is planned for a later version.
 - Break alerts come as the phone's own notifications, with Back to work and 5 more minutes.
-- Scripts and shot lists: in any app's share sheet, choose Vdex (under the apps row, or "Copy to Vdex") for .docx, .txt, .md, .csv and .fountain files; Vdex asks whether they are a script for TC Notes or a shot list for a booking.
+- Scripts and shot lists: in any app's share sheet, choose Vdex (under the apps row, or "Copy to Vdex") for .docx, .txt, .md, .csv and .fountain files; Vdex asks whether they are a script for TC Notes or a shot list for a booking, and for a .csv also offers to bring it into Equipment as the kit list you already keep.
 - Calendar: Settings → Calendar & email offers **This phone's calendar** beside Google and Outlook. It makes a "Vdex bookings" calendar in the Calendar app and keeps it in step both ways.
 - Backups: export and import go through the Files picker (iCloud Drive, On My iPhone, Dropbox and so on). Spreadsheets, calendar files and the asset register go the same way, and Share buttons open the phone's share sheet.
 - Printing: Print on a call sheet, quote or invoice opens the phone's print sheet (AirPrint, or Save to Files for a PDF).

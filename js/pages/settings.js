@@ -43,6 +43,13 @@ export async function openSettingsSection(title) {
   return reveal(title);
 }
 
+// The card of one project template in Settings → Work & billing → Project templates, once that section is on the page
+// (the search lands on it). The cards are listed in the order of projectTemplates(). null when there is no such template.
+export function templateCard(id) {
+  const at = projectTemplates().findIndex(t => t.id === id);
+  return at < 0 ? null : document.querySelectorAll('#page details[data-s="Project templates"] .ss-body .list > .card')[at] || null;
+}
+
 // Your name, business and contact details: one form, reached from Settings → General → Profile only.
 export function editProfile() {
   openForm({

@@ -47,6 +47,8 @@ const setup = async ctx => {
     producing: m.ROLE_GROUPS.find(g => g.name === 'Producing').roles.map(r => r.name),
     same: ['Cinematographer', 'dp', 'Director of Photography', 'Focus Puller', 'make up artist', 'Colorist', 'Clapper Loader'].map(n => (m.findRole(n) || { role: {} }).role.name),
     groupOf: ['Talent', 'Camera Operator', 'Steadicam Operator', 'Vision Mixer', 'Streaming Engineer', 'Medic', 'Some job nobody listed', ''].map(m.groupOf),
+    support: m.ROLE_GROUPS.find(g => g.name === 'Production support').roles.map(r => r.name),
+    filed: ['Production Assistant', 'PA', 'Set PA', 'Office PA', '2nd 2nd AD', 'Crowd 2nd AD', 'Still Photographer', 'Floor Runner'].map(n => { const hit = m.findRole(n); return hit ? `${hit.role.name} (${hit.group})` : 'not listed'; }),
   })));
   const total = list.groups.reduce((n, g) => n + g[1], 0);
   ok(`the list is comprehensive: ${total} roles in ${list.groups.length} groups (at least 150)`, total >= 150 && total === list.names.length && list.groups.length >= 20);
@@ -55,6 +57,8 @@ const setup = async ctx => {
   ok('the groups asked for are all there, and no group is empty', ASKED.every(g => list.groups.some(x => x[0] === g)) && list.groups.every(g => g[1] > 0), ASKED.filter(g => !list.groups.some(x => x[0] === g)).join(', '));
   ok('similar jobs sit together: Producing runs from Executive Producer to Production Coordinator', ['Executive Producer', 'Producer', 'Co-Producer', 'Line Producer', 'Associate Producer', 'Production Manager', 'Production Coordinator'].every(r => list.producing.includes(r)), list.producing.join(', '));
   ok('British names come first and the American and short forms lead to them (DOP, 1st AC, MUA, Colourist, 2nd AC)', JSON.stringify(list.same) === JSON.stringify(['DOP', 'DOP', 'DOP', '1st AC', 'MUA', 'Colourist', '2nd AC']), list.same.join(', '));
+  ok('Production Assistant leads Production support, beside the runners, and is not among the producers; PA, Set PA and Office PA are its other names', list.support[0] === 'Production Assistant' && list.support.slice(1, 4).join() === 'Runner,Floor Runner,Production Runner' && !list.producing.includes('Production Assistant') && list.filed.slice(0, 4).every(f => f === 'Production Assistant (Production support)') && list.filed[7] === 'Floor Runner (Production support)', JSON.stringify([list.support.slice(0, 4), list.filed]));
+  ok('“2nd 2nd AD” is the American name for the 3rd AD, not for the Crowd 2nd AD, and “Still Photographer” finds the Stills Photographer', list.filed[4] === '3rd AD (Directing and ADs)' && list.filed[5] === 'Crowd 2nd AD (Directing and ADs)' && list.filed[6] === 'Stills Photographer (Stills)', list.filed.slice(4, 7).join(' | '));
   const other = await store(() => import('./js/roles.js').then(m => ({ fold: ['Réalisateur', 'realisateur', 'Оператор-постановщик', '撮影助手', '🎬', '  '].map(m.fold), group: ['Оператор-постановщик', '撮影助手', '🎬'].map(m.groupOf), typed: [m.resolveRole('  撮影助手 '), m.resolveRole('x'.repeat(80)).length, m.resolveRole('COLORIST'), m.resolveRole('')] })));
   ok('roles in other alphabets, with accents or in signs are told apart and are roles of your own; a typed role is tidied, 60 letters at most', other.fold[0] === other.fold[1] && new Set(other.fold.slice(1, 5)).size === 4 && other.fold[5] === '' && other.group.every(g => g === 'My roles') && JSON.stringify(other.typed) === JSON.stringify(['撮影助手', 60, 'Colorist', '']), JSON.stringify(other));
   ok('every role knows its group, a role of your own is under My roles, and no role is no group', JSON.stringify(list.groupOf) === JSON.stringify(['Talent and on-screen', 'Camera', 'Drone and specialist camera', 'Live, broadcast and events', 'Live, broadcast and events', 'Production support', 'My roles', '']), list.groupOf.join(' | '));
@@ -71,12 +75,23 @@ const setup = async ctx => {
   ok('it is a dialog called Choose a role, over the form', (await page.locator('.sheet[role=dialog][aria-label="Choose a role"]').count()) === 1 && (await page.locator('.sheet').count()) === 2);
   ok('it lists every group as a fold-down, in order, each saying how many roles it holds', JSON.stringify(shown.map(g => [g.name, g.n])) === JSON.stringify(list.groups) && shown.every(g => g.summary === 'SUMMARY' && g.pill === `${g.n} roles`), shown.map(g => `${g.name} ${g.pill}`).join(' | ').slice(0, 300));
   ok('every group starts folded when no role is chosen', shown.every(g => !g.open) && (await page.locator('.role-menu .role-opt:visible').count()) === 0);
+  const hint = await page.evaluate(() => { const p = document.querySelector('.role-menu .role-hint'), s = document.querySelector('.role-menu .search').getBoundingClientRect(), g = document.querySelector('.role-menu .role-group').getBoundingClientRect(), r = p ? p.getBoundingClientRect() : null; return { text: p ? p.textContent : '', under: !!r && r.top >= s.bottom && r.bottom <= g.top, shown: !!r && r.height > 0, buttons: p ? p.querySelectorAll('button, a').length : -1, size: p ? parseFloat(getComputedStyle(p).fontSize) : 0 }; });
+  ok('one line under the search box says another name for a role can be searched for and picked', hint.text === 'Prefer another name, such as DP or Sound Mixer? Search for it and pick it.' && hint.under && hint.shown && hint.buttons === 0 && hint.size >= 13, JSON.stringify(hint));
   await openGroup('Grip');
   const grip = await groupEl('Grip').locator('.role-opt:visible .role-name').allInnerTexts();
   ok('tapping a group opens its roles', (await groupEl('Grip').evaluate(d => d.open)) && grip.length === list.groups.find(g => g[0] === 'Grip')[1] && grip.includes('Key Grip') && grip.includes('Dolly Grip'), grip.join(', '));
   await openGroup('Sound');
   ok('opening another group folds the first, so the menu stays short', (await groupEl('Sound').evaluate(d => d.open)) && !(await groupEl('Grip').evaluate(d => d.open)) && (await page.locator('.role-menu details[open]').count()) === 1);
   ok('a role shows its other names under it', /Production Sound Mixer/.test(await groupEl('Sound').locator('.role-opt', { hasText: 'Sound Recordist' }).locator('.role-aka').innerText()));
+  // What that line promises: the other names shown under a role are not buttons, and searching for one offers it.
+  const akaTap = await groupEl('Sound').locator('.role-opt', { hasText: 'Sound Recordist' }).locator('.role-aka').evaluate(e => e.closest('button').querySelector('.role-name').textContent);
+  await page.locator('.role-menu .search').fill('Sound Mixer'); await sleep(200);
+  const offered = await page.locator('.role-results .role-opt').first().innerText();
+  const hintGone = await page.locator('.role-menu .role-hint').isHidden();
+  await page.locator('.role-menu .search').fill('DP'); await sleep(200);
+  const offered2 = await page.locator('.role-results .role-opt').first().innerText();
+  await page.locator('.role-menu .search').fill(''); await sleep(200);
+  ok('…which is true: a tap on the small print under Sound Recordist would choose Sound Recordist, while searching “Sound Mixer” or “DP” offers that very name to pick (the line steps aside for the results)', akaTap === 'Sound Recordist' && /^Sound Mixer\s+Same as Sound Recordist · Sound$/.test(offered.trim()) && /^DP\s+Same as DOP · Camera$/.test(offered2.trim()) && hintGone && (await page.locator('.role-menu .role-hint').isVisible()), JSON.stringify([akaTap, offered, offered2, hintGone]));
   await openGroup('Grip');
   await groupEl('Grip').locator('.role-opt', { has: page.locator('.role-name', { hasText: /^Key Grip$/ }) }).click(); await sleep(250);
   ok('tapping a role chooses it: the menu closes, the button shows the role and takes the focus back', (await menu.count()) === 0 && (await page.locator('.sheet').count()) === 1 && (await roleBtn.innerText()).includes('Key Grip') && (await roleBtn.getAttribute('aria-label')) === 'Role: Key Grip' && (await active()).key === 'role');
@@ -102,9 +117,16 @@ const setup = async ctx => {
   await page.keyboard.press('Enter'); await menu.waitFor(); await sleep(200);
   const cur = await active();
   ok('opened again, the menu is on the current role: its group open, the role marked and focused, and named at the top', cur.current === 'true' && cur.text === 'DOP' && (await page.locator('.role-menu details[open] .twirl-name').allInnerTexts()).join() === 'Camera' && /Chosen:\s*DOP/.test(await page.locator('.role-now').innerText()) && (await page.locator('.role-menu .role-opt[aria-current="true"]').count()) === 1, JSON.stringify(cur));
-  await page.keyboard.type('gaf'); await sleep(200);
+  // What a screen reader is told while typing: every announcement made from here on is noted down.
+  await page.evaluate(() => { window.__said = []; new MutationObserver(() => { const r = document.getElementById('sr-live'), t = r ? r.textContent : ''; if (t && /role/i.test(t)) window.__said.push(t); }).observe(document.body, { childList: true, subtree: true, characterData: true }); });
+  await page.keyboard.type('gaf', { delay: 150 });
+  const saidEarly = await page.evaluate(() => window.__said.slice()); // three letters in, and still typing as far as Vdex knows
+  await sleep(200);
   const found = await page.locator('.role-results .role-opt .role-name').allInnerTexts();
   ok('typing anywhere in the menu searches it', (await page.locator('.role-menu .search').inputValue()) === 'gaf' && found[0] === 'Gaffer' && (await page.locator('.role-groups').isHidden()), found.join(', '));
+  await sleep(900);
+  const saidLate = await page.evaluate(() => window.__said.slice());
+  ok('the number of roles found is said once, when typing has paused, not at every letter', saidEarly.length === 0 && saidLate.length === 1 && /^\d+ roles? found$/.test(saidLate[0]), JSON.stringify([saidEarly, saidLate]));
   await page.keyboard.press('Enter'); await sleep(250);
   ok('Enter in the search box takes the first role found', (await menu.count()) === 0 && (await roleBtn.innerText()).includes('Gaffer'));
   await page.keyboard.press('Enter'); await menu.waitFor(); await sleep(200);

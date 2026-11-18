@@ -8,7 +8,8 @@ const back = document.getElementById('menuBack'), panel = document.getElementByI
 let open = false, shown = false, wasInert = false;
 export const isOpen = () => open;
 
-// What Tab and the arrow keys move between: the close button and the rows that are listed (Install comes and goes).
+// What Tab and the arrow keys move between: the close button, the status while it is a button, and the rows that are
+// listed (Install comes and goes).
 // The keys are taken before the page sees them (the Rolodex behind turns on the arrow keys).
 const items = () => [...panel.querySelectorAll('button:not([disabled])')].filter(el => el.offsetParent !== null);
 const keys = e => {
@@ -25,8 +26,11 @@ const keys = e => {
 };
 
 // show: a walkthrough is pointing at the menu, so it is there to look at and not to use (no focus, no keys, no taps).
+// Like the search, the menu opens only while the page itself can be used: this file is fetched on the first tap, and
+// if a form, the lock or a walkthrough has opened by the time it arrives, the menu stays shut instead of opening
+// underneath it and taking the focus away.
 export function openMenu({ show = false } = {}) {
-  if (open) return;
+  if (open || (app && app.inert && !show)) return;
   open = true; shown = show;
   document.getElementById('menuVersion').textContent = `Vdex ${VERSION}${BUILD !== 'dev' ? ' · build ' + BUILD : ''}`;
   back.classList.toggle('shown', show); back.inert = show;
@@ -52,11 +56,11 @@ export function closeMenu() {
 // The backdrop and the ✕ close it. The backdrop closes on the whole tap, not on its first touch: the tap would
 // otherwise finish on the page that has just come back underneath, and take the focus from the hamburger with it.
 // Choosing a row closes the menu first (this runs before the row's own listener), and then the row does what it
-// does: the tutorial, the install prompt, a sheet.
+// does: the tutorial, the install prompt, a sheet. The status at the top is the same while it is a button.
 let downOnBack = false;
 back.addEventListener('pointerdown', e => { downOnBack = e.target === back; });
 back.addEventListener('click', e => { if (e.target === back && downOnBack) closeMenu(); });
-panel.addEventListener('click', e => { if (e.target.closest('.menu-row, #menuClose')) closeMenu(); }, true);
+panel.addEventListener('click', e => { if (e.target.closest('.menu-row, #menuClose, button.menu-status')) closeMenu(); }, true);
 // The page behind does not scroll under the menu: a wheel or a one-finger drag moves the panel when it has more to
 // show, and nothing otherwise. Zooming (two fingers, or the wheel with Ctrl) is left alone.
 for (const type of ['wheel', 'touchmove']) back.addEventListener(type, e => { if (e.ctrlKey || (e.touches && e.touches.length > 1)) return; if (e.target === back || panel.scrollHeight <= panel.clientHeight) e.preventDefault(); }, { passive: false });

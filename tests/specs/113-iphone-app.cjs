@@ -114,7 +114,7 @@ const bridge = () => {
     /* --------------------------------- the app --------------------------------- */
     await openMenu(page);
     const rows = await page.locator('#menu .menu-row:visible .menu-name').allInnerTexts();
-    ok('Install is not listed in the app’s menu; the tutorial, text size and theme, and storage are', (await page.locator('#installBtn').isHidden()) && JSON.stringify(rows) === JSON.stringify(['Tutorial for this page', 'Text size and theme', 'Storage, sync and backups']), rows.join(' | '));
+    ok('Install is not listed in the app’s menu; the tutorial, text size and theme, and storage are', (await page.locator('#installBtn').isHidden()) && JSON.stringify(rows) === JSON.stringify(['Tutorial for this page', 'Text size and theme', 'Storage, sync & backups']), rows.join(' | '));
     await page.keyboard.press('Escape'); await sleep(150);
     ok('the app is known as the iPhone app, not the Play app', (await stored(page)).ios === true && !(await stored(page)).play);
 

@@ -13,13 +13,13 @@ export const ROLE_GROUPS = [
     'Series Producer', 'Showrunner', 'Supervising Producer', 'Creative Producer', 'Development Producer', ['Story Producer', 'Segment Producer'],
     ['Field Producer', 'Location Producer'], ['Archive Producer', 'Archive Researcher'], ['Head of Production', 'HoP'], 'Production Executive',
     ['Production Manager', 'PM', 'Unit Production Manager', 'UPM'], ['Production Coordinator', 'POC', 'Production Office Coordinator'],
-    ['Assistant Production Coordinator', 'APOC'], 'Production Secretary', ['Production Assistant', 'PA', 'Office PA'],
+    ['Assistant Production Coordinator', 'APOC'], 'Production Secretary',
     ['Production Accountant', 'Accountant'], ['Assistant Accountant', 'Accounts Assistant'], 'Researcher',
   ] },
   { name: 'Directing and ADs', icon: '🎬', roles: [
     'Director', 'Co-Director', 'Creative Director', ['Producer/Director', 'PD', 'Shooting PD', 'Self-shooting PD'], ['Second Unit Director', '2nd Unit Director'],
-    ['1st AD', 'First Assistant Director', 'First AD'], ['2nd AD', 'Second Assistant Director', 'Second AD'], ['Crowd 2nd AD', '2nd 2nd AD'],
-    ['3rd AD', 'Third Assistant Director', 'Third AD'], ['AD Trainee', 'Trainee AD'], 'Choreographer', 'Movement Director',
+    ['1st AD', 'First Assistant Director', 'First AD'], ['2nd AD', 'Second Assistant Director', 'Second AD'], 'Crowd 2nd AD',
+    ['3rd AD', 'Third Assistant Director', 'Third AD', '2nd 2nd AD'], ['AD Trainee', 'Trainee AD'], 'Choreographer', 'Movement Director',
     ['Dialect Coach', 'Dialogue Coach', 'Voice Coach'], ['Acting Coach', 'Drama Coach'],
   ] },
   { name: 'Camera', icon: '🎥', roles: [
@@ -105,7 +105,7 @@ export const ROLE_GROUPS = [
     ['Safety Diver', 'Dive Supervisor', 'Diver'], ['Marine Coordinator', 'Boat Master', 'Safety Boat'], ['Animal Handler', 'Animal Wrangler', 'Wrangler', 'Horse Master'],
   ] },
   { name: 'Production support', icon: '🚐', roles: [
-    ['Runner', 'Gofer'], ['Floor Runner', 'Set Runner', 'Set PA'], ['Production Runner', 'Office Runner'], 'Runner/Driver',
+    ['Production Assistant', 'PA', 'Set PA', 'Office PA'], ['Runner', 'Gofer'], ['Floor Runner', 'Set Runner'], ['Production Runner', 'Office Runner'], 'Runner/Driver',
     ['Driver', 'Unit Driver', 'Minibus Driver'], ['Transport Captain', 'Transport Coordinator', 'Transport Manager'], ['Truck Driver', 'HGV Driver', 'Facilities Driver'],
     ['Caterer', 'Catering', 'Chef', 'Location Caterer'], 'Catering Assistant', ['Craft Services', 'Crafty', 'Tea Table'],
     ['Medic', 'Unit Medic', 'Set Medic', 'Paramedic', 'Unit Nurse'], ['Security', 'Security Guard', 'Security Officer'], 'Chaperone',
@@ -144,7 +144,7 @@ export const ROLE_GROUPS = [
     ['Cable Basher', 'Cable Puller'], ['Event Manager', 'Event Producer'],
   ] },
   { name: 'Stills', icon: '📷', roles: [
-    ['Stills Photographer', 'Unit Stills Photographer', 'Set Photographer', 'Unit Stills'], 'Photographer', ['Photographer’s Assistant', 'Photo Assistant', 'Photography Assistant'],
+    ['Stills Photographer', 'Still Photographer', 'Unit Stills Photographer', 'Set Photographer', 'Unit Stills'], 'Photographer', ['Photographer’s Assistant', 'Photo Assistant', 'Photography Assistant'],
     ['Digital Operator', 'Digi Op', 'Digital Tech'], ['Retoucher', 'Photo Retoucher'], ['BTS Photographer', 'Behind-the-scenes Photographer'], 'Studio Assistant',
   ] },
   { name: 'Social and content', icon: '📱', roles: [
