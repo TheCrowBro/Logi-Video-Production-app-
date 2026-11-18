@@ -119,11 +119,16 @@ export async function setPin(pin) { // first PIN makes a new data key; a later o
   const before = S.cfg, hadKey = !!S.key;
   const dropKey = () => { if (!hadKey) { S.key = null; S.raw = null; } };
   await adopt(raw);
-  // max: the longest PIN allowed when this one was chosen (offerLongerPin below). A config the disk would not take is a
-  // PIN that was not set: the disk still holds the old one (or none), which the next start would ask for, so this tab
-  // goes back to it and says so.
-  if (!saveCfg({ ...(S.cfg || { v: 1, autoLock: 1, wipe: false, bio: null }), salt: C.toB64(salt), iter, pin: wrap, len: pin.length, max: PIN_MAX, attempts: 0, until: 0 })) { holdCfg(before); dropKey(); throw new Error('the browser storage is full'); }
-  try { await writeVault(true); } catch (e) { saveCfg(before); dropKey(); throw e; } // no vault, no PIN: the plain copy stays as it was
+  // max: the longest PIN allowed when this one was chosen (offerLongerPin below). past: the salts of the PINs this one
+  // replaces, the last eight, by which a copy of the config from before the change is known for what it is (takeConfig
+  // below). A config the disk would not take is a PIN that was not set: the disk still holds the old one (or none),
+  // which the next start would ask for, so this tab goes back to it and says so.
+  const after = (c, s) => [...new Set([...(c.past || []), s])].slice(-8);
+  const next = { ...(S.cfg || { v: 1, autoLock: 1, wipe: false, bio: null }), salt: C.toB64(salt), iter, pin: wrap, len: pin.length, max: PIN_MAX, past: S.cfg ? after(S.cfg, S.cfg.salt) : undefined, attempts: 0, until: 0 };
+  if (!saveCfg(next)) { holdCfg(before); dropKey(); throw new Error('the browser storage is full'); }
+  // No vault, no PIN: the plain copy stays as it was, and the config goes back to the one before. That one now replaces
+  // the PIN that was not kept, and says so in its own past, so a tab that had already taken the new config takes it back.
+  try { await writeVault(true); } catch (e) { saveCfg(before && { ...before, past: after(before, next.salt) }); dropKey(); throw e; }
 }
 export async function checkPin(pin) { const raw = await openWithPin(pin); if (!raw) return false; await adopt(raw); return true; }
 export async function removePin() { // the caller has just checked the PIN
@@ -407,14 +412,20 @@ export function lockNow() { if (!S.cfg || S.screen) return; showLock(); sealSoon
 // A lock screen that is up follows: its dots are drawn for the PIN's length as it now is, the wait and the tries left
 // are told again when wrong tries were made elsewhere, and the whole screen is drawn again when the fingerprint unlock
 // came or went (while a PIN is being checked it is left alone: the check ends with the message for the new count).
-// One write is not taken: a config without max over this tab's config with it. That comes from a tab still running a
-// version from before longer PINs, which writes back the whole config it started with, the old PIN included, whenever
-// it counts a wrong try or a lock setting is changed in it. This tab then puts its own config back, with the count of
-// wrong tries (and the wait) from that write when it is the higher one: a wrong try there counts here, and that tab's
-// older count never lowers this one. It can do so only while it is open: such a tab should be reloaded.
+// One kind of write is not taken: a copy of the config from before a change this tab knows of. That is a config with a
+// PIN this tab's PIN has replaced (its salt is in this tab's past, and this tab's is not in its past: setPin above), or
+// with this tab's own PIN and no max where this tab has it. Such a copy comes from a tab still running a version from
+// before longer PINs, which never takes what another tab wrote and writes back the whole config it started with, the
+// old PIN included, whenever it counts a wrong try or a lock setting is changed in it (and from any tab whose write
+// crossed a PIN change on its way here). This tab then puts its own config back, with the count of wrong tries (and the
+// wait) from that write when it is the higher one: a wrong try there counts here, and that tab's older count never
+// lowers this one. It can do so only while it is open: such a tab should be reloaded. A PIN newly set in such a tab is
+// no stale copy (its salt is new), and is taken like any other.
+const replaced = (a, b) => (a.past || []).includes(b.salt); // a's PIN came after b's
 function takeConfig() {
   const c = readCfg(), was = S.cfg; if (!c) return;
-  if (was.max && !c.max) saveCfg({ ...was, attempts: Math.max(was.attempts || 0, c.attempts || 0), until: Math.max(was.until || 0, c.until || 0) });
+  const stale = (replaced(was, c) && !replaced(c, was)) || (!!was.max && !c.max && c.salt === was.salt);
+  if (stale) saveCfg({ ...was, attempts: Math.max(was.attempts || 0, c.attempts || 0), until: Math.max(was.until || 0, c.until || 0) });
   else holdCfg(c);
   const now = S.cfg;
   if (S.dropOffer && !offerDue()) S.dropOffer();

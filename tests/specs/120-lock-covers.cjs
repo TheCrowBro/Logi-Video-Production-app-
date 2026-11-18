@@ -245,11 +245,74 @@ const PHONE = { width: 360, height: 740 };
     await other.evaluate(c => localStorage.setItem('logi-lock', JSON.stringify({ ...c, autoLock: 5 })), stale); // a lock setting changed in that tab writes the same stale copy
     await sleep(500);
     ok('…nor does a lock setting changed in that tab, whose older count of wrong tries does not lower this one', (await cfg(page)).len === 12 && (await cfg(page)).max === 20 && (await mem(page)).len === 12 && (await cfg(page)).attempts === 1, JSON.stringify({ len: (await cfg(page)).len, max: (await cfg(page)).max, attempts: (await cfg(page)).attempts }));
-    await other.close();
     await lockNow(page); await lockUp(page); await sleep(200);
     ok('the lock screen asks for the new PIN', (await dots(page)).n === 12);
     await page.keyboard.type(P12);
     ok('…which opens Vdex, with no second offer and the data all there', (await next(page)) === 'app' && (await bookings(page)) === 8 && (await cfg(page)).attempts === 0);
+    // This tab restarted: which PINs its PIN replaced is kept in the config, so the old copy is still known for what it is.
+    await page.reload(); await lockUp(page); await page.keyboard.type(P12);
+    const restarted = await next(page);
+    await other.evaluate(c => localStorage.setItem('logi-lock', JSON.stringify({ ...c, attempts: 2, until: 0 })), stale);
+    await sleep(500);
+    ok('…and it is the same after this tab has been restarted', restarted === 'app' && (await cfg(page)).len === 12 && (await cfg(page)).salt === mine.salt && (await cfg(page)).attempts === 2 && (await mem(page)).len === 12, JSON.stringify(await mem(page)));
+    // A PIN set in that tab (Change PIN… there) is not its old copy written back: it is the PIN now, in this tab too.
+    // Written as the version before writes it: the same data key under the new PIN, in the config it started with.
+    const NEW8 = '87654321';
+    const changed = await page.evaluate(async ([c, oldPin, newPin]) => { // worked out here (the other page runs no scripts of the app), written there
+      const C = await import('./js/crypto.js');
+      const raw = await C.decrypt(await C.pbkdf2Key(oldPin, C.fromB64(c.salt), c.iter), c.pin), salt = C.bytes(16);
+      const pin = await C.encrypt(await C.pbkdf2Key(newPin, salt, c.iter), raw);
+      return { ...c, salt: C.toB64(salt), pin, len: newPin.length, attempts: 0, until: 0 };
+    }, [stale, OLD, NEW8]);
+    await other.evaluate(c => localStorage.setItem('logi-lock', JSON.stringify(c)), changed);
+    await sleep(500);
+    const taken = await cfg(page), held = await mem(page);
+    ok('a PIN newly set in the tab still running the version before is taken, as a PIN set in any other tab is: it is not put back to the one before', taken.len === 8 && taken.max === undefined && taken.salt !== mine.salt && held.len === 8 && held.salt === taken.salt, JSON.stringify({ disk: { len: taken.len, max: taken.max }, mem: held }));
+    await lockNow(page); await lockUp(page); await sleep(200);
+    const asked = (await dots(page)).n;
+    await page.keyboard.type(NEW8); await lockGone(page);
+    const offered = await page.waitForSelector('.pin-offer', { timeout: 15000 }).then(() => true, () => false);
+    ok('…the lock screen asks for it, it opens Vdex, and as it was chosen under the old rule the longer PIN is offered again', asked === 8 && offered, `${asked} dots`);
+    await page.getByRole('button', { name: 'Keep my current PIN' }).click(); await sleep(500);
+    ok('…with the data all there', (await bookings(page)) === 8 && (await cfg(page)).max === 20 && (await cfg(page)).len === 8);
+    // A write made from the config as it stood before a PIN change, landing after the change (its tab had not heard of
+    // the change yet), carries max and the PIN that was replaced: it does not undo the change either.
+    const x1 = await cfg(page);
+    await page.evaluate(p => import('./js/lock.js').then(l => l.setPin(p)), P9); await sleep(400);
+    const x2 = await cfg(page);
+    await other.evaluate(c => localStorage.setItem('logi-lock', JSON.stringify({ ...c, attempts: 1 })), x1);
+    await sleep(500);
+    const end = await cfg(page);
+    ok('a write that crossed a PIN change, made from the config as it was before it, does not put the replaced PIN back', x2.len === 9 && end.salt === x2.salt && end.len === 9 && end.attempts === 1 && (await mem(page)).salt === x2.salt, JSON.stringify({ len: end.len, attempts: end.attempts, same: end.salt === x2.salt }));
+    await other.close();
+    await ctx.close();
+  });
+
+  // A new PIN whose vault could not be written is taken back (setPin puts the config before it back). Another tab has
+  // taken the new config by then, and must take the one before back too: to that tab it is a PIN that was replaced.
+  the('pin taken back in one of two tabs', async () => {
+    const { ctx, page: a } = await existing();
+    await vaultWritten(a);
+    const b = await ctx.newPage(); watch(b);
+    await b.goto(BASE); await unlock(b); await app(b); await sleep(400);
+    const before = await cfg(a);
+    await a.bringToFront();
+    // In this tab the vault cannot be written (the storage is full), and encrypting takes a moment, as on a phone.
+    await a.evaluate(() => {
+      const set = Storage.prototype.setItem; Storage.prototype.setItem = function (k, v) { if (k === 'logi-vault') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError'); return set.call(this, k, v); };
+      const enc = SubtleCrypto.prototype.encrypt; SubtleCrypto.prototype.encrypt = function (...x) { return new Promise(r => setTimeout(r, 1500)).then(() => enc.apply(this, x)); };
+    });
+    await a.evaluate(p => { window.__set = import('./js/lock.js').then(l => l.setPin(p)).then(() => 'set', e => String(e.message || e)); }, P12);
+    const tookNew = await b.waitForFunction(() => import('./js/lock.js').then(l => l.config().len === 12), null, { timeout: 10000, polling: 100 }).then(() => true, () => false);
+    const said = await a.evaluate(() => window.__set);
+    await sleep(600);
+    const disk = await cfg(a), inA = await mem(a), inB = await mem(b);
+    ok('a new PIN whose vault could not be written is not set, and the tab that tried says so', /could not be saved/.test(said) && disk.salt === before.salt && disk.len === 6 && inA.salt === before.salt, said);
+    ok('…and the other tab, which had taken the new PIN meanwhile, goes back to the one before with it', tookNew && inB.salt === before.salt && inB.len === 6 && (await cfg(b)).pin.ct === before.pin.ct, JSON.stringify({ tookNew, inB }));
+    await b.bringToFront(); await lockNow(b); await lockUp(b); await sleep(200);
+    const asked = (await dots(b)).n;
+    await b.keyboard.type(OLD); await lockGone(b); await sleep(300);
+    ok('…so the PIN there was still opens Vdex there', asked === 6 && (await bookings(b)) === 8, `${asked} dots`);
     await ctx.close();
   });
 
