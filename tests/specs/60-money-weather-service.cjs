@@ -7,10 +7,11 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
 (async () => {
   const browser = await chromium.launch();
   const ctx = await browser.newContext({ viewport: { width: 420, height: 900 }, acceptDownloads: true });
-  await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-loc', JSON.stringify({ lat: 51.5, lon: -0.12 })); });
+  await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-loc', JSON.stringify({ lat: 51.50735, lon: -0.12776 })); }); // a saved location to the metre, as "use my location" gives it
   await ctx.addInitScript(acceptTerms());
   // Forecast API mocked: a fixed sunny-then-showery day
-  await ctx.route('https://api.open-meteo.com/**', route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ daily_units: { temperature_2m_max: '°C' }, daily: { time: ['2026-11-01'], weather_code: [80], temperature_2m_max: [14.2], temperature_2m_min: [8.6], precipitation_probability_max: [60], wind_speed_10m_max: [24.1], wind_gusts_10m_max: [45.3] } }) }));
+  const asked = []; // every address the forecast was asked at
+  await ctx.route('https://api.open-meteo.com/**', route => { asked.push(route.request().url()); return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ daily_units: { temperature_2m_max: '°C' }, daily: { time: ['2026-11-01'], weather_code: [80], temperature_2m_max: [14.2], temperature_2m_min: [8.6], precipitation_probability_max: [60], wind_speed_10m_max: [24.1], wind_gusts_10m_max: [45.3] } }) }); });
   const page = await ctx.newPage();
   const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); });
   page.on('dialog', d => d.accept());
@@ -33,6 +34,10 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const cs = await page.evaluate(() => import('./js/store.js').then(s => s.byId('bookings', window.__id).callSheet));
   ok('Add to call sheet writes the forecast into the sheet', /Showers/.test(cs.weather) && cs.editedAt > 0);
   ok('the sheet prints the forecast', /Showers/.test(await page.locator('.cs-doc').evaluate(el => el.textContent)));
+  // The privacy policy says the coordinates are rounded to two decimals before they are sent (about a kilometre).
+  const coords = asked.map(u => new URL(u).searchParams), keys = [...new Set(asked.flatMap(u => [...new URL(u).searchParams.keys()]))].sort();
+  ok('the forecast is asked for with coordinates rounded to two decimals, never the saved location to the metre', asked.length > 0 && coords.every(q => /^-?\d+\.\d{2}$/.test(q.get('latitude')) && /^-?\d+\.\d{2}$/.test(q.get('longitude'))) && !asked.some(u => /50735|12776/.test(u)), asked[0]);
+  ok('…and with nothing else but the day, the time zone setting and what to forecast', keys.every(k => ['daily', 'end_date', 'latitude', 'longitude', 'start_date', 'temperature_unit', 'timezone', 'wind_speed_unit'].includes(k)) && coords.every(q => q.get('timezone') === 'auto' && q.get('start_date') === q.get('end_date')), keys.join(', '));
 
   // ---- quotes and invoices ----
   await page.evaluate(() => window.logiGo('settings')); await sleep(300);

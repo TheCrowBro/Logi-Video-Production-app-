@@ -537,7 +537,7 @@ function pinReady() {
         : 'Vdex now locks with a PIN on every device. The PIN opens it, and everything it stores here is encrypted whenever it is locked, in the background or closed. Your data stays exactly where it is.'),
       h('p', { class: 'small muted' }, PIN_RULE),
       a, b, err,
-      h('p', { class: 'warn small' }, 'A forgotten PIN cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current.'),
+      h('p', { class: 'warn small' }, 'A forgotten PIN cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current (a cloud copy and backup files need a licence).'),
       h('p', { class: 'small muted' }, `Settings → Security sets when Vdex locks, adds fingerprint or face unlock, and has a switch to erase this device after ${WIPE_AT} wrong PINs: it stays off unless you turn it on.`),
       save);
     document.body.append(screen);
@@ -637,7 +637,7 @@ export function securityPanel() {
       c && bioOk === false && h('p', { class: 'small muted' }, 'This device or browser does not offer fingerprint or face unlock to web apps, so the PIN is the way in.'),
       c && h('div', { class: 'field' }, h('label', null, 'Lock when you leave the app'), h('select', { 'aria-label': 'Lock when you leave the app', onchange: e => setOption({ autoLock: Number(e.target.value) }) }, AUTO_LOCK.map(([v, l]) => h('option', { value: String(v), selected: v === (c.autoLock == null ? 1 : c.autoLock) }, l)))),
       c && h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!c.wipe, onchange: e => setOption({ wipe: e.target.checked }) }), h('span', null, `Erase this device after ${WIPE_AT} wrong PINs`, h('em', null, ' — only sensible with a cloud storage linked or a recent backup'))),
-      c && h('p', { class: 'small muted' }, 'Forgot the PIN? It cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current.')));
+      c && h('p', { class: 'small muted' }, 'Forgot the PIN? It cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current (a cloud copy and backup files need a licence).')));
     if (hadKey) { const again = [...el.querySelectorAll('button, input, select')].find(x => [x.tagName, x.getAttribute('aria-label') || (x.closest('label') || x).textContent.trim().slice(0, 60)].join('|') === hadKey); if (again) again.focus({ preventScroll: true }); }
   };
   draw();

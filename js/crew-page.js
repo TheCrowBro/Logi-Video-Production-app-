@@ -87,5 +87,7 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
     ...section('Equipment', kitGroups.size ? [...kitGroups].map(([cat, items]) => [h('div', { class: 'day' }, cat), h('ul', { class: 'plain' }, items.map(k => h('li', null, k.name + (k.qty > 1 ? ` × ${k.qty}` : ''))))]) : null),
     ...section('Deliverables', (snap.deliverables || []).length ? h('table', null, h('tbody', null, snap.deliverables.map(x => h('tr', null, h('td', null, x.name), h('td', { class: 'nw' }, x.duration || ''), h('td', { class: 'nw' }, isDate(x.due) ? 'due ' + fmtShort(x.due) : ''), h('td', null, x.status || ''))))) : null),
     ...section('Instructions', snap.notes && h('p', { class: 'pre' }, snap.notes)),
-    h('p', { class: 'note' }, `Sent ${snap.made ? new Date(snap.made).toLocaleString() : ''}. This is a copy from that moment: if plans change, the producer sends a new link.`)));
+    h('p', { class: 'note' }, `Sent ${snap.made ? new Date(snap.made).toLocaleString() : ''}. This is a copy from that moment: if plans change, the producer sends a new link.`),
+    // Inside the paper, so it is printed too: the page's footer is not (crew.html hides .foot on paper).
+    h('p', { class: 'note checked' }, 'The times, places, weather and emergency details here were entered or chosen by the producer. Vdex has not checked them and they may be out of date. Confirm with the producer.')));
 })();

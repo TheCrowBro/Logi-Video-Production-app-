@@ -28,7 +28,7 @@ export function initInstall(btn) {
 export function openInstallHelp() {
   const ios = isIOS();
   const steps = ios
-    ? [['Open this page in Safari', 'Other iPhone browsers can’t add web apps to the Home Screen.'], ['Tap the Share button', 'The square with an arrow, at the bottom of the screen.'], ['Choose “Add to Home Screen”', 'Then tap Add. Vdex opens full-screen like any other app, and works offline.']]
+    ? [['Open this page in Safari', 'Other iPhone browsers can’t add web apps to the Home Screen.'], ['Tap the Share button', 'The square with an arrow, at the bottom of the screen.'], ['Choose “Add to Home Screen”', 'Then tap Add. Vdex opens full-screen like any other app, and works offline once set up (a licence is checked online at least once every 90 days).']]
     : [['Chrome, Edge or Samsung Internet', 'On Android: menu ⋮ → “Install app” or “Add to Home screen”. On a computer: the install icon at the right of the address bar, or menu → “Install Vdex”.'], ['Firefox', 'Firefox doesn’t install web apps; keep using it in a tab, or bookmark the page.'], ['Same data everywhere', 'Link a cloud storage under Storage, sync & backups, in the menu ☰, and the installed app, your phone and your browser all share one database.']];
   sheet('Install Vdex', h('div', { class: 'stack' },
     // On an iPhone or iPad the Home Screen app does not share Safari's storage: it starts as a copy of its own.

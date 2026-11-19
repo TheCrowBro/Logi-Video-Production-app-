@@ -38,6 +38,7 @@ export const insurance = {
       h('div', { class: 'page-head' }, h('h1', null, 'Insurance'), h('button', { class: 'btn primary', onclick: () => edit() }, '+ Add')),
       db.insurance.length > 0 && h('div', { class: 'stats' }, stat(db.insurance.length, 'policies'), stat(money(annual, sym), 'premiums / yr'), stat(money(gearValue, sym), 'kit value logged')),
       gearValue > 0 && db.insurance.length > 0 && eqCover < gearValue && h('div', { class: 'warn' }, `⚠ Active equipment cover (${money(eqCover, sym)}) is below the value of logged kit (${money(gearValue, sym)}).`),
+      db.insurance.length > 0 && h('p', { class: 'small muted' }, 'Vdex only compares the figures you entered. It cannot tell whether a loss would be paid: your policy and your insurer decide that.'),
       list.length
         ? h('div', { class: 'list' }, list.map(p => card(p, sym)))
         : empty('Keep policy numbers, claims lines and renewal dates in one place — handy when a client or venue asks for your certificate.', h('button', { class: 'btn primary', onclick: () => edit() }, 'Add a policy'))));

@@ -373,7 +373,7 @@ const bridge = () => {
     const p9 = await c9.newPage(); const popups = []; c9.on('page', pg => popups.push(pg.url()));
     await p9.goto(URL + 'index.html?src=ios'); await p9.waitForSelector('.terms-gate');
     const gateText = await p9.locator('.terms-gate').innerText();
-    ok('the iPhone app’s first screen states the trial in full: 30 days, then read-only until the in-app purchase or a sign-in, and what needs the licence from the start', /free to try for 30 days\. After that it becomes read-only until you buy the Vdex Licence in the app, a one-off purchase whose price the App Store shows before you buy, or sign in with a licence you already have\. Cloud storage, backup files and spreadsheets need the licence from the start\./.test(gateText), gateText.slice(0, 300));
+    ok('the iPhone app’s first screen states the trial in full: 30 days, then read-only until a licence, what needs the licence from the start, and that the licence is the in-app purchase or a sign-in', /free to try for 30 days, then is read-only until you have a licence\. Backup files, spreadsheets and cloud storage need the licence from the start\. In this app the licence is the Vdex Licence, a one-off purchase whose price the App Store shows before you buy; or sign in with a licence you already have\./.test(gateText), gateText.slice(0, 300));
     await Promise.all([p9.waitForURL(/terms\.html/, { timeout: 8000 }).catch(() => {}), p9.locator('.terms-gate a[href="terms.html"]').first().click()]);
     ok('…and the terms open inside the app, not in Safari, with the way back to Vdex', /\/terms\.html$/.test(p9.url()) && popups.length === 0 && (await p9.locator('a.back').count()) === 1, p9.url() + ' popups ' + popups.length);
     await c9.close();
