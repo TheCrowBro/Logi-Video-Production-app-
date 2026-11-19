@@ -3,7 +3,8 @@
 //
 //   /buy                       goes to the Stripe payment page for the 20 USD desktop licence
 //   /licence/thanks            where Stripe sends a buyer after paying: shows their licence code
-//   /licence/stripe-webhook    Stripe tells us about payments (email the code), refunds and disputes (cancel it)
+//   /licence/stripe-webhook    Stripe tells us about payments (email the code), refunds and disputes (cancel it), and
+//                              disputes closed in the seller's favour (bring back what the dispute cancelled)
 //   /licence/activate          a desktop app puts its computer on a code's list (at most 3 computers per code)
 //   /licence/release           a desktop app takes its computer off the list
 //   /licence/admin             the owner's generator page: look at, clear, cancel or restore a code (signed requests)
@@ -16,6 +17,8 @@
 //   /licence/apple/email, …/email/verify   an App Store buyer adds an email address (a 6-digit code to it), for the website, Android and the desktop code
 //   /licence/apple/code        the desktop code of an App Store licence, for the person's computer
 //   /licence/web/forget        Delete my licence records: the sign-in's email links or purchase link, and the devices list
+//   /licence/owner/forget      the same for an email address the owner names (a request by email), with FORGET_SECRET;
+//                              the address does not exist until that secret is set
 //   /licence/price             the price with tax in the country the request comes from (js/tax.js: the UK, the EU and
 //                              Australia), for the Buy buttons on the website and in the desktop app
 //
@@ -31,6 +34,9 @@
 //   RESEND_API_KEY         Resend, to email codes (optional: without it the code is only shown after paying)
 //   MAIL_FROM, REPLY_TO    the email's sender (default "Vdex <licences@vdex.crowmade.app>") and where replies go
 //   WEB_SIGN_IN            "on" makes the website and the Google Play app ask for a licence after their 30-day trial
+//   REVIEW_EMAIL, REVIEW_CODE  the store reviewers' sign-in: an address that signs in with a fixed 6-digit code and is
+//                          never emailed one (both must be set, or there is no such address)
+//   FORGET_SECRET          20 characters or more: lets the owner's generator page delete what is held for an email address
 import codes from '../desktop/licence-codes.js';
 import { verifyAppleJws } from './apple-jws.mjs';
 import { PRICE, withTax } from '../js/tax.js';
@@ -45,6 +51,10 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 const hex = buf => [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
 const sha256 = async text => new Uint8Array(await crypto.subtle.digest('SHA-256', enc.encode(text)));
 const today = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+// Comparing secrets: every character is looked at, so the time taken does not say where two values first differ.
+// sameSecret compares digests, so it does not say how long either value is.
+const same = (a, b) => { let d = a.length ^ b.length; for (let i = 0; i < Math.min(a.length, b.length); i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; };
+const sameSecret = async (a, b) => same(hex(await sha256('vdex-same|' + a)), hex(await sha256('vdex-same|' + b)));
 
 /* -------------------------------- responses -------------------------------- */
 const API_HEADERS = { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
@@ -134,7 +144,6 @@ async function stripeEvent(request, env) {
   if (!t || !sigs.length || !env.STRIPE_WEBHOOK_SECRET || Math.abs(Date.now() / 1000 - Number(t)) > 300) return null;
   const key = await crypto.subtle.importKey('raw', enc.encode(env.STRIPE_WEBHOOK_SECRET), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
   const want = hex(await crypto.subtle.sign('HMAC', key, enc.encode(`${t}.${raw}`)));
-  const same = (a, b) => { let d = a.length ^ b.length; for (let i = 0; i < Math.min(a.length, b.length); i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; };
   if (!sigs.some(s => same(s, want))) return null;
   try { return JSON.parse(raw); } catch { return null; }
 }
@@ -151,16 +160,28 @@ async function webhook(request, env) {
     if (env.RESEND_API_KEY && r.email && !(await sendCode(env, r, await webReady(env)))) return json(502, { error: 'email-failed' });
     return json(200, { ok: true, ref: r.ref });
   }
-  // A full refund or a dispute cancels the code bought with that payment. A partial refund keeps it.
-  if ((ev.type === 'charge.refunded' && o.refunded) || ev.type === 'charge.dispute.created') {
+  // A full refund or a dispute cancels the code bought with that payment. A partial refund keeps it. A dispute closed
+  // in the seller's favour (won, or an inquiry the bank dropped) brings back what that dispute cancelled and nothing
+  // else: a code refunded, or cancelled by the owner, before or since stays cancelled.
+  const refunded = ev.type === 'charge.refunded' && !!o.refunded, disputed = ev.type === 'charge.dispute.created';
+  const settled = ev.type === 'charge.dispute.closed' && ['won', 'warning_closed'].includes(o.status);
+  if (refunded || disputed || settled) {
     const pi = typeof o.payment_intent === 'string' ? o.payment_intent : o.payment_intent && o.payment_intent.id;
     if (!pi || !/^pi_[A-Za-z0-9]{6,250}$/.test(pi)) return json(200, { ignored: 'no-payment' });
+    const dispute = refunded || !/^d[pu]_[A-Za-z0-9]{6,250}$/.test(String(o.id)) ? '' : o.id; // which dispute, so another one's end changes nothing
+    if (settled && !dispute) return json(200, { ignored: 'no-dispute' });
     const list = await stripeGet(env, `checkout/sessions?payment_intent=${encodeURIComponent(pi)}&limit=5`);
     if (!list) return json(502, { error: 'stripe' });
-    const why = ev.type === 'charge.refunded' ? 'refund' : 'dispute';
     let n = 0;
-    for (const s of list.data || []) if (paymentLinks(env).includes(s.payment_link)) { await env.LICENCES.put('x:' + (await refForSession(s.id)).ref, JSON.stringify({ why, at: Date.now() })); n++; }
-    return json(200, { ok: true, cancelled: n });
+    for (const s of list.data || []) {
+      if (!paymentLinks(env).includes(s.payment_link)) continue;
+      const key = 'x:' + (await refForSession(s.id)).ref, was = await env.LICENCES.get(key, 'json'); // a failed read is a 500: Stripe sends the event again
+      // A cancellation written before disputes were told apart names none: the end of a dispute on its payment undoes it.
+      if (settled) { if (was && was.why === 'dispute' && (!was.dispute || was.dispute === dispute)) { await env.LICENCES.delete(key); n++; } continue; }
+      if (disputed && was && was.why !== 'dispute') continue; // cancelled for another reason already: that reason stands
+      await env.LICENCES.put(key, JSON.stringify({ why: refunded ? 'refund' : 'dispute', at: Date.now(), ...(dispute ? { dispute } : {}) })); n++;
+    }
+    return json(200, settled ? { ok: true, restored: n } : { ok: true, cancelled: n });
   }
   return json(200, { ignored: ev.type });
 }
@@ -298,15 +319,37 @@ async function webForget(request, env) {
   const b = await readJson(request), v = b && (await webToken(env, b.token));
   if (!v) return json(401, { error: 'signed-out' });
   if (!env.LICENCES) return json(503, { error: 'not-ready' });
-  const ikey = identityKey(v), rec = (await env.LICENCES.get(ikey, 'json')) || {};
+  // One exception: the store reviewers' address keeps its link to its licence. A reviewer who tries this button (Apple's
+  // do) is signed out and its devices are taken off like anyone's, but the next reviewer can still sign in: nobody at
+  // the store has the licence code that would make the link afresh. The owner's own operation below does remove it.
+  await forgetRecords(env, identityKey(v), v, { keepLink: !!v.email && isReview(env, v.email) });
+  return json(200, { ok: true });
+}
+// What Delete removes, for the identity under ikey (e:<email> or a:<purchase>); v names the email and licence of the
+// sign-in that asked, when there is one. Answers with how many licences and devices it found.
+async function forgetRecords(env, ikey, v = {}, { keepLink = false } = {}) {
+  const rec = (await env.LICENCES.get(ikey, 'json')) || {};
   const list = Array.isArray(rec.licences) ? rec.licences : [];
   const emails = new Set([v.email, ...list.map(l => l.email)].map(cleanEmail).filter(Boolean));
   const refs = new Set([String(v.ref), ...list.map(l => String(l.ref))].filter(r => /^\d{1,3}:\d{1,10}$/.test(r)));
-  for (const ref of refs) { const s = await seats(env, ref); await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: [], swaps: s.swaps })); }
-  for (const e of emails) { await env.LICENCES.delete('e:' + e); await env.LICENCES.delete('w:' + e); }
-  await env.LICENCES.delete(ikey);
+  let devices = 0;
+  for (const ref of refs) { const s = await seats(env, ref); devices += s.computers.length; await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: [], swaps: s.swaps })); }
+  for (const e of emails) { if (!keepLink) await env.LICENCES.delete('e:' + e); await env.LICENCES.delete('w:' + e); }
+  if (!keepLink) await env.LICENCES.delete(ikey);
   await env.LICENCES.put(await forgotKey(ikey), JSON.stringify({ at: Date.now() }), { expirationTtl: 400 * 86400 });
-  return json(200, { ok: true });
+  return { licences: refs.size, devices };
+}
+// The same for an email address the owner names: someone who asks by email, or has no device left to press Delete on
+// (docs/selling-desktop.md, part 8). The generator page sends the address with FORGET_SECRET, which the owner sets in
+// the dashboard (20 characters or more; without it this address answers like any that does not exist). The secret is
+// checked before the email address is even read, so without it nothing here says whether an address is known.
+const forgetSecret = env => { const s = String(env.FORGET_SECRET || '').trim(); return s.length >= 20 ? s : ''; };
+async function ownerForget(request, env) {
+  const b = await readJson(request), secret = forgetSecret(env);
+  if (!secret || !b || typeof b.secret !== 'string' || !(await sameSecret(b.secret.trim(), secret))) return json(403, { error: 'refused' }, CORS);
+  const email = cleanEmail(b.email); if (!email) return json(400, { error: 'invalid-email' }, CORS);
+  if (!env.LICENCES) return json(503, { error: 'not-ready' }, CORS);
+  return json(200, { ok: true, ...(await forgetRecords(env, 'e:' + email, { email })) }, CORS);
 }
 async function webStart(request, env) {
   if (!(await webReady(env))) return json(503, { error: 'not-ready' });
@@ -336,6 +379,9 @@ async function webStart(request, env) {
 async function sendCodeTo(env, email, usedToday) {
   const key = 'w:' + email, now = Date.now();
   const rec = (await env.LICENCES.get(key, 'json').catch(() => null)) || {};
+  // The store reviewers' address is never emailed a code, and nothing is stored for it. It is answered like any address
+  // with a licence, after about the time an email takes to hand over, so the wait does not tell it apart either.
+  if (isReview(env, email)) { await new Promise(r => setTimeout(r, 250 + (crypto.getRandomValues(new Uint16Array(1))[0] % 350))); return 'limited'; }
   const sent = (Array.isArray(rec.sent) ? rec.sent : []).filter(t => now - t < 86400e3);
   const lastHour = sent.filter(t => now - t < 3600e3).length, sameDay = sent.filter(t => today(t) === today(now)).length;
   if (!(lastHour < CODES_PER_HOUR && sameDay < CODES_PER_DAY)) return 'limited';
@@ -358,11 +404,61 @@ async function checkCode(env, email, code) {
   await env.LICENCES.put(key, JSON.stringify({ sent: rec.sent || [] }), { expirationTtl: 86400 });
   return true;
 }
+// The store reviewers' sign-in. Google's and Apple's reviewers cannot read a mailbox of ours, so one address
+// (REVIEW_EMAIL) signs in with a code that does not change (REVIEW_CODE, 6 digits): asking for a code for it sends no
+// email, stores nothing and is answered like any other address, and the fixed code then signs in. The address needs a
+// licence like any other (the owner makes it a free one with an end date). With either setting missing, or a code that
+// is not 6 digits, there is no such address.
+// A code that never changes could be found by trying, and the address may be easy to guess, so wrong tries are counted
+// by the UTC day twice over:
+//   - for each requester (an IPv4 address, or an IPv6 /64 block, which one home or server is given whole): after
+//     REVIEW_TRIES wrong tries that requester is refused until the next day, the right code included. So one stranger
+//     cannot use up the day's tries and lock the reviewers out;
+//   - for everyone together: after REVIEW_TRIES_ALL wrong tries the address is refused for everyone until the next day.
+//     That is what keeps guessing impractical however many addresses someone tries from: one code in a million at 20
+//     tries a day takes 25,000 days, about 68 years, on average to find (and the owner changes it after each review);
+//     and it is no more than an ordinary address allows (4 sign-in codes a day, 5 tries each).
+// A refused try gets the same answer as a wrong code. Both counts are kept in memory before anything is awaited, so tries
+// that arrive together are counted before any is answered, and in storage, so they outlive this copy of the script.
+// The requester is stored only as a tag scrambled with the shop key and the day, for two days.
+const REVIEW_TRIES = 5, REVIEW_TRIES_ALL = 20;
+function review(env) {
+  const email = cleanEmail(env.REVIEW_EMAIL), code = String(env.REVIEW_CODE || '').trim();
+  return email && /^\d{6}$/.test(code) ? { email, code } : null;
+}
+const isReview = (env, email) => { const r = review(env); return !!r && r.email === email; };
+// Who is asking: Cloudflare puts the visitor's address in CF-Connecting-IP (a visitor cannot set it). An IPv6 address
+// counts by its first 64 bits.
+function requesterOf(request) {
+  const ip = String(request.headers.get('CF-Connecting-IP') || '').trim().toLowerCase().slice(0, 64);
+  if (!ip.includes(':')) return ip || '?';
+  if (ip.includes('.')) return ip.slice(ip.lastIndexOf(':') + 1); // an IPv4 address written the IPv6 way (::ffff:1.2.3.4)
+  const [a, b] = ip.split('::'), head = a ? a.split(':') : [], tail = b ? b.split(':') : [];
+  const groups = b === undefined ? head : [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail];
+  return groups.slice(0, 4).map(g => (parseInt(g, 16) || 0).toString(16)).join(':') + '::/64';
+}
+const reviewTag = async (env, day, who) => hex(await sha256(`vdex-review|${String(env.LICENCE_SHOP_KEY || '')}|${day}|${who}`)).slice(0, 24);
+let reviewTries = { day: '', all: 0, by: new Map() };
+async function checkReview(env, code, who) {
+  const right = same(code, review(env).code), day = today();
+  if (reviewTries.day !== day) reviewTries = { day, all: 0, by: new Map() };
+  const t = reviewTries;
+  if (t.all >= REVIEW_TRIES_ALL || (t.by.get(who) || 0) >= REVIEW_TRIES) return false; // refused, whatever the code
+  if (!right) { t.all++; t.by.set(who, (t.by.get(who) || 0) + 1); }
+  const allKey = 'rv:' + day, myKey = allKey + ':' + (await reviewTag(env, day, who));
+  const [all, mine] = (await Promise.all([env.LICENCES.get(allKey), env.LICENCES.get(myKey)])).map(v => Number(v) || 0); // a storage error becomes a 500, never a sign-in
+  if (all >= REVIEW_TRIES_ALL || mine >= REVIEW_TRIES) { t.all = Math.max(t.all, all); t.by.set(who, Math.max(t.by.get(who) || 0, mine)); return false; }
+  if (right) return true;
+  const keep = { expirationTtl: 2 * 86400 };
+  await Promise.all([env.LICENCES.put(allKey, String(Math.max(all + 1, t.all)), keep), env.LICENCES.put(myKey, String(Math.max(mine + 1, t.by.get(who))), keep)])
+    .catch(e => console.error('Could not store a wrong try for the review address: ' + e.message)); // it stays counted here
+  return false;
+}
 async function webVerify(request, env) {
   if (!(await webReady(env))) return json(503, { error: 'not-ready' });
   const b = await readJson(request), email = cleanEmail(b && b.email), code = String((b && b.code) || '').replace(/\D/g, '');
   if (!email || code.length !== 6) return json(400, { error: 'invalid' });
-  if (!(await checkCode(env, email, code))) return json(400, { error: 'wrong-code' });
+  if (!(isReview(env, email) ? await checkReview(env, code, requesterOf(request)) : await checkCode(env, email, code))) return json(400, { error: 'wrong-code' });
   const list = await licencesFor(env, email); if (!list.length) return json(403, { error: 'no-licence' });
   const token = await codes.signNote('web', await shopKey(env), SHOP_KID, { email, ref: list[0].ref, iat: Date.now() });
   return json(200, { ok: true, token, licence: shownLicence(list[0], email) });
@@ -589,6 +685,7 @@ export default {
       if (p === '/licence/web/activate' && m === 'POST') return await webActivate(request, env);
       if (p === '/licence/web/release' && m === 'POST') return await webRelease(request, env);
       if (p === '/licence/web/forget' && m === 'POST') return await webForget(request, env);
+      if (p === '/licence/owner/forget' && forgetSecret(env)) return m === 'OPTIONS' ? new Response(null, { status: 204, headers: CORS }) : m === 'POST' ? await ownerForget(request, env) : json(405, { error: 'method' }, CORS);
       if (p === '/licence/apple/status' && m === 'GET') return json(200, { on: await appleReady(env), product: APPLE_PRODUCT }, { 'Cache-Control': 'public, max-age=300' });
       if (p === '/licence/apple/claim' && m === 'POST') return await appleClaim(request, env);
       if (p === '/licence/apple/notify' && m === 'POST') return await appleNotify(request, env);

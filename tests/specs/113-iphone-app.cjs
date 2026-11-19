@@ -174,6 +174,7 @@ const bridge = () => {
     ok('Restore purchases asks the App Store again and brings an owned purchase back as the licence', (await calls(page, 'Purchases', 'restore')).length >= 1 && /Licensed through the App Store/.test(await panel(page)) && /Your purchase is back/.test(await toastText(page)));
     await btn(page, 'Delete my licence records').click(); await page.waitForSelector('.sheet');
     ok('Delete my licence records says what goes and what stays before anything is deleted', /the link between your licence and your App Store purchase/.test(await page.locator('.sheet').innerText()) && /Your licence itself is not cancelled/.test(await page.locator('.sheet').innerText()) && !lastHit('/licence/web/forget'));
+    ok('…and that a computer which still has the licence code puts itself back unless it is released first', /your other devices are signed out at their next check\. A computer that still has your licence code puts itself back at its next weekly check: use Release this computer there first\./.test(await page.locator('.sheet').innerText()));
     await page.locator('.sheet').getByRole('button', { name: 'Delete my records' }).click(); await sleep(500);
     ok('…and deleting signs this phone out, with the purchase offered again', (() => { const f = lastHit('/licence/web/forget'); return f && f.body.token === 'tok-apple'; })() && /Free trial/.test(await panel(page)) && /Restore purchases/.test(await panel(page)) && (await stored(page)).signedOut === true);
     await btn(page, 'Restore purchases').click(); await sleep(600);

@@ -4,6 +4,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 const { chromium } = require('playwright');
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 const ROOT = process.env.VDEX_ROOT || path.resolve(__dirname, '../..');
@@ -150,6 +151,103 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     pc6.c.t += 23 * 3600e3; s = await pc6.lic.recheck();
     ok('it activates by itself once the server answers', s.mode === 'licensed' && s.licence.comp);
 
+    // The 14 days are given once for each code on a computer. The ways round it that were tried: removing the code and
+    // entering it again, keeping the licence server out of reach, winding the clock back, deleting licence.json.
+    const wbox = { v: null }, wmirror = { get: () => wbox.v, set: v => { wbox.v = v; } }, wdir = dirOf();
+    const wcode = await codes.signCode(ownerKey, 1, { name: 'Wendy Waits', comp: true, issued: '2026-11-02', serial: 901 });
+    const wcode2 = await codes.signCode(ownerKey, 1, { name: 'Wendy Waits', comp: true, issued: '2026-11-02', serial: 902 });
+    const w = make({ dir: wdir, mirror: wmirror }); await w.lic.state(); w.c.t = T0 + 40 * DAY; server.mode = 'down';
+    s = await w.lic.enter(wcode);
+    ok('(a code entered with the server out of reach waits: 14 days of editing, the trial being over)', s.mode === 'pending' && s.daysLeft === 14 && s.canEdit && s.trialLeft === 0);
+    w.c.t += 5 * DAY; s = await w.lic.release();
+    ok('a waiting code can be removed without the internet', s.mode === 'ended' && !(await w.lic.code()));
+    s = await w.lic.enter(wcode);
+    ok('removing the code and entering it again does not start a new 14 days: 9 are left', s.mode === 'pending' && s.daysLeft === 9 && s.canEdit, `${s.daysLeft} days`);
+    w.c.t += 10 * DAY; await w.lic.release(); s = await w.lic.enter(wcode);
+    ok('entered again after its 14 days, it is read-only at once (the trial being over)', s.mode === 'pending' && s.daysLeft === 0 && s.canEdit === false);
+    for (let k = 0; k < 3; k++) { w.c.t += 3600e3; await w.lic.release(); s = await w.lic.enter(wcode); }
+    ok('…however often that is repeated', s.mode === 'pending' && s.daysLeft === 0 && s.canEdit === false);
+    w.c.t = T0 + 41 * DAY; s = await w.lic.state(); const back1 = s; await w.lic.release(); s = await w.lic.enter(wcode);
+    ok('winding the clock back to the day after it was first entered gains no days', back1.daysLeft === 0 && back1.canEdit === false && s.daysLeft === 0 && s.canEdit === false);
+    w.c.t = T0 + 56 * DAY; s = await w.lic.enter(wcode2);
+    ok('another code has its own 14 days', s.mode === 'pending' && s.licence.ref === '1:902' && s.daysLeft === 14 && s.canEdit);
+    s = await w.lic.enter(wcode);
+    ok('…and going back to the first code finds its wait used up', s.licence.ref === '1:901' && s.daysLeft === 0 && s.canEdit === false);
+    fs.rmSync(path.join(wdir, 'licence.json'));
+    const w2 = createLicence({ dir: wdir, keys: KEYS, now: () => T0 + 57 * DAY, post: (u, b) => server.post(u, b), mirror: wmirror, site: 'http://licence.test' });
+    await w2.state(); s = await w2.enter(wcode);
+    const s902 = await w2.enter(wcode2);
+    ok('deleting licence.json gives neither code a new wait (their starts are kept in the copy beside the trial\'s)', s.mode === 'pending' && s.daysLeft === 0 && s.canEdit === false && s902.daysLeft === 13 && wbox.v.waits['1:901'] === T0 + 40 * DAY, JSON.stringify(wbox.v));
+    const edited = JSON.parse(fs.readFileSync(path.join(wdir, 'licence.json'), 'utf8')); delete edited.waits; delete edited.code; delete edited.act;
+    fs.writeFileSync(path.join(wdir, 'licence.json'), JSON.stringify(edited));
+    s = await w2.enter(wcode);
+    ok('editing licence.json to take the waits out gives no new wait either (the copy beside it still has them)', s.mode === 'pending' && s.licence.ref === '1:901' && s.daysLeft === 0 && s.canEdit === false && JSON.parse(fs.readFileSync(path.join(wdir, 'licence.json'), 'utf8')).waits['1:901'] === T0 + 40 * DAY);
+    s = await w2.enter(wcode2);
+    ok('…for any of its codes', s.licence.ref === '1:902' && s.daysLeft === 13);
+    ok('…and nothing about the waits is sent to the licence server', server.calls.every(c => Object.keys(c.body).every(k => ['code', 'install', 'os', 'release'].includes(k))));
+    calls = server.calls.length; w.c.t = T0 + 90 * DAY;
+    for (let h = 0; h < 30; h++) { w.c.t += 3600e3; s = await w.lic.recheck(); }
+    ok('with the server kept out of reach it keeps trying, and the code never comes to count as activated', s.mode === 'pending' && s.canEdit === false && server.calls.length >= calls + 10, `${server.calls.length - calls} tries`);
+    server.mode = 'ok'; s = await w.lic.recheck(true);
+    ok('once the server is reached, the code is activated', s.mode === 'licensed' && s.canEdit && s.licence.ref === '1:902');
+    await w.lic.release(); server.mode = 'down'; s = await w.lic.enter(wcode2);
+    ok('…and a wait that was used stays used after that too', s.mode === 'pending' && s.licence.ref === '1:902' && s.daysLeft === 0 && s.canEdit === false);
+    server.mode = 'ok';
+    // A code that activated at once never waited: its 14 days are still there for a day without internet.
+    const n1 = make(); await n1.lic.state(); n1.c.t = T0 + 40 * DAY;
+    const ncode = await codes.signCode(ownerKey, 1, { name: 'Nell Never', comp: true, issued: '2026-11-02', serial: 903 });
+    s = await n1.lic.enter(ncode); await n1.lic.release(); n1.c.t += 60 * DAY; server.mode = 'down'; s = await n1.lic.enter(ncode);
+    ok('a code that was activated at once and released has its 14 days when it is next entered without the internet', s.mode === 'pending' && s.daysLeft === 14 && s.canEdit);
+    server.mode = 'ok';
+    // licence.json as the version before this one wrote it: one `enteredAt` for the code in hand.
+    const odir = dirOf(); fs.mkdirSync(odir, { recursive: true });
+    const ocode = await codes.signCode(ownerKey, 1, { name: 'Olive Older', comp: true, issued: '2026-11-02', serial: 904 });
+    fs.writeFileSync(path.join(odir, 'licence.json'), JSON.stringify({ install: 'older-install-id-00000', first: T0, founder: false, seen: T0 + 36 * DAY, code: ocode, enteredAt: T0 + 31 * DAY, act: { tried: T0 + 36 * DAY, answered: false } }));
+    const o = make({ dir: odir, t: T0 + 37 * DAY }); server.mode = 'down';
+    s = await o.lic.state(); const o1 = s; await o.lic.release(); s = await o.lic.enter(ocode);
+    ok('a wait begun under the version before carries on, and removing the code does not restart it', o1.mode === 'pending' && o1.daysLeft === 8 && s.daysLeft === 8 && !('enteredAt' in JSON.parse(fs.readFileSync(o.lic.file, 'utf8'))), `${o1.daysLeft}, ${s.daysLeft}`);
+    server.mode = 'ok';
+
+    // When a licence stops covering this computer, the page is told when the computer learned of it (lapsedAt).
+    const lp = make(); await lp.lic.state(); lp.c.t = T0 + 40 * DAY;
+    const lcode = await codes.signCode(shopKey, 2, { name: 'Lee Lapsed', email: 'lee@example.com', serial: 5555, issued: '2026-11-02' });
+    s = await lp.lic.enter(lcode);
+    ok('(a licensed computer carries no such time)', s.mode === 'licensed' && !('lapsedAt' in s));
+    server.cancelled.add('2:5555'); lp.c.t += 8 * DAY; s = await lp.lic.recheck(); const learned = lp.c.t;
+    ok('a code cancelled under a computer it was activated on: the state says when this computer learned of it', s.mode === 'cancelled' && s.lapsedAt === learned);
+    lp.c.t += 3 * DAY; s = await lp.lic.recheck();
+    ok('…and later checks do not move that time', s.mode === 'cancelled' && s.lapsedAt === learned);
+    server.cancelled.delete('2:5555'); server.lists.set('2:5555', ['other-a', 'other-b', 'other-c']); lp.c.t += 2 * DAY; s = await lp.lic.recheck();
+    ok('a computer whose place was moved reports "released", with the time it first learned the licence no longer covered it', s.mode === 'released' && s.lapsedAt === learned && s.canEdit === false);
+    server.lists.set('2:5555', ['other-a']); lp.c.t += 2 * DAY; s = await lp.lic.recheck();
+    ok('back on the licence, the time is gone', s.mode === 'licensed' && !('lapsedAt' in s));
+    server.lists.set('2:5555', ['other-a', 'other-b', 'other-c']); lp.c.t += 8 * DAY; s = await lp.lic.recheck();
+    ok('moved off again later, it is the new time', s.mode === 'released' && s.lapsedAt === lp.c.t);
+    const movedAt = lp.c.t;
+    server.mode = 'down'; s = await lp.lic.enter(lcode);
+    ok('a moved computer that enters its code again without the internet is still "released", not waiting', s.mode === 'released' && s.canEdit === false && !('daysLeft' in s) && s.lapsedAt === movedAt);
+    server.mode = 'ok'; lp.c.t += DAY; s = await lp.lic.release();
+    ok('"Remove the code" does not forget when the licence stopped covering this computer', s.mode === 'ended' && !(await lp.lic.code()) && s.lapsedAt === movedAt);
+    server.mode = 'down'; s = await lp.lic.enter(lcode); server.mode = 'ok';
+    ok('…nor does entering the code again without the internet (it waits, and counts as no licence)', s.mode === 'pending' && s.lapsedAt === movedAt);
+    server.lists.set('2:5555', []); s = await lp.lic.recheck(true);
+    ok('…until a code is activated here again', s.mode === 'licensed' && !('lapsedAt' in s));
+    lp.c.t += DAY; s = await lp.lic.release();
+    ok('a computer its owner releases while it is licensed has no such time: nothing ended', s.mode === 'ended' && !('lapsedAt' in s));
+    const lbox = { v: null }, lmirror = { get: () => lbox.v, set: v => { lbox.v = v; } }, ldir = dirOf();
+    const lq = make({ dir: ldir, mirror: lmirror }); await lq.lic.state(); lq.c.t = T0 + 40 * DAY;
+    const qcode = await codes.signCode(shopKey, 2, { name: 'Quinn Quits', email: 'quinn@example.com', serial: 5556, issued: '2026-11-02' });
+    await lq.lic.enter(qcode); server.cancelled.add('2:5556'); lq.c.t += 8 * DAY; s = await lq.lic.recheck(); const qAt = lq.c.t;
+    fs.rmSync(path.join(ldir, 'licence.json'));
+    const lq2 = createLicence({ dir: ldir, keys: KEYS, now: () => qAt + DAY, post: (u, b) => server.post(u, b), mirror: lmirror, site: 'http://licence.test' });
+    const qs = await lq2.state();
+    ok('deleting licence.json does not lose the day a licence stopped covering this computer', s.lapsedAt === qAt && qs.mode === 'ended' && qs.lapsedAt === qAt, `${qs.mode} ${qs.lapsedAt}`);
+    server.cancelled.delete('2:5556');
+    const nv = make(); await nv.lic.state(); nv.c.t = T0 + 40 * DAY; server.mode = 'down';
+    const vcode = await codes.signCode(ownerKey, 1, { name: 'Vic Never', serial: 905, issued: '2026-11-02' });
+    await nv.lic.enter(vcode); server.mode = 'ok'; server.cancelled.add('1:905'); nv.c.t += 2 * 3600e3; s = await nv.lic.recheck();
+    ok('a cancelled code that was never activated here has no such time (nothing ever covered this computer)', s.mode === 'cancelled' && !('lapsedAt' in s));
+
     // A free code with an end date is not checked online once it has ended.
     const pc7 = make(); await pc7.lic.state();
     const short = await codes.signCode(ownerKey, 1, { name: 'Short Term', comp: true, issued: '2026-11-02', expires: '2026-11-10' });
@@ -158,6 +256,8 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     for (let h = 0; h < 48; h++) { pc7.c.t += 3600e3; await pc7.lic.recheck(); }
     s = await pc7.lic.state();
     ok('once it has ended, Vdex stops contacting the server for it', s.mode === 'expired' && server.calls.length === calls, `${server.calls.length - calls} calls`);
+    const firstSeen = Date.parse('2026-11-20T11:00:00Z'); pc7.c.t += 5 * DAY; const s7 = await pc7.lic.state();
+    ok('a licence past its end date says when this computer first saw that, and keeps saying the same', s.lapsedAt === firstSeen && s7.mode === 'expired' && s7.lapsedAt === firstSeen, `${s.lapsedAt} ${s7.lapsedAt}`);
 
     // Deleting licence.json: the desktop app keeps a copy of the trial start in its own window-state file.
     const box = { v: null }, mirror = { get: () => box.v, set: v => { box.v = v; } };
@@ -195,7 +295,13 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     const errors = []; page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     const requests = []; page.on('request', q => { if (!q.url().startsWith('file:') && !q.url().startsWith('blob:') && !q.url().startsWith('data:')) requests.push(q.url()); });
     const linked = []; // the shop is never really contacted from a test: its answers are made up here
-    await page.route('https://vdex.crowmade.app/**', async r => { const body = r.request().postData(); if (r.request().method() === 'POST') linked.push(JSON.parse(body)); await r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ ok: true, ref: '1:1', computers: [], swaps: 0, cancelled: null }) }); });
+    const forgets = [], forgetAnswer = { status: 200, body: { ok: true, licences: 2, devices: 3 } }; // what the page asks the server to delete, and the server's (made-up) answer
+    await page.route('https://vdex.crowmade.app/**', async r => {
+      const body = r.request().postData(), post = r.request().method() === 'POST';
+      if (new URL(r.request().url()).pathname === '/licence/owner/forget') { if (post) forgets.push(JSON.parse(body)); return r.fulfill({ status: post ? forgetAnswer.status : 204, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' }, body: post ? JSON.stringify(forgetAnswer.body) : '' }); }
+      if (post) linked.push(JSON.parse(body));
+      await r.fulfill({ status: 200, contentType: 'application/json', headers: { 'Access-Control-Allow-Origin': '*' }, body: JSON.stringify({ ok: true, ref: '1:1', computers: [], swaps: 0, cancelled: null }) });
+    });
     const genFile = path.join(os.tmpdir(), 'vdex-generator-' + process.pid + '.html'); fs.writeFileSync(genFile, built);
     await page.goto('file://' + genFile);
     ok('the page opens from a file with no errors and says the browser can sign', (await page.locator('#support').isHidden()) && !errors.length, errors.join(' | '));
@@ -229,6 +335,25 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     await page.waitForTimeout(500);
     const linkNote = linked[0] && (await codes.readNote('admin', linked[0], { keys: genKeys, signers: codes.OWNER_KIDS }));
     ok('making keys and codes contacts nothing except, for a code with an email, one signed request to link it for website sign-in', requests.every(u => u === 'https://vdex.crowmade.app/licence/admin') && linked.length === 1 && linkNote && linkNote.op === "link" && linkNote.code === made && linkNote.ref === mr.licence.ref, requests.join(', '));
+    // Deleting what the licence server holds for an email address: the address and the deletion secret, to one address.
+    const made1 = crypto.randomBytes(18).toString('base64url'), asked = []; // a made-up secret for this run
+    page.on('dialog', d => { asked.push(d.message()); d.accept(); });
+    await page.fill('#forgetemail', 'gone@example.com'); await page.fill('#forgetsecret', 'too-short'); await page.click('#forgetgo');
+    ok('a deletion secret that is too short to be one is not sent anywhere', /20 characters or more/.test(await page.textContent('#msg')) && forgets.length === 0 && !asked.length);
+    await page.fill('#forgetemail', 'not an address'); await page.fill('#forgetsecret', made1); await page.click('#forgetgo');
+    ok('…nor is something that is not an email address', /does not look right/.test(await page.textContent('#msg')) && forgets.length === 0);
+    await page.fill('#forgetemail', ' gone@example.com '); await page.click('#forgetgo');
+    await page.waitForFunction(() => document.getElementById('forgetout').textContent !== '', null, { timeout: 10000 }).catch(() => {});
+    ok('the page asks first, then sends the address and the secret to the licence server and says what was deleted', asked.length === 1 && /gone@example\.com/.test(asked[0]) && forgets.length === 1 && JSON.stringify(forgets[0]) === JSON.stringify({ email: 'gone@example.com', secret: made1 }) && /gone@example\.com: deleted\. It was linked to 2 licences, with 3 devices listed\./.test(await page.textContent('#forgetout')) && requests.at(-1) === 'https://vdex.crowmade.app/licence/owner/forget', await page.textContent('#forgetout'));
+    ok('…and does not keep the secret in the page', (await page.inputValue('#forgetsecret')) === '' && !(await page.content()).includes(made1));
+    forgetAnswer.status = 403; forgetAnswer.body = { error: 'refused' };
+    await page.fill('#forgetsecret', made1 + 'x'); await page.click('#forgetgo');
+    await page.waitForFunction(() => /refused/.test(document.getElementById('msg').textContent), null, { timeout: 10000 }).catch(() => {});
+    ok('a secret the server refuses is said to be refused', /that is not the deletion secret/.test(await page.textContent('#msg')));
+    forgetAnswer.status = 404; forgetAnswer.body = { error: 'not-found' };
+    await page.click('#forgetgo');
+    await page.waitForFunction(() => /FORGET_SECRET/.test(document.getElementById('msg').textContent), null, { timeout: 10000 }).catch(() => {});
+    ok('…and a server with no secret set says how to set one', /set FORGET_SECRET in Cloudflare/.test(await page.textContent('#msg')) && !errors.filter(e => !/Failed to load resource/.test(e)).length, errors.join(' | '));
     await browser.close(); fs.rmSync(genFile, { force: true });
   } catch (e) {
     console.log('FAIL spec crashed — ' + (e && e.stack || e));

@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- The only address this page can reach is vdex.crowmade.app, and only when you look up, clear or cancel a code.
+<!-- The only address this page can reach is vdex.crowmade.app, and only when you look up, clear or cancel a code, or
+     delete what it holds for an email address.
      Your key never leaves this page: it is unlocked into the browser in a form that can sign but cannot be read out. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src https://vdex.crowmade.app; img-src data:; form-action 'none'; base-uri 'none'">
 <meta name="color-scheme" content="dark light">
@@ -32,7 +33,7 @@
 <body>
 <main>
 <h1>Vdex licence generator</h1>
-<p class="muted">For the owner only. Keep this file, your key files and your passphrase on your own computer. Making keys and codes works with no internet; looking up, clearing and cancelling codes talks to vdex.crowmade.app.</p>
+<p class="muted">For the owner only. Keep this file, your key files and your passphrase on your own computer. Making keys and codes works with no internet; looking up, clearing and cancelling codes, and deleting someone's records, talks to vdex.crowmade.app.</p>
 <p id="support" class="bad" hidden>This browser cannot sign licence codes. Open this file in an up-to-date Chrome, Edge, Firefox or Safari.</p>
 
 <section id="unlock">
@@ -74,6 +75,15 @@
   <button id="restore" class="ghost">Restore a cancelled code</button>
   <button id="link" class="ghost" title="Lets the person sign in on the website and in the Android app with the email address in the code">Link for website sign-in</button>
   <div id="lookout" class="muted"></div>
+</section>
+
+<section id="forget">
+  <h2>4. Delete what the licence server holds about someone</h2>
+  <p class="muted">For someone who asks you to delete their licence records and cannot press "Delete my licence records" in Vdex themselves. It does the same for the email address you type: the address's links to its licences, a sign-in code waiting for it, and the list of devices on those licences are deleted, and every sign-in made with the address stops working. The licence itself is not cancelled. This needs the deletion secret you set in Cloudflare (FORGET_SECRET, see docs/selling-desktop.md), not your key.</p>
+  <label for="forgetemail">Their email address</label><input id="forgetemail" type="email" autocomplete="off" placeholder="jane@example.com">
+  <label for="forgetsecret">The deletion secret</label><input id="forgetsecret" type="password" autocomplete="off">
+  <button id="forgetgo" class="ghost">Delete this address's records</button>
+  <div id="forgetout" class="muted"></div>
 </section>
 
 <section id="newkey">
@@ -183,6 +193,24 @@ const SITE = 'https://vdex.crowmade.app';
     }
   }
   for (const op of ['look', 'clear', 'cancel', 'restore', 'link']) $(op).onclick = () => ask(op);
+
+  // Delete what the licence server holds for an email address. The server checks the secret (set in Cloudflare as
+  // FORGET_SECRET); this page keeps neither the secret nor the address.
+  $('forgetgo').onclick = async () => {
+    try {
+      const email = $('forgetemail').value.trim(), secret = $('forgetsecret').value.trim();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('That email address does not look right');
+      if (secret.length < 20) throw new Error('Paste the deletion secret you set in Cloudflare (20 characters or more).');
+      if (!confirm(`Delete what the licence server holds for ${email}? Their devices are signed out. The licence itself is not cancelled.`)) return;
+      const r = await fetch(SITE + '/licence/owner/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, secret }) });
+      const b = await r.json().catch(() => ({}));
+      if (!r.ok || !b.ok) throw new Error(r.status === 404 ? 'The licence server has no deletion secret yet: set FORGET_SECRET in Cloudflare (20 characters or more; see docs/selling-desktop.md).' : r.status === 403 ? 'The licence server refused: that is not the deletion secret set in Cloudflare.' : b.error === 'invalid-email' ? 'That email address does not look right' : 'The licence server answered ' + r.status);
+      $('forgetsecret').value = '';
+      const n = Number(b.licences) || 0, d = Number(b.devices) || 0;
+      $('forgetout').textContent = n ? `${email}: deleted. It was linked to ${n} licence${n === 1 ? '' : 's'}, with ${d} device${d === 1 ? '' : 's'} listed.` : `${email}: no licence was linked to this address. Any sign-in made with it before now no longer works.`;
+      say('Deleted.');
+    } catch (e) { say(e.message === 'Failed to fetch' ? 'Could not reach vdex.crowmade.app. Check the internet connection.' : e.message, true); }
+  };
 
   $('makekey').onclick = async () => {
     try {

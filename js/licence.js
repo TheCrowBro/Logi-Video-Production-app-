@@ -47,14 +47,16 @@ const once = () => (T.local ? `${T.local.total} USD once in ${T.local.place}, in
 export const offer = () => ({ buy: !play(), price: ios() || play() ? '' : once() });
 
 // The states in which this device counts as having a licence (or licences are not switched on): cloud storage and
-// saving data files work only in these (store.setPaid).
+// saving data files work only in these (store.setPaid). In the desktop app a code that is still waiting to be activated
+// online ('pending') is not a licence yet: those begin once the computer has been added to the code's list.
 const PAID = new Set(['off', 'founder', 'licensed', 'pending', 'offline', 'released']);
+const paid = s => PAID.has(s.mode) && !(s.mode === 'pending' && !web());
 function set(s) {
   if (!s || s.error || !s.mode) return;
   S.cur = s;
   if (['trial', 'ended', 'cancelled', 'expired'].includes(s.mode)) askLocalPrice(); // the states that offer Buy
-  setPaid(PAID.has(s.mode), needsLicence);
-  if (PAID.has(s.mode) && S.needClose) closeWhenOnTop('licence-needed', 'needClose'); // just signed in: the offer is out of date
+  setPaid(paid(s), needsLicence);
+  if (paid(s) && S.needClose) closeWhenOnTop('licence-needed', 'needClose'); // just signed in: the offer is out of date
   if (s.canEdit !== false && S.roClose) closeWhenOnTop('licence-readonly', 'roClose'); // licensed now: the read-only explanation is out of date
   S.listeners.forEach(f => { try { f(s); } catch { /* ignore */ } });
   paintBar();
@@ -118,7 +120,7 @@ function describe(s) {
       : { line: `Licensed to ${who(l)}${l && l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}.`, tone: 'ok', copy: true, release: true };
     case 'pending': return web()
       ? { line: `Signed in as ${l.email}, but this phone is not on your licence yet: Vdex needs the internet once to add it.`, tone: s.canEdit ? '' : 'warn', retry: true, release: true }
-      : { line: `Licensed to ${who(l)}, but not activated on this computer yet: Vdex needs the internet once to do that${s.daysLeft > 0 ? ` (${plural(s.daysLeft, 'day')} left)` : ''}.`, tone: s.daysLeft > 0 ? '' : 'warn', retry: true, remove: true };
+      : { line: `Licensed to ${who(l)}, but not activated on this computer yet: Vdex needs the internet once to do that${s.daysLeft > 0 ? ` (${plural(s.daysLeft, 'day')} left)` : ''}. Cloud storage, backup files and spreadsheets start once it is activated.`, tone: s.daysLeft > 0 ? '' : 'warn', retry: true, remove: true };
     case 'released': return { line: `This ${here()} is not on your licence: it is in use on ${plural(seats, 'other device')}, its limit. ${web() ? 'Add this phone' : 'Activate it here again'} to choose which device to take off.`, tone: 'warn', again: true, [web() ? 'release' : 'remove']: true };
     case 'cancelled': return { line: `This licence has been cancelled, for example after a refund. If you think that is a mistake, reply to the email your licence came in${ios() ? ', or to Apple for an App Store purchase' : ''}.`, tone: 'warn', buy: shop, enter: true, restore, remove: !web() };
     case 'expired': return { line: `Your licence ended on ${day(l && l.expires)}.`, tone: 'warn', buy: shop, enter: true, restore, [web() ? 'release' : 'remove']: true };
@@ -253,7 +255,7 @@ function readOnlySheet() {
   const s = S.cur, d = describe(s) || {};
   const sh = sheet('Vdex is read-only', h('div', { class: 'stack' },
     h('p', null, d.line || 'Vdex is read-only here.'),
-    h('p', { class: 'small muted' }, 'That change was not saved. Everything already in Vdex is safe, and with a licence you can change everything again here.'),
+    h('p', { class: 'small muted' }, 'That change was not saved. Nothing already in Vdex was changed, and with a licence you can change everything again here.'),
     h('div', { class: 'actions' }, ...actions(s, d, () => sh.close())), buyNote(d)));
   sh.el.classList.add('licence-readonly');
   S.roClose = sh.close;
@@ -266,10 +268,13 @@ function readOnlySheet() {
 function needsLicence(what) {
   const s = S.cur || {};
   const thing = what === 'cloud' ? 'Keeping a copy in your own cloud storage' : 'Saving backups and spreadsheet files';
+  // A licence code that is still waiting to be activated: its own line and next step, never an offer to buy again.
+  const d = s.mode === 'pending' && !web() ? describe(s) : null;
   const sh = sheet('Comes with a licence', h('div', { class: 'stack' },
     h('p', null, `${thing} comes with a Vdex licence.`),
+    d ? h('p', { class: 'small' }, d.line) : '',
     h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
-    h('div', { class: 'actions' }, ...actions(s, { buy: !play(), enter: true, restore: ios() }, () => sh.close())), buyNote({ buy: true })));
+    h('div', { class: 'actions' }, ...actions(s, d ? { retry: true } : { buy: !play(), enter: true, restore: ios() }, () => sh.close())), buyNote({ buy: !d })));
   sh.el.classList.add('licence-needed');
   S.needClose = sh.close;
   sh.el.tabIndex = -1; setTimeout(() => sh.el.focus(), 50); // not a button: someone still typing must not press Buy by accident
@@ -434,8 +439,8 @@ function forgetSheet() {
     set(r); sh.close(); toast('Your licence records have been deleted, and Vdex is signed out here');
   } }, 'Delete my records');
   const sh = sheet('Delete my licence records', h('div', { class: 'stack' },
-    h('p', null, `This deletes what Vdex's licence server keeps about you: ${what}, and the list of devices on your licence. Vdex signs out here, and your other devices are signed out at their next check.`),
-    h('p', { class: 'small muted' }, `Your licence itself is not cancelled: ${ios() ? 'restore your App Store purchase, or ' : ''}sign in again at any time, and the records are made afresh. Stripe, Link and Apple keep their own records of a purchase. Your work in Vdex is not touched.`),
+    h('p', null, `This deletes what Vdex's licence server keeps about you: ${what}, and the list of devices on your licence. Vdex signs out here, and your other devices are signed out at their next check. A computer that still has your licence code puts itself back at its next weekly check: use Release this computer there first.`),
+    h('p', { class: 'small muted' }, `Your licence itself is not cancelled: ${ios() ? 'restore your App Store purchase, or ' : ''}sign in again at any time, and the records are made afresh. Stripe, the seller named on your receipt and Apple keep their own records of a purchase. Your work in Vdex is not touched.`),
     msg, h('div', { class: 'actions' }, go)));
 }
 

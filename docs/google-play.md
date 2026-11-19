@@ -12,6 +12,7 @@ This is the step-by-step for putting Vdex in the Google Play store, written for 
 |---|---|
 | Privacy policy address | https://vdex.crowmade.app/privacy.html |
 | Terms of service address | https://vdex.crowmade.app/terms.html |
+| Address for deleting licence records (Data safety asks for it) | https://vdex.crowmade.app/delete-account.html |
 | The app file for Google Play (`vdex-android.aab`) | the newest run at https://github.com/TheCrowBro/Logi-Video-Production-app-/actions/workflows/android.yml → **Artifacts** at the bottom → `vdex-android` (a zip; kept for 3 days, so press **Run workflow** there for a fresh one). Every build has the same version number, so Google Play takes it only once: later releases reuse the uploaded bundle (Step 9) or need a raised version (see "Later: updates") |
 | Icon, 512 × 512 | https://github.com/TheCrowBro/Logi-Video-Production-app-/blob/main/store/android/icon-512.png (press the download button) |
 | Feature graphic, 1024 × 500 | https://github.com/TheCrowBro/Logi-Video-Production-app-/blob/main/store/android/feature-graphic.jpg |
@@ -80,8 +81,8 @@ Left menu → **Monitor and manage** → **Policy and programmes** → **App con
 |---|---|
 | Privacy policy | The privacy policy address from the table above. |
 | Ads | **No, my app does not contain ads.** |
-| App access | **All or some functionality is restricted.** Instructions for Google: "Everything except cloud storage and saving backup or spreadsheet files works without signing in for 30 days from the first time the app is opened. Those, and everything after 30 days, need a Vdex licence: press Sign in (Settings → General → About & Licence) and type the email address below; Vdex emails a 6-digit code to it." Then give the login of an email account you made for Google's reviewers (for example a new Gmail address and its password) that has a free licence: make it in the generator page with that email address (it is linked by itself). Add: "When Vdex first opens it asks you to choose a PIN of 4 to 20 digits (any you like). It locks the information on the device; it is not an account." |
-| Content rating | Start the questionnaire, enter your email, choose **Utility, Productivity, Communication, or Other**, and answer **No** to every question (no violence, no sexual content, no bad language, no drugs, no gambling, no user-to-user interaction, no location sharing with other users, no purchases). The rating comes out as "Everyone". |
+| App access | **All or some functionality is restricted.** Paste the instructions from "The reviewers' sign-in" below, with the real review address and review code in place of the two placeholders. They are never written in this guide or anywhere in the repository. |
+| Content rating | Start the questionnaire, enter your email, choose **Utility, Productivity, Communication, or Other**. Answer **No** to violence, sexual content, bad language, drugs, gambling, sharing the user's location with other users, and purchases. For the question about users interacting or exchanging content with each other, answer **Yes** from this version on: a user can pass a booking, their contact card or an equipment list to another user as a link or QR code, and the other user can add it to their own Vdex. If the form asks for detail: the link is sent by the user with their own email or messaging app; there is no chat, no public page, no feed and no search of other users; nothing is stored online or by us, the receiver sees what a link holds before adding it, and every such page has "Report this page: support@crowmade.app". The rating should still come out as "Everyone", now with a "Users interact" note. If you answered this questionnaire before this version, answer it again. |
 | Target audience and content | Age group: **18 and over** only. Designed for children: **No**. |
 | News apps | **No.** |
 | COVID-19 contact tracing and status apps | **Not a COVID-19 app.** |
@@ -90,6 +91,22 @@ Left menu → **Monitor and manage** → **Policy and programmes** → **App con
 | Financial features | **My app doesn't provide any financial features.** (Vdex writes invoices but moves no money.) |
 | Health | **My app does not have any health features.** |
 | Advertising ID | **No, my app does not use advertising ID.** |
+
+### The reviewers' sign-in
+
+Google's reviewers cannot read someone else's mailbox, so they do not get the emailed 6-digit code. The licence server has a sign-in for them instead: one review address that takes one fixed code and sends no email.
+
+1. Choose a review address (any address at your own domain; it needs no mailbox) and a review code of 6 digits, which is what the sign-in box takes. Keep both in your password manager.
+2. Add them to the licence server as two **Secrets**, in the same place as the other settings (Cloudflare → Workers & Pages → the Worker **vdex** → Settings → Variables and Secrets; docs/selling-desktop.md names the two settings). With either one missing, the reviewers' sign-in does not exist.
+3. Give the review address a free licence with an end date a few weeks after the review, in the generator page (docs/selling-desktop.md, part 8), as for any other person: without a licence the address cannot sign in.
+4. Paste these instructions under App access, with the address and the code in place of the two placeholders:
+
+   ```
+   Everything except cloud storage and saving backup or spreadsheet files works without signing in for 30 days from the first time the app is opened. Those, and changing anything after 30 days, need a Vdex licence: Settings → General → About & Licence → Sign in. Sign in with <review address> and the code <review code>. The code does not change and no mailbox is needed. When Vdex first opens it asks you to choose a PIN of 4 to 20 digits (any you like). It locks the information on the device; it is not an account.
+   ```
+5. After each review, change the review code (step 2), and let the free licence run out.
+
+Wrong tries are limited at least as strictly as for anyone else, so the code cannot be guessed by trying.
 
 ## Step 6. Upload the app to a closed test
 
@@ -161,24 +178,38 @@ Sunrise and sunset, a white balance reader, a sound level meter and a range find
 YOURS, PRIVATELY
 Vdex keeps everything on your device, behind a PIN, and opens with your fingerprint or face. With a licence, link your own Google Drive to share between your phone and computer and keep a daily backup. Pick a colour theme to match your camera brand.
 
-Works offline. Every page has its own walkthrough, in the menu.
+Works offline once set up. A licence is checked online at least once every 90 days. Every page has its own walkthrough, in the menu.
 ```
 
 ## Data safety answers
 
-Google asks what the app does with people's information. Two things leave the phone. The weather forecast sends the coordinates of the shoot location, or of the phone's own location if that is what is set, to Open-Meteo, which uses them once and does not keep them. And the licence: after the 30-day trial, signing in sends the email address the person types to Vdex's licence server, which keeps which email addresses belong to which licences and emails them a sign-in code; the phone then takes one of the licence's places, which sends a random number made for that installation. The honest declaration is therefore:
+Google asks what the app does with people's information. The form must agree with the privacy policy, so this is the policy's list of what can leave the phone, and when:
+
+- **The weather forecast.** For a day, a booking or a call sheet within the next 16 days, Vdex sends Open-Meteo the coordinates of the venue or, if it has none, the location saved in Vdex (which may be the person's own), rounded to two decimal places (about a kilometre), with the date. It happens by itself. Open-Meteo also sees the phone's internet address and says it keeps server logs, which can include coordinates, for up to 90 days.
+- **The licence.** After the 30-day trial, signing in sends the email address the person types to Vdex's licence server, which keeps which email addresses belong to which licences and emails them a sign-in code; the phone then takes one of the licence's places, which sends a random number made for that installation.
+- **Addresses and maps**, when the person looks one up: the address text and the map area go to OpenStreetMap.
+- **The person's own cloud storage and calendar**, if they link them (Google Drive and Google Calendar today): their Vdex database, backups and booking events go to their own account.
+- **Add to calendar buttons**: the booking's title, dates, location and description go to Google Calendar, Outlook or Yahoo Calendar, whichever button the person presses.
+- **Links the person sends** (quote, invoice, crew, contact card, equipment list): everything is inside the link, which they send with their own email or messaging app. Nothing reaches us or any server of ours.
+- **Linking two devices** (TC Notes): each device's internet address goes to a Google connection server, and the open timecode log travels between the two devices.
+- **Scanning a script or a timecode**: the first use downloads the text-reading library from public content networks. The picture stays on the phone.
+- **The website itself**: Cloudflare, which serves vdex.crowmade.app, keeps ordinary web server logs.
+
+Of these, Google's form counts what the app itself sends to us or to another company without the person choosing where it goes: the email address, the installation's random number, and the location for the weather. What goes to the person's own accounts at their own request, and what they send themselves, is not collection by the developer. The honest declaration is therefore:
 
 | Question | Answer |
 |---|---|
 | Does your app collect or share any of the required user data types? | **Yes** |
 | Is all of the user data collected by your app encrypted in transit? | **Yes** |
-| Do you provide a way for users to request that their data is deleted? | **Yes**: in the app (Settings → General → About & Licence → **Delete my licence records**), or by email to `support@crowmade.app`. If Google asks for a web address for this, give https://vdex.crowmade.app/privacy.html (section 7 explains it). |
+| Do you provide a way for users to request that their data is deleted? | **Yes**: in the app (Settings → General → About & Licence → **Delete my licence records**), or by email to `support@crowmade.app`. The web address Google asks for is https://vdex.crowmade.app/delete-account.html (if the form still has privacy.html there from an earlier version, change it). |
 | Data types: **Personal info → Email address** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **No**. Required or optional: **Required** (to keep using the app after the 30-day trial). Purposes: **App functionality**, **Account management**. |
 | Data types: **Device or other IDs** | Collected: **Yes** (a random number made for the installation, to count the licence's devices). Shared: **No**. Processed ephemerally: **No**. Required. Purpose: **App functionality**. |
-| Data types: **Location → Approximate location** and **Precise location** | Collected: **Yes**. Shared: **No**. Processed ephemerally: **Yes**. Required or optional: **Optional** (users can choose whether to use it). Purpose: **App functionality**. |
+| Data types: **Location → Approximate location** and **Precise location** | Collected: **Yes**. Shared: **Yes** (it goes to Open-Meteo, another company, for the forecast; answer No only if Google's own guidance for this question tells you a weather service like this does not count as sharing). Processed ephemerally: **No** (Open-Meteo says its logs can hold coordinates for up to 90 days). Required or optional: **Optional** (it is sent only when a venue is on the map or a location is saved). Purpose: **App functionality**. Declare both kinds: two decimal places is an area of about one square kilometre, which Google still counts as precise. |
 | Every other data type (financial info, messages, photos, files, contacts, app activity…) | **Not collected.** |
 
-Why "not collected" for the rest: everything a user types into Vdex about their work stays on the device. When a user links their own Google Drive, iCloud, Dropbox or OneDrive, the backup goes to the user's own account at their own request, which Google does not count as collection by the developer; the same goes for the bookings Vdex keeps in the user's own Google Calendar. The privacy policy explains all of it.
+Why "not collected" for the rest: everything a user types into Vdex about their work stays on the device. When a user links their own Google Drive (or iCloud, Dropbox or OneDrive, when Vdex offers them), the backup goes to the user's own account at their own request, which Google does not count as collection by the developer; the same goes for the bookings Vdex keeps in the user's own Google Calendar, and for the links a user makes and sends themselves, which hold their contents inside the link and are stored nowhere online. The privacy policy explains all of it.
+
+**If the forms were filled in from an earlier version of this guide**, four things change with version 1.4.0, and a website update does not change them for you: here, the deletion address (delete-account.html) and the Location row (Shared: Yes; Processed ephemerally: No); in Step 5, the App access instructions and the content rating answer about users exchanging content; and in the store listing, the last line of the full description.
 
 If a Google reviewer asks for changes to this section, send me what they wrote and I will adjust the wording.
 
@@ -188,6 +219,7 @@ If a Google reviewer asks for changes to this section, send me what they wrote a
 - **"Version code 1 has already been used"**: Play already has this bundle. Use **Promote release** or **Add from library** instead of uploading (Step 9). A new file is only accepted after the version number goes up; tell me and I raise it.
 - **The upload is rejected for the target Android version:** tell me; I will update the Android project and rebuild.
 - **Testers cannot find the app:** they must open the opt-in link while signed in with the exact Google account that is on the list, and the release must have finished rolling out (it can take a few hours the first time).
+- **Google says it could not sign in, or the review code "does not work":** check both settings are in Cloudflare and the review address's free licence has not passed its end date (docs/selling-desktop.md, part 10). After 5 wrong codes in a day from one connection, that connection is refused until the next day, and after 20 in a day from everyone together the review address is refused for everyone until the next day, the right code included: ask Google to try again the day after.
 - **The dashboard does not offer "Apply for production access":** the 14 days have not completed with 12 testers opted in the whole time. Add more testers and wait.
 
 ## The screenshot files

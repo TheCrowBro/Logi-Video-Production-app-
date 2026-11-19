@@ -7,6 +7,11 @@
 // Everything else is decided here, offline: the code's signature, the trial clock, and what the page may do. When the
 // trial is over and there is no working code, the page becomes read-only (see js/licence.js).
 //
+// A code entered while the licence server cannot be reached is kept and lets Vdex be edited for 14 days, once: when
+// that wait began is remembered for each code, for good (also after "Remove the code", and in the copy beside the
+// trial's start), so entering the code again starts no new wait. Until this computer has been added to the code's list
+// online, the code is not a licence for anything else (cloud storage, backup and spreadsheet files: js/licence.js).
+//
 // Installs that ran Vdex before it was sold keep it free: while the app has no licence keys built in
 // (desktop/licence-keys.json is empty) nobody is asked for a code, and every install that runs in that time, or that
 // already has Vdex data from an earlier version, is marked as an early user and never asked.
@@ -20,7 +25,7 @@ const TRIAL_DAYS = 30;
 const DAY = 86400e3, HOUR = 3600e3;
 const RECHECK = 7 * DAY;          // a licensed computer confirms it is still on the code's list about once a week
 const OFFLINE_LIMIT = 90 * DAY;   // and has to reach the internet at least once in 90 days
-const PENDING_LIMIT = 14 * DAY;   // a code entered with no connection works for 14 days before it must be activated
+const PENDING_LIMIT = 14 * DAY;   // a code entered with no connection lets Vdex be edited for 14 days, once, before it must be activated
 const SITE = 'https://vdex.crowmade.app';
 const OS = { darwin: 'Mac', win32: 'Windows', linux: 'Linux' };
 
@@ -30,14 +35,27 @@ const MESSAGES = {
   invalid: 'The licence server does not recognise this code. Check you copied all of it, or reply to the email your code came in.',
 };
 
-// `mirror` keeps a copy of when the trial started (and whether this is an early user) outside licence.json, in the
-// desktop app's own window-state file, so deleting licence.json does not start a new trial or make an early user.
+// `mirror` keeps a copy of when the trial started (and whether this is an early user), of when each code's wait began,
+// and of when a licence stopped covering this computer, outside licence.json, in the desktop app's own window-state
+// file, so deleting licence.json does not start a new trial, make an early user, give a code a second wait or lose
+// that day. Nothing in either copy is sent anywhere.
 const NO_MIRROR = { get: () => null, set: () => {} };
 function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = SITE, os = OS[process.platform] || 'Computer', priorData = () => false, mirror = NO_MIRROR, onChange = () => {} }) {
   const file = path.join(dir, 'licence.json');
   const enabled = Object.keys(keys || {}).length > 0;
   const read = () => { try { const s = JSON.parse(fs.readFileSync(file, 'utf8')); return s && typeof s === 'object' ? s : {}; } catch { return {}; } };
   const write = s => { try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file + '.tmp', JSON.stringify(s)); fs.renameSync(file + '.tmp', file); } catch { /* a read-only disk: carry on */ } };
+  // licence.json and, beside it, the copy of what must outlive it.
+  const save = s => { write(s); if (Number.isFinite(s.first)) mirror.set({ first: s.first, founder: !!s.founder, seen: s.seen, ...(s.waits ? { waits: s.waits } : {}), ...(lapsedOf(s) ? { lapsed: s.lapsed } : {}) }); };
+  // The latest time this computer has ever shown: winding the clock back gains no trial days and no waiting days.
+  const clock = (s, t = now()) => Math.max(t, s.seen || 0);
+  // When the wait of the code with this ref began (0: it never waited here). `waits` is { ref: time }, kept for good.
+  const waitsOf = v => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([k, t]) => /^\d{1,3}:\d{1,10}$/.test(k) && Number.isFinite(t) && t > 0)) : {});
+  const waitOf = (s, ref) => waitsOf(s.waits)[ref] || 0;
+  const startWait = (s, ref, t) => { const w = waitsOf(s.waits); w[ref] = Math.min(w[ref] || Infinity, t); s.waits = w; };
+  // The waits in both copies, each at its earliest: a wait missing from either copy is taken from the other.
+  const bothWaits = (a, b) => { const w = waitsOf(a); for (const [k, t] of Object.entries(waitsOf(b))) w[k] = Math.min(w[k] || Infinity, t); return w; };
+  const lapsedOf = s => (Number.isFinite(s.lapsed) && s.lapsed > 0 ? s.lapsed : 0);
   const receiptOk = new Map(); // a receipt's signature -> whether it is good for this code and computer (checked once per run)
   let last = '';
 
@@ -46,19 +64,39 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     const s = read(), t = now();
     let dirty = false;
     if (!s.install) { s.install = codes.b64u.enc(globalThis.crypto.getRandomValues(new Uint8Array(16))); dirty = true; }
+    const m = mirror.get();
     if (!s.first) {
-      const m = mirror.get();
-      if (m && Number.isFinite(m.first) && m.first > 0) { s.first = m.first; s.founder = !!m.founder; s.seen = Math.max(Number(m.seen) || 0, s.seen || 0); } // licence.json was lost: same trial as before
-      else { s.first = t; s.founder = !enabled || !!priorData(); }
+      if (m && Number.isFinite(m.first) && m.first > 0) { // licence.json was lost: the same trial, waits and lapse as before
+        s.first = m.first; s.founder = !!m.founder; s.seen = Math.max(Number(m.seen) || 0, s.seen || 0);
+        if (!lapsedOf(s) && lapsedOf(m)) s.lapsed = m.lapsed;
+      } else { s.first = t; s.founder = !enabled || !!priorData(); }
       dirty = true;
     }
+    // A code's wait is never forgotten while either copy remembers it (licence.json edited, or lost).
+    const w = bothWaits(s.waits, m && m.waits);
+    if (Object.keys(w).length && JSON.stringify(w) !== JSON.stringify(waitsOf(s.waits))) { s.waits = w; dirty = true; }
     if (!enabled && !s.founder) { s.founder = true; dirty = true; }
     if (t > (s.seen || 0) + 60e3 || !s.seen) { s.seen = Math.max(s.seen || 0, t); dirty = true; } // the latest time ever seen, so winding the clock back gains no trial days
-    if (dirty) { write(s); mirror.set({ first: s.first, founder: !!s.founder, seen: s.seen }); }
+    if (dirty) save(s);
     const r = await check(s), good = !!r && !!s.act && s.act.status === 'active' && (await goodReceipt(s, r.licence));
+    if (r) settle(s, r, good);
     const out = describe(s, r, t, good);
     const sig = JSON.stringify(out); if (sig !== last) { last = sig; onChange(out); }
     return out;
+  }
+  // Two things state() may still have to write once the code has been read, done in one go on a fresh read of the
+  // file (never on the copy read before the wait, which an enter() or recheck() may have replaced meanwhile):
+  // an older version's single `enteredAt` becomes this code's wait, if the code is still waiting; and a code that was
+  // active here and has now passed its end date gets the time this computer first saw that (`lapsed`, which recheck()
+  // notes for a cancelled or moved one).
+  function settle(s, r, good) {
+    const old = !!s.enteredAt, ended = r.status === 'expired' && good && !s.lapsed;
+    if (!old && !ended) return;
+    const f = read(); if (f.code !== s.code) return;
+    if (f.enteredAt) { if (!good) startWait(f, r.licence.ref, f.enteredAt); delete f.enteredAt; }
+    if (ended && !f.lapsed) f.lapsed = clock(f);
+    save(f);
+    s.waits = f.waits; delete s.enteredAt; s.lapsed = f.lapsed;
   }
   async function check(s, at = s.seen) {
     if (!s.code) return null;
@@ -77,22 +115,33 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     if (s.founder) return { ...base, mode: 'founder', canEdit: true };
     const left = trialLeft(s);
     const trial = { trialLeft: left, trialEnds: new Date((s.first || t) + TRIAL_DAYS * DAY).toISOString().slice(0, 10) };
-    if (!r) return { ...base, ...trial, mode: left > 0 ? 'trial' : 'ended', canEdit: left > 0 };
+    // lapsedAt: when this computer learned that a licence it was on no longer covers it (past its end date, cancelled,
+    // or its place moved to another device). It stays, also after "Remove the code", until a code is activated here
+    // again, and is absent when no licence that covered this computer has ended that way.
+    const lapsed = lapsedOf(s) ? { lapsedAt: s.lapsed } : {};
+    if (!r) return { ...base, ...trial, ...lapsed, mode: left > 0 ? 'trial' : 'ended', canEdit: left > 0 };
     const l = r.licence, licence = { name: l.name, email: l.email, comp: l.comp, ref: l.ref, issued: l.issued, expires: l.expires, seats: l.seats };
-    if (r.status === 'expired') return { ...base, ...trial, licence, mode: 'expired', canEdit: left > 0 };
     const a = s.act || {};
-    if (a.status === 'cancelled') return { ...base, ...trial, licence, mode: 'cancelled', canEdit: left > 0 };
-    if (a.status === 'released') return { ...base, ...trial, licence, mode: 'released', canEdit: left > 0 };
+    if (r.status === 'expired') return { ...base, ...trial, licence, ...lapsed, mode: 'expired', canEdit: left > 0 };
+    if (a.status === 'cancelled') return { ...base, ...trial, licence, ...lapsed, mode: 'cancelled', canEdit: left > 0 };
+    if (a.status === 'released') return { ...base, ...trial, licence, ...lapsed, mode: 'released', canEdit: left > 0 }; // this computer's place was moved: not on the licence
     // Past a limit, Vdex turns read-only only once a check made after the limit has failed, so someone opening Vdex
     // after a long break is not shown read-only while it is still checking.
     if (a.status === 'active' && good) {
       if (t - (a.checked || 0) > OFFLINE_LIMIT && (a.tried || 0) > (a.checked || 0) + OFFLINE_LIMIT) return { ...base, licence, mode: 'offline', canEdit: false };
       return { ...base, licence, mode: 'licensed', canEdit: true };
     }
-    const waited = Math.max(0, t - (s.enteredAt || t)), daysLeft = Math.max(0, Math.ceil((PENDING_LIMIT - waited) / DAY));
-    const failedSince = (a.tried || 0) > (s.enteredAt || 0) + PENDING_LIMIT;
-    return { ...base, ...trial, licence, mode: 'pending', daysLeft, canEdit: daysLeft > 0 || left > 0 || !failedSince };
+    // Waiting: the code has not been activated on this computer. Its 14 days run from the first time it waited here,
+    // by the latest time ever seen, and a code that never waited here (an activation that cannot be believed) has none.
+    // After them Vdex turns read-only once a try made after them has failed (`late`, or the try's own time, which is
+    // all an older version noted), not while it is still trying.
+    const began = waitOf(s, l.ref) || s.enteredAt || 0;
+    const daysLeft = began ? Math.max(0, Math.ceil((PENDING_LIMIT - Math.max(0, clock(s, t) - began)) / DAY)) : 0;
+    const late = !!a.late || (a.tried || 0) > began + PENDING_LIMIT;
+    return { ...base, ...trial, licence, ...lapsed, mode: 'pending', daysLeft, canEdit: daysLeft > 0 || left > 0 || !late };
   }
+  // A try that did not activate a waiting code: noted, with whether the code's 14 days were already over.
+  const failed = (s, ref, a, t, answered) => ({ ...a, tried: t, answered: !!answered, ...(clock(s, t) - (waitOf(s, ref) || s.enteredAt || 0) > PENDING_LIMIT ? { late: true } : {}) });
 
   // Asks the licence server to put this computer on the code's list. { ok, receipt } | { full, computers } |
   // { cancelled } | { swaps } | { invalid } | { offline } (with answered: true when the server did answer, unusably).
@@ -116,16 +165,18 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     let r;
     try { r = await codes.verifyCode(String(text || '').slice(0, 4000), { keys, now: now() }); } catch (e) { return { error: e.message || 'This code is not valid.' }; }
     if (r.status === 'expired') return { error: `This code ended on ${r.licence.expires}.` };
-    const s = read(), code = r.licence.code;
-    if (!s.install) await state();
+    const code = r.licence.code, ref = r.licence.ref;
+    await state(); // makes the install's ID, and tidies what an older version left
     const install = read().install;
     const a = await activate(code, install, typeof release === 'string' ? release.slice(0, 64) : '');
     if (a.full) return { error: 'full', computers: a.computers, swapsLeft: a.swapsLeft, seats: r.licence.seats };
     for (const k of ['cancelled', 'swaps', 'invalid']) if (a[k]) return { error: MESSAGES[k] };
     const s2 = read(), t = now();
-    if (s2.code !== code) { s2.code = code; s2.enteredAt = t; s2.act = {}; }
-    s2.act = a.ok ? active(a.receipt, t) : { ...(s2.act || {}), tried: t, answered: !!a.answered };
-    write(s2);
+    if (s2.code !== code || !s2.act) { s2.code = code; s2.act = {}; }
+    if (a.ok) { s2.act = active(a.receipt, t); delete s2.lapsed; }
+    else if (s2.act.status) s2.act = { ...s2.act, tried: t, answered: !!a.answered }; // the same code again: on the list, moved off it or cancelled, as it was
+    else { startWait(s2, ref, clock(s2, t)); s2.act = failed(s2, ref, s2.act, t, a.answered); } // the wait begins now, unless this code has waited here before
+    save(s2);
     return { ...(await state()), offline: !a.ok };
   }
 
@@ -141,27 +192,31 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     else if (a.status === 'active') due = t - (a.checked || 0) > RECHECK && t - (a.tried || 0) > (a.answered ? DAY : HOUR);
     else due = t - (a.tried || 0) > (a.status || a.answered ? DAY : HOUR);
     if (!due) return state();
+    const was = a.status === 'active' && (await goodReceipt(s, r.licence)); // on the code's list until now
     const res = await activate(s.code, s.install, '');
     const s2 = read(); if (s2.code !== s.code) return state(); // changed while we waited
     const t2 = now();
-    if (res.ok) s2.act = active(res.receipt, t2);
-    else if (res.full) s2.act = { status: 'released', tried: t2 };
-    else if (res.cancelled) s2.act = { status: 'cancelled', tried: t2 };
-    else s2.act = { ...a, tried: t2, answered: !!res.answered }; // offline, or an answer to look at again later
-    write(s2);
+    if (res.ok) { s2.act = active(res.receipt, t2); delete s2.lapsed; }
+    else if (res.full || res.cancelled) {
+      s2.act = { status: res.full ? 'released' : 'cancelled', tried: t2 };
+      if (was) s2.lapsed = clock(s2, t2); // on the list until now: this is when the computer learned it no longer is
+    }
+    else s2.act = was || a.status === 'released' || a.status === 'cancelled' ? { ...a, tried: t2, answered: !!res.answered } : failed(s2, r.licence.ref, a, t2, res.answered); // offline, or an answer to look at again later
+    save(s2);
     return state();
   }
 
   // Takes the code off this computer, freeing its place for another one. Needs the internet, except when the
   // computer was never on the list.
   async function release() {
+    await state(); // tidies what an older version left, so the code's wait is remembered past this
     const s = read(); if (!s.code) return state();
     const listed = s.act && (s.act.status === 'active' || s.act.status === 'released');
     if (listed) {
       let res; try { res = await post(site + '/licence/release', { code: s.code, install: s.install }); } catch { res = null; }
       if (!res || (res.status !== 200 && res.status !== 404)) return { error: 'Vdex could not reach the licence server. Connect to the internet and try again, so the code can be used on another computer.' };
     }
-    const s2 = read(); delete s2.code; delete s2.act; delete s2.enteredAt; write(s2);
+    const s2 = read(); delete s2.code; delete s2.act; save(s2); // `waits` and `lapsed` stay: a code's 14 days do not start again when it is entered again
     return state();
   }
   const code = () => read().code || '';

@@ -77,9 +77,13 @@ console.log((licenceOk ? 'PASS' : 'FAIL') + ' desktop licence bridge answers' + 
 const priced = await win.evaluate(() => window.vdexDesktop.licence.localPrice().then(p => ({ p }), e => ({ error: String(e && e.message) })));
 const priceOk = !priced.error && (priced.p === null || (typeof priced.p === 'object' && 'taxed' in priced.p && (priced.p.taxed === null || /^\d+\.\d\d$/.test(priced.p.taxed.total))));
 console.log((priceOk ? 'PASS' : 'FAIL') + ' the desktop bridge answers the price with tax (or nothing) without failing —', JSON.stringify(priced));
+// The privacy policy links to the deletion page: the app's own server must serve it (package.json lists it for the installers; spec 99 checks that list).
+const policy = await (await fetch(base + '/privacy.html')).text(), deletion = await fetch(base + '/delete-account.html');
+const deletionOk = /href="delete-account\.html"/.test(policy) && deletion.status === 200 && /^text\/html/.test(deletion.headers.get('content-type') || '') && /support@crowmade\.app/.test(await deletion.text());
+console.log((deletionOk ? 'PASS' : 'FAIL') + ' the desktop app serves the deletion page the privacy policy links to');
 const signinOk = Object.values(signin).every(Boolean);
 console.log((signinOk ? 'PASS' : 'FAIL') + ' desktop sign-ins open in the web browser and come back only for sign-ins the app started —', JSON.stringify(signin));
 await app.close();
-const ok = licenceOk && signinOk && priceOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
+const ok = licenceOk && signinOk && priceOk && deletionOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
 console.log((ok ? 'PASS' : 'FAIL') + ' desktop app launches, serves locally, exposes the update bridge, keeps no service worker, no errors —', JSON.stringify(info), bad.join(' | '));
 process.exit(ok ? 0 : 1);

@@ -28,7 +28,7 @@ const DAY = 86400e3;
     await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });
     await ctx.addInitScript(acceptTerms());
     if (storage) await ctx.addInitScript(v => { if (!sessionStorage.getItem('seeded')) { for (const [k, x] of Object.entries(v)) localStorage.setItem(k, x); sessionStorage.setItem('seeded', '1'); } }, Object.fromEntries(Object.entries(storage).map(([k, v]) => [k, typeof v === 'string' ? v : JSON.stringify(v)])));
-    if (desktop) await ctx.addInitScript(st => { window.vdexDesktop = { platform: 'linux', updateState: async () => ({ status: 'current' }), checkForUpdates: async () => ({}), onStatus: () => () => {}, licence: { state: async () => st, onChange: () => () => {}, code: async () => '', buy: async () => true, recheck: async () => st, enter: async () => ({}), release: async () => st } }; }, desktop);
+    if (desktop) await ctx.addInitScript(st => { window.vdexDesktop = { platform: 'linux', updateState: async () => ({ status: 'current' }), checkForUpdates: async () => ({}), onStatus: () => () => {}, licence: { state: async () => window.__lic || st, onChange: () => () => {}, code: async () => '', buy: async () => true, recheck: async () => window.__lic || st, enter: async () => ({}), release: async () => st } }; }, desktop); // window.__lic: what the desktop app reports from then on
     const page = await ctx.newPage();
     page.on('pageerror', e => errors.push(e.message)); page.on('console', m => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) errors.push(m.text()); });
     const downloads = []; page.on('download', d => downloads.push(d.suggestedFilename()));
@@ -141,6 +141,43 @@ const DAY = 86400e3;
     await backups(page);
     await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(400);
     ok('the desktop app in its trial: backups explain and offer Buy and Enter licence code', /comes with a Vdex licence/.test(await page.locator('.licence-needed').innerText().catch(() => '')) && (await page.locator('.licence-needed').getByRole('button', { name: 'Enter licence code' }).count()) === 1 && !downloads.length);
+    await ctx.close();
+    // A licence code that has not reached the licence server yet (entered without the internet): editing works while
+    // it waits, but it is not a licence for backups, spreadsheets or cloud storage until the computer has been added online.
+    const waiting = { enabled: true, mode: 'pending', canEdit: true, daysLeft: 9, trialLeft: 0, seats: 3, licence: { name: 'Wendy Waits', email: 'wendy@example.com', seats: 3 } };
+    const davWait = { 'logi-provider': 'webdav', 'logi-webdav': { kind: 'webdav', url: 'https://dav.example.test/Vdex', user: 'u', pass: 'p' } };
+    ({ ctx, page, downloads, davCalls } = await open({ desktop: waiting, storage: davWait, dav: true }));
+    await sleep(800);
+    const wFirst = davCalls.length;
+    const edited = await page.evaluate(() => import('./js/store.js').then(s => { s.update(d => { d.profile = { ...d.profile, name: 'Wendy Waits' }; }); return { name: s.db.profile.name, paid: s.isPaid() }; }));
+    await sleep(1500);
+    const wst = await page.evaluate(() => import('./js/store.js').then(s => ({ status: s.cloud.status, paused: s.cloud.paused })));
+    ok('the desktop app with a code waiting to be activated: editing works, and it does not count as a licence', edited.name === 'Wendy Waits' && edited.paid === false, JSON.stringify(edited));
+    await page.reload(); await page.waitForSelector('#rolodex .drum-btn'); await sleep(1500);
+    ok('…a cloud storage linked earlier is paused: the change is not copied to it, and opened again it is not touched at all', wst.paused && wst.status === 'paused' && davCalls.length === wFirst, `${wFirst} → ${davCalls.length}, ${wst.status}`);
+    await backups(page);
+    await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(400);
+    const waitText = await page.locator('.licence-needed').innerText().catch(() => '');
+    ok('…saving a backup is refused, and the explanation says the code is not activated yet, with Try again and no Buy', /Saving backups and spreadsheet files comes with a Vdex licence/.test(waitText) && /Licensed to Wendy Waits \(wendy@example\.com\), but not activated on this computer yet/.test(waitText) && /\(9 days left\)/.test(waitText) && /Cloud storage, backup files and spreadsheets start once it is activated/.test(waitText) && !/Buy|USD|Enter licence code/.test(waitText) && (await page.locator('.licence-needed').getByRole('button', { name: 'Try again' }).count()) === 1 && !downloads.length, waitText.replace(/\n/g, ' | '));
+    await closeSheets(page);
+    const wcsv = await page.evaluate(async () => { const store = await import('./js/store.js'), backup = await import('./js/backup.js'); await backup.exportAssetRegister(); return store.requirePaid('cloud'); });
+    await sleep(300);
+    ok('…and so are spreadsheets and connecting a cloud storage', wcsv === false && !downloads.length && (await page.locator('.licence-needed').count()) >= 1);
+    await closeSheets(page);
+    await page.evaluate(() => window.logiGo('settings')); await sleep(300);
+    await openSetting(page, 'About & Licence'); await sleep(300);
+    const panelLine = await page.locator('.licence-panel').innerText();
+    ok('About & Licence says what waits for the activation', /not activated on this computer yet: Vdex needs the internet once to do that \(9 days left\)\. Cloud storage, backup files and spreadsheets start once it is activated\./.test(panelLine), panelLine.replace(/\n/g, ' | '));
+    // The licence server is reached: the computer is on the code's list, and everything a licence brings starts.
+    await backups(page);
+    await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(300);
+    await page.evaluate(() => { window.__lic = { enabled: true, mode: 'licensed', canEdit: true, seats: 3, licence: { name: 'Wendy Waits', email: 'wendy@example.com', seats: 3 } }; });
+    await page.locator('.licence-needed').getByRole('button', { name: 'Try again' }).click();
+    await page.waitForFunction(() => !document.querySelector('.licence-needed'), null, { timeout: 5000 }).catch(() => {});
+    await page.waitForFunction(() => import('./js/store.js').then(s => !s.cloud.paused), null, { timeout: 8000 }).catch(() => {});
+    await sleep(1500);
+    await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(500);
+    ok('once the code is activated online, the explanation closes, backups save and the storage syncs again', (await page.locator('.licence-needed').count()) === 0 && downloads.some(n => /^vdex-backup-/.test(n)) && davCalls.length > wFirst, `${davCalls.length} requests, ${downloads.join()}`);
     await ctx.close();
     for (const mode of ['founder', 'licensed']) {
       ({ ctx, page, downloads } = await open({ desktop: { enabled: true, mode, canEdit: true, seats: 3, licence: { name: 'A', seats: 3 } } }));

@@ -22,6 +22,7 @@ Copy these exactly, including the slash at the end where there is one.
 | What the form calls it | Paste this |
 |---|---|
 | Website, home page | `https://vdex.crowmade.app/` |
+| Application home page (Google only) | `https://crowmade.app/vdex/` |
 | Privacy policy | `https://vdex.crowmade.app/privacy.html` |
 | Terms of service | `https://vdex.crowmade.app/terms.html` |
 | Redirect URI, first one (Dropbox and Microsoft) | `https://vdex.crowmade.app/` |
@@ -43,7 +44,7 @@ Copy these exactly, including the slash at the end where there is one.
    - Audience: **External**. **Next**.
    - Contact information: your email. **Next**.
    - Tick the box to agree, **Continue**, **Create**.
-5. Still on **Branding**, fill in: application home page, privacy policy and terms of service (all from the table), and under **Authorized domains** click **Add domain** and type `crowmade.app`. Leave the logo empty for now. Click **Save**.
+5. Still on **Branding**, fill in: application home page `https://crowmade.app/vdex/` (Vdex's page on crowmade.app, which says what the app does and links its privacy policy: Google asks for a home page like that, and the app's own address opens on the terms instead), privacy policy and terms of service (from the table), and under **Authorized domains** click **Add domain** and type `crowmade.app`. Leave the logo empty for now. Click **Save**. If Vdex is already registered with Google with `https://vdex.crowmade.app/` as its home page, open **Branding**, change **Application home page** to `https://crowmade.app/vdex/` and click **Save**; nothing else needs changing.
 6. Go to **Data access** → **Add or remove scopes**. In the box for adding scopes by hand, paste these three lines, then click **Add to table**, **Update** and **Save**:
 
    ```

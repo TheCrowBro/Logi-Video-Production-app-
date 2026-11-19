@@ -147,6 +147,52 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const stale = await adm('look', v.licence.ref, { at: Date.now() - 3600e3 });
     ok('an old signed request is refused, with the server\'s time so the page can retry', stale.status === 403 && stale.error === 'stale' && Math.abs(stale.now - Date.now()) < 60e3);
 
+    /* ------------------------------ disputes ------------------------------ */
+    // A dispute cancels the code at once; one closed in the seller's favour brings back what that dispute cancelled, and
+    // nothing that was cancelled for another reason.
+    const kv = await mf.getKVNamespace('LICENCES');
+    const bought = async (sidN, who) => { sessions.set(sidN, session(sidN, { payment_intent: 'pi_of' + sidN.slice(8), customer_details: { name: who, email: who.toLowerCase().replace(/\W+/g, '.') + '@example.com' } })); const c = (await (await get('/licence/thanks?session_id=' + sidN)).text()).match(/<textarea id="code"[^>]*>([^<]+)</)[1]; return { code: c, ref: (await codes.verifyCode(c, { keys: KEYS })).licence.ref, pi: sessions.get(sidN).payment_intent }; };
+    const dispute = (type, o) => signed({ type, data: { object: { object: 'dispute', ...o } } }).then(r => r.json());
+    const works = async (c, n) => (await post('/licence/activate', { code: c, install: id(n) })).status;
+    const d1 = await bought('cs_test_disputeOne00000000001', 'Dee Spute');
+    ok('a code works before its payment is disputed', (await works(d1.code, 40)) === 200);
+    const opened = await dispute('charge.dispute.created', { id: 'dp_test000000000001', status: 'needs_response', payment_intent: d1.pi });
+    ok('a dispute cancels the code bought with that payment, and notes which dispute did it', opened.cancelled === 1 && (await works(d1.code, 40)) === 403 && (await kv.get('x:' + d1.ref, 'json')).why === 'dispute' && (await kv.get('x:' + d1.ref, 'json')).dispute === 'dp_test000000000001');
+    const lost = await dispute('charge.dispute.closed', { id: 'dp_test000000000001', status: 'lost', payment_intent: d1.pi });
+    ok('a dispute that is lost leaves the code cancelled', lost.ignored === 'charge.dispute.closed' && (await works(d1.code, 40)) === 403);
+    const other = await dispute('charge.dispute.closed', { id: 'dp_test000000000099', status: 'won', payment_intent: d1.pi });
+    ok('another dispute on the same payment being won does not bring it back', other.restored === 0 && (await works(d1.code, 40)) === 403);
+    const won = await dispute('charge.dispute.closed', { id: 'dp_test000000000001', status: 'won', payment_intent: d1.pi });
+    ok('the dispute being closed in the seller\'s favour brings the code back: the same computer is on it again', won.restored === 1 && (await works(d1.code, 40)) === 200 && (await kv.get('x:' + d1.ref)) === null);
+    ok('telling the server twice changes nothing more', (await dispute('charge.dispute.closed', { id: 'dp_test000000000001', status: 'won', payment_intent: d1.pi })).restored === 0 && (await works(d1.code, 40)) === 200);
+    await dispute('charge.dispute.created', { id: 'dp_test000000000002', status: 'warning_needs_response', payment_intent: d1.pi });
+    const dropped = await dispute('charge.dispute.closed', { id: 'dp_test000000000002', status: 'warning_closed', payment_intent: d1.pi });
+    ok('an inquiry the bank drops counts as in the seller\'s favour too', dropped.restored === 1 && (await works(d1.code, 40)) === 200);
+    // Cancelled for another reason: that reason stands, whatever the dispute's end.
+    const d2 = await bought('cs_test_disputeTwo00000000001', 'Owen Cancelled');
+    await dispute('charge.dispute.created', { id: 'dp_test000000000003', status: 'needs_response', payment_intent: d2.pi });
+    await adm('cancel', d2.ref);
+    const afterOwner = await dispute('charge.dispute.closed', { id: 'dp_test000000000003', status: 'won', payment_intent: d2.pi });
+    ok('a code the owner cancelled while it was disputed stays cancelled when the dispute is won', afterOwner.restored === 0 && (await works(d2.code, 41)) === 403 && (await kv.get('x:' + d2.ref, 'json')).why === 'owner');
+    const d3 = await bought('cs_test_disputeThree000000001', 'Rae Funded');
+    await signed({ type: 'charge.refunded', data: { object: { refunded: true, payment_intent: d3.pi } } });
+    const onRefunded = await dispute('charge.dispute.created', { id: 'dp_test000000000004', status: 'needs_response', payment_intent: d3.pi });
+    const afterRefund = await dispute('charge.dispute.closed', { id: 'dp_test000000000004', status: 'won', payment_intent: d3.pi });
+    ok('a code refunded before the dispute stays cancelled as a refund, and the dispute\'s end does not bring it back', onRefunded.cancelled === 0 && afterRefund.restored === 0 && (await works(d3.code, 42)) === 403 && (await kv.get('x:' + d3.ref, 'json')).why === 'refund');
+    const d4 = await bought('cs_test_disputeFour00000000001', 'Lee Later');
+    await dispute('charge.dispute.created', { id: 'dp_test000000000005', status: 'needs_response', payment_intent: d4.pi });
+    await signed({ type: 'charge.refunded', data: { object: { refunded: true, payment_intent: d4.pi } } });
+    ok('…and so does one refunded while the dispute was open', (await dispute('charge.dispute.closed', { id: 'dp_test000000000005', status: 'won', payment_intent: d4.pi })).restored === 0 && (await works(d4.code, 43)) === 403);
+    const d5 = await bought('cs_test_disputeFive00000000001', 'Old Record');
+    await kv.put('x:' + d5.ref, JSON.stringify({ why: 'dispute', at: Date.now() - 5 * 86400e3 })); // as written before disputes were told apart
+    ok('a dispute cancellation recorded before this version is undone by its dispute being won', (await dispute('charge.dispute.closed', { id: 'dp_test000000000006', status: 'won', payment_intent: d5.pi })).restored === 1 && (await works(d5.code, 44)) === 200);
+    const d6 = await bought('cs_test_disputeSix000000000001', 'Nan Nameless');
+    await dispute('charge.dispute.created', { id: 'dp_test000000000007', status: 'needs_response', payment_intent: d6.pi });
+    const nameless = await dispute('charge.dispute.closed', { status: 'won', payment_intent: d6.pi }), odd = await dispute('charge.dispute.closed', { id: 'ch_test000000000007', status: 'won', payment_intent: d6.pi });
+    ok('the end of a dispute that does not say which dispute it was restores nothing', nameless.ignored === 'no-dispute' && odd.ignored === 'no-dispute' && (await works(d6.code, 45)) === 403);
+    ok('…until the dispute itself is closed in the seller\'s favour', (await dispute('charge.dispute.closed', { id: 'dp_test000000000007', status: 'won', payment_intent: d6.pi })).restored === 1 && (await works(d6.code, 45)) === 200);
+    ok('a dispute event that is not signed by Stripe restores nothing',(await signed({ type: 'charge.dispute.closed', data: { object: { id: 'dp_test000000000003', status: 'won', payment_intent: d2.pi } } }, undefined, 'whsec_wrong')).status === 400 && (await works(d2.code, 41)) === 403);
+
     /* --------------------- the desktop app, end to end --------------------- */
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vdex-e2e-'));
     const lic = createLicence({ dir, keys: KEYS, site: SITE, post: async (url, body) => { const r = await mf.dispatchFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json().catch(() => ({})) }; } });
@@ -245,6 +291,154 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const capLic = await (await post('/licence/web/start', { email: 'pat@example.com' }, mf2)).json(), capNone = await (await post('/licence/web/start', { email: 'nobody@example.com' }, mf2)).json();
     ok('once the day\'s sign-in emails are used up, everyone gets the same "try tomorrow" answer (purchase emails keep their room)', firstOk === 200 && capLic.error === 'busy' && JSON.stringify(capLic) === JSON.stringify(capNone));
     await mf2.dispose();
+
+    /* ------------------------ the store reviewers ------------------------ */
+    // One address signs in with a code that does not change (REVIEW_EMAIL and REVIEW_CODE, made up here for each run).
+    {
+      const REVIEW = 'store-review@example.com', fixed = String(crypto.randomInt(100000, 1000000)), wrongs = n => Array.from({ length: n }, (_, i) => String((Number(fixed) - 100000 + 7919 * (i + 1)) % 900000 + 100000));
+      const renv = { ...env, REVIEW_EMAIL: ' Store-Review@Example.com ', REVIEW_CODE: fixed };
+      const utc = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
+      const reviewCode = await codes.signCode(ownerKey, 1, { name: 'Store review', email: REVIEW, comp: true, issued: '2026-11-02', expires: '2099-12-31', seats: 10, serial: 4001 });
+      const licensed = async m => (await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'link', ref: '1:4001', code: reviewCode, at: Date.now() }), m)).status;
+      const startOf = async (email, m) => { const t0 = Date.now(), r = await post('/licence/web/start', { email }, m); return { status: r.status, body: await r.text(), type: r.headers.get('content-type'), ms: Date.now() - t0 }; };
+      const fresh = async (bindings = renv, seed = null) => { const m = new Miniflare(opts(bindings)); if (seed) { const k = await m.getKVNamespace('LICENCES'); for (const [key, val] of Object.entries(seed)) await k.put(key, val); } return m; };
+      let m = await fresh();
+      try {
+        const rkv = await m.getKVNamespace('LICENCES');
+        await rkv.put('e:pat@example.com', JSON.stringify({ licences: [{ ref: v.licence.ref, seats: 3 }] }));
+        const before = await web('verify', { email: REVIEW, code: fixed }, m);
+        ok('the review address needs a licence like any other: without one, even the right code signs nobody in', before.status === 403 && before.error === 'no-licence');
+        ok('the owner gives it a free licence with an end date', (await licensed(m)) === 200);
+        calls.length = 0;
+        const rs = await startOf(REVIEW, m), ns = await startOf('nobody@example.com', m), ps = await startOf('pat@example.com', m);
+        ok('asking for a code for the review address is answered exactly as for any other address', rs.status === 200 && rs.body === ns.body && rs.body === ps.body && rs.status === ns.status && rs.status === ps.status && rs.type === ns.type && rs.body === '{"ok":true}', JSON.stringify([rs, ns, ps]));
+        ok('…after about the time an email takes to hand over, so the wait does not single it out either', rs.ms >= 240 && rs.ms < 5000, `${rs.ms} ms`);
+        ok('…sends no email to it (the licensed address beside it got one), and stores nothing about it', !mails().some(x => x.to.includes(REVIEW)) && mails().some(x => x.to[0] === 'pat@example.com') && (await rkv.get('w:' + REVIEW)) === null && !calls.some(c => c.url.includes('resend') && c.body.includes(REVIEW)));
+        // Wrong tries are counted for each requester (the address Cloudflare gives in CF-Connecting-IP; an IPv6 /64 block
+        // counts as one) and for everyone together. These requesters' addresses are from the ranges kept for examples.
+        const from = (ip, code, mm = m) => mm.dispatchFetch(SITE + '/licence/web/verify', { method: 'POST', headers: { 'Content-Type': 'application/json', 'CF-Connecting-IP': ip }, body: JSON.stringify({ email: REVIEW, code }) }).then(async r => ({ status: r.status, ...(await r.json()) }));
+        const tagOf = (ip, d = utc()) => 'rv:' + d + ':' + crypto.createHash('sha256').update(`vdex-review|${env.LICENCE_SHOP_KEY}|${d}|${ip}`).digest('hex').slice(0, 24);
+        const ipA = '198.51.100.7', ipB = '203.0.113.9', ipC = '192.0.2.10', ipD = '192.0.2.11';
+        const wrongOne = await from(ipA, wrongs(1)[0]), wrongAny = await web('verify', { email: 'nobody@example.com', code: '000000' }, m);
+        ok('a wrong code for it is refused with the answer anyone gets', wrongOne.status === 400 && JSON.stringify(wrongOne) === JSON.stringify(wrongAny));
+        const rin = await from(ipA, fixed), rtok = rin.token && (await codes.readNote('web', rin.token, { keys: KEYS, signers: [2] }));
+        ok('the fixed code signs in: a token for the review address and its licence, which shows its end date', rin.status === 200 && rtok && rtok.email === REVIEW && rtok.ref === '1:4001' && rin.licence.comp === true && rin.licence.expires === '2099-12-31' && rin.licence.seats === 10, JSON.stringify(rin).slice(0, 200));
+        ok('…the sign-in works like any other (the daily check, a phone\'s place on the licence)', (await web('check', { token: rin.token }, m)).ok === true && (await web('activate', { token: rin.token, install: 'install-review-00000001', os: 'Android' }, m)).ok === true);
+        const again2 = await web('verify', { email: ' STORE-review@example.com', code: `${fixed.slice(0, 3)} ${fixed.slice(3)}` }, m);
+        ok('the code does not change: it signs in again, typed with a space and the address in capitals', again2.status === 200 && !!again2.token);
+        // A reviewer who tries Delete my licence records (Apple's do) must not lock the next reviewer out.
+        const rdel = await web('forget', { token: again2.token }, m);
+        const rseats = (await (await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'look', ref: '1:4001', at: Date.now() }), m)).json()).computers.length;
+        ok('a reviewer pressing Delete my licence records is signed out and the devices are taken off, like anyone', rdel.ok === true && rseats === 0 && (await web('check', { token: again2.token }, m)).status === 401 && (await web('check', { token: rin.token }, m)).status === 401);
+        const rback = await from(ipA, fixed);
+        ok('…and the review address can still sign in afterwards: its licence stays linked', rback.status === 200 && (await web('check', { token: rback.token }, m)).ok === true);
+        // Guessing from one address: 5 wrong tries a day, whatever a sign-in code's own counter would do.
+        for (const w of wrongs(4).slice(1)) await from(ipA, w); // 4 wrong from A so far, with the one above
+        ok('after 4 wrong tries from one requester the right code still signs in from there', (await from(ipA, fixed)).status === 200 && (await rkv.get(tagOf(ipA))) === '4' && (await rkv.get('rv:' + utc())) === '4');
+        await from(ipA, wrongs(5)[4]);
+        const locked = await from(ipA, fixed);
+        ok('after its 5th wrong try that requester is refused, the right code included, with the same answer as a wrong code', locked.status === 400 && JSON.stringify(locked) === JSON.stringify(wrongAny) && (await rkv.get(tagOf(ipA))) === '5');
+        ok('…while a reviewer anywhere else still signs in: one stranger cannot lock the reviewers out', (await from(ipB, fixed)).status === 200);
+        for (const w of wrongs(30).slice(5)) await from(ipA, w);
+        ok('…and that requester\'s further tries are refused unlooked-at and not counted for everyone, so it cannot use up the day\'s 20', (await rkv.get('rv:' + utc())) === '5' && (await rkv.get(tagOf(ipA))) === '5' && (await from(ipB, fixed)).status === 200);
+        await startOf(REVIEW, m);
+        ok('asking for a new code does not reset the count (a sign-in code\'s own 5 tries start afresh with each code; these do not)', (await from(ipA, fixed)).status === 400);
+        // An IPv6 network counts as one requester: its /64 block, however the address is written.
+        for (const w of wrongs(33).slice(30)) await from('2001:db8:1:2::1', w);
+        for (const w of wrongs(35).slice(33)) await from('2001:DB8:1:2:aaaa:bbbb:cccc:dddd', w);
+        ok('addresses in one IPv6 /64 block share one count: 5 wrong tries from two of them close it to a third', (await from('2001:0db8:0001:0002::ffff', fixed)).status === 400 && (await from('2001:db8:1:3::1', fixed)).status === 200, (await rkv.get('rv:' + utc())) + ' in all');
+        // Guessing from many addresses: 20 wrong tries a day in all, and then nobody, the right code included.
+        for (const w of wrongs(40).slice(35)) await from(ipC, w);
+        ok('after 15 wrong tries in all, from three requesters, the reviewers still sign in', (await rkv.get('rv:' + utc())) === '15' && (await from(ipB, fixed)).status === 200);
+        for (const w of wrongs(45).slice(40)) await from(ipD, w);
+        const shut = await from(ipB, fixed), shutNew = await from('192.0.2.200', fixed);
+        ok('after 20 in all (four requesters\' worth) the address is refused for everyone until the next day, the right code included', (await rkv.get('rv:' + utc())) === '20' && shut.status === 400 && JSON.stringify(shut) === JSON.stringify(wrongAny) && shutNew.status === 400);
+        const stored = (await rkv.list({ prefix: 'rv:' })).keys.map(k => k.name);
+        ok('what is stored names no requester: a tag scrambled with the shop key and the day, kept for two days', stored.length === 5 && stored.every(k => /^rv:\d{4}-\d\d-\d\d(:[0-9a-f]{24})?$/.test(k)) && !stored.some(k => /198\.51|203\.0|192\.0|2001/.test(k)) && (await rkv.list({ prefix: 'rv:' })).keys.every(k => k.expiration && k.expiration * 1000 - Date.now() <= 2 * 86400e3 + 60e3), stored.join(' '));
+        ok('no email was sent to the review address through any of this', !mails().some(x => x.to.includes(REVIEW)));
+        await m.dispose();
+        // The counts are kept in storage by the day: they outlive this copy of the script, and end with the day.
+        m = await fresh(renv, { [tagOf(ipA)]: '5', ['rv:' + utc()]: '5' }); await licensed(m);
+        ok('a fresh copy of the script still refuses that requester for the rest of the day, and only it', (await from(ipA, fixed)).status === 400 && (await from(ipB, fixed)).status === 200);
+        await m.dispose();
+        m = await fresh(renv, { ['rv:' + utc()]: '20' }); await licensed(m);
+        ok('…and still refuses everyone once the day\'s 20 are used', (await from(ipB, fixed)).status === 400);
+        await m.dispose();
+        const y = utc(Date.now() - 86400e3);
+        m = await fresh(renv, { ['rv:' + y]: '20', [tagOf(ipA, y)]: '5' }); await licensed(m);
+        ok('the next day it signs in again', (await from(ipA, fixed)).status === 200);
+        await m.dispose();
+        // Many tries at once must not each get a look before the counts catch up.
+        m = await fresh(); await licensed(m);
+        const burst = await Promise.all(wrongs(40).map(w => from(ipA, w)));
+        ok('40 wrong tries sent at once from one requester are all refused and count as its 5; the reviewers still sign in elsewhere', burst.every(r => r.status === 400 && r.error === 'wrong-code') && (await from(ipA, fixed)).status === 400 && (await (await m.getKVNamespace('LICENCES')).get('rv:' + utc())) === '5' && (await from(ipB, fixed)).status === 200, (await (await m.getKVNamespace('LICENCES')).get('rv:' + utc())) + ' stored');
+        await m.dispose();
+        m = await fresh(); await licensed(m);
+        const crowd = await Promise.all(wrongs(60).map((w, i) => from(`198.51.100.${100 + (i % 30)}`, w)));
+        ok('60 wrong tries sent at once from 30 requesters are all refused, and no more than 20 of them are counted', crowd.every(r => r.status === 400) && (await (await m.getKVNamespace('LICENCES')).get('rv:' + utc())) === '20' && (await from(ipB, fixed)).status === 400, (await (await m.getKVNamespace('LICENCES')).get('rv:' + utc())) + ' stored');
+        await m.dispose();
+        // With either setting missing, or a code that could not be typed, there is no such address.
+        for (const [what, bindings] of [['the code is not set', { ...env, REVIEW_EMAIL: REVIEW }], ['the code is not 6 digits', { ...renv, REVIEW_CODE: fixed + '1' }], ['the address is not set', { ...env, REVIEW_CODE: fixed }]]) {
+          m = await fresh(bindings); await licensed(m);
+          calls.length = 0;
+          await startOf(REVIEW, m);
+          const real = lastCode(REVIEW), tryFixed = await web('verify', { email: REVIEW, code: fixed === real ? wrongs(1)[0] : fixed }, m);
+          ok(`when ${what}, the address is like any other: it is emailed a code, and the fixed code signs nobody in`, /^\d{6}$/.test(real || '') && tryFixed.status === 400 && (await web('verify', { email: REVIEW, code: real }, m)).status === 200, JSON.stringify(tryFixed));
+          await m.dispose();
+        }
+        m = null;
+      } finally { if (m) await m.dispose().catch(() => {}); }
+    }
+
+    /* -------------------- deleting for a named address -------------------- */
+    // The owner's way to do what Delete my licence records does, for an email address: behind FORGET_SECRET.
+    {
+      const secret = crypto.randomBytes(24).toString('base64url'), ADDR = 'forget.me@example.com';
+      const forget = async (body, m, init = {}) => { const r = await m.dispatchFetch(SITE + '/licence/owner/forget', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'null' }, body: JSON.stringify(body), ...init }); return { status: r.status, cors: r.headers.get('access-control-allow-origin'), text: await r.text() }; };
+      const unknown = await mf.dispatchFetch(SITE + '/licence/no-such-address', { method: 'POST', body: '{}' }), absent = await forget({ email: ADDR, secret }, mf);
+      const pre0 = await mf.dispatchFetch(SITE + '/licence/owner/forget', { method: 'OPTIONS', headers: { Origin: 'null', 'Access-Control-Request-Method': 'POST' } });
+      ok('until the owner sets the secret, the operation does not exist: its address answers like any unknown one', absent.status === 404 && absent.text === (await unknown.text()) && unknown.status === 404 && pre0.status === 404);
+      let m = new Miniflare(opts({ ...env, FORGET_SECRET: secret.slice(0, 19) }));
+      try {
+        ok('a secret shorter than 20 characters does not switch it on', (await forget({ email: ADDR, secret: secret.slice(0, 19) }, m)).status === 404);
+        await m.dispose(); m = new Miniflare(opts({ ...env, FORGET_SECRET: secret }));
+        const fkv = await m.getKVNamespace('LICENCES'), fadm = async (op, ref, extra = {}) => (await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op, ref, at: Date.now(), ...extra }), m)).json();
+        const fcode = await codes.signCode(ownerKey, 1, { name: 'Forget Me', email: ADDR, comp: true, issued: '2026-11-02', serial: 5001 });
+        const fcode2 = await codes.signCode(ownerKey, 1, { name: 'Forget Me', email: ADDR, comp: true, issued: '2026-11-02', serial: 5002 });
+        for (const n of [1, 2, 3, 4]) { const r = await post('/licence/activate', { code: fcode, install: id(60 + n), os: 'Windows' }, m); if (n === 4) await post('/licence/activate', { code: fcode, install: id(64), os: 'Windows', release: (await r.json()).computers[0].tag }, m); } // 3 computers, and one move
+        await post('/licence/activate', { code: fcode2, install: id(70), os: 'Mac' }, m);
+        await fadm('cancel', '1:5002');
+        calls.length = 0;
+        await web('start', { email: ADDR }, m);
+        const fin = await web('verify', { email: ADDR, code: lastCode(ADDR) }, m);
+        await web('start', { email: ADDR }, m); // a sign-in code waiting to be used
+        const held = async () => ({ e: await fkv.get('e:' + ADDR, 'json'), w: await fkv.get('w:' + ADDR, 'json'), c: await fkv.get('c:1:5001', 'json'), c2: await fkv.get('c:1:5002', 'json'), x2: await fkv.get('x:1:5002', 'json') });
+        const h0 = await held();
+        ok('(an address with two licences, four devices, a sign-in and a waiting code is held)', fin.status === 200 && h0.e.licences.length === 2 && !!h0.w.h && h0.c.computers.length === 3 && h0.c.swaps.length === 1 && h0.c2.computers.length === 1 && h0.x2.why === 'owner');
+        // Without the secret: one answer, whatever the address, and nothing happens.
+        const tries = [];
+        for (const sec of [undefined, '', 'x', secret.slice(0, -1), secret + 'x', secret.toUpperCase(), 12345, null, { a: 1 }]) for (const email of [ADDR, 'nobody.at.all@example.com', 'not an address']) tries.push(await forget({ email, ...(sec === undefined ? {} : { secret: sec }) }, m));
+        tries.push(await forget({ email: ADDR, token: fin.token }, m)); // a sign-in is not the secret
+        tries.push(await m.dispatchFetch(SITE + '/licence/owner/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json' }).then(async r => ({ status: r.status, text: await r.text() })));
+        const h1 = await held();
+        ok('without the right secret every request gets the same refusal, for an address that is held, one that is not, and one that is no address', tries.every(t => t.status === 403 && t.text === '{"error":"refused"}'), JSON.stringify(tries.find(t => t.status !== 403 || t.text !== '{"error":"refused"}') || ''));
+        ok('…and nothing is deleted', JSON.stringify(h1) === JSON.stringify(h0) && (await web('check', { token: fin.token }, m)).ok === true);
+        const preF = await m.dispatchFetch(SITE + '/licence/owner/forget', { method: 'OPTIONS', headers: { Origin: 'null', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'content-type' } });
+        ok('the generator page (a file on the owner\'s computer) may ask: the browser\'s pre-check is answered, and other methods are not served', preF.status === 204 && /POST/.test(preF.headers.get('access-control-allow-methods')) && (await m.dispatchFetch(SITE + '/licence/owner/forget')).status === 405);
+        ok('with the secret, something that is not an email address is said to be one', (await forget({ email: 'not an address', secret }, m)).text === '{"error":"invalid-email"}');
+        const gone = await forget({ email: '  Forget.Me@Example.com ', secret: ` ${secret} ` }, m), h2 = await held();
+        ok('with the secret, the address\'s records are deleted, and the answer says how much there was', gone.status === 200 && gone.cors === '*' && gone.text === JSON.stringify({ ok: true, licences: 2, devices: 4 }), gone.text);
+        ok('…what the in-app Delete removes: the address\'s links to its licences, its sign-in code, and the devices on those licences', h2.e === null && h2.w === null && h2.c.computers.length === 0 && h2.c2.computers.length === 0, JSON.stringify(h2));
+        ok('…and what it keeps: a cancellation, and the count of recent moves', h2.x2.why === 'owner' && h2.c.swaps.length === 1);
+        ok('…every sign-in made before it stops working', (await web('check', { token: fin.token }, m)).status === 401);
+        ok('nothing in storage names the address any more', !(await fkv.list()).keys.some(k => k.name.includes(ADDR)) && !JSON.stringify(await Promise.all((await fkv.list()).keys.map(k => fkv.get(k.name)))).includes(ADDR));
+        const none = await forget({ email: 'nobody.at.all@example.com', secret }, m);
+        ok('an address nothing is held for is answered the same way, with nothing found', none.status === 200 && none.text === JSON.stringify({ ok: true, licences: 0, devices: 0 }));
+        // What the deletion page warns of: a computer that still has the code puts itself, and the address, back.
+        const backOn = await post('/licence/activate', { code: fcode, install: id(61), os: 'Windows' }, m), h3 = await held();
+        ok('a computer that still has the code puts itself and the address back at its next check (so: Release this computer first)', backOn.status === 200 && h3.c.computers.length === 1 && h3.e.licences.length === 1);
+      } finally { await m.dispose().catch(() => {}); }
+    }
 
     /* ----------------------------- not set up ----------------------------- */
     mf2 = new Miniflare(opts({}));
@@ -366,6 +560,29 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const { WORKER_ROUTES } = await import(path.join(ROOT, 'tools/site-files.mjs'));
     ok('only /buy and /licence/… run the script; the rest is served as files', wr.main === 'worker.mjs' && JSON.stringify(wr.assets.run_worker_first) === JSON.stringify(['/buy', '/licence/*']) && JSON.stringify(WORKER_ROUTES) === JSON.stringify(wr.assets.run_worker_first) && wr.assets.binding === 'ASSETS');
     ok('the licence store is created by Wrangler (no ID to set up), and dashboard secrets survive a publish', JSON.stringify(wr.kv_namespaces) === JSON.stringify([{ binding: 'LICENCES' }]) && wr.keep_vars === true);
+
+    /* ------------------------------ the guides ------------------------------ */
+    // What the owner is told must match what the Worker does, and no real address, code or secret is written down.
+    const doc = f => fs.readFileSync(path.join(ROOT, 'docs', f), 'utf8'), selling = doc('selling-desktop.md'), play = doc('google-play.md'), apple = doc('apple-app-store.md');
+    const sentence = /Sign in with `?<review address>`? and the code `?<review code>`?\. The code does not change and no mailbox is needed\./;
+    ok('both store guides give reviewers the fixed sign-in, with placeholders for the address and the code', sentence.test(play) && sentence.test(apple) && sentence.test(selling) && !/Gmail|mailbox for the reviewer|arrives in that mailbox/.test(play + apple));
+    const workerText = fs.readFileSync(path.join(ROOT, 'cloudflare/worker.mjs'), 'utf8'), settings = ['REVIEW_EMAIL', 'REVIEW_CODE', 'FORGET_SECRET'];
+    ok('the owner\'s guide names the three new settings, and the Worker reads exactly those', settings.every(n => selling.includes('`' + n + '`') && workerText.includes('env.' + n)));
+    ok('…and nowhere gives any of them a value', ![selling, play, apple].some(t => /(REVIEW_EMAIL|REVIEW_CODE|FORGET_SECRET)`?\s*(=|:)\s*`?[^\s`(]/.test(t) || /review code[^.\n]{0,40}\b\d{6}\b/i.test(t)) && ![play, apple].some(t => /[A-Za-z0-9._%+-]+@(?!crowmade\.app\b)[A-Za-z0-9.-]+\.[a-z]{2,}/.test(t.replace(/you@example\.com/g, ''))));
+    const hookStep = (selling.match(/\n9\. \*\*Webhook\.\*\*[^\n]*/) || [''])[0];
+    ok('the webhook step lists every event the Worker acts on, the end of a dispute included', ['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'charge.refunded', 'charge.dispute.created', 'charge.dispute.closed'].every(e => hookStep.includes('`' + e + '`') && workerText.includes(`'${e}'`)), hookStep.trim().slice(0, 80));
+    const nums = (workerText.match(/const REVIEW_TRIES = (\d+), REVIEW_TRIES_ALL = (\d+);/) || []).slice(1).map(Number), years = Math.round(1e6 / 2 / (nums[1] || 1) / 365);
+    ok('the guides say what the Worker enforces: the review address\'s limits per connection and for everyone, what they give, and a deletion secret of 20 characters or more', nums.length === 2 && selling.includes(`After ${nums[0]} wrong tries in a day from one internet connection`) && selling.includes(`After ${nums[1]} wrong tries in a day from everyone together`) && selling.includes(`about ${years} years on average`) && [play, apple].every(t => t.includes(`After ${nums[0]} wrong codes in a day from one connection`) && t.includes(`after ${nums[1]} in a day from everyone together`)) && /20 characters or more/.test(selling) && /s\.length >= 20/.test(workerText), `${nums} → ${years} years`);
+    ok('the product is a Vdex licence for one person on up to 3 devices, not a desktop licence', selling.includes('name "Vdex licence", description "One-off licence to use Vdex, for one person, on up to 3 devices"') && !/name "Vdex desktop licence"/.test(selling));
+    // The review address and code, and the deletion secret, are the owner's to set in Cloudflare and are written nowhere
+    // here: the only addresses at the publisher's domains in these files are the support and sending addresses (and the
+    // made-up reply address the tests use).
+    const walk = d => (fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }) : []).flatMap(e => (e.name === 'node_modules' || e.name.startsWith('.') ? [] : e.isDirectory() ? walk(path.join(d, e.name)) : /\.(md|mjs|cjs|js|html|json|jsonc)$/.test(e.name) ? [path.join(d, e.name)] : []));
+    const ours = [...['docs', 'cloudflare', 'js', 'desktop', 'tools'].flatMap(d => walk(path.join(ROOT, d))), ...walk(path.join(REPO, 'tests/specs')), ...fs.readdirSync(ROOT).filter(f => /\.(html|md|json)$/.test(f)).map(f => path.join(ROOT, f))];
+    const atOurs = [...new Set(ours.flatMap(f => (fs.readFileSync(f, 'utf8').match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}/g) || []).map(a => a.toLowerCase())))].filter(a => /[@.]crowmade\.app$/.test(a));
+    ok('no address at crowmade.app is written in the code, the guides or the tests but the support, sending and test reply addresses', ours.length > 100 && atOurs.every(a => ['support@crowmade.app', 'licences@vdex.crowmade.app', 'help@crowmade.app'].includes(a)), atOurs.join(', '));
+    const google = doc('turn-on-sign-in.md');
+    ok('Google\'s sign-in registration is given crowmade.app/vdex/ as the application home page', /application home page `https:\/\/crowmade\.app\/vdex\/`/.test(google) && /\| Application home page \(Google only\) \| `https:\/\/crowmade\.app\/vdex\/` \|/.test(google));
   } catch (e) {
     console.log('FAIL spec crashed — ' + (e && e.stack || e));
     process.exitCode = 1;

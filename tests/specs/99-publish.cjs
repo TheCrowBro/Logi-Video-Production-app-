@@ -65,6 +65,16 @@ try {
   ok('the Android app is no longer published as a free public download, and the old one is removed in a job of its own', !/gh release create/.test(andr) && /\n  unpublish:\n/.test(andr) && /gh release delete android-latest/.test(andr) && /actions\/artifacts\/\$id/.test(andr) && /^permissions:\n  contents: read$/m.test(andr));
   ok('only the Play file is kept, for 3 days, and only from a build signed with the upload key', /if: env\.KEY_KIND == 'upload key'\n\s+uses: actions\/upload-artifact@[0-9a-f]{40}/.test(andr) && /retention-days: 3\n\s+path: android\/vdex-android\.aab\n/.test(andr) && !/path:[\s|]*[^\n]*\.apk/.test(andr));
 
+  // ---- the desktop app's package ----
+  // The installers carry the files package.json lists (build.files). A page in there that links to a page left out
+  // would open on "Not found" in the desktop app: the privacy policy links to the deletion page, for one.
+  const packed = JSON.parse(read('package.json')).build.files, packedPages = packed.filter(f => /^[^/*]+\.html$/.test(f));
+  const inPack = f => packed.includes(f) || packed.some(g => g.endsWith('/**') && f.startsWith(g.slice(0, -2)));
+  const dangling = packedPages.flatMap(pg => [...read(pg).matchAll(/<a\b[^>]*\shref="([^"#?:]+\.html)(?:[#?][^"]*)?"/g)].map(m => m[1]).filter(to => !inPack(to)).map(to => `${pg} → ${to}`));
+  ok('the desktop app carries the deletion page, and every page its pages link to', packedPages.includes('delete-account.html') && packedPages.includes('privacy.html') && /href="delete-account\.html"/.test(read('privacy.html')) && !dangling.length, dangling.join(', ') || packedPages.join(', '));
+  const needs = [...read('delete-account.html').matchAll(/(?:src|href)="([^"#?:]+\.(?:svg|png|css|js))"/g)].map(m => m[1]);
+  ok('…with the files the deletion page itself loads', needs.length > 0 && needs.every(inPack), needs.join(', '));
+
   // ---- the Android app agrees with itself and the new address ----
   const twa = JSON.parse(read('android/twa-manifest.json')), gradle = read('android/app/build.gradle'), manifest = read('android/app/src/main/AndroidManifest.xml'), strings = read('android/app/src/main/res/values/strings.xml');
   const links = JSON.parse(read('.well-known/assetlinks.json'));
