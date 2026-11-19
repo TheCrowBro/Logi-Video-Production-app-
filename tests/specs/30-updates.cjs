@@ -5,7 +5,8 @@ const { spawnSync } = require('child_process');
 const ROOT = process.env.VDEX_ROOT;
 const swPath = ROOT + '/sw.js', verPath = ROOT + '/js/version.js', laterPath = ROOT + '/later-page.html', laterJs = ROOT + '/js/later-page.js', utilPath = ROOT + '/js/util.js';
 const origSw = fs.readFileSync(swPath, 'utf8'), origVer = fs.readFileSync(verPath, 'utf8'), origUtil = fs.readFileSync(utilPath, 'utf8');
-const restore = () => { fs.writeFileSync(swPath, origSw); fs.writeFileSync(verPath, origVer); fs.writeFileSync(utilPath, origUtil); fs.rmSync(laterPath, { force: true }); fs.rmSync(laterJs, { force: true }); };
+const tcPath = ROOT + '/js/pages/tcnotes.js', tcHeld = tcPath + '.held';
+const restore = () => { fs.writeFileSync(swPath, origSw); fs.writeFileSync(verPath, origVer); fs.writeFileSync(utilPath, origUtil); fs.rmSync(laterPath, { force: true }); fs.rmSync(laterJs, { force: true }); if (fs.existsSync(tcHeld)) fs.renameSync(tcHeld, tcPath); };
 process.on('exit', restore);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -213,6 +214,18 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await openSetting(page, 'About & Licence');
   const about = await page.locator('details.settings-section:has(> summary:has-text("About"))').innerText();
   ok('Settings → General → About & Licence offers the reload', /new version has been downloaded/i.test(about) && /Reload now/.test(about));
+  // A section that cannot be loaded while a new version is waiting (the new files may not fit the ones running): the
+  // cure is to reload, not the connection.
+  fs.renameSync(tcPath, tcHeld);
+  await page.evaluate(async () => {
+    for (const k of await caches.keys()) { const c = await caches.open(k); for (const r of await c.keys()) if (/\/js\/pages\/tcnotes\.js$/.test(r.url)) await c.delete(r); }
+    window.__toasts = []; new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true });
+  });
+  const errs = errors.length;
+  await page.evaluate(() => window.logiGo('tcnotes')); await sleep(1000);
+  const saidTc = await page.evaluate(() => window.__toasts.join(' | '));
+  fs.renameSync(tcHeld, tcPath); errors.splice(errs); // the failed load's own console line
+  ok('a section that cannot be loaded once a new version is waiting says to reload, not to check the connection', /Vdex has been updated: reload to open that section/.test(saidTc) && !/Check the connection/.test(saidTc), saidTc);
   await page.screenshot({ path: process.env.S + '/update-bar.png' });
   await page.locator('.update-bar button', { hasText: 'Reload' }).click();
   await page.waitForLoadState('domcontentloaded'); await page.waitForSelector('#rolodex .drum-btn');

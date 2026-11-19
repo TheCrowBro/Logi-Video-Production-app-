@@ -38,6 +38,8 @@ export function healthLine() {
 }
 function healthText() {
   // A licence stopped covering this device less than 30 days ago: backup files still work, until a date.
+  // A licence not confirmed online for 90 days: backup files still work, until it is confirmed again.
+  if (!store.isPaid() && store.backupsAllowed() && store.backupsUntil() === Infinity) return h('p', { class: 'warn small' }, 'Vdex has not been able to check your licence for 90 days. Export backup still saves a backup file of everything here; cloud storage and spreadsheets wait until it can.');
   if (!store.isPaid() && store.backupsAllowed()) return h('p', { class: 'warn small' }, `Your licence no longer covers this device. Export backup still saves a backup file of everything here until ${new Date(store.backupsUntil()).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}; cloud storage and spreadsheets need a licence.`);
   if (!store.isPaid()) return h('p', { class: 'small muted' }, 'Backup files and cloud storage come with a Vdex licence. Your data is kept on this device.');
   const hl = health();

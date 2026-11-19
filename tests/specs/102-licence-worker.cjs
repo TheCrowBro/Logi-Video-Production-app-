@@ -125,6 +125,16 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('after 3 moves in 30 days the code cannot move again', last.status === 200 && j7.swapsLeft === 0 && (await act(id(7), { release: j7.computers[0].tag })).status === 429);
     const listed = (await mf.getKVNamespace('LICENCES').then(kv => kv.get('c:' + v.licence.ref, 'json'))).computers.map(c => c.id);
     ok('releasing a computer frees its place; an unlisted one is told so', (await post('/licence/release', { code, install: listed[0] })).status === 200 && (await post('/licence/release', { code, install: listed[0] })).status === 404 && (await act(id(8))).status === 200);
+    // Turns (the desktop app from 1.4.0): a new one at each check, so a copy of an installation shows an old one.
+    const tcode = await codes.signCode(ownerKey, 1, { name: 'Tess Turn', comp: true, issued: '2026-11-02', serial: 7001 });
+    const tact = (install, turn) => post('/licence/activate', { code: tcode, install, os: 'Linux', ...(turn === undefined ? {} : { turn }) }).then(async r => ({ status: r.status, ...(await r.json()) }));
+    const tlist = async () => ((await (await mf.getKVNamespace('LICENCES')).get('c:1:7001', 'json')) || { computers: [] }).computers.map(c => c.id);
+    const tu1 = await tact(id(90), ''), tu2 = await tact(id(90), tu1.turn), tu3 = await tact(id(90), tu1.turn);
+    ok('each check gives the desktop app a new turn, and an out-of-date one (a copy that checked after the other, or an answer lost on the way) takes that install off the list', tu1.status === 200 && /^[A-Za-z0-9_-]{16}$/.test(tu1.turn || '') && tu2.status === 200 && tu2.turn !== tu1.turn && tu3.status === 409 && tu3.error === 'stale' && !(await tlist()).includes(id(90)), JSON.stringify([tu1.turn, tu2.turn, tu3]));
+    const told = await tact(id(91));
+    ok('an app that sends no turn (a store app, an older desktop app) is answered as before, with none', told.status === 200 && !('turn' in told) && (await tact(id(91))).status === 200 && (await tlist()).includes(id(91)));
+    const tu4 = await tact(id(92), ''), tu5 = await tact(id(92));
+    ok('…but once an install has been given a turn, a request without one is out of date too', tu4.status === 200 && tu5.status === 409 && tu5.error === 'stale');
     ok('a code that does not check out, or a bad computer ID, is refused', (await post('/licence/activate', { code: code.slice(0, -3) + 'AAA', install: id(9) })).status === 400 && (await post('/licence/activate', { code, install: 'x' })).status === 400 && (await post('/licence/activate', 'not json')).status === 400);
 
     /* ------------------------------ refunds ------------------------------ */
@@ -158,8 +168,6 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('a code works before its payment is disputed', (await works(d1.code, 40)) === 200);
     const opened = await dispute('charge.dispute.created', { id: 'dp_test000000000001', status: 'needs_response', payment_intent: d1.pi });
     ok('a dispute cancels the code bought with that payment, and notes which dispute did it', opened.cancelled === 1 && (await works(d1.code, 40)) === 403 && (await kv.get('x:' + d1.ref, 'json')).why === 'dispute' && (await kv.get('x:' + d1.ref, 'json')).dispute === 'dp_test000000000001');
-    const lost = await dispute('charge.dispute.closed', { id: 'dp_test000000000001', status: 'lost', payment_intent: d1.pi });
-    ok('a dispute that is lost leaves the code cancelled', lost.ignored === 'charge.dispute.closed' && (await works(d1.code, 40)) === 403);
     const other = await dispute('charge.dispute.closed', { id: 'dp_test000000000099', status: 'won', payment_intent: d1.pi });
     ok('another dispute on the same payment being won does not bring it back', other.restored === 0 && (await works(d1.code, 40)) === 403);
     const won = await dispute('charge.dispute.closed', { id: 'dp_test000000000001', status: 'won', payment_intent: d1.pi });
@@ -168,6 +176,27 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     await dispute('charge.dispute.created', { id: 'dp_test000000000002', status: 'warning_needs_response', payment_intent: d1.pi });
     const dropped = await dispute('charge.dispute.closed', { id: 'dp_test000000000002', status: 'warning_closed', payment_intent: d1.pi });
     ok('an inquiry the bank drops counts as in the seller\'s favour too', dropped.restored === 1 && (await works(d1.code, 40)) === 200);
+    // Each payment's disputes are remembered, so the order Stripe's events arrive in changes nothing.
+    const dL = await bought('cs_test_disputeLost0000000001', 'Lou Lost');
+    await dispute('charge.dispute.created', { id: 'dp_test00000000000A', status: 'needs_response', payment_intent: dL.pi });
+    await dispute('charge.dispute.created', { id: 'dp_test00000000000B', status: 'needs_response', payment_intent: dL.pi });
+    const lost = await dispute('charge.dispute.closed', { id: 'dp_test00000000000A', status: 'lost', payment_intent: dL.pi });
+    ok('a dispute that is lost leaves the code cancelled', lost.ok === true && (await works(dL.code, 46)) === 403);
+    const wonAfterLost = await dispute('charge.dispute.closed', { id: 'dp_test00000000000B', status: 'won', payment_intent: dL.pi });
+    ok('…and another dispute on that payment being won afterwards does not bring it back', wonAfterLost.restored === 0 && (await works(dL.code, 46)) === 403 && (await kv.get('x:' + dL.ref, 'json')).why === 'dispute');
+    const dW = await bought('cs_test_disputeWarn0000000001', 'Wen Early');
+    const early = await dispute('charge.dispute.closed', { id: 'dp_test00000000000C', status: 'warning_closed', payment_intent: dW.pi });
+    const late = await dispute('charge.dispute.created', { id: 'dp_test00000000000C', status: 'warning_needs_response', payment_intent: dW.pi });
+    ok('a dispute already closed in the seller\'s favour is not reopened by its "created" event arriving late', early.restored === 0 && late.cancelled === 0 && (await works(dW.code, 47)) === 200 && (await kv.get('x:' + dW.ref)) === null);
+    const dT = await bought('cs_test_disputeTwoOpen00000001', 'Tia Twice');
+    await dispute('charge.dispute.created', { id: 'dp_test00000000000D', status: 'needs_response', payment_intent: dT.pi });
+    await dispute('charge.dispute.created', { id: 'dp_test00000000000E', status: 'needs_response', payment_intent: dT.pi });
+    const firstWon = await dispute('charge.dispute.closed', { id: 'dp_test00000000000D', status: 'won', payment_intent: dT.pi });
+    const bothWon = await dispute('charge.dispute.closed', { id: 'dp_test00000000000E', status: 'won', payment_intent: dT.pi });
+    ok('with two disputes open, the code comes back only once both are closed in the seller\'s favour', firstWon.restored === 0 && bothWon.restored === 1 && (await works(dT.code, 48)) === 200);
+    const dN = await bought('cs_test_disputeNoCreate000001', 'Nia Missed');
+    const lostOnly = await dispute('charge.dispute.closed', { id: 'dp_test00000000000F', status: 'lost', payment_intent: dN.pi });
+    ok('a lost dispute whose "created" event never came cancels the code', lostOnly.cancelled === 1 && (await works(dN.code, 49)) === 403);
     // Cancelled for another reason: that reason stands, whatever the dispute's end.
     const d2 = await bought('cs_test_disputeTwo00000000001', 'Owen Cancelled');
     await dispute('charge.dispute.created', { id: 'dp_test000000000003', status: 'needs_response', payment_intent: d2.pi });
@@ -202,6 +231,27 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('the desktop app activates a free code against the real Worker', e2e.mode === 'licensed' && e2e.licence.comp && e2e.licence.name === 'Riley Free');
     ok('and releases it', (await lic.release()).mode === 'trial');
     fs.rmSync(dir, { recursive: true, force: true });
+    { // A copy of an installation (licence.json and the window-state file copied to other computers) needs a place of its own.
+      const DAY = 86400e3, clock = { t: Date.now() }, lose = { next: false };
+      const viaWorker = async (url, body) => { const r = await mf.dispatchFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); const out = { status: r.status, body: await r.json().catch(() => ({})) }; if (lose.next) { lose.next = false; throw new Error('the answer was lost'); } return out; };
+      const machine = d => createLicence({ dir: d, keys: KEYS, site: SITE, now: () => clock.t, post: viaWorker });
+      const dirs = [0, 1, 2, 3].map(() => fs.mkdtempSync(path.join(os.tmpdir(), 'vdex-copy-')));
+      const copyCode = await codes.signCode(ownerKey, 1, { name: 'Cody Copied', comp: true, issued: '2026-11-02', serial: 7002 });
+      const pcs = dirs.map(machine);
+      await pcs[0].state(); const first = await pcs[0].enter(copyCode);
+      for (const d of dirs.slice(1)) fs.copyFileSync(path.join(dirs[0], 'licence.json'), path.join(d, 'licence.json'));
+      let modes = [];
+      for (let round = 0; round < 2; round++) { clock.t += 8 * DAY; modes = []; for (const pc of pcs) modes.push((await pc.recheck()).mode); }
+      const ids = dirs.map(d => JSON.parse(fs.readFileSync(path.join(d, 'licence.json'), 'utf8')).install);
+      const placed = (await (await mf.getKVNamespace('LICENCES')).get('c:1:7002', 'json')).computers;
+      ok('copies of an activated installation each need a place of their own: within two weekly checks each has its own ID, three hold the licence\'s 3 places, and the fourth is not licensed', first.mode === 'licensed' && modes.filter(x => x === 'licensed').length === 3 && modes.filter(x => x === 'released').length === 1 && new Set(ids).size === 4 && placed.length === 3, `${modes.join()} · ${placed.length} places`);
+      const keeper = pcs[modes.indexOf('licensed')];
+      lose.next = true; clock.t += 8 * DAY; await keeper.recheck();
+      clock.t += 8 * DAY; const afterLost = await keeper.recheck();
+      const placed2 = (await (await mf.getKVNamespace('LICENCES')).get('c:1:7002', 'json')).computers;
+      ok('…while a computer whose answer was lost on the way gets its own place back at its next check, as a move that is not counted', afterLost.mode === 'licensed' && placed2.length === 3 && (await adm('look', '1:7002')).swaps === 0, `${afterLost.mode} · ${placed2.length}`);
+      for (const d of dirs) fs.rmSync(d, { recursive: true, force: true });
+    }
 
     /* --------------------------- website sign-in --------------------------- */
     const mails = () => calls.filter(c => c.url === 'https://api.resend.com/emails').map(c => JSON.parse(c.body));
@@ -329,8 +379,8 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
         ok('the code does not change: it signs in again, typed with a space and the address in capitals', again2.status === 200 && !!again2.token);
         // A reviewer who tries Delete my licence records (Apple's do) must not lock the next reviewer out.
         const rdel = await web('forget', { token: again2.token }, m);
-        const rseats = (await (await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'look', ref: '1:4001', at: Date.now() }), m)).json()).computers.length;
-        ok('a reviewer pressing Delete my licence records is signed out and the devices are taken off, like anyone', rdel.ok === true && rseats === 0 && (await web('check', { token: again2.token }, m)).status === 401 && (await web('check', { token: rin.token }, m)).status === 401);
+        const rseats = (await (await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'look', ref: '1:4001', at: Date.now() }), m)).json()).computers;
+        ok('a reviewer pressing Delete my licence records is signed out and the devices\' details are deleted, like anyone (their places stay held)', rdel.ok === true && rseats.length === 1 && rseats.every(c => !c.os && !c.added && !c.seen) && (await web('check', { token: again2.token }, m)).status === 401 && (await web('check', { token: rin.token }, m)).status === 401);
         const rback = await from(ipA, fixed);
         ok('…and the review address can still sign in afterwards: its licence stays linked', rback.status === 200 && (await web('check', { token: rback.token }, m)).ok === true);
         // Guessing from one address: 5 wrong tries a day, whatever a sign-in code's own counter would do.
@@ -339,7 +389,7 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
         await from(ipA, wrongs(5)[4]);
         const locked = await from(ipA, fixed);
         ok('after its 5th wrong try that requester is refused, the right code included, with the same answer as a wrong code', locked.status === 400 && JSON.stringify(locked) === JSON.stringify(wrongAny) && (await rkv.get(tagOf(ipA))) === '5');
-        ok('…while a reviewer anywhere else still signs in: one stranger cannot lock the reviewers out', (await from(ipB, fixed)).status === 200);
+        ok('…while a reviewer anywhere else still signs in: one connection alone cannot lock the reviewers out', (await from(ipB, fixed)).status === 200);
         for (const w of wrongs(30).slice(5)) await from(ipA, w);
         ok('…and that requester\'s further tries are refused unlooked-at and not counted for everyone, so it cannot use up the day\'s 20', (await rkv.get('rv:' + utc())) === '5' && (await rkv.get(tagOf(ipA))) === '5' && (await from(ipB, fixed)).status === 200);
         await startOf(REVIEW, m);
@@ -429,15 +479,18 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
         ok('with the secret, something that is not an email address is said to be one', (await forget({ email: 'not an address', secret }, m)).text === '{"error":"invalid-email"}');
         const gone = await forget({ email: '  Forget.Me@Example.com ', secret: ` ${secret} ` }, m), h2 = await held();
         ok('with the secret, the address\'s records are deleted, and the answer says how much there was', gone.status === 200 && gone.cors === '*' && gone.text === JSON.stringify({ ok: true, licences: 2, devices: 4 }), gone.text);
-        ok('…what the in-app Delete removes: the address\'s links to its licences, its sign-in code, and the devices on those licences', h2.e === null && h2.w === null && h2.c.computers.length === 0 && h2.c2.computers.length === 0, JSON.stringify(h2));
+        ok('…what the in-app Delete removes: the address\'s links to its licences, its sign-in code, and everything about the devices on those licences but a scrambled tag that holds each one\'s place', h2.e === null && h2.w === null && h2.c.computers.length === 3 && h2.c2.computers.length === 1 && [...h2.c.computers, ...h2.c2.computers].every(c => Object.keys(c).sort().join() === 'gone,tag' && /^[A-Za-z0-9_-]{12}$/.test(c.tag)), JSON.stringify(h2));
         ok('…and what it keeps: a cancellation, and the count of recent moves', h2.x2.why === 'owner' && h2.c.swaps.length === 1);
         ok('…every sign-in made before it stops working', (await web('check', { token: fin.token }, m)).status === 401);
         ok('nothing in storage names the address any more', !(await fkv.list()).keys.some(k => k.name.includes(ADDR)) && !JSON.stringify(await Promise.all((await fkv.list()).keys.map(k => fkv.get(k.name)))).includes(ADDR));
         const none = await forget({ email: 'nobody.at.all@example.com', secret }, m);
         ok('an address nothing is held for is answered the same way, with nothing found', none.status === 200 && none.text === JSON.stringify({ ok: true, licences: 0, devices: 0 }));
+        // A deletion frees no place: another computer still finds the licence full (and moving it is counted).
+        const fourth = await post('/licence/activate', { code: fcode, install: id(65), os: 'Windows' }, m);
+        ok('deleting the records frees none of the licence\'s places: a new computer is told it is full', fourth.status === 409 && (await fourth.json()).computers.length === 3);
         // What the deletion page warns of: a computer that still has the code puts itself, and the address, back.
-        const backOn = await post('/licence/activate', { code: fcode, install: id(61), os: 'Windows' }, m), h3 = await held();
-        ok('a computer that still has the code puts itself and the address back at its next check (so: Release this computer first)', backOn.status === 200 && h3.c.computers.length === 1 && h3.e.licences.length === 1);
+        const backOn = await post('/licence/activate', { code: fcode, install: id(62), os: 'Windows' }, m), h3 = await held();
+        ok('a computer that still has the code puts itself and the address back at its next check, in its own kept place (so: Release this computer first)', backOn.status === 200 && h3.c.computers.length === 3 && h3.c.computers.filter(c => c.id).length === 1 && h3.e.licences.length === 1);
       } finally { await m.dispose().catch(() => {}); }
     }
 
@@ -552,7 +605,7 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     // Delete my licence records
     const forgot = await apost('/licence/web/forget', { token: cb.token });
     const lookAfter = await (await post('/licence/admin', await codes.signNote('admin', ownerKey, 1, { op: 'look', ref: cb.licence.ref, at: Date.now() }), mf2)).json();
-    ok('Delete my licence records forgets the purchase link, the email and the devices list', forgot.status === 200 && forgot.body.ok && lookAfter.ok && lookAfter.computers.length === 0, JSON.stringify([forgot.body, lookAfter]).slice(0, 200));
+    ok('Delete my licence records forgets the purchase link, the email and what the devices list says about each device (only their places stay held)', forgot.status === 200 && forgot.body.ok && lookAfter.ok && lookAfter.computers.length === 2 && lookAfter.computers.every(c => !c.os && !c.added && !c.seen), JSON.stringify([forgot.body, lookAfter]).slice(0, 200));
     ok('…every sign-in made before it stops working: the phone’s own, and a website sign-in with the linked email', (await apost('/licence/web/check', { token: cb.token })).status === 401 && (await apost('/licence/web/check', { token: wv.body.token })).body.error === 'signed-out');
     ok('…and it cannot be repeated with the old sign-in', (await apost('/licence/web/forget', { token: cb.token })).status === 401);
     const restored = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });

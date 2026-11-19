@@ -9,9 +9,12 @@
 // From the first time this browser sees it on, there is a 30-day trial, for people who used the website before as well
 // as new visitors. After that the website is read-only until someone signs in with the email address their licence
 // belongs to: the Worker emails a 6-digit code, and the page keeps the signed token it gets back, checking it about once
-// a day. When a licence that covered this browser or phone stops covering it (cancelled, refunded or charged back, past
-// its end date, or the phone's place moved to another device), the time it learned so is kept here (`lapsed`, never
-// sent), and Export backup stays open for 30 days from it (js/licence.js).
+// a day. Only the licence server's signature counts, never what is stored beside it: the token (signed with the shop's
+// key, and naming the stored licence), a store app's receipt for its place, and the token's own time, from which the
+// 90 days without a check are counted (each check brings a new token). When a licence that covered this browser or
+// phone stops covering it (cancelled, refunded or charged back, past its end date, or the phone's place moved to
+// another device), the time it learned so is kept here (`lapsed`, never sent), and Export backup stays open for 30
+// days from it (js/licence.js).
 // The Google Play app also takes one of the licence's 3 places (like a computer running the desktop app), and never
 // links to the shop: Google Play does not allow a Play app to send people to another way to pay.
 // The iPhone app (apple/) takes a place the same way, and can also buy the licence through the App Store: Apple's
@@ -57,6 +60,28 @@ function readOff(note) {
 }
 // Whether the stored note (already checked: `off`) still says licences are off at this time.
 const fresh = (off, latest) => !!off && latest < off.at + NOTE_LIFE && off.at < latest + NOTE_LIFE;
+// The licence server's sign-in token (VDEX-WEB) and a store app's place receipt (VDEX-ACTIVE), signed with the shop's
+// key (2), as the Worker signs them: their value when the signature is good, null when it is not, and false in a browser
+// without Ed25519 in Web Crypto, which cannot check them (there a token counts only once the licence server has given or
+// confirmed it while this page is open). Nothing typed into the browser's storage passes for either.
+const SHOP_KID = 2;
+const signed = new Map();
+const edOk = () => (signed.has('ed') ? signed.get('ed') : signed.set('ed', crypto.subtle.importKey('raw', unb64(KEYS[SHOP_KID] || KEYS[Object.keys(KEYS)[0]]), { name: 'Ed25519' }, false, ['verify']).then(() => true, () => false)).get('ed'));
+function readSigned(prefix, n) {
+  if (!n || typeof n !== 'object' || n.kid !== SHOP_KID || !KEYS[SHOP_KID] || typeof n.data !== 'string' || typeof n.sig !== 'string' || n.data.length > 4000 || n.sig.length > 200) return Promise.resolve(null);
+  const id = prefix + noteId(n);
+  if (!signed.has(id)) signed.set(id, (async () => {
+    if (!(await edOk())) return false;
+    try {
+      const key = await crypto.subtle.importKey('raw', unb64(KEYS[SHOP_KID]), { name: 'Ed25519' }, false, ['verify']);
+      if (!(await crypto.subtle.verify({ name: 'Ed25519' }, key, unb64(n.sig), new TextEncoder().encode(prefix + n.data)))) return null;
+      const v = JSON.parse(n.data); return v && typeof v === 'object' ? v : null;
+    } catch { return null; }
+  })());
+  return signed.get(id);
+}
+const readToken = n => readSigned('VDEX-WEB\0', n), readReceipt = n => readSigned('VDEX-ACTIVE\0', n);
+const unchecked = n => { try { const v = JSON.parse(n.data); return v && typeof v === 'object' ? v : null; } catch { return null; } };
 
 // bare: nothing but the request itself (no cookie, no address of the page it comes from), for the status question.
 async function call(path, body, { bare = false } = {}) {
@@ -96,31 +121,73 @@ export function webLicence() {
   const emit = st => { const sig = JSON.stringify(st); if (sig !== last) { last = sig; listeners.forEach(f => { try { f(st); } catch { /* ignore */ } }); } };
   // The stored note, once its signature has been checked (`id` says which note `off` belongs to). Checking takes a
   // moment, so it is done before every look from outside (state, recheck); the state is worked out from it.
-  const known = { id: '', off: null };
-  async function learn() { const n = read().note, id = noteId(n); if (id !== known.id) { const off = await readOff(n); if (noteId(read().note) === id) { known.id = id; known.off = off; } } }
+  // The same for the stored sign-in token (`tid`, `tok`) and place receipt (`rid`, `rec`). `vouched`: tokens and receipts
+  // the licence server gave or confirmed while this page is open, which is all a browser that cannot check them goes by.
+  const known = { id: '', off: null, tid: '', tok: null, rid: '', rec: null };
+  const vouched = new Set();
+  async function learn() {
+    { const n = read().note, id = noteId(n); if (id !== known.id) { const off = await readOff(n); if (noteId(read().note) === id) { known.id = id; known.off = off; } } }
+    { const n = read().token, id = noteId(n); if (id !== known.tid) { const v = await readToken(n); if (noteId(read().token) === id) { known.tid = id; known.tok = v; } } }
+    { const n = read().seatReceipt, id = noteId(n); if (id !== known.rid) { const v = await readReceipt(n); if (noteId(read().seatReceipt) === id) { known.rid = id; known.rec = v; } } }
+  }
+  // A token or receipt from the licence server's answer, checked before it is kept: its value, or null (not the
+  // server's: the answer is not used). In a browser that cannot check it, the answer itself vouches for it.
+  async function take(kind, n) {
+    const v = await (kind === 'token' ? readToken(n) : readReceipt(n));
+    if (v === false) { vouched.add(noteId(n)); return unchecked(n); }
+    if (!v) return null;
+    if (kind === 'token') { known.tid = noteId(n); known.tok = v; } else { known.rid = noteId(n); known.rec = v; }
+    return v;
+  }
+  // The stored token's value when it is the licence server's and names the stored licence; otherwise there is no sign-in.
+  function tokenOf(s) {
+    const id = noteId(s.token); if (!id || !s.licence || id !== known.tid) return null;
+    const v = known.tok === false ? (vouched.has(id) ? unchecked(s.token) : null) : known.tok;
+    return v && String(v.ref) === String(s.licence.ref) && (!v.email || v.email === String(s.licence.email || '').toLowerCase()) ? v : null;
+  }
+  // The stored place receipt's value when it is for this sign-in's licence and this phone.
+  function receiptOf(s, tok) {
+    const id = noteId(s.seatReceipt); if (!id || !tok || id !== known.rid) return null;
+    const v = known.rec === false ? (vouched.has(id) ? unchecked(s.seatReceipt) : null) : known.rec;
+    return v && String(v.ref) === String(tok.ref) && v.install === s.install && Number.isFinite(v.at) ? v : null;
+  }
+  // When a check made in this page last failed (no answer, or not the licence server's): kept here, where nothing
+  // typed into the browser's storage reaches it.
+  const failed = { check: 0, seat: 0 };
+  // Past the 90 days since the licence server last signed (the token's or the receipt's own time), read-only only once
+  // a check made after them has failed (not while it is still checking).
+  const lapsedCheck = (latest, at, fail, tried, ok) => latest - at > OFFLINE_LIMIT && (fail > at + OFFLINE_LIMIT || ((tried || 0) > at + OFFLINE_LIMIT && (tried || 0) > (ok || 0)));
+  // A trial start later than the latest time this browser has seen counts as that time: no more than 30 days.
+  const trialLeftOf = (s, t) => Math.max(0, Math.min(TRIAL_DAYS, TRIAL_DAYS - Math.floor((latestOf(s, t) - Math.min(s.first || t, latestOf(s, t))) / DAY)));
+  const localDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; // the date where this browser is
 
-  function describe(s, t, on) {
+  // s: the stored record, with token and seat as checked (`tok`, `rec`); a token that is not the licence server's is no sign-in.
+  function describe(s, t, on, tok, rec) {
     const via = viaOf(s);
     const base = { kind: 'web', play: !!s.play, ios: !!s.ios, app: inApp(s), enabled: on, seats: (s.licence && s.licence.seats) || SEATS, os: s.play ? 'Android' : s.ios ? native.device() : 'Web', price: s.price || '', via };
     if (!on) return { ...base, mode: 'off', canEdit: true };
-    const left = Math.max(0, TRIAL_DAYS - Math.floor(((s.seen || t) - (s.first || t)) / DAY));
-    const trial = { trialLeft: left, trialEnds: new Date((s.first || t) + TRIAL_DAYS * DAY).toISOString().slice(0, 10), ...(s.lapsed > 0 ? { lapsedAt: s.lapsed } : {}) };
+    const left = trialLeftOf(s, t), latest = latestOf(s, t);
+    const trial = { trialLeft: left, trialEnds: localDay(new Date(Math.min(s.first || t, latest) + TRIAL_DAYS * DAY)), ...(s.lapsed > 0 ? { lapsedAt: s.lapsed } : {}) };
     if (s.cancelled && !s.token) return { ...base, ...trial, licence: s.licence || null, mode: 'cancelled', canEdit: left > 0 };
     if (s.licence && (s.expired || ended(s.licence, t))) return { ...base, ...trial, licence: s.licence, mode: 'expired', canEdit: left > 0 }; // a free licence given until a date
-    if (!s.token || !s.licence) return { ...base, ...trial, mode: left > 0 ? 'trial' : 'ended', canEdit: left > 0 };
+    if (!tok) return { ...base, ...trial, mode: left > 0 ? 'trial' : 'ended', canEdit: left > 0 };
     const licence = s.licence;
-    // Past the limit, read-only only once a check made after it has failed (not while it is still checking).
-    if (t - (s.checked || 0) > OFFLINE_LIMIT && (s.tried || 0) > (s.checked || 0) + OFFLINE_LIMIT) return { ...base, licence, mode: 'offline', canEdit: false };
+    if (lapsedCheck(latest, Number(tok.iat) || 0, failed.check, s.tried, s.checked)) return { ...base, licence, mode: 'offline', canEdit: false };
     if (seated(s)) {
       // Not on the licence's list: its place was moved to another device, or it signed in while all were taken. The
       // licence does not cover it, so Vdex is as it is without one here (js/licence.js).
       if (s.seat === 'released' || s.seat === 'full') return { ...base, ...trial, licence, mode: 'released', canEdit: left > 0 };
-      if (s.seat !== 'ok') return { ...base, ...trial, licence, mode: 'pending', daysLeft: 0, canEdit: left > 0 };
+      // On the list only with the licence server's receipt for this phone, confirmed at least once in 90 days.
+      if (s.seat !== 'ok' || !rec) return { ...base, ...trial, licence, mode: 'pending', daysLeft: 0, canEdit: left > 0 };
+      if (lapsedCheck(latest, rec.at, failed.seat, s.seatTried, s.seatChecked)) return { ...base, licence, mode: 'offline', canEdit: false };
     }
     return { ...base, licence, mode: 'licensed', canEdit: true };
   }
+  let relearn = false;
   function state() {
     const s = read(), t = now();
+    // A token or receipt not checked yet (written by another window): checked, then the state is given again.
+    if (!relearn && ((s.token && noteId(s.token) !== known.tid) || (s.seatReceipt && noteId(s.seatReceipt) !== known.rid))) { relearn = true; learn().then(() => { relearn = false; state(); }, () => { relearn = false; }); }
     // On unless the stored note, checked, still says off. Before its check (a moment after the page opens) the last
     // answer stands in, and nothing is changed on account of it.
     const sure = noteId(s.note) === known.id;
@@ -134,9 +201,15 @@ export function webLicence() {
     }
     if (on && !s.first) s.first = t;
     if (!s.seen || t > s.seen + 60e3) s.seen = Math.max(s.seen || 0, t); // the latest time seen: winding the clock back gains no trial days
-    if (on && covered(s) && ended(s.licence, t)) lapse(s, t); // a licence given until a date that has passed here
-    if (on && seated(s) && s.token && s.licence && s.seat === 'released') lapse(s, t); // moved off the list (a place moved before this version kept no day: from now)
-    const st = describe(s, t, on);
+    if (s.first > latestOf(s, t)) s.first = latestOf(s, t); // a trial cannot start later than now
+    const tok = tokenOf(s), rec = receiptOf(s, tok);
+    const signedIn = !!tok && !(seated(s) && !(s.seat === 'ok' && rec)); // covered(), with the token and the place as checked
+    if (on && signedIn && ended(s.licence, t)) lapse(s, t); // a licence given until a date that has passed here
+    if (on && seated(s) && tok && s.seat === 'released') lapse(s, t); // moved off the list (a place moved before this version kept no day: from now)
+    // Once, on the first look with this version: a licence refunded, cancelled or ended before it, which kept no day, is
+    // taken to have stopped covering this device now, so its 30 days of Export backup run from here.
+    if (on && !s.v14) { if ((s.cancelled || s.expired) && !s.token) lapse(s, t); s.v14 = 1; }
+    const st = describe(s, t, on, tok, rec);
     if (st.mode === 'licensed') delete s.lapsed; // covered again
     write(s);
     emit(st); return st;
@@ -168,14 +241,21 @@ export function webLicence() {
   async function seat(release) {
     const s = read(); if (!s.token) return { error: 'signed-out' };
     if (!s.install) update(x => { x.install = x.install || rand(); });
-    let r; try { r = await call('activate', { token: read().token, install: read().install, ...(s.ios ? { os: native.device() } : {}), ...(release ? { release } : {}) }); } catch { update(x => { x.seatTried = now(); }); return { offline: true }; }
+    const offline = () => { failed.seat = now(); update(x => { x.seatTried = now(); }); return { offline: true }; };
+    let r; try { r = await call('activate', { token: read().token, install: read().install, ...(s.ios ? { os: native.device() } : {}), ...(release ? { release } : {}) }); } catch { return offline(); }
     const b = r.body;
-    if (r.status === 200 && b.ok) { update(x => { x.seat = 'ok'; x.seatChecked = x.seatTried = now(); if (b.token) { x.token = b.token; x.licence = b.licence || x.licence; } }); return { ok: true }; } // b.token: moved to another of this email's licences, which had room
-    if (b.token) update(x => { x.token = b.token; x.licence = b.licence || x.licence; }); // moved to another of this email's licences
+    // The place counts only with the licence server's signed receipt for it (b.token: moved to another of this email's
+    // licences, which had room); an answer without them is not the licence server's.
+    if (r.status === 200 && b.ok) {
+      if ((b.token && !(await take('token', b.token))) || !(await take('receipt', b.receipt))) return offline();
+      failed.seat = 0; update(x => { x.seat = 'ok'; x.seatReceipt = b.receipt; x.seatChecked = x.seatTried = now(); if (b.token) { x.token = b.token; x.licence = b.licence || x.licence; } });
+      return { ok: true };
+    }
+    if (b.token && (await take('token', b.token))) update(x => { x.token = b.token; x.licence = b.licence || x.licence; }); // moved to another of this email's licences
     if (b.error === 'full') { update(x => { if (x.seat === 'ok') lapse(x, now()); x.seat = x.seat === 'ok' ? 'released' : 'full'; x.seatTried = now(); }); return { full: true, computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft }; }
     if (b.error === 'swaps') return { error: 'This licence has been moved between devices 3 times in the last 30 days, so it cannot move again yet. Reply to the email your licence came in and we will sort it out.' };
     if (r.answered && ['cancelled', 'signed-out', 'expired'].includes(b.error)) { signedOut(b.error); return { error: { cancelled: 'This licence has been cancelled.', 'signed-out': 'You have been signed out. Sign in again.', expired: 'This licence has ended.' }[b.error] }; }
-    update(x => { x.seatTried = now(); }); return { offline: true };
+    return offline();
   }
   // A store app signing in to another licence while it holds a place on one: that place goes back first, so it is
   // not left taken on a licence this phone no longer uses (the next weekly check could not do it: the token is gone).
@@ -186,7 +266,9 @@ export function webLicence() {
   }
   // Only when the licence server itself says so: a firewall's or a network filter's refusal is not an answer. A
   // licence that covered this device and is now cancelled or ended: the day this device learned so is kept.
-  function signedOut(why) { update(x => { if ((why === 'cancelled' || why === 'expired') && covered(x)) lapse(x, now()); delete x.token; delete x.seat; if (why === 'cancelled') x.cancelled = true; if (why === 'expired') x.expired = true; else delete x.licence; }); }
+  // A cancelled sign-in's token is kept aside (`cancelledToken`, no sign-in) and shown to the licence server once a day:
+  // a cancellation for a payment dispute that is then settled in the seller's favour is undone there, and so here.
+  function signedOut(why) { update(x => { if ((why === 'cancelled' || why === 'expired') && covered(x)) lapse(x, now()); if (why === 'cancelled' && x.token) { x.cancelledToken = x.token; x.cancelTried = now(); } delete x.token; delete x.seat; delete x.seatReceipt; if (why === 'cancelled') x.cancelled = true; if (why === 'expired') x.expired = true; else delete x.licence; }); }
 
   /* ------------------------------ the App Store ------------------------------ */
   // Apple's signed purchase → a licence, with this phone on it. Answers like verify(): the state, or { error }.
@@ -194,8 +276,9 @@ export function webLicence() {
     if (!read().install) update(x => { x.install = x.install || rand(); });
     let r; try { r = await call('/licence/apple/claim', { jws, install: read().install, os: native.device() }); } catch { update(x => { delete x.autoAt; }); return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; }
     const b = r.body, t = now();
-    if (b.token && b.licence) { await giveBack(b.licence); update(x => { x.token = b.token; x.licence = b.licence; x.via = 'apple'; delete x.seat; delete x.signedOut; x.checked = x.tried = t; delete x.cancelled; delete x.expired; }); }
-    if (r.status === 200 && b.ok) return state(); // no place to take: the purchase covers every iPhone and iPad of the Apple Account
+    const good = !!(b.token && b.licence) && !!(await take('token', b.token)); // a token that is not the licence server's is no purchase confirmed
+    if (good) { await giveBack(b.licence); update(x => { x.token = b.token; x.licence = b.licence; x.via = 'apple'; delete x.seat; delete x.seatReceipt; delete x.signedOut; x.checked = x.tried = t; delete x.cancelled; delete x.cancelledToken; delete x.expired; }); }
+    if (r.status === 200 && b.ok && good) return state(); // no place to take: the purchase covers every iPhone and iPad of the Apple Account
     if (!r.answered) { update(x => { delete x.autoAt; }); return { error: 'Vdex could not reach the licence server. Check the internet connection, then use Restore purchases.' }; } // looked for again at the next check
     return { error: { cancelled: 'This purchase was refunded, so it no longer licenses Vdex. Buy again, or sign in with the email address of a licence.', revoked: 'Apple has revoked this purchase.', sandbox: 'That is a test purchase, which does not license Vdex.', 'not-ready': 'Buying in the app is not switched on yet. Try again later, or sign in with the email address of a licence.', swaps: 'This licence has been moved between devices 3 times in the last 30 days, so it cannot move again yet.' }[b.error] || 'Vdex could not confirm the purchase with Apple. Use Restore purchases in a moment.' };
   }
@@ -268,7 +351,7 @@ export function webLicence() {
       const s = read(); if (!s.token) return { error: 'Sign in first: the records are found through your sign-in.' };
       let r; try { r = await call('forget', { token: s.token }); } catch { return { error: 'Vdex could not reach the licence server. Check the internet connection and try again.' }; }
       if (!(r.status === 200 && r.body.ok) && !(r.answered && r.status === 401)) return { error: 'The records could not be deleted just now. Try again in a minute.' };
-      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.cancelled; delete x.expired; delete x.via; if (x.ios) x.signedOut = true; });
+      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.seatReceipt; delete x.cancelled; delete x.cancelledToken; delete x.expired; delete x.via; if (x.ios) x.signedOut = true; });
       return state();
     },
     code: async () => (read().via === 'apple' || (read().ios && read().licence && !read().licence.email) ? desktopCode() : ''), // an App Store licence's desktop code, fetched when asked for
@@ -283,9 +366,9 @@ export function webLicence() {
     verify: async (email, code) => {
       let r; try { r = await call('verify', { email, code }); } catch { return { error: 'Vdex could not reach the sign-in server. Check the internet connection and try again.' }; }
       const b = r.body;
-      if (r.status !== 200 || !b.token) return { error: { 'wrong-code': 'That code is not right, or has run out (a code works for 15 minutes and 5 tries). Check it, or send a new one.', 'no-licence': `No licence is linked to this email address. Use the one your licence belongs to${read().play ? '' : ', or buy a licence'}.` }[b.error] || 'Something went wrong. Try again.' };
+      if (r.status !== 200 || !b.token || !(await take('token', b.token))) return { error: { 'wrong-code': 'That code is not right, or has run out (a code works for 15 minutes and 5 tries). Check it, or send a new one.', 'no-licence': `No licence is linked to this email address. Use the one your licence belongs to${read().play ? '' : ', or buy a licence'}.` }[b.error] || 'Something went wrong. Try again.' };
       await giveBack(b.licence);
-      update(x => { x.token = b.token; x.licence = b.licence; x.via = 'email'; delete x.signedOut; x.checked = x.tried = now(); delete x.cancelled; delete x.expired; delete x.seat; });
+      update(x => { x.token = b.token; x.licence = b.licence; x.via = 'email'; delete x.signedOut; x.checked = x.tried = now(); delete x.cancelled; delete x.cancelledToken; delete x.expired; delete x.seat; delete x.seatReceipt; });
       if (inApp(read())) { const sr = await seat(); if (sr.full) return { ...state(), full: sr }; }
       return state();
     },
@@ -299,19 +382,37 @@ export function webLicence() {
       // The iPhone app, signed out: a purchase this Apple ID already owns (a reinstall, a second iPhone) licenses it by itself,
       // unless the person signed out on purpose (Sign out): then only Restore purchases or a new purchase signs in again.
       if (on && !s.token && s.ios && !s.signedOut && native.purchases.available() && (force || !s.autoAt || t - s.autoAt > DAY || t < s.autoAt)) { update(x => { x.autoAt = t; }); await restoreInApp(true).catch(() => null); s = read(); }
-      if (!on || !s.token) return state();
-      if (force || t - (s.checked || 0) > CHECK_EVERY || t < (s.checked || 0)) {
+      if (!on) return state();
+      // Cancelled: the old sign-in is shown to the licence server once a day, and if the licence works again (a payment
+      // dispute settled in the seller's favour) this device is signed in again with it.
+      if (!s.token && s.cancelled && s.cancelledToken && (force || t - (s.cancelTried || 0) > CHECK_EVERY || t < (s.cancelTried || 0))) {
+        update(x => { x.cancelTried = t; });
         try {
-          const r = await call('check', { token: s.token });
-          if (r.status === 200 && r.body.ok) update(x => { x.checked = x.tried = now(); x.licence = r.body.licence || x.licence; if (r.body.token) x.token = r.body.token; });
-          else if (r.answered && (r.status === 401 || r.status === 403) && ['signed-out', 'cancelled', 'expired'].includes(r.body.error)) signedOut(r.body.error);
-          else update(x => { x.tried = now(); }); // no answer, or not the licence server's: try again later
-        } catch { update(x => { x.tried = now(); }); }
+          const r = await call('check', { token: s.cancelledToken }), b = r.body, tk = b.token || s.cancelledToken;
+          if (r.status === 200 && b.ok && b.licence && (await take('token', tk))) update(x => { x.token = tk; x.licence = b.licence; x.checked = x.tried = now(); delete x.cancelled; delete x.cancelledToken; delete x.cancelTried; });
+          else if (r.answered && (r.status === 401 || (r.status === 403 && b.error !== 'cancelled'))) update(x => { delete x.cancelledToken; delete x.cancelTried; }); // signed out or ended for good: nothing to wait for
+        } catch { /* asked again tomorrow */ }
+        s = read();
+      }
+      if (!s.token) return state();
+      // Due about once a day by the licence server's own time on the token (and by the time stored here, which only
+      // makes it sooner), and at every look while the token is one this page has not been able to check.
+      const tok = tokenOf(s), iat = (tok && Number(tok.iat)) || 0;
+      if (force || !tok || t - iat > CHECK_EVERY || t < iat - DAY || t - (s.checked || 0) > CHECK_EVERY || t < (s.checked || 0)) {
+        const fail = () => { failed.check = now(); update(x => { x.tried = now(); }); }; // no answer, or not the licence server's: try again later
+        try {
+          const r = await call('check', { token: s.token }), b = r.body;
+          if (r.status === 200 && b.ok && (!b.token || (await take('token', b.token)))) { if (!b.token) vouched.add(noteId(s.token)); failed.check = 0; update(x => { x.checked = x.tried = now(); x.licence = b.licence || x.licence; if (b.token) x.token = b.token; }); }
+          else if (r.answered && (r.status === 401 || r.status === 403) && ['signed-out', 'cancelled', 'expired'].includes(b.error)) signedOut(b.error);
+          else fail();
+        } catch { fail(); }
       }
       const s2 = read();
       if (seated(s2) && s2.token) {
-        const t2 = now(), wait = s2.seat === 'ok' ? null : s2.seat ? DAY : 3600e3; // on the list: weekly; moved off or full: daily; not yet: hourly
-        const due = force || (wait === null ? t2 - (s2.seatChecked || 0) > SEAT_EVERY : t2 - (s2.seatTried || 0) > wait) || t2 < (s2.seatTried || 0);
+        // On the list: about weekly, by the receipt's own time too, and at once without a receipt (one from an earlier
+        // version, which kept none); moved off or full: daily; not yet: hourly.
+        const t2 = now(), rec = receiptOf(s2, tokenOf(s2)), wait = s2.seat === 'ok' ? null : s2.seat ? DAY : 3600e3;
+        const due = force || (wait === null ? !rec || t2 - rec.at > SEAT_EVERY || t2 - (s2.seatChecked || 0) > SEAT_EVERY : t2 - (s2.seatTried || 0) > wait) || t2 < (s2.seatTried || 0);
         if (due) await seat();
       }
       return state();
@@ -323,7 +424,7 @@ export function webLicence() {
         let r; try { r = await call('release', { token: s.token, install: s.install }); } catch { r = null; }
         if (!r || (r.status !== 200 && r.status !== 404 && r.status !== 400)) return { error: 'Vdex could not reach the licence server. Connect to the internet and try again, so this phone\'s place can go to another device.' };
       }
-      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.cancelled; delete x.expired; delete x.via; if (x.ios) x.signedOut = true; });
+      update(x => { delete x.token; delete x.licence; delete x.seat; delete x.seatReceipt; delete x.cancelled; delete x.cancelledToken; delete x.expired; delete x.via; if (x.ios) x.signedOut = true; });
       return state();
     },
   };

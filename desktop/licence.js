@@ -40,13 +40,16 @@ const MESSAGES = {
 // file, so deleting licence.json does not start a new trial, make an early user, give a code a second wait or lose
 // that day. Nothing in either copy is sent anywhere.
 const NO_MIRROR = { get: () => null, set: () => {} };
+const newInstall = () => codes.b64u.enc(globalThis.crypto.getRandomValues(new Uint8Array(16))); // a random ID for this install
 function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = SITE, os = OS[process.platform] || 'Computer', priorData = () => false, mirror = NO_MIRROR, onChange = () => {} }) {
   const file = path.join(dir, 'licence.json');
   const enabled = Object.keys(keys || {}).length > 0;
   const read = () => { try { const s = JSON.parse(fs.readFileSync(file, 'utf8')); return s && typeof s === 'object' ? s : {}; } catch { return {}; } };
   const write = s => { try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(file + '.tmp', JSON.stringify(s)); fs.renameSync(file + '.tmp', file); } catch { /* a read-only disk: carry on */ } };
-  // licence.json and, beside it, the copy of what must outlive it.
-  const save = s => { write(s); if (Number.isFinite(s.first)) mirror.set({ first: s.first, founder: !!s.founder, seen: s.seen, ...(s.waits ? { waits: s.waits } : {}), ...(lapsedOf(s) ? { lapsed: s.lapsed } : {}) }); };
+  // licence.json and, beside it, the copy of what must outlive it. An early user is one in both: the copy is never raised
+  // to one by licence.json (edited), and licence.json follows the copy when the copy says no.
+  const notFounder = () => { const m = enabled && mirror.get(); return !!m && Number.isFinite(m.first) && m.first > 0 && m.founder !== true; };
+  const save = s => { if (s.founder && notFounder()) s.founder = false; write(s); if (Number.isFinite(s.first)) mirror.set({ first: s.first, founder: !!s.founder, seen: s.seen, ...(s.waits ? { waits: s.waits } : {}), ...(lapsedOf(s) ? { lapsed: s.lapsed } : {}) }); };
   // The latest time this computer has ever shown: winding the clock back gains no trial days and no waiting days.
   const clock = (s, t = now()) => Math.max(t, s.seen || 0);
   // When the wait of the code with this ref began (0: it never waited here). `waits` is { ref: time }, kept for good.
@@ -56,14 +59,17 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
   // The waits in both copies, each at its earliest: a wait missing from either copy is taken from the other.
   const bothWaits = (a, b) => { const w = waitsOf(a); for (const [k, t] of Object.entries(waitsOf(b))) w[k] = Math.min(w[k] || Infinity, t); return w; };
   const lapsedOf = s => (Number.isFinite(s.lapsed) && s.lapsed > 0 ? s.lapsed : 0);
-  const receiptOk = new Map(); // a receipt's signature -> whether it is good for this code and computer (checked once per run)
+  const receiptOk = new Map(); // a receipt's signature -> its value when it is good for this code and computer, else null (checked once per run)
+  // When a check made in this run last failed (no answer, or not one to use): kept here, where no edit of licence.json
+  // reaches it, for the 90 days without a check.
+  let failedAt = 0;
   let last = '';
 
   // The licence as the page sees it. Never throws.
   async function state() {
     const s = read(), t = now();
     let dirty = false;
-    if (!s.install) { s.install = codes.b64u.enc(globalThis.crypto.getRandomValues(new Uint8Array(16))); dirty = true; }
+    if (!s.install) { s.install = newInstall(); dirty = true; }
     const m = mirror.get();
     if (!s.first) {
       if (m && Number.isFinite(m.first) && m.first > 0) { // licence.json was lost: the same trial, waits and lapse as before
@@ -76,11 +82,19 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     const w = bothWaits(s.waits, m && m.waits);
     if (Object.keys(w).length && JSON.stringify(w) !== JSON.stringify(waitsOf(s.waits))) { s.waits = w; dirty = true; }
     if (!enabled && !s.founder) { s.founder = true; dirty = true; }
+    if (s.founder && notFounder()) { s.founder = false; dirty = true; } // licence.json says early user, the copy beside it does not: edited
+    // The trial began at the earlier of the two copies' times, and never later than the latest time ever seen: it lasts
+    // no more than 30 days however either copy is edited.
+    if (m && Number.isFinite(m.first) && m.first > 0 && m.first < s.first) { s.first = m.first; dirty = true; }
     if (t > (s.seen || 0) + 60e3 || !s.seen) { s.seen = Math.max(s.seen || 0, t); dirty = true; } // the latest time ever seen, so winding the clock back gains no trial days
+    if (s.first > clock(s, t)) { s.first = clock(s, t); dirty = true; }
+    // Once, on the first look with this version: a computer moved off its licence, or whose licence was cancelled, before
+    // it (which kept no day for that) is taken to have learned of it now, so its 30 days of Export backup run from here.
+    if (!s.v14) { if (s.act && (s.act.status === 'released' || s.act.status === 'cancelled') && !lapsedOf(s)) s.lapsed = clock(s, t); s.v14 = 1; dirty = true; }
     if (dirty) save(s);
-    const r = await check(s), good = !!r && !!s.act && s.act.status === 'active' && (await goodReceipt(s, r.licence));
+    const r = await check(s), rv = r && s.act && s.act.status === 'active' ? await goodReceipt(s, r.licence) : null, good = !!rv;
     if (r) settle(s, r, good);
-    const out = describe(s, r, t, good);
+    const out = describe(s, r, t, rv);
     const sig = JSON.stringify(out); if (sig !== last) { last = sig; onChange(out); }
     return out;
   }
@@ -102,19 +116,24 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     if (!s.code) return null;
     try { const r = await codes.verifyCode(s.code, { keys, now: at }); return r; } catch { return null; } // a code no longer accepted (its key retired): back to the trial
   }
+  // The activation receipt's value (the licence server's time on it included) when it is signed for this code and computer, else null.
   async function goodReceipt(s, lic) {
-    const r = s.act && s.act.receipt; if (!r || !r.sig) return false;
+    const r = s.act && s.act.receipt; if (!r || !r.sig) return null;
     const k = JSON.stringify([r.kid, r.data, r.sig, lic.ref, s.install]);
-    if (!receiptOk.has(k)) receiptOk.set(k, codes.readNote('active', r, { keys }).then(v => !!v && v.ref === lic.ref && v.install === s.install));
+    if (!receiptOk.has(k)) receiptOk.set(k, codes.readNote('active', r, { keys }).then(v => (!!v && v.ref === lic.ref && v.install === s.install ? v : null)));
     return receiptOk.get(k);
   }
-  function trialLeft(s) { return Math.max(0, TRIAL_DAYS - Math.floor(((s.seen || 0) - (s.first || 0)) / DAY)); }
-  function describe(s, r, t, good) {
+  function trialLeft(s) { return Math.max(0, Math.min(TRIAL_DAYS, TRIAL_DAYS - Math.floor(((s.seen || 0) - Math.min(s.first || 0, s.seen || 0)) / DAY))); }
+  // The trial's last day, as the date where this computer is.
+  const localDay = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // rv: the activation receipt's value, when it is good for this code and computer.
+  function describe(s, r, t, rv) {
+    const good = !!rv;
     const base = { enabled, buyUrl: site + '/buy', os, seats: codes.SEATS };
     if (!enabled) return { ...base, mode: 'off', canEdit: true };
     if (s.founder) return { ...base, mode: 'founder', canEdit: true };
     const left = trialLeft(s);
-    const trial = { trialLeft: left, trialEnds: new Date((s.first || t) + TRIAL_DAYS * DAY).toISOString().slice(0, 10) };
+    const trial = { trialLeft: left, trialEnds: localDay(new Date((s.first || t) + TRIAL_DAYS * DAY)) };
     // lapsedAt: when this computer learned that a licence it was on no longer covers it (past its end date, cancelled,
     // or its place moved to another device). It stays, also after "Remove the code", until a code is activated here
     // again, and is absent when no licence that covered this computer has ended that way.
@@ -126,9 +145,12 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     if (a.status === 'cancelled') return { ...base, ...trial, licence, ...lapsed, mode: 'cancelled', canEdit: left > 0 };
     if (a.status === 'released') return { ...base, ...trial, licence, ...lapsed, mode: 'released', canEdit: left > 0 }; // this computer's place was moved: not on the licence
     // Past a limit, Vdex turns read-only only once a check made after the limit has failed, so someone opening Vdex
-    // after a long break is not shown read-only while it is still checking.
+    // after a long break is not shown read-only while it is still checking. The 90 days run from the licence server's
+    // own time on the receipt (each check brings a new one), by the latest time this computer has seen, and the failed
+    // check is one made in this run or the last one noted in licence.json.
     if (a.status === 'active' && good) {
-      if (t - (a.checked || 0) > OFFLINE_LIMIT && (a.tried || 0) > (a.checked || 0) + OFFLINE_LIMIT) return { ...base, licence, mode: 'offline', canEdit: false };
+      const at = Number(rv.at) || 0, tried = a.tried || 0;
+      if (clock(s, t) - at > OFFLINE_LIMIT && (failedAt > at + OFFLINE_LIMIT || (tried > at + OFFLINE_LIMIT && tried > (a.checked || 0)))) return { ...base, licence, mode: 'offline', canEdit: false };
       return { ...base, licence, mode: 'licensed', canEdit: true };
     }
     // Waiting: the code has not been activated on this computer. Its 14 days run from the first time it waited here,
@@ -143,22 +165,37 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
   // A try that did not activate a waiting code: noted, with whether the code's 14 days were already over.
   const failed = (s, ref, a, t, answered) => ({ ...a, tried: t, answered: !!answered, ...(clock(s, t) - (waitOf(s, ref) || s.enteredAt || 0) > PENDING_LIMIT ? { late: true } : {}) });
 
-  // Asks the licence server to put this computer on the code's list. { ok, receipt } | { full, computers } |
-  // { cancelled } | { swaps } | { invalid } | { offline } (with answered: true when the server did answer, unusably).
-  async function activate(code, install, release) {
+  // Asks the licence server to put this computer on the code's list. { ok, receipt, turn } | { full, computers } |
+  // { cancelled } | { swaps } | { invalid } | { stale } | { offline } (with answered: true when the server did answer,
+  // unusably). `turn`: the random value the server gave this computer at its last check, which changes at each one.
+  async function activate(code, install, release, turn = '') {
     let res;
-    try { res = await post(site + '/licence/activate', { code, install, os, ...(release ? { release } : {}) }); } catch { return { offline: true }; }
+    try { res = await post(site + '/licence/activate', { code, install, os, turn, ...(release ? { release } : {}) }); } catch { return { offline: true }; }
     const b = (res && res.body) || {};
     if (res.status === 200 && b.receipt) {
       const v = await codes.readNote('active', b.receipt, { keys });
       const r = await check({ code, seen: now() });
-      return v && r && v.ref === r.licence.ref && v.install === install ? { ok: true, receipt: b.receipt } : { offline: true, answered: true }; // an answer we cannot trust counts as no answer
+      return v && r && v.ref === r.licence.ref && v.install === install ? { ok: true, receipt: b.receipt, turn: typeof b.turn === 'string' && /^[A-Za-z0-9_-]{8,64}$/.test(b.turn) ? b.turn : '' } : { offline: true, answered: true }; // an answer we cannot trust counts as no answer
     }
     if (b.error === 'full') return { full: true, computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft };
-    if (b.error === 'cancelled' || b.error === 'swaps' || b.error === 'invalid') return { [b.error]: true };
+    if (b.error === 'cancelled' || b.error === 'swaps' || b.error === 'invalid' || b.error === 'stale') return { [b.error]: true };
     return { offline: true, answered: true }; // the server is down, not set up yet, or says the code has ended
   }
-  const active = (receipt, t) => ({ status: 'active', receipt, checked: t, tried: t });
+  // The same for this computer, with the turn it was last given. An out-of-date turn means another computer is running
+  // a copy of this installation (licence.json copied with it), or an answer was lost on the way: the server has taken
+  // this install off the list, and this computer asks again under a new random ID. So a copy needs a place of its own,
+  // and a computer whose answer was lost gets its place back at once.
+  async function activateHere(code, release) {
+    const s = read(), turn = s.code === code && s.act && typeof s.act.turn === 'string' ? s.act.turn : '';
+    let a = await activate(code, s.install, release, turn);
+    if (a.stale) {
+      const s2 = read(); s2.install = newInstall(); if (s2.act) delete s2.act.turn; save(s2);
+      a = await activate(code, s2.install, release, '');
+      if (a.stale) a = { offline: true, answered: true };
+    }
+    return a;
+  }
+  const active = (receipt, t, turn) => ({ status: 'active', receipt, checked: t, tried: t, ...(turn ? { turn } : {}) });
 
   // Checks a pasted code and activates it on this computer. Returns the new state, or { error } / { error: 'full', computers }.
   async function enter(text, { release } = {}) {
@@ -167,13 +204,12 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     if (r.status === 'expired') return { error: `This code ended on ${r.licence.expires}.` };
     const code = r.licence.code, ref = r.licence.ref;
     await state(); // makes the install's ID, and tidies what an older version left
-    const install = read().install;
-    const a = await activate(code, install, typeof release === 'string' ? release.slice(0, 64) : '');
+    const a = await activateHere(code, typeof release === 'string' ? release.slice(0, 64) : '');
     if (a.full) return { error: 'full', computers: a.computers, swapsLeft: a.swapsLeft, seats: r.licence.seats };
     for (const k of ['cancelled', 'swaps', 'invalid']) if (a[k]) return { error: MESSAGES[k] };
     const s2 = read(), t = now();
     if (s2.code !== code || !s2.act) { s2.code = code; s2.act = {}; }
-    if (a.ok) { s2.act = active(a.receipt, t); delete s2.lapsed; }
+    if (a.ok) { s2.act = active(a.receipt, t, a.turn); delete s2.lapsed; }
     else if (s2.act.status) s2.act = { ...s2.act, tried: t, answered: !!a.answered }; // the same code again: on the list, moved off it or cancelled, as it was
     else { startWait(s2, ref, clock(s2, t)); s2.act = failed(s2, ref, s2.act, t, a.answered); } // the wait begins now, unless this code has waited here before
     save(s2);
@@ -187,16 +223,18 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     const s = read(); if (!enabled || s.founder || !s.code) return state();
     const a = s.act || {}, t = now(), r = await check(s, Math.max(s.seen || 0, t));
     if (!r || r.status === 'expired') return state();
+    const was = a.status === 'active' ? await goodReceipt(s, r.licence) : null; // on the code's list until now
     let due;
     if (force || t < (a.tried || 0) || t < (a.checked || 0)) due = true; // asked to, or the clock went back
-    else if (a.status === 'active') due = t - (a.checked || 0) > RECHECK && t - (a.tried || 0) > (a.answered ? DAY : HOUR);
+    // On the list: about once a week, by the licence server's time on the receipt as well as the time noted here.
+    else if (a.status === 'active') due = (t - (a.checked || 0) > RECHECK || !was || clock(s, t) - (Number(was.at) || 0) > RECHECK) && t - (a.tried || 0) > (a.answered ? DAY : HOUR);
     else due = t - (a.tried || 0) > (a.status || a.answered ? DAY : HOUR);
     if (!due) return state();
-    const was = a.status === 'active' && (await goodReceipt(s, r.licence)); // on the code's list until now
-    const res = await activate(s.code, s.install, '');
+    const res = await activateHere(s.code, '');
     const s2 = read(); if (s2.code !== s.code) return state(); // changed while we waited
     const t2 = now();
-    if (res.ok) { s2.act = active(res.receipt, t2); delete s2.lapsed; }
+    failedAt = res.offline ? t2 : res.ok ? 0 : failedAt; // a check that got through is no failure, whatever came before it
+    if (res.ok) { s2.act = active(res.receipt, t2, res.turn); delete s2.lapsed; }
     else if (res.full || res.cancelled) {
       s2.act = { status: res.full ? 'released' : 'cancelled', tried: t2 };
       if (was) s2.lapsed = clock(s2, t2); // on the list until now: this is when the computer learned it no longer is

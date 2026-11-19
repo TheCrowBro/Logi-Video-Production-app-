@@ -664,6 +664,8 @@ body.has-licence-bar .toast { z-index: 320; pointer-events: none; } /* messages 
 body.has-update-bar .licence-bar { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 64px); }
 body.has-licence-bar #page { padding-bottom: 110px; }
 body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
+/* At phone width the update bar wraps to three rows: the licence bar goes above all of them, and the page scrolls clear of both. */
+@media (max-width: 480px) { body.has-update-bar .licence-bar { bottom: calc(max(16px, env(safe-area-inset-bottom, 0px)) + 170px); } body.has-licence-bar.has-update-bar #page { padding-bottom: 290px; } }
 .licence-title { font-size: 1rem; margin: 4px 0 0; }
 .licence-warn { color: var(--danger); }
 .licence-code { width: 100%; font: 0.95rem/1.5 ui-monospace, Menlo, Consolas, monospace; word-break: break-all; }

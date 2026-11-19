@@ -180,6 +180,23 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
     const c = document.createElement('canvas'); c.width = c.height = 900; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 900, 900); g.drawImage(img, 0, 0, 900, 900);
     const r = jsQR(g.getImageData(0, 0, 900, 900).data, 900, 900); return r ? r.data : '';
   });
+  // A long link's code: version 23 at level L (about 1,010 to 1,090 characters, as the sample equipment list makes)
+  // is read by Vdex's own scanner library, as are the versions either side of it.
+  const sizes = await A.page.evaluate(async () => {
+    const { loadQR, loadJsQR } = await import('./js/qr.js'), qrcode = await loadQR(), jsQR = await loadJsQR();
+    const ABC = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_', out = [];
+    for (const n of [960, 1010, 1040, 1090, 1150]) {
+      const text = location.origin + '/shared.html#' + Array.from(crypto.getRandomValues(new Uint8Array(n)), b => ABC[b & 63]).join('');
+      const qr = qrcode(0, 'L'); qr.addData(text, 'Byte'); qr.make();
+      const m = qr.getModuleCount(), cell = 6, side = (m + 8) * cell, c = document.createElement('canvas'); c.width = c.height = side;
+      const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, side, side); g.fillStyle = '#000';
+      for (let y = 0; y < m; y++) for (let x = 0; x < m; x++) if (qr.isDark(y, x)) g.fillRect((x + 4) * cell, (y + 4) * cell, cell, cell);
+      const r = jsQR(g.getImageData(0, 0, side, side).data, side, side);
+      out.push({ version: (m - 17) / 4, read: !!r && r.data === text });
+    }
+    return out;
+  });
+  ok('Vdex\'s scanner reads long links\' codes, version 23 among them (the one its library could not read)', sizes.some(x => x.version === 23) && sizes.every(x => x.read), JSON.stringify(sizes));
   const qrCard = await readQr(A.page);
   const cardLink = await A.page.evaluate(() => import('./js/share-out.js').then(m => m.contactLink()));
   ok('the Me page’s usual QR code is now a link to the contact card’s page', (await A.page.locator('#page .me-modes button.on').innerText()) === 'Contact card' && qrCard === cardLink && cardLink.startsWith(BASE + 'shared.html#'), qrCard.slice(0, 60));

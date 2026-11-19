@@ -23,3 +23,11 @@ exports.openSetting = (page, title) => page.evaluate(t => { const d = [...docume
 // closed; menuClick opens it and taps a row, as a person would.
 exports.openMenu = async page => { if (!(await page.locator('#menu').isVisible())) await page.locator('#menuBtn').click(); await page.locator('#menu').waitFor({ state: 'visible' }); };
 exports.menuClick = async (page, row) => { await exports.openMenu(page); await page.locator(row).click(); };
+// The licence server's signatures, made with the test run's key, whose public half tests/run.mjs puts in the page
+// under test: a sign-in token ('web') or a store app's place receipt ('active'), as cloudflare/worker.mjs signs them.
+// The page counts nothing else as a sign-in (js/licence-web.js).
+exports.shopSign = async (kind, value) => {
+  const codes = require(path.join(__dirname, '..', 'desktop', 'licence-codes.js'));
+  if (!process.env.VDEX_STATUS_KEY) throw new Error('run the specs with node tests/run.mjs: they need the test run\'s key');
+  return codes.signNote(kind, await codes.importPrivate(process.env.VDEX_STATUS_KEY), 2, value);
+};

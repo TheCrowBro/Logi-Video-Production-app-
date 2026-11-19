@@ -71,7 +71,7 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
           }
           list.push(body.install); this.lists.set(ref, list);
         }
-        return { status: 200, body: { ok: true, receipt: await codes.signNote('active', shopKey, 2, { ref, install: this.forge || body.install, at: Date.now() }) } };
+        return { status: 200, body: { ok: true, receipt: await codes.signNote('active', shopKey, 2, { ref, install: this.forge || body.install, at: this.clock ? this.clock() : Date.now() }) } }; // clock: the server's time, when a test sets one
       } };
     const T0 = Date.parse('2026-11-02T10:00:00Z');
     const make = (opts = {}) => { const c = { t: opts.t || T0 }; const lic = createLicence({ dir: opts.dir || dirOf(), keys: 'keys' in opts ? opts.keys : KEYS, now: () => c.t, post: (u, b) => server.post(u, b), priorData: () => !!opts.prior, mirror: opts.mirror, site: 'http://licence.test' }); return { lic, c }; };
@@ -98,7 +98,7 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     tr.c.t = T0 + 31 * DAY; server.calls = [];
     s = await tr.lic.enter(pasted);
     const sent = server.calls[0];
-    ok('a good code is activated online with this install\'s random ID and only "Mac/Windows/Linux"', s.mode === 'licensed' && s.canEdit && sent && sent.url === 'http://licence.test/licence/activate' && /^[A-Za-z0-9_-]{22}$/.test(sent.body.install) && Object.keys(sent.body).sort().join() === 'code,install,os' && sent.body.code === paid, JSON.stringify(sent && sent.body));
+    ok('a good code is activated online with this install\'s random ID, only "Mac/Windows/Linux" and the turn the server last gave it (none yet)', s.mode === 'licensed' && s.canEdit && sent && sent.url === 'http://licence.test/licence/activate' && /^[A-Za-z0-9_-]{22}$/.test(sent.body.install) && Object.keys(sent.body).sort().join() === 'code,install,os,turn' && sent.body.turn === '' && sent.body.code === paid, JSON.stringify(sent && sent.body));
     ok('the licence shows whom it is for and how many computers', s.licence.name === 'Jane Smith' && s.licence.email === 'jane@example.com' && s.licence.seats === 3 && s.licence.ref === '2:4242');
     ok('the code is kept tidy for "Copy the code"', (await tr.lic.code()) === paid);
 
@@ -184,7 +184,7 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     ok('editing licence.json to take the waits out gives no new wait either (the copy beside it still has them)', s.mode === 'pending' && s.licence.ref === '1:901' && s.daysLeft === 0 && s.canEdit === false && JSON.parse(fs.readFileSync(path.join(wdir, 'licence.json'), 'utf8')).waits['1:901'] === T0 + 40 * DAY);
     s = await w2.enter(wcode2);
     ok('…for any of its codes', s.licence.ref === '1:902' && s.daysLeft === 13);
-    ok('…and nothing about the waits is sent to the licence server', server.calls.every(c => Object.keys(c.body).every(k => ['code', 'install', 'os', 'release'].includes(k))));
+    ok('…and nothing about the waits is sent to the licence server', server.calls.every(c => Object.keys(c.body).every(k => ['code', 'install', 'os', 'release', 'turn'].includes(k))));
     calls = server.calls.length; w.c.t = T0 + 90 * DAY;
     for (let h = 0; h < 30; h++) { w.c.t += 3600e3; s = await w.lic.recheck(); }
     ok('with the server kept out of reach it keeps trying, and the code never comes to count as activated', s.mode === 'pending' && s.canEdit === false && server.calls.length >= calls + 10, `${server.calls.length - calls} tries`);
@@ -271,6 +271,65 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     const again = createLicence({ dir: dir9, keys: KEYS, now: () => T0 + 41 * DAY, post: (u, b) => server.post(u, b), priorData: () => true, mirror: mirror2, site: 'http://licence.test' });
     s = await again.state();
     ok('deleting licence.json neither starts a new trial nor makes it an early user', s.mode === 'ended' && s.canEdit === false, s.mode);
+
+    // The 90 days without a check run from the licence server's own time on the receipt, by the latest time this
+    // computer has seen, and a check that failed in this run counts: a refunded computer that blocks the check and
+    // edits the times in licence.json, or winds the clock back, still turns read-only.
+    {
+      const own = make(), oc = await codes.signCode(ownerKey, 1, { name: 'Off Line', serial: 501, issued: '2026-11-02' });
+      server.clock = () => own.c.t; server.mode = 'ok';
+      await own.lic.state(); own.c.t = T0 + 40 * DAY;
+      const on = await own.lic.enter(oc), learnedAt = own.c.t, seen = [];
+      server.mode = 'down';
+      for (const d of [60, 200, 400]) {
+        own.c.t = learnedAt + d * DAY;
+        const raw = JSON.parse(fs.readFileSync(own.lic.file, 'utf8')); raw.act.checked = own.c.t + 3650 * DAY; fs.writeFileSync(own.lic.file, JSON.stringify(raw)); // typed 10 years ahead
+        seen.push((await own.lic.recheck()).mode);
+      }
+      ok('a computer that cannot reach the licence server, with the time of its last check typed 10 years ahead, is still licensed on day 60 and read-only on days 200 and 400', on.mode === 'licensed' && seen.join() === 'licensed,offline,offline', seen.join());
+      const back = make({ t: T0 + 40 * DAY }); await back.lic.state();
+      server.clock = () => back.c.t; server.mode = 'ok'; await back.lic.enter(await codes.signCode(ownerKey, 1, { name: 'Back Wards', serial: 502, issued: '2026-11-02' }));
+      const goodAt = back.c.t; server.mode = 'down'; back.c.t = goodAt + 200 * DAY;
+      const late = await back.lic.recheck();
+      const rewound = createLicence({ dir: path.dirname(back.lic.file), keys: KEYS, now: () => goodAt - DAY, post: (u, b) => server.post(u, b), site: 'http://licence.test' });
+      const after = await rewound.state();
+      ok('…and with nothing edited, winding the clock back to before its last good check and starting again does not make it licensed again', late.mode === 'offline' && after.mode === 'offline' && after.canEdit === false, `${late.mode} ${after.mode}`);
+      server.clock = null; server.mode = 'ok';
+    }
+    // An early user is one in both copies (LIC-03): one edit to licence.json does not make one.
+    {
+      const fbox = { v: null }, fmirror = { get: () => fbox.v, set: v => { fbox.v = v; } };
+      const fd = make({ mirror: fmirror }); await fd.lic.state(); fd.c.t = T0 + 40 * DAY;
+      const ended1 = await fd.lic.state();
+      const raw = JSON.parse(fs.readFileSync(fd.lic.file, 'utf8')); raw.founder = true; fs.writeFileSync(fd.lic.file, JSON.stringify(raw));
+      const edited = await fd.lic.state(), later = await fd.lic.state();
+      ok('"founder": true typed into licence.json makes no early user: the trial stays over, and the copy beside it stays "no"', ended1.mode === 'ended' && edited.mode === 'ended' && edited.canEdit === false && later.mode === 'ended' && fbox.v.founder === false && JSON.parse(fs.readFileSync(fd.lic.file, 'utf8')).founder === false, `${edited.mode} ${JSON.stringify(fbox.v)}`);
+      const ebox = { v: null }, early = make({ mirror: { get: () => ebox.v, set: v => { ebox.v = v; } }, prior: true }); // 1.2.x straight to this version: no licence.json, no copy
+      early.c.t = T0 + 400 * DAY;
+      ok('…while an install with Vdex data from before licences, and no licence file yet, is still an early user', (await early.lic.state()).mode === 'founder' && ebox.v.founder === true);
+    }
+    // The trial: never more than 30 days, from the earlier of the two copies' starts, and its last day where the computer is.
+    {
+      const tdir = dirOf(); fs.mkdirSync(tdir, { recursive: true });
+      fs.writeFileSync(path.join(tdir, 'licence.json'), JSON.stringify({ install: 'install-trial-00000001', first: T0 + 20 * DAY, seen: T0, founder: false }));
+      const fut = make({ dir: tdir });
+      ok('a trial start moved into the future in licence.json gives no more than 30 days', (await fut.lic.state()).trialLeft === 30);
+      const tbox = { v: null }, tm = make({ mirror: { get: () => tbox.v, set: v => { tbox.v = v; } } }); await tm.lic.state(); tm.c.t = T0 + 40 * DAY;
+      const raw = JSON.parse(fs.readFileSync(tm.lic.file, 'utf8')); raw.first = tm.c.t; fs.writeFileSync(tm.lic.file, JSON.stringify(raw));
+      const restarted = await tm.lic.state();
+      ok('…nor does setting the start in licence.json to today, while the copy beside it remembers the first one', restarted.mode === 'ended' && restarted.canEdit === false, `${restarted.mode} ${restarted.trialLeft}`);
+      const tz = process.env.TZ; process.env.TZ = 'America/Los_Angeles';
+      const la = make({ t: Date.parse('2026-11-03T03:00:00Z') }), laState = await la.lic.state();
+      process.env.TZ = tz === undefined ? '' : tz; if (tz === undefined) delete process.env.TZ;
+      ok('in Los Angeles, a trial that ends at 03:00 UTC on 3 December ends on 2 December there', laState.trialEnds === '2026-12-02', laState.trialEnds);
+    }
+    // Moved off, or cancelled, under an earlier version (which kept no day for it): 30 days of Export backup from the first look now.
+    for (const status of ['released', 'cancelled']) {
+      const odir = dirOf(); fs.mkdirSync(odir, { recursive: true });
+      fs.writeFileSync(path.join(odir, 'licence.json'), JSON.stringify({ install: 'install-older-0000000' + status.length, first: T0, seen: T0 + 39 * DAY, founder: false, code: paid, act: { status, tried: T0 + 37 * DAY } }));
+      const old = make({ dir: odir, t: T0 + 40 * DAY }), st1 = await old.lic.state(); old.c.t += DAY; const st2 = await old.lic.state();
+      ok(`a computer ${status === 'released' ? 'moved off its licence' : 'whose licence was cancelled'} under an earlier version learns of it now: its 30 days of Export backup start at the first look, once`, st1.mode === status && st1.lapsedAt === T0 + 40 * DAY && st2.lapsedAt === T0 + 40 * DAY, `${st1.mode} ${st1.lapsedAt} ${st2.lapsedAt}`);
+    }
 
     // Releasing.
     server.mode = 'down'; s = await pc2.lic.release();

@@ -399,7 +399,7 @@ const SITE = 'https://vdex.crowmade.app';
         const b = await r.json().catch(() => ({}));
         if (b.error === 'stale' && b.now && !tries) { at = b.now; continue; } // this computer's clock is off: use the server's
         if (!r.ok) throw new Error(b.error === 'not-signed' ? 'The shop did not accept your key. Is this the key built into Vdex?' : b.error === 'not-ready' ? 'The shop is not set up yet (see docs/selling-desktop.md).' : b.error === 'bad-code' ? 'That code has no email address in it, or is not valid.' : 'The shop answered ' + r.status);
-        const list = (b.computers || []).map(c => `${c.os} (added ${c.added}, last used ${c.seen})`).join('; ');
+        const list = (b.computers || []).map(c => (c.os ? `${c.os} (added ${c.added}, last used ${c.seen})` : 'a place held after a deletion')).join('; ');
         $('lookout').textContent = `${b.ref}: ${b.cancelled ? `CANCELLED (${b.cancelled.why}). ` : ''}${b.computers.length ? `on ${b.computers.length} computer${b.computers.length === 1 ? '' : 's'}: ${list}.` : 'not on any computer.'} Moved ${b.swaps} time${b.swaps === 1 ? '' : 's'} in the last 30 days.`;
         say({ look: 'Looked up.', clear: 'Its devices are cleared: it can be activated afresh.', cancel: 'Cancelled.', restore: 'Restored.', link: quiet ? 'Code made, and linked to its email for website sign-in. Save the ledger before you close this page.' : 'Linked: its email address can now sign in on the website and in the Android app.' }[op]);
         return;

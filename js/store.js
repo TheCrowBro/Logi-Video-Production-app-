@@ -303,9 +303,21 @@ function setStatus(status, error = '') { cloud.status = status; cloud.error = er
 // Until the licence is known, the last answer this device saw is used, so a paused link stays paused from the start.
 // Two things follow the licence a little differently: links and QR codes that pass on the contact card or equipment
 // also work during the trial (`links`), and saving a backup file also works until `backupUntil`, 30 days after a
-// licence stopped covering this device.
-let paid = lsGet('vdex-paid') !== '0', paidPrompt = null, links = paid, backupUntil = 0;
+// licence stopped covering this device. The last answer is kept as 'vdex-paid': '1' a licence, '0' none, 'ro' none and
+// read-only.
+const lastPaid = lsGet('vdex-paid');
+let paid = lastPaid !== '0' && lastPaid !== 'ro', paidPrompt = null, links = paid, backupUntil = 0;
 cloud.paused = !paid;
+// Read-only the last time the licence was known: read-only again from the start, until it is known (a licence check
+// held up, neither loading nor failing, must not leave Vdex editable meanwhile). A first visit, with nothing kept, is
+// not held up so.
+const CHECKING = 'Vdex is still checking its licence, so nothing was changed. Try again in a moment.';
+// Work Vdex does by itself meanwhile is refused quietly; a change someone just asked for is explained.
+if (lastPaid === 'ro') {
+  let said = 0, input = 0;
+  try { for (const t of ['pointerdown', 'keydown', 'change']) document.addEventListener(t, e => { if (e.isTrusted) input = Date.now(); }, true); } catch { /* no page */ }
+  gate = ({ quiet = false } = {}) => { if (!quiet && Date.now() - input < 3000 && Date.now() - said > 5e3) { said = Date.now(); toast(CHECKING); announce('Vdex is read-only. Nothing was changed.'); } return false; };
+}
 export const isPaid = () => paid;
 export const linksAllowed = () => paid || links;
 export const backupsAllowed = () => paid || Date.now() < backupUntil;
@@ -314,7 +326,7 @@ export function setPaid(on, prompt, more = {}) {
   if (prompt) paidPrompt = prompt;
   const was = paid, wasMore = linksAllowed() + '|' + backupUntil; paid = !!on; cloud.paused = !paid;
   links = !!more.links; backupUntil = Number(more.backupUntil) || 0;
-  lsSet('vdex-paid', paid ? '1' : '0');
+  lsSet('vdex-paid', paid ? '1' : more.canEdit === false ? 'ro' : '0');
   if (was === paid) { if (wasMore !== linksAllowed() + '|' + backupUntil) emit('licence'); return; }
   // 'licence': panels that show it (storage) redraw themselves; the page is not redrawn, so focus stays where it is.
   if (paid) { if (cloud.adapter) sync(); else emit('licence'); }
@@ -371,7 +383,7 @@ function waitForLicence() {
     if (!quiet && Date.now() - said > 5e3) { said = Date.now(); toast(NO_CHECK); announce('Vdex is read-only. Nothing was changed.'); } // once, not for every background change
     return false;
   });
-  setPaid(false); emit('licence');
+  setPaid(false, null, { canEdit: false }); emit('licence');
   const again = () => { if (L.waiting && !document.hidden) loadLicence(); };
   if (!L.timer) L.timer = setInterval(again, 60e3);
   if (!L.heard) { L.heard = true; window.addEventListener('online', again); document.addEventListener('visibilitychange', again); }

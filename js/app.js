@@ -9,7 +9,7 @@ import './calendar.js'; // registers the feed writer and the auto-push to a link
 import { initClockBar } from './clock.js';
 import * as lock from './lock.js';
 import * as backup from './backup.js';
-import { initUpdates } from './update.js';
+import { initUpdates, updateState } from './update.js';
 import { termsGate } from './terms.js';
 import * as native from './native.js';
 
@@ -33,7 +33,10 @@ lockBtn && lockBtn.addEventListener('click', () => lock.lockNow());
 // it through window.logiMenu before they open, so it is never left open underneath one of them.
 const menuBtn = document.getElementById('menuBtn');
 let menu = null;
-const openMenu = opts => import('./menu.js').then(m => { menu = m; m.openMenu(opts); }, e => { console.error(e); toast('The menu could not be loaded. Check the connection and try again.'); });
+// A part loaded later that fails: when a new version of Vdex has arrived since this page opened (its files may no longer
+// fit the ones already running), reloading is the cure, not the connection.
+const notLoaded = what => toast(updateState().ready ? `Vdex has been updated: reload to open ${what}.` : `${what[0].toUpperCase() + what.slice(1)} could not be loaded. Check the connection and try again.`);
+const openMenu = opts => import('./menu.js').then(m => { menu = m; m.openMenu(opts); }, e => { console.error(e); notLoaded('the menu'); });
 menuBtn.addEventListener('click', () => openMenu());
 window.logiMenu = { open: openMenu, close: () => { if (menu) menu.closeMenu(); }, isOpen: () => !!menu && menu.isOpen() };
 // The search control beside it opens the search across everything (js/search.js, fetched on first use). "/" when not
@@ -42,7 +45,7 @@ window.logiMenu = { open: openMenu, close: () => { if (menu) menu.closeMenu(); }
 // walkthrough or the lock, each of which closes the search first, as it does the menu (the lock also makes it forget).
 const searchBtn = document.getElementById('searchBtn');
 let search = null;
-const openSearch = opts => import('./search.js').then(m => { search = m; m.openSearch(opts); }, e => { console.error(e); toast('The search could not be loaded. Check the connection and try again.'); });
+const openSearch = opts => import('./search.js').then(m => { search = m; m.openSearch(opts); }, e => { console.error(e); notLoaded('the search'); });
 searchBtn.addEventListener('click', () => openSearch());
 window.logiSearch = { open: openSearch, close: forget => { if (search) search.closeSearch(forget); }, isOpen: () => !!search && search.isOpen() };
 const apple = /Mac|iPhone|iPad/.test(navigator.platform || '');
@@ -93,7 +96,7 @@ function show(i, dir = 0) {
     const holder = h('section', { class: 'page-card' + (dir ? ' fade-in' : ''), 'aria-label': p.label });
     page.replaceChildren(holder);
     cleanup = p.render(holder) || null;
-  }).catch(e => { console.error(e); toast('That section could not be loaded. Check the connection and try again.'); });
+  }).catch(e => { console.error(e); notLoaded('that section'); });
   return showing;
 }
 

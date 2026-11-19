@@ -187,7 +187,7 @@ Google asks what the app does with people's information. The form must agree wit
 
 - **The weather forecast.** For a day, a booking or a call sheet within the next 16 days, Vdex sends Open-Meteo the coordinates of the venue or, if it has none, the location saved in Vdex (which may be the person's own), rounded to two decimal places (about a kilometre), with the date. It happens by itself. Open-Meteo also sees the phone's internet address and says it keeps server logs, which can include coordinates, for up to 90 days.
 - **The licence.** After the 30-day trial, signing in sends the email address the person types to Vdex's licence server, which keeps which email addresses belong to which licences and emails them a sign-in code; the phone then takes one of the licence's places, which sends a random number made for that installation.
-- **Addresses and maps**, when the person looks one up: the address text and the map area go to OpenStreetMap.
+- **Addresses and maps:** a look-up sends the address text to OpenStreetMap, and showing a venue with a map location loads OpenStreetMap's map images around it.
 - **The person's own cloud storage and calendar**, if they link them (Google Drive and Google Calendar today): their Vdex database, backups and booking events go to their own account.
 - **Add to calendar buttons**: the booking's title, dates, location and description go to Google Calendar, Outlook or Yahoo Calendar, whichever button the person presses.
 - **Links the person sends** (quote, invoice, crew, contact card, equipment list): everything is inside the link, which they send with their own email or messaging app. Nothing reaches us or any server of ours.

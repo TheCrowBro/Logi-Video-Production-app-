@@ -1,7 +1,7 @@
 # Bundled libraries
 
 - `qrcode.js` — qrcode-generator 1.4.4, MIT License, © Kazuhiko Arase. https://github.com/kazuhikoarase/qrcode-generator
-- `jsQR.js` — jsQR 1.4.0, Apache License 2.0, © Cosmo Wolfe. https://github.com/cozmo/jsQR
+- `jsQR.js` — jsQR 1.4.0, Apache License 2.0, © Cosmo Wolfe. https://github.com/cozmo/jsQR. Changed here: in the table of versions, version 23's alignment pattern centres read 6, 30, 54, 78, 102 (the published file has 74 in place of 78, so it could not read a version-23 code), as in the QR code standard and in `qrcode.js`.
 
 # Adapted code
 

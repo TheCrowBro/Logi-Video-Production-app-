@@ -51,20 +51,21 @@ export const offer = () => ({ buy: !play(), price: ios() || play() ? '' : once()
 // saving data files work only in these (store.setPaid). A licence that is still waiting to be added to this device
 // online ('pending': a code on a computer, a sign-in in a store app) is not a licence here yet: those begin once the
 // device is on the licence's list. A device the licence does not cover ('released': its place was moved, or a store
-// app signed in while all were taken) is as it is without a licence.
-const PAID = new Set(['off', 'founder', 'licensed', 'offline']);
+// app signed in while all were taken) is as it is without a licence. One whose licence has not been confirmed online for
+// 90 days ('offline') is read-only and keeps only Export backup, until it is confirmed again.
+const PAID = new Set(['off', 'founder', 'licensed']);
 const paid = s => PAID.has(s.mode);
 const DAY = 86400e3, BACKUP_DAYS = 30;
 // Links and QR codes that pass on the contact card or equipment: during the trial, or with a licence.
 const links = s => paid(s) || s.trialLeft > 0;
 // When a licence stopped covering this device (`lapsedAt`, kept on the device by either licence), Export backup works
 // for 30 days from then. Someone who only ever had the trial has none.
-const backupUntil = s => (Number.isFinite(s.lapsedAt) && s.lapsedAt > 0 ? s.lapsedAt + BACKUP_DAYS * DAY : 0);
+const backupUntil = s => (s.mode === 'offline' ? Infinity : Number.isFinite(s.lapsedAt) && s.lapsedAt > 0 ? s.lapsedAt + BACKUP_DAYS * DAY : 0);
 function set(s) {
   if (!s || s.error || !s.mode) return;
   S.cur = s;
   if (['trial', 'ended', 'cancelled', 'expired'].includes(s.mode)) askLocalPrice(); // the states that offer Buy
-  setPaid(paid(s), needsLicence, { links: links(s), backupUntil: backupUntil(s) });
+  setPaid(paid(s), needsLicence, { links: links(s), backupUntil: backupUntil(s), canEdit: s.canEdit !== false });
   if (paid(s) && S.needClose) closeWhenOnTop('licence-needed', 'needClose'); // just signed in: the offer is out of date
   if (s.canEdit !== false && S.roClose) closeWhenOnTop('licence-readonly', 'roClose'); // licensed now: the read-only explanation is out of date
   S.listeners.forEach(f => { try { f(s); } catch { /* ignore */ } });
@@ -135,9 +136,9 @@ function describe(s) {
       ? { line: `Signed in as ${l.email}, but this phone is not on your licence yet: Vdex needs the internet once to add it. Cloud storage, backup files and spreadsheets start once it is added.`, tone: s.canEdit ? '' : 'warn', retry: true, release: true }
       : { line: `Licensed to ${who(l)}, but not activated on this computer yet: Vdex needs the internet once to do that${s.daysLeft > 0 ? ` (${plural(s.daysLeft, 'day')} left)` : ''}. Cloud storage, backup files and spreadsheets start once it is activated.`, tone: s.daysLeft > 0 ? '' : 'warn', retry: true, remove: true };
     case 'released': return { line: `This ${here()} is not on your licence: it is in use on ${plural(seats, 'other device')}, its limit. ${web() ? 'Add this phone' : 'Activate it here again'} to choose which device to take off.`, tone: 'warn', again: true, [web() ? 'release' : 'remove']: true };
-    case 'cancelled': return { line: `This licence has been cancelled, for example after a refund. If you think that is a mistake, reply to the email your licence came in${ios() ? ', or to Apple for an App Store purchase' : ''}.`, tone: 'warn', buy: shop, enter: true, restore, remove: !web() };
+    case 'cancelled': return { line: `This licence has been cancelled, for example after a refund. If you think that is a mistake, reply to the email your licence came in${ios() ? ', or to Apple for an App Store purchase' : ''}. If a payment dispute is settled in our favour, the licence works here again within a day.`, tone: 'warn', buy: shop, enter: true, restore, remove: !web() };
     case 'expired': return { line: `Your licence ended on ${day(l && l.expires)}.`, tone: 'warn', buy: shop, enter: true, restore, [web() ? 'release' : 'remove']: true };
-    case 'offline': return { line: `Vdex has not been able to check your ${web() ? 'sign-in' : 'licence'} for 90 days. Connect to the internet and press Try again.`, tone: 'warn', retry: true };
+    case 'offline': return { line: `Vdex has not been able to check your ${web() ? 'sign-in' : 'licence'} for 90 days, so it is read-only here and cloud storage and spreadsheets are paused until it can; Export backup still works. Connect to the internet and press Try again.`, tone: 'warn', retry: true };
     default: return null;
   }
 }
@@ -287,11 +288,11 @@ function needsLicence(what) {
     : keep ? 'Saving spreadsheet files' : 'Saving backups and spreadsheet files';
   // A licence that is still waiting to be added to this device, or a device whose place on the licence was moved: its
   // own line and next step, never an offer to buy again.
-  const d = s.mode === 'pending' || s.mode === 'released' ? describe(s) : null;
+  const d = ['pending', 'released', 'offline'].includes(s.mode) ? describe(s) : null;
   const sh = sheet('Comes with a licence', h('div', { class: 'stack' },
     h('p', null, `${thing} comes with a Vdex licence.`),
     d ? h('p', { class: 'small' }, d.line) : '',
-    keep ? h('p', { class: 'small' }, `Export backup still saves a backup file of everything here until ${longDay(keep)}.`) : '',
+    keep && s.mode !== 'offline' ? h('p', { class: 'small' }, `Export backup still saves a backup file of everything here until ${longDay(keep)}.`) : '',
     h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
     h('div', { class: 'actions' }, ...actions(s, d ? { retry: d.retry, again: d.again } : { buy: !play(), enter: true, restore: ios() }, () => sh.close())), buyNote({ buy: !d })));
   sh.el.classList.add('licence-needed');
@@ -458,8 +459,8 @@ function forgetSheet() {
     set(r); sh.close(); toast('Your licence records have been deleted, and Vdex is signed out here');
   } }, 'Delete my records');
   const sh = sheet('Delete my licence records', h('div', { class: 'stack' },
-    h('p', null, `This deletes what Vdex's licence server keeps about you: ${what}, and the list of devices on your licence. Vdex signs out here, and your other devices are signed out at their next check. A computer that still has your licence code puts itself back at its next weekly check: use Release this computer there first.`),
-    h('p', { class: 'small muted' }, `Your licence itself is not cancelled: ${ios() ? 'restore your App Store purchase, or ' : ''}sign in again at any time, and the records are made afresh. Stripe, the seller named on your receipt and Apple keep their own records of a purchase. Your work in Vdex is not touched.`),
+    h('p', null, `This deletes what Vdex's licence server keeps about you: ${what}, and what the list of devices on your licence says about each one (each keeps its place for 90 days, so this frees none). Vdex signs out here, and your other devices are signed out at their next check. A computer that still has your licence code puts itself back at its next weekly check: use Release this computer there first.`),
+    h('p', { class: 'small muted' }, `Your licence itself is not cancelled: ${lic.comp ? `sign in again with your licence code${ios() ? ' on the website' : ' (Have a licence code? Use it instead)'}, since a free licence is found again only by its code,` : `${ios() ? 'restore your App Store purchase, or ' : ''}sign in again at any time,`} and the records are made afresh. Stripe, the seller named on your receipt and Apple keep their own records of a purchase. Your work in Vdex is not touched.`),
     msg, h('div', { class: 'actions' }, go)));
 }
 

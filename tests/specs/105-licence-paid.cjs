@@ -7,7 +7,7 @@
 // covering a device, and not for someone who only had the trial; and links or QR codes that pass on the contact card
 // or equipment are made during the trial and with a licence, and after the trial only with one.
 const { chromium } = require('playwright');
-const { acceptTerms, openSetting, menuClick } = require('../helpers.cjs');
+const { acceptTerms, openSetting, menuClick, shopSign } = require('../helpers.cjs');
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 const URL = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -49,6 +49,8 @@ const DAY = 86400e3;
     await sleep(200);
   };
   const closeSheets = async page => { while (await page.locator('.sheet').count()) { await page.keyboard.press('Escape'); await sleep(150); } };
+  // Jo's sign-in token, as the licence server signs it (the page counts no other).
+  const TJ = await shopSign('web', { email: 'jo@example.com', ref: '2:1', iat: Date.now() });
   const trialWeb = { on: true }, trialStore = { 'vdex-licence': { on: true, statusAt: Date.now(), first: Date.now() - 2 * DAY, seen: Date.now() } };
   try {
     // Licences switched off (as now): everything works as before.
@@ -93,7 +95,7 @@ const DAY = 86400e3;
     // Signing in while the explanation is open: it closes, and Storage, sync & backups changes in place.
     await backups(page);
     await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(300);
-    await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.token = { kid: 2, data: '{}', sig: 'x' }; s.licence = { email: 'jo@example.com', ref: '2:1', seats: 3 }; s.checked = s.tried = Date.now(); localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.evaluate(tok => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.token = tok; s.licence = { email: 'jo@example.com', ref: '2:1', seats: 3 }; s.checked = s.tried = Date.now(); localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); }, TJ);
     await page.waitForFunction(() => !document.querySelector('.licence-needed'), null, { timeout: 5000 }).catch(() => {});
     const after = await page.evaluate(() => [...document.querySelectorAll('details.settings-section')].find(x => x.querySelector('.ss-title').textContent === 'Storage, sync & backups').innerText);
     ok('once signed in, the "comes with a licence" offer closes and Storage, sync & backups no longer says it needs one', (await page.locator('.licence-needed').count()) === 0 && !/come with a Vdex licence|backups with a licence/.test(after), after.slice(0, 160).replace(/\n/g, ' | '));
@@ -121,14 +123,14 @@ const DAY = 86400e3;
     ok('its panel explains the pause and offers a licence, with no Sync now', /Paused: cloud storage comes with a licence/.test(await page.locator('.sheet').first().innerText()) && (await page.locator('.sheet').first().getByRole('button', { name: 'Get a licence' }).count()) === 1 && (await page.locator('.sheet').first().getByRole('button', { name: 'Sync now' }).count()) === 0);
     await closeSheets(page);
     // Signing in (here: a stored sign-in the faked server confirms).
-    await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.token = { kid: 2, data: '{}', sig: 'x' }; s.licence = { email: 'jo@example.com', ref: '2:1', seats: 3 }; s.checked = s.tried = Date.now(); localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.evaluate(tok => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.token = tok; s.licence = { email: 'jo@example.com', ref: '2:1', seats: 3 }; s.checked = s.tried = Date.now(); localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); }, TJ);
     await page.waitForFunction(() => import('./js/store.js').then(s => !s.cloud.paused), null, { timeout: 8000 }).catch(() => {});
     await sleep(1500);
     ok('with a licence, syncing starts again by itself', davCalls.length > first && (await page.evaluate(() => import('./js/store.js').then(s => s.cloud.status))) !== 'paused', `${davCalls.length - first} requests`);
     await ctx.close();
 
     // Signed in on the website: backups save.
-    ({ ctx, page, downloads } = await open({ web: trialWeb, storage: { 'vdex-licence': { ...trialStore['vdex-licence'], token: { kid: 2, data: '{}', sig: 'x' }, licence: { email: 'jo@example.com', ref: '2:1', seats: 3 }, checked: Date.now(), tried: Date.now() } } }));
+    ({ ctx, page, downloads } = await open({ web: trialWeb, storage: { 'vdex-licence': { ...trialStore['vdex-licence'], token: TJ, licence: { email: 'jo@example.com', ref: '2:1', seats: 3 }, checked: Date.now(), tried: Date.now() } } }));
     await backups(page);
     await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(500);
     ok('signed in with a licence, backups save', downloads.some(n => /^vdex-backup-/.test(n)) && (await page.locator('.licence-needed').count()) === 0);
@@ -241,7 +243,7 @@ const DAY = 86400e3;
 
     // The website: a refund learned at the daily check, kept on the device, not started again by signing in again.
     const jo = { email: 'jo@example.com', ref: '2:1', seats: 3 };
-    const signedIn = extra => ({ 'vdex-licence': { on: true, statusAt: Date.now(), first: Date.now() - 40 * DAY, seen: Date.now(), token: 'tok-jo', licence: jo, checked: Date.now() - 2 * DAY, tried: Date.now() - 2 * DAY, ...extra } });
+    const signedIn = extra => ({ 'vdex-licence': { on: true, statusAt: Date.now(), first: Date.now() - 40 * DAY, seen: Date.now(), token: TJ, licence: jo, checked: Date.now() - 2 * DAY, tried: Date.now() - 2 * DAY, ...extra } });
     const refunded = { on: true, answers: { check: [403, { error: 'cancelled' }], start: [200, { ok: true }], verify: [403, { error: 'no-licence' }] } };
     ({ ctx, page, downloads } = await open({ web: refunded, storage: signedIn() }));
     await modeIs(page, 'cancelled');
@@ -346,7 +348,7 @@ const DAY = 86400e3;
         await other.close();
         // Signing in while on the Me page: the card's code appears without leaving the page.
         await page.evaluate(() => window.logiGo('me')); await sleep(500);
-        await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.token = 'tok-jo'; s.licence = { email: 'jo@example.com', ref: '2:1', seats: 3 }; s.checked = s.tried = Date.now(); localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); });
+        await page.evaluate(tok => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.token = tok; s.licence = { email: 'jo@example.com', ref: '2:1', seats: 3 }; s.checked = s.tried = Date.now(); localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); }, TJ);
         await page.waitForSelector('.qr svg', { timeout: 6000 }).catch(() => {});
         ok('…and once signed in, the Me page draws the Contact card code by itself', (await page.locator('.qr svg').count()) === 1);
       }

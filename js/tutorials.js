@@ -37,16 +37,17 @@ const SAMPLES = [
   { id: 'sample-talent', name: 'Sample talent', role: 'Talent', phone: '+1 555 0101', email: 'talent@example.com', rate: 300, rateUnit: 'day', notes: 'Added by the set-up walkthrough to show how the Crew page works. Remove when you like: ✎ then Delete.', sample: true },
   { id: 'sample-crew', name: 'Sample crew member', role: 'Camera Operator', phone: '+1 555 0102', email: 'crew@example.com', rate: 450, rateUnit: 'day', notes: 'Added by the set-up walkthrough to show how the Crew page works. Remove when you like: ✎ then Delete.', sample: true },
 ];
-const addSamples = () => { for (const x of SAMPLES) if (!store.byId('crew', x.id)) store.upsert('crew', x); };
+const addSamples = () => { if (!store.canChangeQuietly()) return; for (const x of SAMPLES) if (!store.byId('crew', x.id)) store.upsert('crew', x); }; // none while Vdex is read-only
 const removeSamples = () => { for (const x of SAMPLES) if (store.byId('crew', x.id)) store.remove('crew', x.id); };
 const samplesPresent = () => SAMPLES.some(x => store.byId('crew', x.id));
-// A card with fields of the profile: what is typed is saved when the card is left with Next (or Enter).
+// A card with fields of the profile: what is typed is saved when the card is left with Next (or Enter). While Vdex is
+// read-only the fields show what is stored and take nothing, so nothing typed is refused afterwards.
 const profileStep = (title, text, fields) => {
-  let box = null;
-  const input = ([label, key, type = 'text', extra = {}]) => h('label', { class: 'tour-field' }, h('span', null, label), h('input', { type, value: store.db.profile[key] || '', 'data-key': key, 'aria-label': label, autocomplete: 'off', ...extra }));
+  let box = null, ro = false;
+  const input = ([label, key, type = 'text', extra = {}]) => h('label', { class: 'tour-field' }, h('span', null, label), h('input', { type, value: store.db.profile[key] || '', 'data-key': key, 'aria-label': label, autocomplete: 'off', disabled: ro, ...extra }));
   return { title, text, target: null,
-    body: () => { box = h('div', { class: 'tour-fields' }, ...fields.map(input)); return box; },
-    onNext: () => { if (!box) return; const p = store.db.profile, patch = {}; box.querySelectorAll('input[data-key]').forEach(i => { const v = i.value.trim(); if ((p[i.dataset.key] || '') !== v) patch[i.dataset.key] = v; }); if (Object.keys(patch).length) store.update(d => { d.profile = { ...d.profile, ...patch, updatedAt: Date.now() }; }); } };
+    body: () => { ro = !store.canChangeQuietly(); box = h('div', { class: 'tour-fields' }, ...fields.map(input), ro ? h('p', { class: 'small muted' }, 'Vdex is read-only: your details can be changed again with a licence.') : ''); return box; },
+    onNext: () => { if (!box || ro) return; const p = store.db.profile, patch = {}; box.querySelectorAll('input[data-key]').forEach(i => { const v = i.value.trim(); if ((p[i.dataset.key] || '') !== v) patch[i.dataset.key] = v; }); if (Object.keys(patch).length) store.update(d => { d.profile = { ...d.profile, ...patch, updatedAt: Date.now() }; }); } };
 };
 const revealSetting = title => async () => { await closeSheets(); const m = await import('./pages/settings.js'); m.reveal(title); };
 // The calendar card: connect Google or Microsoft from the card itself (a sign-in has to start from a tap), with the
@@ -74,7 +75,7 @@ const calendarStep = () => {
 };
 const setupSteps = () => [
   C('Welcome to Vdex', 'Your whole production in one deck: bookings, crew, kit, venues, insurance, field tools and timecode notes. This set-up takes about three minutes: a look at the deck, your details, your calendar, and two sample people to try things on. Next moves on, and Skip leaves at any point; Settings → General → About & Licence → Take the tour runs it again.'),
-  C('Your PIN', (lock.enabled() ? (tourSeen() ? 'Vdex is locked with your PIN' : 'Vdex is locked with the PIN you just set') : 'Vdex locks with a PIN') + ', and everything it stores on this device is encrypted whenever it is locked, in the background or closed. A forgotten PIN cannot be recovered: the way back is to erase the device and restore from your cloud storage or a backup, so keep one of those current (a cloud copy and backup files need a licence). Settings → Security changes the PIN (' + lock.PIN_MIN + ' to ' + lock.PIN_MAX + ' digits), sets when it locks, adds fingerprint or face unlock, and has a switch to erase this device after 10 wrong PINs, which stays off unless you turn it on.'),
+  C('Your PIN', (lock.enabled() ? (tourSeen() ? 'Vdex is locked with your PIN' : 'Vdex is locked with the PIN you just set') : 'Vdex locks with a PIN') + ', and your work and your sign-ins on this device are encrypted whenever it is locked, in the background or closed. A forgotten PIN cannot be recovered: the way back is to erase the device and restore from your cloud storage or a backup, so keep one of those current (a cloud copy and backup files need a licence). Settings → Security changes the PIN (' + lock.PIN_MIN + ' to ' + lock.PIN_MAX + ' digits), sets when it locks, adds fingerprint or face unlock, and has a switch to erase this device after 10 wrong PINs, which stays off unless you turn it on.'),
   T('The Rolodex', 'Spin it to move between sections: drag it, tap ▲ ▼, use the arrow keys, or scroll on it. It slides away as a page scrolls down and comes back as you scroll up.', '.binder', '#rolodex', { go: 'bookings' }),
   C('What is in the deck', 'Bookings holds the calendar and, for each shoot, the call sheet, the stripboard, the crew link, the hours, the quote and the invoice. Crew, Equipment, Venues and Insurance are your lists. Me is your contact card. Field has the sun, Polaris, white balance, noise and range tools. TC Notes stamps notes with the camera’s timecode. Settings has the rest. On any page, the magnifier at the top searches everything you keep here, and the menu ☰ at the top right has Tutorial for this page: that page’s own walkthrough.'),
   profileStep('You', 'Your name and business go on call sheets, quotes and invoices, and on your contact card. Type them here and tap Next.', [['Full name', 'name'], ['Business name', 'business']]),
@@ -87,7 +88,7 @@ const setupSteps = () => [
   { title: 'Keep the samples?', text: 'Sample talent and Sample crew member stay on the Crew page until you remove them: ✎ then Delete, or the button here. That is the set-up done. Open the menu ☰ at the top right of any page and tap Tutorial for this page for its walkthrough, and Other pages… on its first card for any other.', target: null,
     body: ctx => h('div', { class: 'actions tour-done' }, samplesPresent()
       ? h('button', { class: 'btn ghost', type: 'button', onclick: () => { removeSamples(); toast('Samples removed'); ctx.refresh(); } }, '🗑 Remove the samples')
-      : h('span', { class: 'small muted' }, 'The samples have been removed.')) },
+      : h('span', { class: 'small muted' }, store.canChangeQuietly() ? 'The samples have been removed.' : 'Vdex is read-only, so no samples were added.')) },
 ];
 
 /* ------------------------------ quotes and invoices, start to finish ------------------------------ */

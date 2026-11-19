@@ -533,8 +533,8 @@ function pinReady() {
       why && h('p', { class: 'warn small', role: 'status' }, why),
       h('h1', { id: 'pin-setup-title' }, firstRun ? 'First, set a PIN' : 'Set a PIN to keep using Vdex'),
       h('p', { class: 'small' }, firstRun
-        ? 'Vdex keeps your bookings, contacts, kit serials and insurance details on this device, so it locks with a PIN. The PIN opens it, and everything it stores is encrypted whenever it is locked, in the background or closed.'
-        : 'Vdex now locks with a PIN on every device. The PIN opens it, and everything it stores here is encrypted whenever it is locked, in the background or closed. Your data stays exactly where it is.'),
+        ? 'Vdex keeps your bookings, contacts, kit serials and insurance details on this device, so it locks with a PIN. The PIN opens it, and your work and your sign-ins are encrypted whenever it is locked, in the background or closed.'
+        : 'Vdex now locks with a PIN on every device. The PIN opens it, and your work and your sign-ins here are encrypted whenever it is locked, in the background or closed. Your data stays exactly where it is.'),
       h('p', { class: 'small muted' }, PIN_RULE),
       a, b, err,
       h('p', { class: 'warn small' }, 'A forgotten PIN cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current (a cloud copy and backup files need a licence).'),

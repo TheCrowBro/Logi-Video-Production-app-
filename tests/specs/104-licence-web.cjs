@@ -51,13 +51,15 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
   const asked = [];
   // status: answers /licence/web/status in place of the licence server (route => fulfil or abort); routes: more of
   // them, set before the page opens.
-  const open = async ({ width = 420, start = '', storage = null, status = null, routes = null } = {}) => {
-    const ctx = await browser.newContext({ viewport: { width, height: 860 }, serviceWorkers: 'block' });
+  // block: licence server paths whose requests are refused (as a blocked address); tz: the browser's time zone.
+  const open = async ({ width = 420, start = '', storage = null, status = null, routes = null, block = null, tz = '' } = {}) => {
+    const ctx = await browser.newContext({ viewport: { width, height: 860 }, serviceWorkers: 'block', ...(tz ? { timezoneId: tz } : {}) });
     if (routes) await routes(ctx);
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
     await ctx.route(u => new globalThis.URL(u).pathname.startsWith('/licence/'), async r => {
       const q = r.request();
       if (status && new globalThis.URL(q.url()).pathname === '/licence/web/status') { asked.push('/licence/web/status'); return status(r); }
+      if (block && block.test(new globalThis.URL(q.url()).pathname)) return r.abort('blockedbyclient');
       // The test swaps the fake licence server now and then; a request caught in between gets "unavailable", as it would
       // from a real server that is restarting, instead of crashing the test.
       asked.push(new globalThis.URL(q.url()).pathname);
@@ -176,6 +178,16 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
       ok(`…and once ${file} can be loaded (the connection is back), the licence check takes over: here licences are off, so everything works`, after.changed === true && after.paid === true, JSON.stringify(after));
       await ctx.close();
     }
+    // Read-only the last time the licence was known: read-only from the start, also while the licence check is held up
+    // (a request that neither loads nor fails), rather than editable until it gives up 30 seconds later.
+    ({ ctx, page } = await open({ storage: { on: true, statusAt: Date.now(), first: Date.now() - 40 * DAY, seen: Date.now() }, routes: c => Promise.all([
+      c.addInitScript(() => { if (!sessionStorage.getItem('ro-seeded')) { localStorage.setItem('vdex-paid', 'ro'); sessionStorage.setItem('ro-seeded', '1'); } }),
+      c.route(u => new globalThis.URL(u).pathname === '/js/licence.js', () => {}), // held open: never answered
+    ]) }));
+    await sleep(4000);
+    const held = await page.evaluate(() => import('./js/store.js').then(s => ({ changed: s.update(d => { d.profile = { ...d.profile, name: 'Held up' }; }), paid: s.isPaid(), missing: s.licenceMissing() })));
+    ok('a browser that was read-only last time stays read-only while its licence check is held up, with no cloud storage or files', held.changed === false && held.paid === false && held.missing === false, JSON.stringify(held));
+    await ctx.close();
     await mf.dispose(); mf = worker(true); await link();
 
     // Switched on: the 30-day trial.
@@ -236,6 +248,40 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
     ok('signing out goes back to read-only (the trial is over)', !(await lic(page)).token && /trial has ended/.test(await page.locator('.licence-bar').innerText()));
     await ctx.close();
 
+    // At phone width the update bar (made here as js/update.js makes it) wraps to three rows: the read-only bar sits
+    // above it, so its Buy and Sign in buttons can still be tapped.
+    ({ ctx, page } = await open({ width: 390, storage: { on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY } }));
+    await page.waitForSelector('.licence-bar', { timeout: 5000 });
+    const bars = await page.evaluate(() => {
+      const el = (tag, cls, text, attrs = {}) => { const e = document.createElement(tag); if (cls) e.className = cls; e.textContent = text; for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
+      const bar = el('div', 'update-bar', '', { role: 'status' });
+      bar.append(el('span', '', 'Vdex has been updated.'), el('button', 'btn primary small', 'Reload for the new version'), el('button', 'icon-btn', '✕', { 'aria-label': 'Not now' }));
+      document.body.append(bar); document.body.classList.add('has-update-bar');
+      const lb = document.querySelector('.licence-bar').getBoundingClientRect(), ub = bar.getBoundingClientRect();
+      const free = [...document.querySelectorAll('.licence-bar button')].map(b => { const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !!hit && b.contains(hit); });
+      return { overlap: Math.round(Math.max(0, Math.min(lb.bottom, ub.bottom) - Math.max(lb.top, ub.top))), free, top: Math.round(lb.top) };
+    });
+    ok('at phone width, with the update bar showing too, the read-only bar sits above it and each of its buttons can be tapped', bars.overlap === 0 && bars.free.length >= 2 && bars.free.every(Boolean) && bars.top > 0, JSON.stringify(bars));
+    await ctx.close();
+
+    // After the trial, the setup tour (Take the tour) shows the profile as it is stored and takes nothing, so no
+    // read-only explanation comes up under its card, and it adds no sample people.
+    ({ ctx, page } = await open({ width: 390, storage: { on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY } }));
+    await page.waitForSelector('.licence-bar', { timeout: 5000 });
+    await page.evaluate(() => import('./js/tutorials.js').then(t => t.openSetup(t.stepsFor('setup').findIndex(x => x.title === 'You'))));
+    await page.waitForSelector('#tour-title', { timeout: 5000 }); await sleep(400);
+    const youCard = await page.evaluate(() => ({ title: document.getElementById('tour-title').textContent, inputs: [...document.querySelectorAll('.tour-form input')].map(i => i.disabled), text: document.querySelector('.tour-form').textContent }));
+    const ro = [];
+    for (let i = 0; i < 12 && (await page.locator('#tour-title').count()); i++) {
+      const title = await page.locator('#tour-title').innerText();
+      if (title === 'Keep the samples?') { ro.push(await page.locator('.tour-done').innerText()); break; }
+      await page.locator('.tour-actions .btn.primary').click(); await sleep(500);
+      ro.push((await page.locator('.sheet.licence-readonly').count()) ? 'read-only sheet after ' + title : 'ok');
+    }
+    const crewNow = await page.evaluate(() => import('./js/store.js').then(s => s.db.crew.length));
+    ok('after the trial, Take the tour shows the profile\'s fields as stored, says why they cannot be changed, and takes nothing: no read-only sheet comes up under the tour, and no sample people are added', youCard.title === 'You' && youCard.inputs.length === 2 && youCard.inputs.every(Boolean) && /read-only/.test(youCard.text) && !ro.some(x => /read-only sheet/.test(x)) && /no samples were added/.test(ro.at(-1) || '') && crewNow === 0, JSON.stringify({ youCard, ro, crewNow }));
+    await ctx.close();
+
     // Switched off and on again: the trial carries on where it was, it did not run while off.
     ({ ctx, page } = await open({ storage: { on: true, statusAt: Date.now() - 7 * 3600e3, first: Date.now() - 25 * DAY, seen: Date.now() - 15 * DAY } })); // 10 days of trial used
     // The page asks at most every 6 hours, Try again included: each step below is 7 hours after the one before.
@@ -280,7 +326,58 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
     await page.waitForFunction(() => /cancelled/.test(document.querySelector('.licence-bar')?.textContent || ''), null, { timeout: 8000 }).catch(() => {});
     ok('a cancelled licence (a refund) signs the browser out at its next daily check', /licence has been cancelled/.test(await page.locator('.licence-bar').innerText().catch(() => '')));
     await mf.dispatchFetch('https://vdex.crowmade.app/licence/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(await codes.signNote('admin', ownerKey, 1, { op: 'restore', ref, at: Date.now() })) });
+    // Switched back on (a payment dispute settled in the seller's favour, or the owner's restore): the next day's look
+    // finds it, and the browser is signed in again by itself.
+    await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.cancelTried = Date.now() - 2 * 86400e3; localStorage.setItem('vdex-licence', JSON.stringify(s)); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.waitForFunction(() => !document.querySelector('.licence-bar'), null, { timeout: 8000 }).catch(() => {});
+    const back = await lic(page);
+    ok('…and once the licence works again (a dispute won), the next daily look signs the browser in again by itself', (await page.locator('.licence-bar').count()) === 0 && !!back.token && !back.cancelled && !back.cancelledToken && (await page.evaluate(() => import('./js/licence.js').then(m => m.licenceState().mode))) === 'licensed', JSON.stringify(Object.keys(back)));
     await ctx.close();
+
+    // Only the licence server's signature counts as a sign-in: a token typed into the browser's storage, a real one
+    // beside a licence it does not name, or a store app's place typed in as taken is none. And the 90 days without a
+    // check run from the licence server's own time on the token, which every check renews, not from a stored time.
+    const shopKey = await codes.importPrivate(STATUS_KEY);
+    const jo = { email: 'jo@example.com', name: 'Jo Web', ref, seats: 3, comp: false, expires: '' };
+    const token = (extra = {}) => codes.signNote('web', shopKey, 2, { email: 'jo@example.com', ref, iat: Date.now(), ...extra });
+    const blocked = /^\/licence\/web\/(check|activate)$/;
+    const trialOver = extra => ({ on: true, statusAt: Date.now(), first: Date.now() - 40 * DAY, seen: Date.now(), checked: Date.now(), tried: Date.now(), ...extra });
+    const lookAt = async opts => {
+      const o = await open(opts);
+      await o.page.evaluate(() => import('./js/licence.js').then(m => m.initLicence()));
+      await sleep(2800); // the first background look (1.5 seconds after the licence loads) has had its answer
+      const st = await o.page.evaluate(() => import('./js/licence.js').then(async m => { const s = m.licenceState(), store = await import('./js/store.js'), kept = JSON.parse(localStorage.getItem('vdex-licence') || '{}'); return { mode: s.mode, canEdit: s.canEdit, paid: store.isPaid(), backups: store.backupsAllowed(), links: store.linksAllowed(), trialLeft: s.trialLeft, trialEnds: s.trialEnds, lapsedAt: s.lapsedAt || 0, iat: kept.token ? JSON.parse(kept.token.data).iat : 0 }; }));
+      await o.ctx.close(); return st;
+    };
+    const madeUp = { kid: 2, data: JSON.stringify({ email: 'jo@example.com', ref, iat: Date.now() }), sig: 'A'.repeat(86) };
+    st = await lookAt({ block: blocked, storage: trialOver({ token: madeUp, licence: jo }) });
+    ok('a made-up sign-in token in the browser\'s storage is no licence: after the trial Vdex stays read-only, with no cloud storage, files or links, also with the check blocked', st.mode === 'ended' && st.canEdit === false && !st.paid && !st.backups && !st.links, JSON.stringify(st));
+    st = await lookAt({ block: blocked, storage: trialOver({ token: await token(), licence: { ...jo, ref: '2:999' } }) });
+    ok('…nor is the licence server\'s own token beside a licence it does not name', st.mode === 'ended' && !st.paid, JSON.stringify(st));
+    st = await lookAt({ block: blocked, storage: trialOver({ token: await token(), licence: jo }) });
+    ok('…while the licence server\'s token for the licence still signs in, with its check blocked', st.mode === 'licensed' && st.paid, JSON.stringify(st));
+    st = await lookAt({ block: blocked, start: 'index.html?src=play', storage: trialOver({ play: true, token: await token(), licence: jo, seat: 'ok', seatChecked: Date.now() + 365 * DAY, seatTried: Date.now(), install: 'inst-play-typed-00001' }) });
+    ok('in the Play app, a place typed in as taken, with its check blocked, is no place: not licensed until the licence server adds the phone', st.mode === 'pending' && st.canEdit === false && !st.paid, JSON.stringify(st));
+    st = await lookAt({ block: blocked, storage: trialOver({ token: await token({ iat: Date.now() - 100 * DAY }), licence: jo, checked: Date.now() + 365 * DAY }) });
+    ok('a sign-in the licence server last confirmed 100 days ago, with its check blocked and the time of the last check typed a year ahead, turns read-only once the check fails: Export backup still works, cloud storage and spreadsheets do not', st.mode === 'offline' && st.canEdit === false && !st.paid && st.backups, JSON.stringify(st));
+    st = await lookAt({ block: blocked, storage: trialOver({ token: await token({ iat: Date.now() - 2 * DAY }), licence: jo, checked: Date.now() - 2 * DAY, tried: Date.now() - 2 * DAY }) });
+    ok('…one confirmed 2 days ago stays licensed while the check is blocked', st.mode === 'licensed' && st.paid, JSON.stringify(st));
+    st = await lookAt({ storage: trialOver({ token: await token({ iat: Date.now() - 100 * DAY }), licence: jo, checked: Date.now() - 100 * DAY, tried: Date.now() - 100 * DAY }) });
+    ok('…and one that can reach the licence server again is confirmed, with a new token from it', st.mode === 'licensed' && st.paid && Date.now() - st.iat < 60e3, JSON.stringify(st));
+    // The trial: never more than 30 days, and its last day in the browser's own time zone.
+    st = await lookAt({ storage: { on: true, statusAt: Date.now(), first: Date.now() + 20 * DAY, seen: Date.now() } });
+    ok('a trial start moved into the future gives no more than the 30 days', st.mode === 'trial' && st.trialLeft === 30, JSON.stringify(st));
+    for (const [tz, hour] of [['America/Los_Angeles', 3], ['Australia/Sydney', 20]]) {
+      const d = new Date(Date.now() + 3 * DAY), end = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), hour);
+      const want = new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(end));
+      st = await lookAt({ tz, storage: { on: true, statusAt: Date.now(), first: end - 30 * DAY, seen: Date.now() } });
+      ok(`in ${tz}, the trial's last day is the date there (${want}), not the date in London`, st.trialEnds === want, JSON.stringify(st));
+    }
+    // A refund learned under an earlier version, which kept no day: its 30 days of Export backup run from the first look now.
+    st = await lookAt({ storage: { on: true, statusAt: Date.now(), first: Date.now() - 90 * DAY, seen: Date.now(), cancelled: true } });
+    ok('a browser signed out by a refund under an earlier version gets its 30 days of Export backup from now', st.mode === 'cancelled' && Math.abs(st.lapsedAt - Date.now()) < 60e3 && st.backups && !st.paid, JSON.stringify(st));
+    st = await lookAt({ storage: { on: true, statusAt: Date.now(), first: Date.now() - 90 * DAY, seen: Date.now() } });
+    ok('…and someone who only ever had the trial gets none', st.mode === 'ended' && !st.lapsedAt && !st.backups, JSON.stringify(st));
 
     // The Google Play app: no Buy, and it takes a place on the licence.
     ({ ctx, page } = await open({ start: 'index.html?src=play', storage: { on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY } }));

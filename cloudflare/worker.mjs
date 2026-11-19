@@ -161,26 +161,40 @@ async function webhook(request, env) {
     if (env.RESEND_API_KEY && r.email && !(await sendCode(env, r, await webReady(env)))) return json(502, { error: 'email-failed' });
     return json(200, { ok: true, ref: r.ref });
   }
-  // A full refund or a dispute cancels the code bought with that payment. A partial refund keeps it. A dispute closed
-  // in the seller's favour (won, or an inquiry the bank dropped) brings back what that dispute cancelled and nothing
-  // else: a code refunded, or cancelled by the owner, before or since stays cancelled.
+  // A full refund or a dispute cancels the code bought with that payment. A partial refund keeps it. Each payment's
+  // disputes are remembered (dp:<ref>: the open ones, and the closed ones with how they ended), so the order Stripe's
+  // events arrive in changes nothing: a dispute closed in the seller's favour (won, or an inquiry the bank dropped)
+  // brings the code back only once no dispute on it is open and none was lost; a lost one keeps it cancelled; and a
+  // dispute's late or repeated "created" after it closed cancels nothing. A code refunded, or cancelled by the owner,
+  // before or since stays cancelled.
   const refunded = ev.type === 'charge.refunded' && !!o.refunded, disputed = ev.type === 'charge.dispute.created';
-  const settled = ev.type === 'charge.dispute.closed' && ['won', 'warning_closed'].includes(o.status);
-  if (refunded || disputed || settled) {
+  const closed = ev.type === 'charge.dispute.closed', settled = closed && ['won', 'warning_closed'].includes(o.status), lost = closed && o.status === 'lost';
+  if (refunded || disputed || settled || lost) {
     const pi = typeof o.payment_intent === 'string' ? o.payment_intent : o.payment_intent && o.payment_intent.id;
     if (!pi || !/^pi_[A-Za-z0-9]{6,250}$/.test(pi)) return json(200, { ignored: 'no-payment' });
     const dispute = refunded || !/^d[pu]_[A-Za-z0-9]{6,250}$/.test(String(o.id)) ? '' : o.id; // which dispute, so another one's end changes nothing
-    if (settled && !dispute) return json(200, { ignored: 'no-dispute' });
+    if (closed && !dispute) return json(200, { ignored: 'no-dispute' });
     const list = await stripeGet(env, `checkout/sessions?payment_intent=${encodeURIComponent(pi)}&limit=5`);
     if (!list) return json(502, { error: 'stripe' });
     let n = 0;
     for (const s of list.data || []) {
       if (!paymentLinks(env).includes(s.payment_link)) continue;
-      const key = 'x:' + (await refForSession(s.id)).ref, was = await env.LICENCES.get(key, 'json'); // a failed read is a 500: Stripe sends the event again
-      // A cancellation written before disputes were told apart names none: the end of a dispute on its payment undoes it.
-      if (settled) { if (was && was.why === 'dispute' && (!was.dispute || was.dispute === dispute)) { await env.LICENCES.delete(key); n++; } continue; }
-      if (disputed && was && was.why !== 'dispute') continue; // cancelled for another reason already: that reason stands
-      await env.LICENCES.put(key, JSON.stringify({ why: refunded ? 'refund' : 'dispute', at: Date.now(), ...(dispute ? { dispute } : {}) })); n++;
+      const ref = (await refForSession(s.id)).ref, key = 'x:' + ref, was = await env.LICENCES.get(key, 'json'); // a failed read is a 500: Stripe sends the event again
+      if (refunded) { await env.LICENCES.put(key, JSON.stringify({ why: 'refund', at: Date.now() })); n++; continue; }
+      const hkey = 'dp:' + ref, h0 = (await env.LICENCES.get(hkey, 'json')) || {}, ids = v => (Array.isArray(v) ? v.filter(x => typeof x === 'string') : []);
+      const h = { open: ids(h0.open), won: ids(h0.won), lost: ids(h0.lost) }, ended = id => h.won.includes(id) || h.lost.includes(id);
+      // A cancellation that names its dispute counts it as open; one written before disputes were told apart names none.
+      if (was && was.why === 'dispute' && was.dispute && !ended(was.dispute) && !h.open.includes(was.dispute)) h.open.push(was.dispute);
+      if (disputed) {
+        if (dispute && ended(dispute)) continue; // closed already: a late or repeated notice changes nothing
+        if (dispute && !h.open.includes(dispute)) { h.open.push(dispute); await env.LICENCES.put(hkey, JSON.stringify(h)); }
+        if (was && was.why !== 'dispute') continue; // cancelled for another reason already: that reason stands
+        await env.LICENCES.put(key, JSON.stringify({ why: 'dispute', at: Date.now(), ...(dispute ? { dispute } : {}) })); n++;
+        continue;
+      }
+      if (!ended(dispute)) { h.open = h.open.filter(x => x !== dispute); (lost ? h.lost : h.won).push(dispute); await env.LICENCES.put(hkey, JSON.stringify(h)); }
+      if (lost) { if (!was) { await env.LICENCES.put(key, JSON.stringify({ why: 'dispute', at: Date.now(), dispute })); n++; } continue; } // the chargeback stands
+      if (was && was.why === 'dispute' && !h.open.length && !h.lost.length) { await env.LICENCES.delete(key); n++; }
     }
     return json(200, settled ? { ok: true, restored: n } : { ok: true, cancelled: n });
   }
@@ -203,16 +217,32 @@ async function sendCode(env, r, web) {
 // A device (a computer running the desktop app, or the Google Play app) is listed by the random ID its install made.
 // Other devices only ever see a short tag made from it, so one cannot take another off the list except through a
 // counted swap.
+// After Delete my licence records, each device's place is held for 90 days by its tag alone ({ tag, gone }: nothing
+// else about it), so a deletion frees no place: a device that comes back takes its own place again, and any other needs
+// a free place or a counted move as before. 90 days is the longest a device can go without a check and stay licensed.
 const tagOf = async id => codes.b64u.enc(await sha256('vdex-seat|' + id)).slice(0, 12);
 const OS = new Set(['Mac', 'Windows', 'Linux', 'Android', 'iPhone', 'iPad']);
 const validInstall = v => typeof v === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(v);
+const KEPT = 90 * DAY;
+const keptPlace = c => !c.id && typeof c.tag === 'string' && /^[A-Za-z0-9_-]{12}$/.test(c.tag) && Number.isFinite(c.gone) && Date.now() - c.gone < KEPT;
+const tagFor = c => (c.id ? tagOf(c.id) : Promise.resolve(c.tag));
+// The entry that is this install: listed by its ID, or a place kept for it by its tag.
+const isInstall = (c, install, tag) => c.id === install || (!c.id && c.tag === tag);
 async function readCode(text) { try { const r = await codes.verifyCode(String(text || ''), { keys: KEYS }); return r; } catch { return null; } }
 async function seats(env, ref) {
   const rec = await env.LICENCES.get('c:' + ref, 'json').catch(() => null);
-  const computers = rec && Array.isArray(rec.computers) ? rec.computers.filter(c => c && validInstall(c.id)) : [];
+  const computers = rec && Array.isArray(rec.computers) ? rec.computers.filter(c => c && (validInstall(c.id) || keptPlace(c))) : [];
   return { computers, swaps: rec && Array.isArray(rec.swaps) ? rec.swaps.filter(t => Number.isFinite(t) && Date.now() - t < 30 * DAY) : [] };
 }
-const shown = computers => Promise.all(computers.map(async c => ({ tag: await tagOf(c.id), os: c.os, added: c.added, seen: c.seen })));
+const shown = computers => Promise.all(computers.map(async c => ({ tag: await tagFor(c), os: c.os || '', added: c.added || '', seen: c.seen || '' })));
+// The desktop app (from 1.4.0) sends the turn it was given at its last check, and gets a new one at each: a copy of an
+// installation (its licence.json copied to another computer) shows a turn that is out of date as soon as either copy
+// has checked. The server cannot tell which copy is the first, so it takes that install off the list and answers
+// 'stale': each copy then asks again under a new random ID, needing a place of its own (or a counted move), and a
+// computer whose answer was lost on the way gets its place back the same way. Only the latest turn is accepted, never
+// the one before, so two copies cannot take turns for ever. Apps that send no turn (the store apps, older desktop
+// apps) are answered as before, unless their install was given a turn: then a missing one is out of date too.
+const newTurn = () => codes.b64u.enc(crypto.getRandomValues(new Uint8Array(12)));
 
 async function activate(request, env) {
   const b = await readJson(request); if (!b || !validInstall(b.install)) return json(400, { error: 'invalid' });
@@ -224,32 +254,42 @@ async function activate(request, env) {
   if (r.licence.email) await linkEmail(env, r.licence.email, r.licence); // so the website can sign in with this code's email
   return takeSeat(env, key, r.licence.ref, r.licence.seats, b);
 }
-// Puts the install b.install on the licence's list (b.release: the tag of a device to move it from when it is full).
+// Puts the install b.install on the licence's list (b.release: the tag of a device to move it from when it is full;
+// b.turn: the desktop app's turn, above).
 async function takeSeat(env, key, ref, max, b) {
   const rec = await seats(env, ref), now = Date.now(), day = today(now);
   let list = rec.computers, changed = false;
-  const mine = list.find(c => c.id === b.install);
+  const turns = typeof b.turn === 'string', mine = list.find(c => c.id === b.install);
+  const tag = mine ? '' : await tagOf(b.install), kept = mine ? -1 : list.findIndex(c => !c.id && c.tag === tag); // back after a deletion: its kept place
+  if (mine && mine.turn && !(turns && same(b.turn, mine.turn))) { // a copy, or an answer lost: off the list
+    await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: list.filter(c => c !== mine), swaps: rec.swaps }));
+    return json(409, { error: 'stale' });
+  }
+  if (!mine && kept < 0 && turns && b.turn) return json(409, { error: 'stale' }); // a turn given to an entry that is no longer listed
+  if (kept >= 0) { list = list.filter((_, j) => j !== kept); changed = true; }
+  let entry = mine;
   if (mine) { if (!mine.seen || now - Date.parse(mine.seen) > 6 * DAY) { mine.seen = day; changed = true; } }
   else {
     if (list.length >= max) {
-      const tags = await Promise.all(list.map(c => tagOf(c.id)));
+      const tags = await Promise.all(list.map(tagFor));
       const i = typeof b.release === 'string' ? tags.indexOf(b.release) : -1;
       if (i < 0) return json(409, { error: 'full', computers: await shown(list), swapsLeft: Math.max(0, SWAPS - rec.swaps.length) });
       if (rec.swaps.length >= SWAPS) return json(429, { error: 'swaps' });
       list = list.filter((_, j) => j !== i); rec.swaps.push(now);
     }
-    list.push({ id: b.install, os: OS.has(b.os) ? b.os : 'Computer', added: day, seen: day }); changed = true;
+    entry = { id: b.install, os: OS.has(b.os) ? b.os : 'Computer', added: day, seen: day }; list.push(entry); changed = true;
   }
+  if (turns) { entry.turn = newTurn(); changed = true; }
   if (changed) await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: list, swaps: rec.swaps }));
-  return json(200, { ok: true, receipt: await codes.signNote('active', key, SHOP_KID, { ref, install: b.install, at: now }), used: list.length, seats: max });
+  return json(200, { ok: true, receipt: await codes.signNote('active', key, SHOP_KID, { ref, install: b.install, at: now }), used: list.length, seats: max, ...(turns ? { turn: entry.turn } : {}) });
 }
 async function release(request, env) {
   const b = await readJson(request); if (!b || !validInstall(b.install)) return json(400, { error: 'invalid' });
   if (!env.LICENCES) return json(503, { error: 'not-ready' });
   const r = await readCode(b.code); if (!r) return json(400, { error: 'invalid' });
-  const ref = r.licence.ref, rec = await seats(env, ref);
-  if (!rec.computers.some(c => c.id === b.install)) return json(404, { error: 'not-listed' });
-  await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: rec.computers.filter(c => c.id !== b.install), swaps: rec.swaps }));
+  const ref = r.licence.ref, rec = await seats(env, ref), tag = await tagOf(b.install);
+  if (!rec.computers.some(c => isInstall(c, b.install, tag))) return json(404, { error: 'not-listed' });
+  await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: rec.computers.filter(c => !isInstall(c, b.install, tag)), swaps: rec.swaps }));
   return json(200, { ok: true });
 }
 
@@ -345,7 +385,10 @@ async function forgetRecords(env, ikey, v = {}, { keepLink = false } = {}) {
   const emails = new Set([v.email, ...list.map(l => l.email)].map(cleanEmail).filter(Boolean));
   const refs = new Set([String(v.ref), ...list.map(l => String(l.ref))].filter(r => /^\d{1,3}:\d{1,10}$/.test(r)));
   let devices = 0;
-  for (const ref of refs) { const s = await seats(env, ref); devices += s.computers.length; await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: [], swaps: s.swaps })); }
+  for (const ref of refs) {
+    const s = await seats(env, ref), at = Date.now(); devices += s.computers.filter(c => c.id).length;
+    await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: await Promise.all(s.computers.map(async c => ({ tag: await tagFor(c), gone: c.id ? at : c.gone }))), swaps: s.swaps }));
+  }
   for (const e of emails) { if (!keepLink) await env.LICENCES.delete('e:' + e); await env.LICENCES.delete('w:' + e); }
   if (!keepLink) await env.LICENCES.delete(ikey);
   await env.LICENCES.put(await forgotKey(ikey), JSON.stringify({ at: Date.now() }), { expirationTtl: 400 * 86400 });
@@ -424,9 +467,11 @@ async function checkCode(env, email, code) {
 // A code that never changes could be found by trying, and the address may be easy to guess, so wrong tries are counted
 // by the UTC day twice over:
 //   - for each requester (an IPv4 address, or an IPv6 /64 block, which one home or server is given whole): after
-//     REVIEW_TRIES wrong tries that requester is refused until the next day, the right code included. So one stranger
-//     cannot use up the day's tries and lock the reviewers out;
+//     REVIEW_TRIES wrong tries that requester is refused until the next day, the right code included. So one
+//     connection alone cannot use up the day's tries;
 //   - for everyone together: after REVIEW_TRIES_ALL wrong tries the address is refused for everyone until the next day.
+//     So someone trying wrong codes from four or more connections can shut it for the rest of the UTC day, and a
+//     reviewer then signs in the next day (docs/selling-desktop.md, part 10). A larger cap would make guessing easier.
 //     That is what keeps guessing impractical however many addresses someone tries from: one code in a million at 20
 //     tries a day takes 25,000 days, about 68 years, on average to find (and the owner changes it after each review);
 //     and it is no more than an ordinary address allows (4 sign-in codes a day, 5 tries each).
@@ -475,15 +520,17 @@ async function webVerify(request, env) {
   const token = await codes.signNote('web', await shopKey(env), SHOP_KID, { email, ref: list[0].ref, iat: Date.now() });
   return json(200, { ok: true, token, licence: shownLicence(list[0], email) });
 }
-// About once a day: is the signed-in licence still good? Answers with a new token when it moved to another licence.
+// About once a day: is the signed-in licence still good? Answers with a new token every time (another licence's when
+// it moved): the page counts its 90 days without a check from the time signed in it, never from a time it keeps itself.
 async function webCheck(request, env) {
   const b = await readJson(request), v = b && (await webToken(env, b.token));
   if (!v) return json(401, { error: 'signed-out' });
   if (!env.LICENCES) return json(503, { error: 'not-ready' });
+  const key = await shopKey(env); if (!key) return json(503, { error: 'not-ready' });
   const list = await licencesForKey(env, identityKey(v), v.email), l = list.find(x => x.ref === v.ref) || list[0];
   if (!l) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : (await endedFor(env, v)) ? 'expired' : 'signed-out' });
-  const fresh = l.ref === v.ref ? null : await codes.signNote('web', await shopKey(env), SHOP_KID, { ...identityOf(v), ref: l.ref, iat: Date.now() });
-  return json(200, { ok: true, licence: shownLicence(l, l.email || v.email || ''), ...(fresh ? { token: fresh } : {}) });
+  const token = await codes.signNote('web', key, SHOP_KID, { ...identityOf(v), ref: l.ref, iat: Date.now() });
+  return json(200, { ok: true, licence: shownLicence(l, l.email || v.email || ''), token });
 }
 // Whether the token's licence is still linked but past its end date (a free licence given until a date).
 async function endedFor(env, v) {
@@ -508,12 +555,12 @@ async function webActivate(request, env) {
     return json(res.status, { ...(await res.json()), token: await codes.signNote('web', key, SHOP_KID, { ...identityOf(v), ref: l.ref, iat: Date.now() }), licence: shownLicence(l, v.email || '') });
   }
   if (!b.release && list.length > 1) {
-    const r = await seats(env, l.ref);
-    const room = r.computers.some(c => c.id === b.install) || r.computers.length < (l.seats || 3);
+    const r = await seats(env, l.ref), tag = await tagOf(b.install);
+    const room = r.computers.some(c => isInstall(c, b.install, tag)) || r.computers.length < (l.seats || 3);
     for (const other of room ? [] : list) {
       if (other.ref === l.ref) continue;
       const o = await seats(env, other.ref);
-      if (o.computers.some(c => c.id === b.install) || o.computers.length < (other.seats || 3)) {
+      if (o.computers.some(c => isInstall(c, b.install, tag)) || o.computers.length < (other.seats || 3)) {
         const res = await takeSeat(env, key, other.ref, other.seats || 3, { install: b.install, os });
         const body = await res.json();
         return json(res.status, { ...body, token: await codes.signNote('web', key, SHOP_KID, { ...identityOf(v), ref: other.ref, iat: Date.now() }), licence: shownLicence(other, v.email || '') });
@@ -633,9 +680,9 @@ async function webRelease(request, env) {
   const b = await readJson(request), v = b && (await webToken(env, b.token));
   if (!v || !b.install || !validInstall(b.install)) return json(400, { error: 'invalid' });
   if (!env.LICENCES) return json(503, { error: 'not-ready' });
-  const rec = await seats(env, v.ref);
-  if (!rec.computers.some(c => c.id === b.install)) return json(404, { error: 'not-listed' });
-  await env.LICENCES.put('c:' + v.ref, JSON.stringify({ computers: rec.computers.filter(c => c.id !== b.install), swaps: rec.swaps }));
+  const rec = await seats(env, v.ref), tag = await tagOf(b.install);
+  if (!rec.computers.some(c => isInstall(c, b.install, tag))) return json(404, { error: 'not-listed' });
+  await env.LICENCES.put('c:' + v.ref, JSON.stringify({ computers: rec.computers.filter(c => !isInstall(c, b.install, tag)), swaps: rec.swaps }));
   return json(200, { ok: true });
 }
 async function sendSignIn(env, email, code) {

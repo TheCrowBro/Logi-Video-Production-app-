@@ -89,5 +89,5 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
     ...section('Instructions', snap.notes && h('p', { class: 'pre' }, snap.notes)),
     h('p', { class: 'note' }, `Sent ${snap.made ? new Date(snap.made).toLocaleString() : ''}. This is a copy from that moment: if plans change, the producer sends a new link.`),
     // Inside the paper, so it is printed too: the page's footer is not (crew.html hides .foot on paper).
-    h('p', { class: 'note checked' }, 'The times, places, weather and emergency details here were entered or chosen by the producer. Vdex has not checked them and they may be out of date. Confirm with the producer.')));
+    h('p', { class: 'note checked' }, 'The times, places, weather, sun times and emergency details here were entered or chosen by the producer. Vdex has not checked them and they may be out of date. Confirm with the producer.'))); // the call sheet's own notice (CHECK_NOTICE in js/callsheet.js), word for word
 })();
