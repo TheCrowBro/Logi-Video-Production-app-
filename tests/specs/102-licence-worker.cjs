@@ -288,6 +288,19 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
       clock.t += 2 * HOUR; const l4 = await lost.pc.lic.recheck();
       ok('a computer whose weekly answer was lost, and which then could not ask again under a new ID, stays licensed throughout, and is back on the list at its next check as a move that is not counted', [l1, l2, l3, l4].every(x => x.mode === 'licensed' && x.canEdit) && (await places('1:7102')) === 1 && (await adm('look', '1:7102')).swaps === 0, [l1, l2, l3, l4].map(x => x.mode).join());
 
+      // The same, but the answer to asking again under a new ID is lost after the server listed that ID, twice, and then
+      // a 'stale' answer is lost: no ID whose answer was lost holds a place, so the licence's other places stay free.
+      const twice = await activated(7107), seen = [];
+      twice.pc.plan = ['lose']; clock.t += 8 * DAY; seen.push(await twice.pc.lic.recheck());
+      for (const plan of [['ok', 'lose'], ['ok', 'lose'], ['lose'], [], []]) { twice.pc.plan = plan; clock.t += 2 * HOUR; seen.push(await twice.pc.lic.recheck()); }
+      const held1 = await places('1:7107'), more = [await activated(7107), await activated(7107)];
+      ok('a computer whose answers to asking again under a new ID were lost too stays licensed throughout and holds one place, so two more computers can still use the licence', seen.every(x => x.mode === 'licensed' && x.canEdit) && held1 === 1 && more.every(x => x.s.mode === 'licensed') && (await adm('look', '1:7107')).swaps === 0, `${seen.map(x => x.mode).join()} · ${held1} place(s) · ${more.map(x => x.s.mode || x.s.error).join()}`);
+      const gone = await activated(7108);
+      gone.pc.plan = ['lose']; clock.t += 8 * DAY; await gone.pc.lic.recheck();
+      gone.pc.plan = ['ok', 'lose']; clock.t += 2 * HOUR; await gone.pc.lic.recheck();
+      const held2 = await places('1:7108'), removed = await gone.pc.lic.release();
+      ok('…and Remove the code before its next check frees the place of the new ID whose answer was lost', held2 === 1 && !removed.error && (await places('1:7108')) === 0, `${held2} · ${removed.error || removed.mode} · ${await places('1:7108')}`);
+
       // The background check and Try again at the same moment, the first answer coming late.
       const both = await activated(7103);
       both.pc.plan = [300]; clock.t += 8 * DAY;

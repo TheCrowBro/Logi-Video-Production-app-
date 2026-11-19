@@ -195,23 +195,32 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
     if (b.error === 'cancelled' || b.error === 'swaps' || b.error === 'invalid' || b.error === 'stale') return { [b.error]: true };
     return { offline: true, answered: true }; // the server is down, not set up yet, or says the code has ended
   }
+  // The new ID noted for this code and not yet answered for (below), or ''.
+  const nextOf = (s, code) => (s.next && typeof s.next === 'object' && s.next.code === code && typeof s.next.install === 'string' && /^[A-Za-z0-9_-]{16,64}$/.test(s.next.install) ? s.next.install : '');
   // The same for this computer, with the turn it was last given. An out-of-date turn means another computer is running
   // a copy of this installation (licence.json copied with it), or an answer was lost on the way: the server has taken
   // this install off the list, and this computer asks again under a new random ID. So a copy needs a place of its own,
-  // and a computer whose answer was lost gets its place back at once. The new ID is kept only once the server has
-  // answered for it: until then the old ID and its receipt stay, and the next check asks again.
+  // and a computer whose answer was lost gets its place back at once. The new ID becomes this computer's only once the
+  // server has answered for it: until then the old ID and its receipt stay. It is noted for the code before it is asked
+  // for (`next`), and while it is noted each check asks for it again, not for the old ID (already off the list) or yet
+  // another new one, and Remove the code releases it too. So an answer lost on the way leaves no place that nothing
+  // frees: a noted ID the server did list is taken off when it is asked for again without its turn ('stale'), and is
+  // then asked for once more.
   // While licence.json cannot be written (a full disk), nothing is asked: the new turn could not be kept, so the next
   // check, or the next start, would look like a copy's and take another place. The receipt kept counts meanwhile.
   async function activateHere(code, release) {
     if (!write(read())) return { offline: true };
     const s = read(), mine = s.code === code && s.act ? s.act : {}, turn = typeof mine.turn === 'string' ? mine.turn : '';
     const kept = mine.receipt ? await codes.readNote('active', mine.receipt, { keys }).catch(() => null) : null, than = (kept && Number(kept.at)) || 0;
-    let a = await activate(code, s.install, release, turn, than);
+    const noted = nextOf(s, code);
+    let a = noted ? { stale: true } : await activate(code, s.install, release, turn, than);
     if (a.stale) {
-      const fresh = newInstall();
+      const fresh = noted || newInstall();
+      if (!noted) { const s1 = read(); s1.next = { code, install: fresh }; save(s1); }
       a = await activate(code, fresh, release, '', than);
+      if (a.stale && noted) a = await activate(code, fresh, release, '', than); // listed by an answer that was lost, and off the list now
       if (a.stale) a = { offline: true, answered: true };
-      if (a.ok || a.full || a.cancelled) { const s2 = read(); s2.install = fresh; if (s2.act) delete s2.act.turn; save(s2); }
+      if (a.ok || a.full || a.cancelled) { const s2 = read(); s2.install = fresh; delete s2.next; if (s2.act) delete s2.act.turn; save(s2); }
     }
     return a;
   }
@@ -274,12 +283,13 @@ function createLicence({ dir, keys = KEYS, now = () => Date.now(), post, site = 
   async function releaseNow() {
     await state(); // tidies what an older version left, so the code's wait is remembered past this
     const s = read(); if (!s.code) return state();
-    const listed = s.act && (s.act.status === 'active' || s.act.status === 'released');
-    if (listed) {
-      let res; try { res = await post(site + '/licence/release', { code: s.code, install: s.install }); } catch { res = null; }
+    const listed = s.act && (s.act.status === 'active' || s.act.status === 'released'), noted = nextOf(s, s.code);
+    // This computer's ID when it is on the list, and a new ID noted for the code, which the server may have listed.
+    for (const install of [...(listed ? [s.install] : []), ...(noted ? [noted] : [])]) {
+      let res; try { res = await post(site + '/licence/release', { code: s.code, install }); } catch { res = null; }
       if (!res || (res.status !== 200 && res.status !== 404)) return { error: 'Vdex could not reach the licence server. Connect to the internet and try again, so the code can be used on another computer.' };
     }
-    const s2 = read(); delete s2.code; delete s2.act; save(s2); // `waits` and `lapsed` stay: a code's 14 days do not start again when it is entered again
+    const s2 = read(); delete s2.code; delete s2.act; delete s2.next; save(s2); // `waits` and `lapsed` stay: a code's 14 days do not start again when it is entered again
     return state();
   }
   const code = () => read().code || '';
