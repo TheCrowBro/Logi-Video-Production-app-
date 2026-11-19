@@ -35,7 +35,7 @@ const newer = snap => snap.newer && h('p', { class: 'note small' }, 'This link w
 // very link, and would offer to add it a second time where it should offer to update it. The read gets a few seconds
 // (one already on its way will do, as when Vdex has only just started: which storage is linked is known a moment
 // after the start); without an answer by then the sheet comes as this device knows things, and the tap on Add looks
-// again (the previews below).
+// again (each of the three previews below).
 const READ_FOR = 4000;
 async function ready() {
   const clear = async () => { while (lock.isLocked() || store.isSealed() || !tourSeen() || tourActive() || document.querySelector('.terms-gate, .lock')) await sleep(400); };
@@ -50,6 +50,10 @@ async function ready() {
 // (the read above was still on its way, or Vdex came back to the front) and brings what the link would add, the tap
 // must not add it a second time: the preview is then drawn again, with this line, and waits for another tap.
 const again = what => h('p', { class: 'note small add-again' }, `Your ${what} changed while this was open, so this has been worked out again. Check it, then tap again.`);
+// The read above gets nothing when the storage wants a new sign-in first (Google Drive does an hour after the last
+// one) or cannot be reached, and then no later read puts the preview right before the tap. A preview that would add
+// says so, since the same thing added on another device would then be here twice after the next sync.
+const unread = () => { const c = store.cloud, signIn = c.status === 'needs-permission'; return !!c.adapter && !c.paused && (signIn || c.status === 'error') && h('p', { class: 'note small add-unread', role: 'note' }, `Vdex could not sync with your cloud storage just now${signIn ? ': it needs you to sign in again (the menu ☰ at the top, then Storage, sync & backups)' : ''}, so this device may not have what your other devices have added. If one of them has added this already, adding it here makes a second copy.`); };
 
 // A link that came in with the address. Shown once Vdex is ready; a link that cannot be read says why.
 export async function arrived(link) {
@@ -114,7 +118,7 @@ async function previewBooking(snap, redrawn = false) {
   }, 'primary']], () => sh.close());
   const sh = dialog(was ? 'Update this booking?' : 'Add this booking?', h('div', { class: 'stack add-preview' },
     h('div', null, h('h3', { class: 'add-title' }, snap.title || 'Shared shoot'), h('div', { class: 'muted small' }, p.from ? `Shared by ${p.from}` : 'From a shared link', snap.made ? ` · sent ${new Date(snap.made).toLocaleDateString()}` : '')),
-    redrawn && again('Bookings'),
+    redrawn && again('Bookings'), !was && unread(),
     was && h('p', { class: 'note small' }, `“${was.title}” is in your Bookings already${was.shared.at ? `, added ${new Date(was.shared.at).toLocaleDateString()}` : ''}. Adding it again updates it from this link.`),
     other && h('p', { class: 'warn small add-other', role: 'note' }, p.from ? `This link is from ${p.from}; the booking in your Bookings came from ${had}. Check that it is the same shoot before you update it.` : `This link does not say who it is from; the booking in your Bookings came from ${had}. Check that it is the same shoot before you update it.`),
     moved && h('p', { class: 'warn small add-readdress', role: 'note' }, `The ${docs.join(' and the ')} you made on this booking ${docs.length === 1 ? 'is' : 'are'} headed to ${whom(toWas)}. After this update ${docs.length === 1 ? 'it is' : 'they are'} headed to ${whom(toNow)}, even if ${docs.length === 1 ? 'it has' : 'they have'} been sent already.`),
@@ -142,8 +146,9 @@ async function previewBooking(snap, redrawn = false) {
 
 /* ---------------------------------- a contact card ---------------------------------- */
 const MATCHED = { email: 'email address', phone: 'phone number', name: 'name' };
-async function previewContact(c) {
+async function previewContact(c, redrawn = false) {
   const m = await import('./share-import.js'), p = m.planContact(c), name = p.person.name, found = p.match;
+  const about = x => [x.own, x.match && x.match.person.id, x.match && x.match.sure].join(); // whom on the Crew list the card is about
   if (p.own) {
     const sh = dialog('This is your own card', h('div', { class: 'stack' }, h('p', null, 'This card was made from your own details, so there is nobody to add to your Crew list.'),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onclick: () => sh.close() }, 'Close'))));
@@ -153,6 +158,7 @@ async function previewContact(c) {
   // the card and may be somebody else, so both are shown and adding a new person is the first choice.
   const was = found && found.sure ? found.person : null, maybe = found && !found.sure ? found.person : null;
   const add = as => async () => {
+    if (about(m.planContact(c)) !== about(p)) return previewContact(c, true);
     const done = m.applyContact(c, as); if (!done) return;
     sh.close(); toast(done.existing ? 'Contact updated' : 'Added to your Crew');
     await afterAdd(async () => (await import('./pages/crew.js')).showPerson(done.person.id));
@@ -160,6 +166,7 @@ async function previewContact(c) {
   const f = foot(was ? [['Update the contact', add('update'), 'primary']] : maybe ? [['Add as a new person', add('new'), 'primary'], [`Update ${maybe.name}`, add('update')]] : [['Add to my Crew', add('new'), 'primary']], () => sh.close());
   const sh = dialog(was ? 'Update this contact?' : 'Add this contact?', h('div', { class: 'stack add-preview' },
     h('div', { class: 'card-row add-who' }, h('div', { class: 'avatar', 'aria-hidden': 'true' }, initials(name)), h('div', { class: 'grow' }, h('h3', { class: 'add-title' }, name), h('div', { class: 'muted small' }, [c.title, c.name && c.business].filter(Boolean).join(' · ')))),
+    redrawn && again('Crew list'), !was && unread(),
     was && h('p', { class: 'note small' }, `${was.name} is on your Crew list already${found.card ? ', from this card' : ', with this name and email address'}. Adding the card${found.card ? ' again' : ''} updates the details below; the rate and notes you keep for them stay as they are.`),
     rows([['Role', c.title], ['Phone', c.phone], ['Email', c.email], ['Their work', c.website], ['In the notes', [c.name && c.business && `Business: ${c.business}`, c.location && `Based in: ${c.location}`].filter(Boolean).join(' · ')]]),
     maybe && h('section', { class: 'add-group add-maybe', 'aria-label': 'Someone on your Crew list' },
@@ -210,7 +217,7 @@ async function previewGear(g, redrawn = false) {
   const all = dup.length > 1 && h('label', { class: 'add-all small' }, 'All of these: ', h('select', { 'aria-label': 'What to do with every item you already have', onchange: e => { if (!e.target.value) return; dup.forEach(r => { r.action = e.target.value; }); selects.forEach(s => { s.value = e.target.value; }); paint(); } }, h('option', { value: '' }, 'Choose…'), m.ACTIONS.map(([v, label]) => h('option', { value: v }, label))));
   const sh = dialog('Add this equipment?', h('div', { class: 'stack add-preview' },
     h('div', null, h('h3', { class: 'add-title' }, g.title || 'Equipment list'), h('div', { class: 'muted small' }, from ? `Shared by ${from}` : 'From a shared link', g.made ? ` · sent ${new Date(g.made).toLocaleDateString()}` : '')),
-    redrawn && again('Equipment'),
+    redrawn && again('Equipment'), fresh.length > 0 && unread(),
     h('p', { class: 'small muted' }, 'A copy of each item goes into your Equipment, with its serial number, value, notes and the rest of its details. Values come as the numbers they are, in whatever currency the sender uses.'),
     g.cut > 0 && h('p', { class: 'note small add-cut' }, `This list is longer than one link carries: only its first ${GEAR_MAX.toLocaleString()} items are here, and ${plural(g.cut, 'more item')} ${g.cut === 1 ? 'is' : 'are'} not. Ask for the rest in a second link.`),
     dup.length > 0 && h('section', { class: 'add-group', 'aria-label': 'Items you already have' }, h('h4', null, `Already in your Equipment (${dup.length.toLocaleString()})`),

@@ -14,7 +14,10 @@
 // link (or of which only one took its update), and a workmate's card under one's own email address. And what a check
 // of those repairs found: a second device reads the cloud copy before it shows a link, what it adds when it cannot is
 // its own (so nothing done on the first device is replaced, deleted or undone), a preview is drawn again when what it
-// would add has arrived meanwhile, and a sync never forgets a strip that a link made.
+// would add has arrived meanwhile, and a sync never forgets a strip that a link made. And what a last check found: a
+// card's preview looks again at the tap as the other two do, a preview that would add says when the cloud storage
+// could not be synced with (no answer it can use, or a sign-in that has run out), and a link parked during a sign-in
+// to the storage waits until the start knows that storage.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const { acceptTerms } = require('../helpers.cjs');
@@ -741,7 +744,8 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   // ---- two devices on one cloud folder: the cloud copy is read before a link is looked at ----
   // A stand-in for the person's own storage (a WebDAV folder), which each device's requests reach through its browser.
   // held: the storage does not answer that device (no usable connection) until let go; slow: it takes that long to.
-  const cloud = { file: '', held: {}, letGo: {}, slow: {} }; // an empty file to begin with, which reads as no copy yet (a missing file would be a 404 in the console)
+  // garbled: what it answers that device with is not a copy (a read that fails, without a failed request in the console).
+  const cloud = { file: '', held: {}, letGo: {}, slow: {}, garbled: {} }; // an empty file to begin with, which reads as no copy yet (a missing file would be a 404 in the console)
   const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
   const device = async who => {
     const D = await open({ init: `try { localStorage.setItem('logi-provider', 'webdav'); localStorage.setItem('logi-webdav', JSON.stringify({ kind: 'webdav', url: 'https://dav.test/vdex', user: 'u', pass: 'p' })); } catch (e) {}` });
@@ -751,7 +755,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
       if (cloud.held[who]) await cloud.held[who];
       if (cloud.slow[who]) await sleep(cloud.slow[who]);
       if (m === 'PUT') { if (main) cloud.file = q.postData(); return r.fulfill({ status: 201, headers: CORS }); }
-      return main && cloud.file != null ? r.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: cloud.file }) : r.fulfill({ status: 404, headers: CORS });
+      return main && cloud.file != null ? r.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: cloud.garbled[who] ? '{"version":' : cloud.file }) : r.fulfill({ status: 404, headers: CORS });
     });
     await D.page.goto(BASE); await D.page.waitForSelector('#rolodex .drum-btn');
     return D;
@@ -775,7 +779,9 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const work = re => PH.page.evaluate(src => import('./js/store.js').then(s => s.update(d => { const of = x => !!x.shared && new RegExp(src).test(x.shared.ref || ''), t = Date.now(), b = d.bookings.find(of), k = d.kits.find(of); if (b) Object.assign(b, { invoice: { number: 'INV-0009', status: 'Sent', lines: [] }, gear: d.gear.filter(of).map(x => x.id), updatedAt: t }); d.gear.filter(of).forEach(g => Object.assign(g, { location: 'Flight case 1', updatedAt: t })); if (k) Object.assign(k, { name: 'My interview set', updatedAt: t }); })), re.source);
   const Y = /^(REF-Y1|gy\d|ky\d)$/, bkY = await pack(harbour({ ref: 'REF-Y1' })), gearY = await pack(kitList('y'));
   await arrive(PH.page, gearY); await PH.page.locator('.sheet .add-go').click(); await PH.page.waitForSelector('.gear-card.just-added');
-  await arrive(PH.page, bkY); await PH.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await PH.page.waitForSelector('.bk-detail');
+  await arrive(PH.page, bkY);
+  const readNote = await PH.page.locator('.sheet .add-unread').count(); // (looked at below, with the previews of a storage that could not be read)
+  await PH.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await PH.page.waitForSelector('.bk-detail');
   await work(Y); await syncNow(PH.page);
   const ph1 = await holds(PH.page, Y), pcBefore = await holds(PC.page, Y);
   await paste(PC.page, bkY);
@@ -827,7 +833,45 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   cloud.slow.computer = 0;
   ok('a device that the link itself starts waits for its first read of the cloud copy before it shows the link: the booking added on the other device is offered as an update', /Update this booking\?/.test(cold) && /“Pier film” is in your Bookings already/.test(cold), cold.slice(0, 160).replace(/\n/g, ' | '));
   await PC.page.keyboard.press('Escape'); await sleep(200);
+  // A storage that cannot be read at that moment: the preview comes as the device knows things, and one that would add
+  // says that Vdex could not sync, and what adding then means. (Here the storage answers with something that is no copy.)
+  cloud.garbled.computer = true;
+  await paste(PC.page, await pack(kitList('q')));
+  const unreadGear = { sum: await PC.page.locator('.sheet .add-sum').innerText(), note: await PC.page.locator('.sheet .add-unread').allInnerTexts() };
+  cloud.garbled.computer = false;
+  ok('a preview that would add, on a device that could not read its cloud storage just then, says so and what adding means; one made after a read says nothing of it', unreadGear.sum === '2 to add' && unreadGear.note.join() === 'Vdex could not sync with your cloud storage just now, so this device may not have what your other devices have added. If one of them has added this already, adding it here makes a second copy.' && readNote === 0, JSON.stringify([unreadGear, readNote]));
+  await PC.page.keyboard.press('Escape'); await sleep(200);
   await PC.ctx.close(); await PH.ctx.close();
+  // The same for a storage that wants a new sign-in first, as Google Drive does an hour after the last one: nothing is
+  // read, and the sheet says where to sign in. (A stand-in: the sign-in kept on the device has run out, and Google's
+  // sign-in window is never asked for by a link.)
+  const SCOPE = 'https://www.googleapis.com/auth/drive.appdata';
+  const GD = await open({ init: `try { localStorage.setItem('logi-provider', 'gdrive'); localStorage.setItem('logi-gdrive-file', 'file1'); localStorage.setItem('logi-google-tokens', JSON.stringify({ '${SCOPE}': { value: 'tok1', exp: Date.now() - 60000 } })); localStorage.setItem('logi-google-scopes', '${SCOPE}'); localStorage.setItem('logi-google-email', 'gee@example.com'); window.__gasked = 0; window.google = { accounts: { oauth2: { initTokenClient: () => ({ requestAccessToken: () => { window.__gasked++; } }) } } }; } catch (e) {}` });
+  let toGoogle = 0;
+  await GD.ctx.route('https://www.googleapis.com/**', r => { toGoogle++; return r.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: '{}' }); });
+  await arrive(GD.page, bkW);
+  const lapsed = { text: await sheetText(GD.page), note: await GD.page.locator('.sheet .add-unread').allInnerTexts(), status: await GD.page.evaluate(() => import('./js/store.js').then(s => s.cloud.status)), asked: await GD.page.evaluate(() => window.__gasked) };
+  ok('with Google Drive linked and its sign-in run out, a link is shown without a read, no sign-in window opens by itself, and the preview that would add says that the storage needs a new sign-in and where', /Add this booking\?/.test(lapsed.text) && lapsed.status === 'needs-permission' && toGoogle === 0 && lapsed.asked === 0 && lapsed.note.join() === 'Vdex could not sync with your cloud storage just now: it needs you to sign in again (the menu ☰ at the top, then Storage, sync & backups), so this device may not have what your other devices have added. If one of them has added this already, adding it here makes a second copy.', JSON.stringify([lapsed.text.slice(0, 60), lapsed.status, toGoogle, lapsed.asked, lapsed.note]));
+  await GD.ctx.close();
+  // Which storage is linked is known only once the start has found out, and that can take a while: on the way back
+  // from Dropbox's sign-in page, Vdex starts again and asks Dropbox to finish the sign-in before it links the storage.
+  // A link parked in that tab is looked at after that, and after the first read. (A stand-in for Dropbox, which takes
+  // a second to answer the sign-in and holds the copy the other devices wrote.)
+  const DB = await open({ init: `try { if (!sessionStorage.getItem('dbx-seeded')) { sessionStorage.setItem('dbx-seeded', '1'); localStorage.setItem('logi-dbx-state', 'vdex-abc'); localStorage.setItem('logi-dbx-verifier', 'v'); localStorage.setItem('logi-dbx-redirect', '${BASE}index.html'); localStorage.setItem('logi-dbx-client', 'key'); sessionStorage.setItem('vdex-add', ${JSON.stringify(bkW)}); } } catch (e) {}` });
+  const dbxAsked = [];
+  await DB.ctx.route('https://*.dropboxapi.com/**', async r => {
+    const q = r.request(), u = q.url(), json = body => r.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body });
+    if (q.method() === 'OPTIONS') return r.fulfill({ status: 204, headers: CORS });
+    dbxAsked.push(new URL(u).pathname);
+    if (/oauth2\/token/.test(u)) { await sleep(1200); return json(JSON.stringify({ access_token: 'a1', refresh_token: 'r1', expires_in: 14400 })); }
+    if (/get_current_account/.test(u)) return json('{"name":{"display_name":"Dee Test"},"email":"dee@example.com"}');
+    if (/files\/download/.test(u)) return r.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/octet-stream' }, body: cloud.file });
+    return json('{}');
+  });
+  await DB.page.goto(BASE + 'index.html?state=vdex-abc&code=xyz'); await DB.page.waitForSelector('.sheet .add-preview', { timeout: 20000 }); await sleep(150);
+  const back = await sheetText(DB.page), readAt = dbxAsked.indexOf('/2/files/download');
+  ok('a link parked while the person signs in to their storage waits, on the way back, until the start knows that storage and has read it: the booking the other device added is offered as an update', /Update this booking\?/.test(back) && /“Pier film” is in your Bookings already/.test(back) && readAt > dbxAsked.indexOf('/oauth2/token') && (await DB.page.locator('.sheet .add-again, .sheet .add-unread').count()) === 0, JSON.stringify([back.slice(0, 60), dbxAsked]));
+  await DB.ctx.close();
 
   /* ============================== a card that only looks like someone on the Crew list ============================== */
   const C = await open();
@@ -881,6 +925,29 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   if (await C.page.locator('.sheet').count()) { await C.page.keyboard.press('Escape'); await sleep(200); }
   const owns = await C.page.evaluate(() => import('./js/share-import.js').then(m => { const p = { name: 'Uma Owner', business: 'Owner Films', email: 'uma@ownerfilms.example', phone: '+1 555 0500' }, c = o => m.ownCard({ name: '', business: '', email: '', phone: '', ...o }, p); return [c({ name: 'Uma Owner', email: 'UMA@ownerfilms.example' }), c({ name: 'Owner Films', email: 'uma@ownerfilms.example' }), c({ email: 'uma@ownerfilms.example' }), c({ name: 'Uma Owner', email: 'other@elsewhere.example', phone: '+1 555 0500' }), c({ name: 'Wes Workmate', email: 'uma@ownerfilms.example', phone: '+1 555 0500' }), m.ownCard({ name: 'Wes Workmate', business: '', email: 'x@y.example', phone: '' }, { name: '', business: '', email: 'x@y.example', phone: '' })]; }));
   ok('…while one’s own name or business under that address, or the address with no name, is still one’s own card; one’s name and number under another address is not; and a profile with no name goes by the address alone', JSON.stringify(owns) === JSON.stringify([true, true, true, false, false, true]), JSON.stringify(owns));
+
+  // A card's preview looks again at the tap, like a booking's and a list's. The person arrives while it is open (the
+  // cloud copy came in with them, worked on elsewhere): the tap adds nobody, and the sheet is drawn again as an update.
+  const lateCard = await cardOf({ name: 'Dee Late', title: 'Grip', phone: '+1 555 0611', email: 'dee@late.example' });
+  const dees = async () => (await crewOf()).filter(x => x.name === 'Dee Late').map(x => [x.id, x.role, x.rate, x.notes]);
+  await arrive(C.page, lateCard);
+  const cardWas = (await C.page.locator('.sheet .add-actions .btn').allInnerTexts()).join('|');
+  await C.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.crew.push({ id: 'cl', name: 'Dee Late', role: 'Best boy', phone: '+1 555 0611', email: 'dee@late.example', link: '', rate: 450, rateUnit: 'day', notes: 'Prefers morning calls', shared: { by: 'Dee Late', at: Date.now() }, updatedAt: Date.now() }); })));
+  await C.page.locator('.sheet .add-actions .btn.primary').click(); await C.page.waitForSelector('.sheet .add-again', { timeout: 8000 }).catch(() => {}); await sleep(200);
+  const cardNow = await C.page.locator('.sheet').count() ? await sheetText(C.page) : '(no sheet)', deeHeld = await dees();
+  ok('a person who arrives while their card’s preview is open is not added a second time by the tap: the preview is drawn again as an update, and says that the Crew list changed', cardWas === 'Add to my Crew|Cancel' && /Update this contact\?/.test(cardNow) && /Your Crew list changed while this was open, so this has been worked out again\. Check it, then tap again\./.test(cardNow) && deeHeld.length === 1 && deeHeld[0][1] === 'Best boy' && (await C.page.locator('.sheet-back').count()) === 1, JSON.stringify([cardWas, cardNow.replace(/\s+/g, ' ').slice(0, 200), deeHeld]));
+  if (/Update this contact\?/.test(cardNow)) { await C.page.locator('.sheet button:has-text("Update the contact")').click(); await C.page.waitForSelector('.crew-card.just-added', { timeout: 8000 }).catch(() => {}); await sleep(200); } else if (await C.page.locator('.sheet').count()) { await C.page.keyboard.press('Escape'); await sleep(200); }
+  ok('…and the second tap updates the one person there is, who keeps the rate and the notes', JSON.stringify(await dees()) === JSON.stringify([['cl', 'Grip', 450, 'Prefers morning calls']]), JSON.stringify(await dees()));
+  // “Update <name>” is about the person the sheet shows. When someone who fits the card better arrives meanwhile (here
+  // under the card's email address), the tap changes nobody: the sheet is drawn again with that person.
+  await C.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.crew.push({ id: 'cn', name: 'Nia Hall', role: 'Gaffer', phone: '+1 555 0622', email: 'nia@hall.example', rate: 400, rateUnit: 'day', notes: '', updatedAt: Date.now() }); })));
+  await arrive(C.page, await cardOf({ name: 'Sam Card', title: 'Sound', phone: '+1 555 0622', email: 'sam@card.example' }));
+  const otherWas = (await C.page.locator('.sheet .add-actions .btn').allInnerTexts()).join('|');
+  await C.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.crew.unshift({ id: 'cv', name: 'Val Other', role: 'Editor', phone: '+1 555 0633', email: 'sam@card.example', rate: 300, rateUnit: 'day', notes: '', updatedAt: Date.now() }); })));
+  await C.page.locator('.sheet button:has-text("Update Nia Hall")').click(); await C.page.waitForSelector('.sheet .add-again', { timeout: 8000 }).catch(() => {}); await sleep(200);
+  const otherNow = await C.page.locator('.sheet').count() ? (await C.page.locator('.sheet .add-actions .btn').allInnerTexts()).join('|') : '(no sheet)', pair = (await crewOf()).filter(x => ['cn', 'cv'].includes(x.id)).map(x => `${x.id}=${x.name} <${x.email}> ${x.role}`).sort().join('; ');
+  ok('“Update” on a card changes nobody but the person it names: when someone who fits the card better has arrived meanwhile, neither is changed and the preview is drawn again with them', otherWas === 'Add as a new person|Update Nia Hall|Cancel' && otherNow === 'Add as a new person|Update Val Other|Cancel' && (await C.page.locator('.sheet .add-again').count()) === 1 && pair === 'cn=Nia Hall <nia@hall.example> Gaffer; cv=Val Other <sam@card.example> Editor', JSON.stringify([otherWas, otherNow, pair]));
+  if (await C.page.locator('.sheet').count()) { await C.page.keyboard.press('Escape'); await sleep(200); }
 
   // ---- one link at a time ----
   const three3 = [await cardOf({ name: 'Ann Test', phone: '555 0001 01' }), await cardOf({ name: 'Ben Test', phone: '555 0001 02' }), await cardOf({ name: 'Cy Test', phone: '555 0001 03' })];
@@ -1170,7 +1237,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('the same for a contact when the Crew page cannot be fetched: the person is added and said to be, and nothing says otherwise', o2.crew === 'Otto Offline' && o2.toasts.join('|') === 'Added to your Crew' && o2.sheets === 0 && O2.broke.length === 0, JSON.stringify([o2, O2.broke]));
   await O2.ctx.close();
   const origin = new URL(BASE).origin;
-  const outside = requests.filter(u => !u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:') && !/^https:\/\/api\.open-meteo\.com\//.test(u) && !u.startsWith('https://dav.test/')); // dav.test: the stand-in for one's own cloud storage in the two-device cases
+  const outside = requests.filter(u => !u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:') && !/^https:\/\/api\.open-meteo\.com\//.test(u) && !u.startsWith('https://dav.test/') && !/^https:\/\/(api|content)\.dropboxapi\.com\//.test(u)); // dav.test and Dropbox's addresses: the stand-ins for one's own cloud storage in the two-device cases
   const leaked = requests.filter(u => u.includes(hashOf(cardLink).slice(0, 40)) || u.includes(hashOf(kitLink).slice(0, 40)) || /[?&]add=/.test(u));
   ok('nothing was sent anywhere in all of this: every request was for the app’s own files, and no link’s contents were in any of them', outside.length === 0 && leaked.length === 0, [...outside, ...leaked].slice(0, 3).join(' | '));
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));

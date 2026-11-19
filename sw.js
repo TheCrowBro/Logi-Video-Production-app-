@@ -18,37 +18,30 @@ const keyOf = req => { const u = new URL(req.url); u.search = ''; u.hash = ''; r
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'no-cache' })))).then(() => self.skipWaiting()));
 });
+// Old caches are dropped as this build takes over and at each tidy, but never while a newer build is installing or
+// waiting: the cache that build is filling is not an old one, and deleting it would leave it to take over with nothing.
 const dropOld = () => caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== 'logi-share').map(k => caches.delete(k))));
+const coming = () => !!(self.registration.installing || self.registration.waiting);
 // Puts back whatever of this build is missing from its cache. The worker of the build before this one can wake while
-// this one is installing and delete this build's half-filled cache as an old one (its own tidy below; builds from
-// before the guard there do it on any request). This build would then take over with a few files, or none, and Vdex
-// would not open offline. So the list is checked as this build takes over and at each tidy, and the missing files are
-// fetched again. → whether every file is there now (false: one could not be fetched, as with no connection).
+// this one is installing and delete this build's half-filled cache as an old one (builds from before the rule above
+// do it on any request). This build would then take over with a few files, or none, and Vdex would not open offline.
+// So the list is checked as this build takes over and at each tidy, and the missing files are fetched again.
 const refill = () => caches.open(CACHE).then(async c => {
   const have = new Set((await c.keys()).map(r => r.url));
-  return (await Promise.allSettled(SHELL.filter(p => !have.has(new URL(p, self.registration.scope).href)).map(p => c.add(new Request(p, { cache: 'no-cache' }))))).every(d => d.status === 'fulfilled');
+  await Promise.allSettled(SHELL.filter(p => !have.has(new URL(p, self.registration.scope).href)).map(p => c.add(new Request(p, { cache: 'no-cache' }))));
 });
 // Taking over: this build's cache is made whole first, here and not only when a page asks for it, because Vdex may be
 // closed by now, and the next start may be one without a connection. (There is one now: the install has just ended.)
 // With nothing missing, which is the rule, no file is fetched. The requests of an open page wait until this is over,
-// so a refill that drags on is given 20 seconds and then carries on beside them.
+// so a refill that drags on is given 20 seconds and then carries on beside them. A newer build may have been found
+// and installed in that time: then the old caches are left to it, which drops them as it takes over in its turn.
 self.addEventListener('activate', e => {
-  e.waitUntil(Promise.race([refill().catch(() => {}), new Promise(r => setTimeout(r, 20000))]).then(dropOld).then(() => self.clients.claim()));
+  e.waitUntil(Promise.race([refill().catch(() => {}), new Promise(r => setTimeout(r, 20000))]).then(() => coming() || dropOld()).then(() => self.clients.claim()));
 });
-// Tidying up after taking over: old caches go and this build's own is made whole. Never while a newer build is
-// installing or waiting: the cache it is filling is not an old one, and deleting it would leave that build to take
-// over with nothing. → whether it was done (false: there is a newer build on its way, so it is left for later).
-// A tidy that could not put every file back (no connection at that moment) does not count as done: the next request
-// starts another, which begins no sooner than three seconds after the one before, so that a file the server does not
-// have is not asked for with every request. (A newer build may have begun to install during that wait: looked at again.)
-const coming = () => !!(self.registration.installing || self.registration.waiting);
-const tidy = e => {
-  if (coming()) return false;
-  const wait = Math.max(0, triedAt + 3000 - Date.now()); triedAt = Date.now() + wait;
-  e.waitUntil(new Promise(r => setTimeout(r, wait)).then(() => !coming() && dropOld().then(refill)).then(whole => { if (!whole) tidied = false; }, () => { tidied = false; }));
-  return true;
-};
-let tidied = false, triedAt = 0;
+// Tidying up after taking over: old caches go and this build's own is made whole.
+// → whether it was begun (false: there is a newer build on its way, so it is left for later).
+const tidy = e => { if (coming()) return false; e.waitUntil(dropOld().then(refill).catch(() => {})); return true; };
+let tidied = false;
 const passed = new Set(); // pages handed over from the server because this build does not hold them (see the fetch handler)
 self.addEventListener('message', e => {
   if (e.data === 'skip-waiting') self.skipWaiting();
@@ -83,7 +76,9 @@ self.addEventListener('fetch', e => {
   }
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   const key = keyOf(req);
-  if (!tidied) tidied = tidy(e); // once each time this worker starts (the browser puts an idle worker to sleep), and again after one that left files missing
+  // A tidy each time this worker starts (the browser puts an idle worker to sleep) and each time a page is opened: one
+  // that could put nothing back, for want of a connection, is so made good at the next start of Vdex that has one.
+  if (!tidied || req.mode === 'navigate') tidied = tidy(e);
   // A page that came from the server because this build does not hold it (below) belongs to a later build, and so do
   // its scripts and styles: they come from the server too, and are not kept. This build's copies stand in only when
   // the server cannot be reached. (Not for the page's next navigation: that request still carries this page's id.)

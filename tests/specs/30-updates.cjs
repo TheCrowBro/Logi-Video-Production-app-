@@ -73,7 +73,15 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const files = await serve(ROOT), answer = files.listeners('request')[0]; files.close();
   // Its worker script is answered from here, so a build deployed on this site is never seen by the other one.
   let slow = 0, swNow = origSw, down = false; // down: the server cannot be reached (it drops every connection)
-  const slowSite = require('http').createServer((req, res) => { if (down) return req.socket.destroy(); if (/^\/sw\.js(\?|$)/.test(req.url)) { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' }); return res.end(swNow); } setTimeout(() => answer(req, res), slow); });
+  // asked: every file it was asked for. stuck: one file whose nth request from then on gets no answer (stuck.at: when it came).
+  const asked = []; let stuck = null;
+  const slowSite = require('http').createServer((req, res) => {
+    if (down) return req.socket.destroy();
+    if (/^\/sw\.js(\?|$)/.test(req.url)) { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' }); return res.end(swNow); }
+    const file = req.url.split('?')[0]; asked.push(file);
+    if (stuck && file === stuck.file && !--stuck.nth) { stuck.at = Date.now(); return; }
+    setTimeout(() => answer(req, res), slow);
+  });
   await new Promise(r => slowSite.listen(0, '127.0.0.1', r));
   const site = `http://localhost:${slowSite.address().port}/`;
   const ctx2 = await browser.newContext({ viewport: { width: 420, height: 860 } });
@@ -86,12 +94,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const cdp = await ctx2.newCDPSession(p2); await cdp.send('ServiceWorker.enable');
   // deploy: a new build number on the server, found by the page; the install has begun once the new cache exists
   const until = async (ms, test) => { for (const end = Date.now() + ms; Date.now() < end;) { if (await test()) return true; await sleep(100); } return false; };
-  const deploy = async (build, list = null) => {
+  const deploy = async (build, list = null, pg = p2) => {
     swNow = origSw.replace("const BUILD = 'dev';", `const BUILD = '${build}';`);
     if (list) swNow = swNow.replace(/const SHELL = \[[\s\S]*?\n\];/, () => `const SHELL = [\n  ${list.map(f => `'${f}'`).join(', ')},\n];`);
     slow = 1500;
-    await p2.evaluate(() => { navigator.serviceWorker.getRegistration().then(r => r.update()); });
-    return until(15000, () => p2.evaluate(async n => (await caches.has(n)) && !!(await navigator.serviceWorker.getRegistration()).installing, 'logi-' + build));
+    await pg.evaluate(() => { navigator.serviceWorker.getRegistration().then(r => r.update()); });
+    return until(15000, () => pg.evaluate(async n => (await caches.has(n)) && !!(await navigator.serviceWorker.getRegistration()).installing, 'logi-' + build));
   };
   // …and it has taken over once the cache of the build before it is gone (a worker drops the old caches as it takes
   // over). The page's own "cleanup" goes out 3 s after that; what is missing is then waited for, for a while.
@@ -152,9 +160,10 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await p3.close();
   ok('a new build whose cache was deleted while it installed, with Vdex closed before it took over, has put every file back by itself as it took over', begun3 && deleted3 && took3 && closed === 0, JSON.stringify([begun3, deleted3, took3, closed]));
   ok('…so the next start, which has no connection, opens Vdex with the sections that were never opened', /^opened/.test(cut3), cut3);
-  // A put-back that cannot be done for want of a connection does not count as done. The offline copy is lost again
-  // and the worker put to sleep; the next start has no connection (it is that worker's first request, so its tidy
-  // runs then, and can fetch nothing); the start after that has one, with the same worker still awake.
+  // A put-back that cannot be done for want of a connection is made good at the next start that has one: a tidy runs
+  // each time a page is opened, not only when the worker starts. The offline copy is lost again and the worker put to
+  // sleep; the next start has no connection (its tidy can fetch nothing); the start after that has one, with the same
+  // worker still awake.
   await cdp2.send('ServiceWorker.stopAllWorkers'); await sleep(400);
   await watcher.evaluate(() => caches.delete('logi-test000'));
   const p4 = await ctx2.newPage();
@@ -169,6 +178,23 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   down = false;
   ok('a put-back that failed for want of a connection is tried again once there is one, by the same worker: the start with a connection ends with every file in the offline copy, not only the ones it asked for', lostStart !== 'opened' && again && left === 0, JSON.stringify([lostStart, again, left]));
   ok('…so Vdex then opens without a connection, with a section never opened', /^opened/.test(cut4), cut4);
+  // A build found while the one before it is still taking over. That build's cache is deleted while it installs (as
+  // above), so it asks for every file a second time as it takes over, and one of them gets no answer: the take-over
+  // drags on. Meanwhile the next build is deployed, found, and installed whole. When the build before stops waiting
+  // (it gives a put-back 20 seconds), it must not drop the next build's cache with the old ones: that build would
+  // fetch every file again, or take over with no offline copy if the connection had gone by then.
+  stuck = { file: '/js/pages/insurance.js', nth: 2 };
+  const begun4 = await deploy('test4', WHOLE, p5);
+  const deleted4 = await p5.evaluate(() => caches.delete('logi-test4')); slow = 0;
+  const dragging = await until(30000, async () => !!stuck.at && [0, 1].includes(await lacks('logi-test4'))); // its put-back has every file but the one that does not come (which the page's own tidy may have fetched meanwhile)
+  const from = asked.length;
+  const begun5 = await deploy('test5', WHOLE, p5); slow = 0;
+  const took5 = await until(40000, async () => (await watcher.evaluate(() => caches.keys())).every(k => k === 'logi-test5' || k === 'logi-share')); // the next build has taken over: every other cache is gone
+  const waited = Date.now() - stuck.at, lacks5 = await lacks('logi-test5');
+  // How often each file of the build was asked for since it was deployed (not the stuck one: a tidy may ask for it again).
+  const whole5 = WHOLE.map(f => new URL(f, site).pathname).filter(f => f !== stuck.file), since = asked.slice(from), times = whole5.map(f => since.filter(a => a === f).length);
+  ok('a take-over whose put-back gets no answer for a file stops waiting for it after 20 seconds, so the page’s requests, and the next build, are not held up for as long as that file takes', begun4 && deleted4 && dragging && took5 && waited > 15000 && waited < 35000, JSON.stringify([begun4, deleted4, dragging, took5, waited]));
+  ok('…and a build that was found and installed during that wait keeps its offline copy: the build before does not drop it with the old ones, so no file is fetched a second time', begun5 && took5 && lacks5 === 0 && times.every(n => n === 1), JSON.stringify([begun5, took5, lacks5, times.filter(n => n !== 1).length + ' of ' + whole5.length + ' files not asked for exactly once']));
   await ctx2.close(); slowSite.close();
   fs.writeFileSync(verPath, origVer.replace(/VERSION = '[^']+'/, "VERSION = '9.9.9'"));
   const served = await page.evaluate(() => fetch('js/version.js', { cache: 'no-store' }).then(r => r.text()));
