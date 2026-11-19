@@ -253,6 +253,22 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const settled = await page.evaluate(() => ({ tag: document.getElementById('menuStatus').tagName, focus: document.activeElement.id, title: document.getElementById('menuStatusTitle').textContent, n: document.querySelectorAll('#menuStatus').length }));
   ok('when all is well again it is plain words once more, and the focus it had goes to the first row', during.tag === 'BUTTON' && during.state === 'saving' && settled.tag === 'DIV' && settled.n === 1 && settled.focus === 'helpBtn' && settled.title === 'Synced with Google Drive', JSON.stringify({ during, settled }));
   ok('…without the rows moving under a finger as it changes', (await rowAt()) === during.row, `${during.row} → ${await rowAt()}`);
+  // …and so at every width the menu takes and at every text size, whatever the font draws the words in (a wider one
+  // wraps them sooner): the button and the plain words are the same height, a save starting or finishing.
+  const moved = [];
+  for (const text of ['normal', 'large', 'xlarge']) for (const width of [320, 340, 360, 375, 390, 412, 600]) {
+    await page.setViewportSize({ width, height: 740 }); await page.evaluate(t => { document.documentElement.dataset.text = t; }, text); await sleep(60);
+    const r = await page.evaluate(async () => {
+      const s = await import('./js/store.js'), at = () => Math.round(document.getElementById('helpBtn').getBoundingClientRect().top * 10) / 10, tag = () => document.getElementById('menuStatus').tagName;
+      const synced = at(), was = tag();
+      s.cloud.adapter = { id: 'gdrive', label: 'Google Drive', ready: async () => true, read: async () => null, write: () => new Promise(r => { window.__letGo = r; }) }; s.sync(); await new Promise(r => setTimeout(r, 150));
+      const saving = at(), now = tag(); window.__letGo(); await new Promise(r => setTimeout(r, 150));
+      return { synced, saving, after: at(), forms: [was, now, tag()].join('→') };
+    });
+    if (r.synced !== r.saving || r.after !== r.saving || r.forms !== 'DIV→BUTTON→DIV') moved.push(`${text} ${width} px: ${r.synced} → ${r.saving} → ${r.after} (${r.forms})`);
+  }
+  await page.setViewportSize({ width: 360, height: 740 }); await page.evaluate(() => { document.documentElement.dataset.text = 'normal'; }); await sleep(60);
+  ok('…at every width the menu takes and every text size: Standard, Large and Extra large, from 320 px up', moved.length === 0, moved.join(' | '));
   await page.keyboard.press('Escape'); await setCloud('off');
 
   /* --------------------------- the search control in the bar --------------------------- */

@@ -308,7 +308,7 @@ export function shotsBlock(b) {
   const order = [...new Set([...scenes.map(x => String(x.scene)), ...shots.map(s => s.scene && String(s.scene))].filter(Boolean))];
   const groups = grouped ? [...order.map(n => [n, shots.filter(s => String(s.scene || '') === n)]).filter(([, l]) => l.length), ['', shots.filter(s => !s.scene)]].filter(([, l]) => l.length) : [];
   return h('div', { class: 'card shot-list' },
-    h('div', { class: 'card-row' }, h('strong', null, `Shot list · ${done}/${shots.length}`), h('button', { class: 'btn ghost small', 'data-fk': 'shot-import', onclick: () => import('./stripboard.js').then(m => m.openShotImport(b)).catch(e => toast('Could not open the import: ' + (e.message || e))) }, '⬆ Import shot list…')),
+    h('div', { class: 'card-row wraps' }, h('strong', null, `Shot list · ${done}/${shots.length}`), h('button', { class: 'btn ghost small', 'data-fk': 'shot-import', onclick: () => import('./stripboard.js').then(m => m.openShotImport(b)).catch(e => toast('Could not open the import: ' + (e.message || e))) }, '⬆ Import shot list…')),
     shots.length
       ? (grouped ? groups.map(([n, list]) => h('div', { class: 'shot-group' }, h('h4', null, n ? label(n) : 'Unsorted'), h('div', { class: 'checklist' }, list.map(row)))) : h('div', { class: 'checklist' }, shots.map(row)))
       : h('p', { class: 'muted small' }, 'List the shots you need and tick them off on the day. Import a shot list to fill the stripboard from it at the same time.'),

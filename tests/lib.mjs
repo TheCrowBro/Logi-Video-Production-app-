@@ -35,6 +35,10 @@ export function serve(root, port = 0, key = process.env.VDEX_STATUS_KEY) {
     let p = decodeURIComponent(new URL(req.url, 'http://x').pathname); if (p.endsWith('/')) p += 'index.html';
     // The live site's Worker answers this; here licences are switched off, as before the owner switched them on.
     if (p === '/licence/web/status') { const body = JSON.stringify({ on: false, ...(key ? { note: await statusNote(key) } : {}) }); res.writeHead(200, { 'Content-Type': 'application/json' }); return res.end(body); }
+    // …and this, as it does for a request from a country with no tax to show (cloudflare/worker.mjs). The page asks for
+    // the price whenever its licence state offers Buy, and a browser counts as on its trial until the status answer
+    // comes: a page whose answer was late (a busy machine) asked here, was told 404, and its spec counted a script error.
+    if (p === '/licence/price') { res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); return res.end(JSON.stringify({ price: '20.00', currency: 'USD', country: '', taxed: null })); }
     const file = resolve(root, '.' + p); if (!file.startsWith(resolve(root))) { res.writeHead(403); return res.end(); }
     try { statSync(file); } catch { res.writeHead(404); return res.end('not found'); }
     res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });

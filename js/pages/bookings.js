@@ -153,8 +153,10 @@ function month(go) {
     h('section', { class: 'cal-panel box-dark', 'aria-label': 'Calendar' },
       h('div', { class: 'cal-nav' },
         h('button', { class: 'icon-btn', 'aria-label': 'Previous month', onclick: () => go({ cursor: new Date(y, m - 1, 1) }) }, '‹'),
-        h('div', { class: 'cal-title' }, new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
-        h('button', { class: 'btn ghost small', onclick: () => go({ cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }) }, 'Today'),
+        // The month and Today between the arrows: Today goes under the month where the two do not fit side by side.
+        h('div', { class: 'cal-mid' },
+          h('div', { class: 'cal-title' }, new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })),
+          h('button', { class: 'btn ghost small', onclick: () => go({ cursor: new Date(new Date().getFullYear(), new Date().getMonth(), 1) }) }, 'Today')),
         h('button', { class: 'icon-btn', 'aria-label': 'Next month', onclick: () => go({ cursor: new Date(y, m + 1, 1) }) }, '›')),
       h('div', { class: 'cal' },
         ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(w => h('div', { class: 'wd' }, w)), cells)),
@@ -358,7 +360,7 @@ function venueBlock(b, gear) {
   const warns = venueWarnings(v, gear);
   return h('section', { class: 'block', id: 'bk-venue' }, h('h3', null, 'Venue'),
     h('div', { class: 'card' },
-      h('div', { class: 'card-row' }, h('strong', null, v.name), h('button', { class: 'btn ghost small', onclick: () => openVenue(v.id) }, 'Rules & details →')),
+      h('div', { class: 'card-row wraps' }, h('strong', null, v.name), h('button', { class: 'btn ghost small', onclick: () => openVenue(v.id) }, 'Rules & details →')),
       warns.map(w => h('div', { class: 'warn' }, '⚠ ' + w.text)),
       venueChips(v),
       (v.rules || '').trim() && h('div', { class: 'muted small prewrap' }, v.rules.split('\n').slice(0, 3).join('\n')),

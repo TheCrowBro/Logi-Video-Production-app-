@@ -205,7 +205,7 @@ const SYNC = {
 };
 function paintCloud() {
   const c = store.cloud, s = c.status, [word, dot, title, text] = SYNC[s] || SYNC.off;
-  const headline = title(c.adapter ? c.adapter.label : 'your storage');
+  const where = c.adapter ? c.adapter.label : 'your storage', headline = title(where);
   cloudLabel.textContent = word;
   cloudBtn.dataset.state = s;
   let status = document.getElementById('menuStatus');
@@ -218,6 +218,13 @@ function paintCloud() {
   status.dataset.state = s;
   document.getElementById('menuStatusTitle').textContent = headline;
   document.getElementById('menuStatusText').textContent = text(c);
+  // While a storage is linked, unseen under those words, the words of both halves of a save (synced, saving): a save
+  // starting or finishing while the menu is open changes neither the status's height nor where the rows under it are
+  // (styles.css, .menu-room). Kept on this device only, there are no saves to make room for.
+  status.querySelectorAll('.menu-room').forEach((room, i) => {
+    const [, , t, x] = SYNC[i ? 'saving' : 'synced'];
+    room.firstChild.textContent = c.adapter ? t(where) : ''; room.lastChild.textContent = c.adapter ? x(c) : '';
+  });
   menuBtn.dataset.state = s;
   if (dot) menuBtn.dataset.dot = dot; else delete menuBtn.dataset.dot;
   const name = dot ? `Menu. ${headline}` : 'Menu';

@@ -60,7 +60,8 @@ const ODD_XLSX = zip({
 (async () => {
   const browser = await chromium.launch();
   const errors = [], requests = [], dialogs = [];
-  const watch = p => { p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text()); }); p.on('dialog', d => { dialogs.push(d.message()); d.accept(); }); return p; };
+  // A resource that failed is named by its address too, so a failure on another machine says what was asked for.
+  const watch = p => { p.on('pageerror', e => errors.push(e.message)); p.on('console', m => { if (m.type() === 'error' || /Content Security Policy|Refused to/.test(m.text())) errors.push(m.text() + (/^Failed to load resource/.test(m.text()) && m.location().url ? ` (${m.location().url.replace(BASE, '/')})` : '')); }); p.on('dialog', d => { dialogs.push(d.message()); d.accept(); }); return p; };
   // A browser of its own: one that has agreed to the terms, skipped the PIN set-up and seen the tour.
   // signIn: false switches the cloud sign-ins off, whatever js/cloud-config.js holds, for a visit to Settings (whose
   // storage panel otherwise fetches Google's sign-in script, and this spec counts every request made).
@@ -1006,6 +1007,24 @@ const ODD_XLSX = zip({
     const sides = { 'Equipment, kits': await over() };
     for (const p of ['bookings', 'crew', 'venues', 'insurance', 'me', 'field', 'tcnotes', 'settings']) { await N.page.evaluate(p => window.logiGo(p), p); await sleep(700); sides[p] = await over(); }
     ok('320 px: no other page scrolls sideways with the sample data either', Object.values(sides).every(v => v <= 0), JSON.stringify(sides));
+    // …nor with the larger text sizes (Display & accessibility), at 320 and 360 px, a booking's page and its day too, and
+    // Settings with every section open: titles and their buttons, the month and Today, the Field tools, the figures on
+    // Insurance and the choices in Settings all keep inside the screen, whatever font the device draws them in.
+    const bigger = {};
+    for (const text of ['large', 'xlarge']) for (const width of [320, 360]) {
+      await N.page.setViewportSize({ width, height: 640 }); await N.page.evaluate(t => { document.documentElement.dataset.text = t; }, text);
+      for (const p of ['gear', 'bookings', 'crew', 'venues', 'insurance', 'me', 'field', 'tcnotes', 'settings']) {
+        await N.page.evaluate(p => window.logiGo(p), p); await sleep(500);
+        if (p === 'settings') { await N.page.evaluate(() => document.querySelectorAll('#page details').forEach(d => { d.open = true; })); await sleep(300); }
+        const o = await over(); if (o > 0) bigger[`${text} ${width} ${p}`] = o;
+      }
+      for (const view of [{}, { view: 'day' }]) {
+        await N.page.evaluate(async v => { await window.logiGo('bookings'); const s = await import('./js/store.js'); (await import('./js/pages/bookings.js')).openBooking(s.db.bookings[0].id, v); }, view); await sleep(500);
+        const o = await over(); if (o > 0) bigger[`${text} ${width} booking${view.view ? ' day' : ''}`] = o;
+      }
+      await N.page.evaluate(() => import('./js/pages/bookings.js').then(m => m.showMonth()));
+    }
+    ok('…nor with Large or Extra large text, at 320 or 360 px: each page, a booking and its day, and Settings opened up', Object.keys(bigger).length === 0, JSON.stringify(bigger));
     await N.ctx.close(); }
   // …and where the row does fit, it is laid out as it always was: the name beside the booked mark and the buttons.
   { const M = await open({ width: 360, height: 740 });
