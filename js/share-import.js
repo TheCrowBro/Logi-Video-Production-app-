@@ -10,14 +10,11 @@ import { db, byId, update } from './store.js';
 import { TYPES, DELIV_STATUS } from './workflow.js';
 import { parseEighths } from './board.js';
 import { isTime, mail, fromLine } from './share-data.js';
-import { roomFor, linkId } from './gear-import.js';
+import { roomFor } from './gear-import.js';
 
 const low = v => String(v == null ? '' : v).trim().toLowerCase();
 const squash = v => low(v).replace(/[\s,]+/g, ' ');
 const hhmm = t => (isTime(t) ? t.padStart(5, '0') : ''); // "7:30" → "07:30", as the time boxes want it
-// The id of a record a link makes: worked out from the link's own reference (linkId in js/gear-import.js), so the same
-// link added on two devices of one person makes the same record on both, and the sync folds them into one.
-const fromRef = (d, list, ref, tail = '') => linkId(ref && ref + tail, new Set(d[list].map(x => x.id)), d.deleted);
 // Two values of a detail are the same whatever their line ends and the white space around them (a form may tidy those).
 const plain = v => String(v == null ? '' : v).replace(/\r\n?/g, '\n').trim();
 const same = (a, b) => plain(a) === plain(b);
@@ -35,13 +32,10 @@ export function producerOf(snap) {
   }
   return out;
 }
-// The link was made from a booking of one's own: there is nothing to add. A booking's id is the reference of the
-// links made from it, so a link that names a booking here was made from it, also when that booking itself came from
-// someone's link and was shared on. One case apart: a booking added from this very reference before is what the link
-// updates (build() finds it), whatever else carries that id. (A booking a link made has an id worked out from that
-// link, the same on every device that adds it, so someone can hold both the booking from the first link and the one
-// from a workmate's link made from their copy of it.)
-export const ownBooking = snap => (snap.ref && !db.bookings.some(b => b.shared && b.shared.ref === snap.ref) && byId('bookings', snap.ref)) || null;
+// The link was made from a booking of one's own: there is nothing to add. A booking's id is made on this device and
+// is the link's reference, so a link that names it can only have been made from it, also when that booking itself
+// came from someone's link and was shared on.
+export const ownBooking = snap => (snap.ref && byId('bookings', snap.ref)) || null;
 
 // The stripboard from the days the link carries, merged into the board the booking has (old). The link's strips come
 // in the link's order, day by day. A strip the link made before (made(id) says so) is found again by what it is (a
@@ -153,7 +147,7 @@ function build(snap, d) {
       } else for (const [k, v] of Object.entries(details)) if (v && !String(twin[k] || '').trim()) record[k] = v;
       const shown = x => JSON.stringify([x.name, ...Object.keys(details).map(k => x[k] || '')]);
       venue = { record, isNew: false, changed: JSON.stringify(record) !== JSON.stringify(twin), filled: shown(record) !== shown(twin) };
-    } else venue = { isNew: true, changed: true, filled: true, record: { id: fromRef(d, 'venues', snap.ref, '-venue'), name, type: '', ...details, permit: 'Unknown', notes: from ? `Shared by ${from} with “${snap.title || 'a booking'}”.` : 'Added with a shared booking.',
+    } else venue = { isNew: true, changed: true, filled: true, record: { id: uid(), name, type: '', ...details, permit: 'Unknown', notes: from ? `Shared by ${from} with “${snap.title || 'a booking'}”.` : 'Added with a shared booking.',
       shared: { ref: snap.ref, by: from, at: now, sent: Object.fromEntries(Object.entries({ name, ...details }).filter(([, v]) => v)) } } };
   }
 
@@ -220,7 +214,7 @@ function build(snap, d) {
   const note = whole ? was.note : [kitNote, ...odd].filter(Boolean).join('\n');
   const notes = held ? own.replace(was.note, () => note).trim() : [own, note && !own.includes(note) ? note : ''].filter(Boolean).join('\n\n');
 
-  const booking = { ...(cur || { id: fromRef(d, 'bookings', snap.ref), status: 'Confirmed', type: type || 'other', crew: [], gear: [] }),
+  const booking = { ...(cur || { id: uid(), status: 'Confirmed', type: type || 'other', crew: [], gear: [] }),
     title, client, date, start, end, address, stakeholders, hires, crewCall, crewStatus, shots, deliverables, callSheet, notes, updatedAt: now };
   if (lastDay) booking.endDate = lastDay; else delete booking.endDate;
   if (breakMinutes !== '') booking.breakMinutes = breakMinutes;

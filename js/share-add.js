@@ -30,10 +30,26 @@ const dialog = (title, body) => {
 const newer = snap => snap.newer && h('p', { class: 'note small' }, 'This link was made with a newer version of Vdex, so some of what it holds may be left out. Updating Vdex first is the safe way.');
 
 // Vdex is ready for a question once nothing stands in front of it: the lock, the terms, the PIN set-up, a walkthrough.
+// With cloud storage linked, the cloud copy is read first. A device reads it only when it starts and when it comes
+// back to the front, so one that has been open for a while may not hold what another of one's devices added from this
+// very link, and would offer to add it a second time where it should offer to update it. The read gets a few seconds
+// (one already on its way will do, as when Vdex has only just started: which storage is linked is known a moment
+// after the start); without an answer by then the sheet comes as this device knows things, and the tap on Add looks
+// again (the previews below).
+const READ_FOR = 4000;
 async function ready() {
-  while (lock.isLocked() || store.isSealed() || !tourSeen() || tourActive() || document.querySelector('.terms-gate, .lock')) await sleep(400);
+  const clear = async () => { while (lock.isLocked() || store.isSealed() || !tourSeen() || tourActive() || document.querySelector('.terms-gate, .lock')) await sleep(400); };
+  await clear();
   await import('./licence.js').then(m => m.initLicence()).catch(() => {}); // whether changes are allowed is known before Add is offered
+  const slow = setTimeout(() => { if (store.cloud.adapter && !store.cloud.paused) toast('Checking your cloud storage first…'); }, 800);
+  await Promise.race([store.cloudKnown.then(() => (store.cloud.adapter && !store.cloud.paused ? store.sync({ quiet: true, join: true }) : null)).catch(() => {}), sleep(READ_FOR)]);
+  clearTimeout(slow);
+  await clear(); // Vdex may have been locked, or a walkthrough begun, while the storage was being read
 }
+// A preview says what the tap would do as things stood when it was drawn. If the cloud copy comes in while it is open
+// (the read above was still on its way, or Vdex came back to the front) and brings what the link would add, the tap
+// must not add it a second time: the preview is then drawn again, with this line, and waits for another tap.
+const again = what => h('p', { class: 'note small add-again' }, `Your ${what} changed while this was open, so this has been worked out again. Check it, then tap again.`);
 
 // A link that came in with the address. Shown once Vdex is ready; a link that cannot be read says why.
 export async function arrived(link) {
@@ -70,12 +86,11 @@ const afterAdd = async (step, missing = '') => { try { return await step(); } ca
 const noRoom = (what, done, ask) => `This ${what} is bigger than the space Vdex has on this device, so nothing was ${done}. Free some space first (erase old logs and bookings), or ask for ${ask}.`;
 
 /* ----------------------------------- a booking ----------------------------------- */
-async function previewBooking(snap) {
-  const [m, { billTo }, { derived }] = await Promise.all([import('./share-import.js'), import('./money.js'), import('./gear-import.js')]), p = m.planBooking(snap), L = snap.location, C = snap.call, was = p.existing;
+async function previewBooking(snap, redrawn = false) {
+  const [m, { billTo }] = await Promise.all([import('./share-import.js'), import('./money.js')]), p = m.planBooking(snap), L = snap.location, C = snap.call, was = p.existing;
+  const found = x => [x.own && x.own.id, x.existing && x.existing.id].join(); // which booking of one's own the link is about
   if (p.own) {
-    // A booking that itself came from a link carries the id that link gives it on anyone's device (linkId in
-    // js/gear-import.js), so a link that names it was made from it or from another person's copy of the same booking.
-    const sh = dialog('This booking is yours', h('div', { class: 'stack' }, h('p', null, `“${p.own.title}” is already in your Bookings: this link was made from it${derived(p.own) ? ', or from another copy of the same shared booking' : ''}, so there is nothing to add.`),
+    const sh = dialog('This booking is yours', h('div', { class: 'stack' }, h('p', null, `“${p.own.title}” is already in your Bookings: this link was made from it, so there is nothing to add.`),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onclick: async () => { sh.close(); await window.logiGo('bookings'); (await import('./pages/bookings.js')).openBooking(p.own.id); } }, 'Open it'))));
     return;
   }
@@ -91,6 +106,7 @@ async function previewBooking(snap) {
   const toWas = docs.length ? toOf(was) : null, toNow = docs.length ? toOf(p.booking) : null, moved = !!toWas && toWas.join('\n') !== toNow.join('\n');
   const whom = t => `${t[0] === '—' ? 'nobody' : t[0]}${t.length > 1 ? ` (${t.slice(1).join(', ')})` : ''}`;
   const f = foot([[was ? 'Update the booking' : 'Add to my Bookings', async () => {
+    if (found(m.planBooking(snap)) !== found(p)) return previewBooking(snap, true);
     if (!m.roomForBooking(snap)) return f.refuse(noRoom('booking', was ? 'changed' : 'added', 'a link with fewer parts ticked'));
     const done = m.applyBooking(snap); if (!done) return;
     sh.close(); toast(was ? 'Booking updated' : 'Added to your Bookings');
@@ -98,6 +114,7 @@ async function previewBooking(snap) {
   }, 'primary']], () => sh.close());
   const sh = dialog(was ? 'Update this booking?' : 'Add this booking?', h('div', { class: 'stack add-preview' },
     h('div', null, h('h3', { class: 'add-title' }, snap.title || 'Shared shoot'), h('div', { class: 'muted small' }, p.from ? `Shared by ${p.from}` : 'From a shared link', snap.made ? ` · sent ${new Date(snap.made).toLocaleDateString()}` : '')),
+    redrawn && again('Bookings'),
     was && h('p', { class: 'note small' }, `“${was.title}” is in your Bookings already${was.shared.at ? `, added ${new Date(was.shared.at).toLocaleDateString()}` : ''}. Adding it again updates it from this link.`),
     other && h('p', { class: 'warn small add-other', role: 'note' }, p.from ? `This link is from ${p.from}; the booking in your Bookings came from ${had}. Check that it is the same shoot before you update it.` : `This link does not say who it is from; the booking in your Bookings came from ${had}. Check that it is the same shoot before you update it.`),
     moved && h('p', { class: 'warn small add-readdress', role: 'note' }, `The ${docs.join(' and the ')} you made on this booking ${docs.length === 1 ? 'is' : 'are'} headed to ${whom(toWas)}. After this update ${docs.length === 1 ? 'it is' : 'they are'} headed to ${whom(toNow)}, even if ${docs.length === 1 ? 'it has' : 'they have'} been sent already.`),
@@ -154,18 +171,18 @@ async function previewContact(c) {
 }
 
 /* -------------------------------- an equipment list -------------------------------- */
-async function previewGear(g) {
+async function previewGear(g, redrawn = false) {
   const m = await import('./gear-import.js'), plan = m.planGearImport(g.items), from = fromLine(g.by), cur = g.currency || '';
   const dup = plan.rows.filter(r => r.match), fresh = plan.rows.filter(r => !r.match), mine = r => r.match.id === r.item.ref, allMine = dup.length > 0 && dup.every(mine);
-  // An item that itself came from a link has the id that link gives it on anyone's device, so a list that names it was
-  // made from it or from another person's copy of the same item.
-  const orCopy = rows => (rows.some(r => m.derived(r.match)) ? ', or from another copy of the same shared list' : '');
+  // Which items and kits of one's own the list is about: the rows' matches, and the kits it would rewrite.
+  const found = pl => JSON.stringify([pl.rows.map(r => (r.match ? r.match.id : '')), g.kits.map(k => (m.kitOf(store.db.kits, k.ref) || {}).id || '')]), seen = found(plan);
   const sum = h('p', { class: 'add-sum', role: 'status' }), selects = [];
   // A kit that is here already is rewritten only when one of the rows it names is added or updated (applyGearImport).
   const KIT = { make: 'is made as a kit', update: 'is updated', same: 'stays as it is: every item of it is skipped' };
   const kitDoes = k => (!m.kitOf(store.db.kits, k.ref) ? 'make' : k.items.some(([row]) => { const r = plan.rows[row]; return r && !(r.match && r.action === 'skip'); }) ? 'update' : 'same');
   const kitLines = g.kits.map(k => h('span'));
   const f = foot([['', async () => {
+    if (found(m.planGearImport(g.items)) !== seen) return previewGear(g, true);
     if (!m.roomForGear(plan, { kits: g.kits, from })) return f.refuse(noRoom('list', 'added', 'the list in parts'));
     const done = m.applyGearImport(plan, { kits: g.kits, from }); if (!done) return;
     sh.close();
@@ -187,16 +204,17 @@ async function previewGear(g) {
     go.textContent = c.add && c.update ? `Add ${c.add.toLocaleString()} and update ${c.update.toLocaleString()}` : c.update ? `Update ${plural(c.update, 'item')}` : c.add ? `Add ${plural(c.add, 'item')} to my Equipment` : made ? (made === 1 ? 'Make the kit' : `Make ${made} kits`) : 'Nothing to add';
     go.off = go.disabled = !(c.add + c.update + made);
   };
-  const WHY = { ref: r => (mine(r) ? 'This is your own item: the list was made from it' + orCopy([r]) : `Added from this list before${r.match.name !== r.item.name ? `, as “${r.match.name}”` : ''}`), serial: r => `Same serial number as your “${r.match.name}”`, name: r => `Same name as your “${r.match.name}”` };
+  const WHY = { ref: r => (mine(r) ? 'This is your own item: the list was made from it' : `Added from this list before${r.match.name !== r.item.name ? `, as “${r.match.name}”` : ''}`), serial: r => `Same serial number as your “${r.match.name}”`, name: r => `Same name as your “${r.match.name}”` };
   const line = r => { const x = r.item; return [h('div', null, h('strong', null, x.name), x.qty > 1 && ` × ${x.qty}`), h('div', { class: 'muted small' }, [x.category, x.serial && 'S/N ' + x.serial, x.value !== '' && money(x.value, cur) + (x.qty > 1 ? ' each' : ''), x.location && '📍 ' + x.location].filter(Boolean).join(' · '))]; };
   const pick = r => { const sel = h('select', { 'aria-label': `What to do with ${r.item.name}`, onchange: e => { r.action = e.target.value; paint(); } }, m.ACTIONS.map(([v, label]) => h('option', { value: v, selected: v === r.action }, label))); selects.push(sel); return sel; };
   const all = dup.length > 1 && h('label', { class: 'add-all small' }, 'All of these: ', h('select', { 'aria-label': 'What to do with every item you already have', onchange: e => { if (!e.target.value) return; dup.forEach(r => { r.action = e.target.value; }); selects.forEach(s => { s.value = e.target.value; }); paint(); } }, h('option', { value: '' }, 'Choose…'), m.ACTIONS.map(([v, label]) => h('option', { value: v }, label))));
   const sh = dialog('Add this equipment?', h('div', { class: 'stack add-preview' },
     h('div', null, h('h3', { class: 'add-title' }, g.title || 'Equipment list'), h('div', { class: 'muted small' }, from ? `Shared by ${from}` : 'From a shared link', g.made ? ` · sent ${new Date(g.made).toLocaleDateString()}` : '')),
+    redrawn && again('Equipment'),
     h('p', { class: 'small muted' }, 'A copy of each item goes into your Equipment, with its serial number, value, notes and the rest of its details. Values come as the numbers they are, in whatever currency the sender uses.'),
     g.cut > 0 && h('p', { class: 'note small add-cut' }, `This list is longer than one link carries: only its first ${GEAR_MAX.toLocaleString()} items are here, and ${plural(g.cut, 'more item')} ${g.cut === 1 ? 'is' : 'are'} not. Ask for the rest in a second link.`),
     dup.length > 0 && h('section', { class: 'add-group', 'aria-label': 'Items you already have' }, h('h4', null, `Already in your Equipment (${dup.length.toLocaleString()})`),
-      allMine && h('p', { class: 'note small add-mine' }, `${dup.length === 1 ? 'This is your own item: the list was made from it' : 'These are your own items: the list was made from them'}${orCopy(dup)}. ${dup.length === 1 ? 'It is' : 'They are'} left as ${dup.length === 1 ? 'it is' : 'they are'} unless you choose otherwise.`), all,
+      allMine && h('p', { class: 'note small add-mine' }, `${dup.length === 1 ? 'This is your own item: the list was made from it. It is' : 'These are your own items: the list was made from them. They are'} left as ${dup.length === 1 ? 'it is' : 'they are'} unless you choose otherwise.`), all,
       h('ul', { class: 'add-list add-items' }, dup.map(r => h('li', { class: 'add-dup' }, ...line(r), !allMine && h('div', { class: 'small add-why' }, WHY[r.why](r)), pick(r))))),
     fresh.length > 0 && h('section', { class: 'add-group', 'aria-label': 'New items' }, h('h4', null, `New (${fresh.length.toLocaleString()})`), h('ul', { class: 'add-list add-items' }, fresh.map(r => h('li', null, ...line(r))))),
     g.kits.length > 0 && h('section', { class: 'add-group add-kits' }, h('h4', null, g.kits.length === 1 ? 'Kit' : 'Kits'), h('ul', { class: 'add-list' }, kitLines.map(el => h('li', null, el)))),

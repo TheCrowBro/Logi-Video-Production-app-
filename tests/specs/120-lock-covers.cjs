@@ -772,6 +772,36 @@ const PHONE = { width: 360, height: 740 };
     const opened = await C.page.evaluate(() => { const d = document.querySelector('#page details[data-s="Quotes & invoices"]'); return d ? d.open : 'not there'; });
     ok('a step left during its wait does not run what it had prepared to do: the Settings section it opens stays shut', (await state(C.page)).tour === 0 && opened !== true && await usable(C.page), String(opened));
     await C.ctx.close();
+    // What the person opens themselves while the left step's file is still on its way is theirs: the late step neither
+    // closes it nor puts its own panel over it. Next, Skip, and then, before the search has arrived:
+    const late = async after => {
+      const D = await existing();
+      await D.page.locator('#menuBtn').click(); await D.page.locator('#menu').waitFor({ state: 'visible' }); await D.page.keyboard.press('Escape'); await sleep(200); // the menu has been used before: its file is here
+      await D.ctx.route('**/js/search.js', async r => { await sleep(1500); await r.continue().catch(() => {}); });
+      await D.page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await D.page.waitForSelector('.tour-card h2'); await sleep(300);
+      const on = await toCard(D.page, 'Search everything');
+      await D.page.locator('.tour-card .btn.primary').click(); await sleep(150); await D.page.locator('.tour-card button', { hasText: 'Skip' }).click(); await sleep(150);
+      const out = await after(D.page);
+      await D.ctx.close();
+      return { on, ...out };
+    };
+    const drawn = pg => pg.evaluate(() => { const s = document.getElementById('searchBack'); return !!s && !s.hidden; });
+    const menu = await late(async pg => {
+      await pg.locator('#menuBtn').click(); await pg.locator('#menu').waitFor({ state: 'visible' }); await sleep(200);
+      const before = (await shown(pg)).menu; await sleep(2000);
+      return { before, after: (await shown(pg)).menu, inMenu: await pg.evaluate(() => !!document.activeElement && !!document.activeElement.closest('#menu')), search: await drawn(pg) };
+    });
+    ok('the menu opened by hand after leaving a walkthrough is not closed when the left step’s file arrives', menu.on && menu.before && menu.after && menu.inMenu && !menu.search, JSON.stringify(menu));
+    const slash = await late(async pg => {
+      await pg.keyboard.press('/'); await sleep(2300);
+      return { search: (await shown(pg)).search, typing: await pg.evaluate(() => (document.activeElement || {}).id === 'searchInput'), inReach: await pg.evaluate(() => { const s = document.getElementById('searchBack'); return !!s && !s.inert; }) };
+    });
+    ok('…the search asked for with / in that moment opens, for use, with the cursor in its box', slash.on && slash.search && slash.typing && slash.inReach, JSON.stringify(slash));
+    const other = await late(async pg => {
+      await pg.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('gear'))); await pg.waitForSelector('.tour-card h2'); await sleep(2600);
+      return { card: await card(pg), search: await drawn(pg), tour: (await state(pg)).tour };
+    });
+    ok('…and another walkthrough started in that moment does not get the left one’s search drawn over it', other.on && other.tour === 1 && !!other.card && other.card !== 'What to type' && !other.search, JSON.stringify(other));
   });
 
   /* ------------------- the offer of a longer PIN arriving over the open menu or search ------------------- */
@@ -809,6 +839,63 @@ const PHONE = { width: 360, height: 740 };
     await page.keyboard.press('Escape'); await sleep(300);
     ok('…and when the walkthrough ends the page is usable', (await state(page)).tour === 0 && !(await shown(page)).menu && await usable(page));
     await ctx.close();
+    // The offer as it usually comes, its file not held back: the unlock has only just put the search back for the
+    // card that points into it (“What comes back” prepares its words first, so the card is still on its way).
+    const panel = pg => pg.evaluate(() => { const m = document.getElementById('menuBack'), s = document.getElementById('searchBack'); const of = el => (!el || el.hidden ? 'shut' : el.inert ? 'out of reach' : 'in reach'); return { menu: of(m), search: of(s) }; });
+    const tabs = async (pg, n = 7) => { const at = []; for (let i = 0; i < n; i++) { await pg.keyboard.press('Tab'); at.push(await pg.evaluate(() => { const a = document.activeElement; return a.closest('.tour-card') ? 'card' : a.closest('#menu') ? 'menu' : a.closest('#search') ? 'search' : a.closest('#app') ? 'page' : a.tagName === 'BODY' || a.classList.contains('skip') || /Skip to content/.test(a.textContent || '') ? 'top' : a.tagName; })); } return at; };
+    {
+      const { ctx, page } = await existing();
+      await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await page.waitForSelector('.tour-card h2'); await sleep(400);
+      ok('(Getting around is on “What comes back”, the search shown)', (await toCard(page, 'What comes back')) && (await shown(page)).search);
+      const step = await page.locator('.tour-step').innerText();
+      await page.evaluate(() => import('./js/lock.js').then(l => l.setOption({ max: undefined })));
+      await lockNow(page); await lockUp(page); await page.keyboard.type(OLD);
+      await page.waitForSelector('.pin-offer', { timeout: 20000 }); await sleep(1500);
+      const under = { card: await card(page), ...(await panel(page)) };
+      await page.keyboard.press('Escape'); await sleep(1500);
+      const st = { ...(await state(page)), card: await card(page), step: await page.locator('.tour-step').innerText().catch(() => ''), ...(await panel(page)), tabs: await tabs(page) };
+      ok('the offer of a longer PIN coming up over a walkthrough card that shows the search leaves that search where it is: the card does not move on', under.card === 'What comes back' && under.search === 'out of reach' && st.offer === 0 && st.card === 'What comes back' && st.step === step, JSON.stringify([under, st.card, st.step]));
+      ok('…and once it is answered the search is still there to look at and out of reach, with the keyboard kept to the card', st.search === 'out of reach' && st.menu === 'shut' && st.tour === 1 && st.tabs.every(x => x === 'card' || x === 'top'), JSON.stringify(st));
+      await page.keyboard.press('Escape'); await sleep(300);
+      ok('…and the page is usable when the walkthrough ends', (await state(page)).tour === 0 && await usable(page));
+      await ctx.close();
+    }
+    // The offer answered in another tab while it is up here over a card that points into the menu: it goes, the menu
+    // the card points into stays, and the focus is back on the card.
+    {
+      const { ctx, page } = await existing();
+      await page.evaluate(() => import('./js/lock.js').then(l => l.setOption({ max: undefined })));
+      const two = await ctx.newPage(); watch(two);
+      await two.goto(BASE); await lockUp(two); await two.keyboard.type(OLD); await two.waitForSelector('.pin-offer', { timeout: 20000 }); await sleep(300);
+      await page.bringToFront();
+      await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await page.waitForSelector('.tour-card h2'); await sleep(400);
+      ok('(the first tab is on its menu card, with the offer due)', (await toCard(page, 'How syncing is going')) && (await shown(page)).menu);
+      await lockNow(page); await unlock(page); await page.waitForSelector('.pin-offer', { timeout: 20000 }); await sleep(400);
+      await two.bringToFront(); await two.keyboard.press('Escape'); await sleep(600);
+      await page.bringToFront(); await sleep(1500);
+      const st = { ...(await state(page)), card: await card(page), ...(await panel(page)), pointsAt: await page.evaluate(() => { const el = document.getElementById('menuStatus'); return !!el && el.offsetParent !== null; }), onCard: await page.evaluate(() => !!document.activeElement && !!document.activeElement.closest('.tour-card')) };
+      ok('an offer answered in another tab goes from this one and leaves the walkthrough as it was: the menu its card points into is still shown, out of reach, and the focus is on the card', st.offer === 0 && st.tour === 1 && st.card === 'How syncing is going' && st.menu === 'out of reach' && st.pointsAt && st.onCard, JSON.stringify(st));
+      await ctx.close();
+    }
+    // A menu put up for a walkthrough card while the lock screen is over it (Next, then the lock, and the menu's file
+    // arrives after it): the lock screen's way out gives back what was in reach before, and this menu was not there
+    // then. It is there to look at all the same, and stays out of reach.
+    {
+      const { ctx, page } = await existing();
+      let release; const held = new Promise(r => { release = r; });
+      await ctx.route('**/js/menu.js', async r => { await held; await r.continue().catch(() => {}); });
+      await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await page.waitForSelector('.tour-card h2'); await sleep(400);
+      ok('(Getting around is on the card before its first menu card, the menu never opened yet)', (await toCard(page, 'What comes back')) && (await panel(page)).menu === 'shut');
+      await page.locator('.tour-card .btn.primary').click(); await sleep(150);
+      await lockNow(page); await lockUp(page);
+      release(); await sleep(900);
+      await unlock(page); await sleep(900);
+      const st = { ...(await state(page)), card: await card(page), ...(await panel(page)), tabs: await tabs(page) };
+      ok('a menu that a walkthrough put up while the lock screen was over it is out of reach after the unlock, like any menu a walkthrough shows: the keyboard stays on the card', st.lock === 0 && st.tour === 1 && st.card === 'How syncing is going' && st.menu === 'out of reach' && st.tabs.every(x => x === 'card' || x === 'top'), JSON.stringify(st));
+      await page.keyboard.press('Escape'); await sleep(300);
+      ok('…and the page is usable when the walkthrough ends', (await state(page)).tour === 0 && (await panel(page)).menu === 'shut' && await usable(page));
+      await ctx.close();
+    }
   });
 
   /* ------------- a course started from a sheet that holds work but has no box to type in ------------- */

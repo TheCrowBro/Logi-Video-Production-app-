@@ -252,6 +252,9 @@ export function coverAll(screen) {
   document.querySelectorAll('.sheet-back').forEach(el => el.classList.add('behind-lock'));
   return () => {
     was.forEach(([el, inert]) => { if (el.isConnected) el.inert = inert; });
+    // A menu or a search that a walkthrough is showing may have been put up while the screen was over it (the step
+    // that shows it runs on after an unlock): it is there to look at, and stays out of reach whatever it was before.
+    document.querySelectorAll('#menuBack.shown, #searchBack.shown').forEach(el => { el.inert = true; });
     document.querySelectorAll('.sheet-back[data-covered], .tour[data-covered]').forEach(el => { el.inert = false; el.removeAttribute('data-covered'); });
     settleApp();
     if (app) app.removeAttribute('aria-hidden');
@@ -441,7 +444,7 @@ function takeConfig() {
   if (stale) saveCfg({ ...was, attempts: Math.max(was.attempts || 0, c.attempts || 0), until: Math.max(was.until || 0, c.until || 0) });
   else holdCfg(c);
   const now = S.cfg;
-  if (S.dropOffer && !offerDue()) S.dropOffer();
+  if (S.dropOffer && !offerDue()) S.dropOffer(true);
   if (!S.screen || S.checking) return;
   if (!now.bio !== !was.bio) { hideLock(); showLock(); }
   else if ((now.attempts || 0) !== (was.attempts || 0) || (now.until || 0) !== (was.until || 0) || !now.wipe !== !was.wipe) S.retell();

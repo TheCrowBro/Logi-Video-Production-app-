@@ -72,8 +72,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const { serve } = await import('../lib.mjs');
   const files = await serve(ROOT), answer = files.listeners('request')[0]; files.close();
   // Its worker script is answered from here, so a build deployed on this site is never seen by the other one.
-  let slow = 0, swNow = origSw;
-  const slowSite = require('http').createServer((req, res) => { if (/^\/sw\.js(\?|$)/.test(req.url)) { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' }); return res.end(swNow); } setTimeout(() => answer(req, res), slow); });
+  let slow = 0, swNow = origSw, down = false; // down: the server cannot be reached (it drops every connection)
+  const slowSite = require('http').createServer((req, res) => { if (down) return req.socket.destroy(); if (/^\/sw\.js(\?|$)/.test(req.url)) { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' }); return res.end(swNow); } setTimeout(() => answer(req, res), slow); });
   await new Promise(r => slowSite.listen(0, '127.0.0.1', r));
   const site = `http://localhost:${slowSite.address().port}/`;
   const ctx2 = await browser.newContext({ viewport: { width: 420, height: 860 } });
@@ -86,8 +86,9 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const cdp = await ctx2.newCDPSession(p2); await cdp.send('ServiceWorker.enable');
   // deploy: a new build number on the server, found by the page; the install has begun once the new cache exists
   const until = async (ms, test) => { for (const end = Date.now() + ms; Date.now() < end;) { if (await test()) return true; await sleep(100); } return false; };
-  const deploy = async build => {
+  const deploy = async (build, list = null) => {
     swNow = origSw.replace("const BUILD = 'dev';", `const BUILD = '${build}';`);
+    if (list) swNow = swNow.replace(/const SHELL = \[[\s\S]*?\n\];/, () => `const SHELL = [\n  ${list.map(f => `'${f}'`).join(', ')},\n];`);
     slow = 1500;
     await p2.evaluate(() => { navigator.serviceWorker.getRegistration().then(r => r.update()); });
     return until(15000, () => p2.evaluate(async n => (await caches.has(n)) && !!(await navigator.serviceWorker.getRegistration()).installing, 'logi-' + build));
@@ -125,6 +126,49 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const cut2 = await p2.reload().then(async () => { await p2.waitForSelector('#rolodex .drum-btn', { timeout: 15000 }); await p2.evaluate(() => window.logiGo('venues')); await p2.waitForSelector('.page-card[aria-label="Venues"]', { timeout: 8000 }); return 'opened, and a section not opened before came up'; }).catch(e => String(e.message).split('\n')[0]);
   await ctx2.setOffline(false);
   ok('…so after that update Vdex opens without a connection, with the sections that were never opened', /^opened/.test(cut2), cut2);
+  // The same with Vdex closed while the new build installs (the tap that woke the old worker was the last thing done
+  // in it). No page is left to ask for a tidy, and none makes a request, so the new build has to make itself whole as
+  // it takes over. Watched from a page of the site that is not the app and asks the worker for nothing (an address
+  // the site's own Worker answers).
+  // The worker in the repository lists fewer files than a deploy's does (tools/stamp-build.mjs writes the whole list
+  // at each deploy). This build lists every script, as a deployed one does, so that what it puts back is enough to
+  // start from with nothing else in the cache.
+  const scripts = dir => fs.readdirSync(`${ROOT}/${dir}`).flatMap(n => (fs.statSync(`${ROOT}/${dir}/${n}`).isDirectory() ? scripts(`${dir}/${n}`) : n.endsWith('.js') ? [`${dir}/${n}`] : []));
+  const WHOLE = [...new Set([...SHELL, ...scripts('js')])];
+  const watcher = await ctx2.newPage(); await watcher.goto(site + 'licence/web/status');
+  const lacks = name => watcher.evaluate(async ([n, shell]) => { if (!(await caches.has(n))) return -1; const have = new Set((await (await caches.open(n)).keys()).map(r => r.url)); return shell.filter(f => !have.has(new URL(f, location.origin + '/').href)).length; }, [name, WHOLE]);
+  const begun3 = await deploy('test000', WHOLE);
+  const deleted3 = await p2.evaluate(() => caches.delete('logi-test000'));
+  await p2.close(); slow = 0;
+  const took3 = await until(30000, async () => !(await watcher.evaluate(() => caches.keys())).includes('logi-test00')); // it has taken over: the cache of the build before is gone
+  await sleep(1500);
+  const closed = await lacks('logi-test000');
+  const cdp2 = await ctx2.newCDPSession(watcher); await cdp2.send('ServiceWorker.enable');
+  await cdp2.send('ServiceWorker.stopAllWorkers'); await sleep(400); // the idle worker is put to sleep; the next start wakes it
+  down = true;
+  const opens = (pg, how, section, label) => how().then(async () => { await pg.waitForSelector('#rolodex .drum-btn', { timeout: 15000 }); await pg.evaluate(id => window.logiGo(id), section); await pg.waitForSelector(`.page-card[aria-label="${label}"]`, { timeout: 8000 }); return 'opened, and a section not opened before came up'; }).catch(e => String(e.message).split('\n')[0]);
+  const p3 = await ctx2.newPage(); p3.on('dialog', d => d.accept());
+  const cut3 = await opens(p3, () => p3.goto(site), 'insurance', 'Insurance');
+  await p3.close();
+  ok('a new build whose cache was deleted while it installed, with Vdex closed before it took over, has put every file back by itself as it took over', begun3 && deleted3 && took3 && closed === 0, JSON.stringify([begun3, deleted3, took3, closed]));
+  ok('…so the next start, which has no connection, opens Vdex with the sections that were never opened', /^opened/.test(cut3), cut3);
+  // A put-back that cannot be done for want of a connection does not count as done. The offline copy is lost again
+  // and the worker put to sleep; the next start has no connection (it is that worker's first request, so its tidy
+  // runs then, and can fetch nothing); the start after that has one, with the same worker still awake.
+  await cdp2.send('ServiceWorker.stopAllWorkers'); await sleep(400);
+  await watcher.evaluate(() => caches.delete('logi-test000'));
+  const p4 = await ctx2.newPage();
+  const lostStart = await p4.goto(site).then(() => 'opened', e => String(e.message).split('\n')[0]);
+  await p4.close(); // (the browser's own error page would try again by itself once there is a connection)
+  down = false;
+  const p5 = await ctx2.newPage(); p5.on('dialog', d => d.accept());
+  await p5.goto(site); await p5.waitForSelector('#rolodex .drum-btn', { timeout: 20000 });
+  const again = await until(20000, async () => (await lacks('logi-test000')) === 0), left = await lacks('logi-test000');
+  down = true;
+  const cut4 = await opens(p5, () => p5.reload(), 'field', 'Field');
+  down = false;
+  ok('a put-back that failed for want of a connection is tried again once there is one, by the same worker: the start with a connection ends with every file in the offline copy, not only the ones it asked for', lostStart !== 'opened' && again && left === 0, JSON.stringify([lostStart, again, left]));
+  ok('…so Vdex then opens without a connection, with a section never opened', /^opened/.test(cut4), cut4);
   await ctx2.close(); slowSite.close();
   fs.writeFileSync(verPath, origVer.replace(/VERSION = '[^']+'/, "VERSION = '9.9.9'"));
   const served = await page.evaluate(() => fetch('js/version.js', { cache: 'no-store' }).then(r => r.text()));

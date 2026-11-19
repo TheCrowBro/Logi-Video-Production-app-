@@ -8,7 +8,8 @@
 // number cells of an .xlsx, workbooks and lists made to waste time, a list made from one's own items and kits, room
 // in the browser's storage (with and without a PIN) and saying so when a save is refused, a tap beside the sheet,
 // where Undo goes, and a spreadsheet shared to the installed web app. And: a copy of a kit that came from a link is
-// one's own, and a file shared while Vdex was locked is offered at the next unlocked start and goes with an erase.
+// one's own, a workmate's list made from his copy of a kit one also holds makes a kit of its own, and a file shared
+// while Vdex was locked is offered at the next unlocked start and goes with an erase.
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const { acceptTerms } = require('../helpers.cjs');
@@ -768,6 +769,46 @@ const ODD_XLSX = zip({
   await linkAdd();
   const after2 = await kitsNow(), myKit = after2.find(k => k.name === 'My interview set') || {}, patKit = after2.find(k => k.name === 'Interview kit') || {};
   ok('…so the sender’s next link makes its kit anew beside the copy, which keeps its name and the item put into it', /“Interview kit” \(3 items\) is made as a kit/.test(kitLine) && after2.length === 2 && myKit.gear === 'Sony FX6+Sigma 24-70+My light' && !myKit.marked && patKit.gear === 'Sony FX6+Sigma 24-70+Aputure 600d' && patKit.marked, JSON.stringify([kitLine, after2]));
+
+  // ---- a workmate's list, made from their copy of a kit one also has from its first sender ----
+  // Three people in turn on one page, each with a database of their own; every list is the one Share… makes
+  // (gearSnapshot), packed into a link and read back as any link is. What a link makes has an id of its own on each
+  // device, so the workmate's kit is nobody else's: it is made beside one's own copy of the first sender's kit.
+  const three = await K.page.evaluate(async () => {
+    const s = await import('./js/store.js'), so = await import('./js/share-out.js'), lp = await import('./js/link-pack.js'), sd = await import('./js/share-data.js'), gi = await import('./js/gear-import.js');
+    const person = (name, extra = {}) => s.replaceAll({ profile: { name }, gear: [], kits: [], bookings: [], ...extra });
+    const list = async () => sd.readShared('#' + await lp.pack(so.gearSnapshot({ kits: s.db.kits })));
+    const add = g => gi.applyGearImport(gi.planGearImport(g.items), { kits: g.kits, from: g.by.name });
+    const names = k => k.gear.map(id => (s.byId('gear', id) || {}).name).join('+'), kits = () => s.db.kits.map(k => `${k.name} (from ${k.shared ? k.shared.by : 'nobody'}): ${names(k)}`);
+    const rows = plan => plan.rows.map(r => `${r.item.name}:${r.why || 'new'}:${r.action}`).sort().join('|'), wait = () => new Promise(r => setTimeout(r, 25));
+    person('Pat Producer', { gear: [{ id: 'pc1', name: 'Sony FX6', category: 'Camera', serial: 'FX6-1' }, { id: 'pl1', name: 'Sigma 24-70', category: 'Lens', serial: 'SIG-1' }], kits: [{ id: 'pk1', name: 'Interview kit', gear: ['pc1', 'pl1'] }] });
+    const fromPat = await list();
+    // the workmate adds it, swaps the lens in his copy of the kit for a light of his own, renames it and shares his list
+    person('Alex Workmate'); add(fromPat); await wait();
+    s.update(d => { d.gear.push({ id: 'al1', name: 'Alex light', category: 'Lighting', serial: '', updatedAt: Date.now() }); Object.assign(d.kits[0], { name: 'Alex interview kit', gear: [d.kits[0].gear[0], 'al1'], updatedAt: Date.now() }); });
+    const fromAlex = await list(), refs = { mine: fromAlex.items.every(i => !/^p[cl]1$/.test(i.ref)) && fromAlex.kits[0].ref !== 'pk1' };
+    // one adds Pat's list too, renames the kit and puts a light of one's own into it
+    person('Dana Other'); add(fromPat); await wait();
+    s.update(d => { d.gear.push({ id: 'dl1', name: 'Dana light', category: 'Lighting', serial: '', updatedAt: Date.now() }); Object.assign(d.kits[0], { name: 'Dana’s interview set', gear: [...d.kits[0].gear, 'dl1'], updatedAt: Date.now() }); });
+    const out = { refs, before: kits() }, first = s.db.gear.find(g => g.name === 'Sony FX6').id;
+    // the workmate's list here: his camera is taken as another item (“Add anyway”), his light is new
+    const plan = gi.planGearImport(fromAlex.items);
+    out.rows = rows(plan); out.kitHere = !!gi.kitOf(s.db.kits, fromAlex.kits[0].ref);
+    plan.rows.find(r => r.item.name === 'Sony FX6').action = 'add';
+    gi.applyGearImport(plan, { kits: fromAlex.kits, from: 'Alex Workmate' });
+    out.after = kits();
+    // his list again, with a note on the camera: it is about the items and the kit his list made, not one's own
+    await wait();
+    const next = { ...fromAlex, items: fromAlex.items.map(i => (i.name === 'Sony FX6' ? { ...i, notes: 'from Alex, second time' } : i)) }, plan2 = gi.planGearImport(next.items);
+    out.rows2 = rows(plan2); out.kitThen = (gi.kitOf(s.db.kits, next.kits[0].ref) || {}).name;
+    gi.applyGearImport(plan2, { kits: next.kits, from: 'Alex Workmate' });
+    const cams = s.db.gear.filter(g => g.name === 'Sony FX6');
+    out.cams = cams.map(g => `${g.id === first ? 'first' : 'second'}:${g.shared.by}:${g.notes || '-'}`).join('|'); out.last = kits();
+    return out;
+  });
+  ok('a workmate’s list made from his copy of a kit one also holds names nothing of one’s own: his kit is not here yet, his camera has one’s serial number and his light is new', three.refs.mine && three.before.join('|') === 'Dana’s interview set (from Pat Producer): Sony FX6+Sigma 24-70+Dana light' && three.rows === 'Alex light:new:add|Sigma 24-70:serial:skip|Sony FX6:serial:skip' && !three.kitHere, JSON.stringify(three));
+  ok('…so his kit is made beside one’s own copy of the first sender’s kit, which keeps its name and what was put into it', three.after.join('|') === 'Dana’s interview set (from Pat Producer): Sony FX6+Sigma 24-70+Dana light|Alex interview kit (from Alex Workmate): Sony FX6+Alex light', JSON.stringify(three.after));
+  ok('…and his list again is about what his list made: the camera added from it is the one updated, the first one and one’s own kit are left as they are', three.rows2 === 'Alex light:ref:update|Sigma 24-70:serial:skip|Sony FX6:ref:update' && three.kitThen === 'Alex interview kit' && three.cams === 'first:Pat Producer:-|second:Alex Workmate:from Alex, second time' && three.last.join('|') === three.after.join('|'), JSON.stringify([three.rows2, three.kitThen, three.cams, three.last]));
   await K.ctx.close();
 
   /* ============================== a tap beside the sheet, and where Undo goes ============================== */

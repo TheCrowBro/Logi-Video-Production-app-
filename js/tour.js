@@ -80,12 +80,15 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
     if (n >= STEPS.length) return stop();
     i = n; const s = STEPS[n];
     // The walkthrough may be left (Skip, Escape) during any of the waits below. A step that was on its way then stops
-    // where it is: its hook does not run, and a menu or a search panel that arrived after the leaving (its file is
-    // fetched on first use) is closed again, since the walkthrough's own way out ran before there was anything to close.
+    // where it is: its hook does not run and it opens nothing. The menu and the search are in files fetched on first
+    // use, so the file is waited for here first, and the panel is opened only if the walkthrough is still this one.
+    // Whatever the person has opened meanwhile (the menu, the search, another walkthrough) is theirs and is left alone.
     if (s.go) { window.logiGo?.(s.go); await new Promise(r => setTimeout(r, 650)); if (active !== me) return; }
-    if (s.menu) await window.logiMenu?.open({ show: true }); else window.logiMenu?.close();
-    if (s.search) await window.logiSearch?.open({ show: true, query: '' }); else window.logiSearch?.close();
-    if (active !== me) { if (!active) { window.logiMenu?.close(); window.logiSearch?.close(); settleApp(); } return; }
+    if (s.menu) { await import('./menu.js').catch(() => {}); if (active !== me) return; await window.logiMenu?.open({ show: true }); } else window.logiMenu?.close();
+    if (s.search) { await import('./search.js').catch(() => {}); if (active !== me) return; await window.logiSearch?.open({ show: true, query: '' }); } else window.logiSearch?.close();
+    // Left in the moment between the file and the panel: the panel this step has just put up for show goes again (the
+    // walkthrough's own way out ran before it was there). One that is open for use is not this step's.
+    if (active !== me) { if (!active) { if (document.querySelector('#menuBack.shown')) window.logiMenu?.close(); if (document.querySelector('#searchBack.shown')) window.logiSearch?.close(); settleApp(); } return; }
     if (s.before) { try { await s.before(); } catch { /* the step still shows */ } await new Promise(r => setTimeout(r, 250)); if (active !== me) return; }
     target = find(s);
     if (s.target && !target) return step(n + dir); // nothing to point at here, skip

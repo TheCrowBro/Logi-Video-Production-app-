@@ -321,6 +321,8 @@ export function requirePaid(what) {
   return false;
 }
 
+// Resolves once initCloud() has found out whether a storage is linked: cloud.adapter is set by then, or stays null.
+let linkKnown; export const cloudKnown = new Promise(res => { linkKnown = res; });
 export async function initCloud() {
   cloud.feedUrl = lsGet('logi-feed-url') || '';
   // Coming back from a sign-in page: finish it, or say why it did not work and leave nothing half-linked.
@@ -352,12 +354,14 @@ export async function initCloud() {
       const handle = await kv('readonly', s => s.get('fileHandle'));
       if (handle) { const aux = await kv('readonly', s => s.get('auxHandle')); cloud.adapter = fileAdapter(handle, aux || null); cloud.auxName = aux ? aux.name : ''; }
     }
+    linkKnown();
     if (cloud.adapter) await sync();
     if (icloudFirst) {
       if (cloud.status === 'synced' || sealed) say('Connected to iCloud'); // behind the PIN lock the first copy waits for the unlock
       else { const msg = cloud.error || 'iCloud didn’t finish connecting. Tap Connect to try again.'; cloud.adapter?.signOut?.(); cloud.adapter = null; lsSet('logi-provider', null); cloud.notice = msg; setStatus('off'); say(msg); }
     }
   } catch (e) { setStatus('error', e.message); }
+  linkKnown();
   document.addEventListener('visibilitychange', () => { if (!document.hidden && cloud.adapter && cloud.status === 'synced') sync(); });
 }
 
@@ -375,16 +379,18 @@ const newer = (x, y) => (ts(y) > ts(x) ? y : x);
 // another ticks the checklist, and neither loses the other's work.
 const budgetAt = b => Number(b && b.budget && b.budget.updatedAt) || 0, boardAt = b => Number(b && b.board && b.board.updatedAt) || 0;
 // The budget and the stripboard each keep their own time, so a newer one survives a newer edit elsewhere on the booking.
-// On a booking added from a shared link, which strips the link made is written beside the board (shared.rows.strips,
-// js/share-import.js): that list goes with the board it describes. Left with the other copy's list, the next update
-// from the link would take its own strips for the receiver's and add them a second time.
+// On a booking added from a shared link, which strips the link made is written beside the board, by id
+// (shared.rows.strips, js/share-import.js). Both copies' lists are joined: an id is in a list only if a link made that
+// strip, on whichever device, so neither copy can be wrong about one, and a copy that knows of fewer must not win.
+// With one copy's list alone, a merge that takes the other's stripboard (or a copy handed back by a device on a
+// version that merged the board without the list) would leave strips of the link unlisted, and the next update from
+// the link would take them for the receiver's own and add them a second time. (An id whose strip has gone does no harm.)
 const mergeBooking = (x, y) => {
   const base = newer(x, y), other = base === x ? y : x; let out = base;
   if (budgetAt(other) > budgetAt(base)) out = { ...out, budget: other.budget };
-  if (boardAt(other) > boardAt(base)) {
-    out = { ...out, board: other.board };
-    if (out.shared && out.shared.rows && other.shared && other.shared.rows) out = { ...out, shared: { ...out.shared, rows: { ...out.shared.rows, strips: other.shared.rows.strips || [] } } };
-  }
+  if (boardAt(other) > boardAt(base)) out = { ...out, board: other.board };
+  const rows = base.shared && base.shared.rows, had = (rows && rows.strips) || [], seen = new Set(had), more = ((other.shared && other.shared.rows && other.shared.rows.strips) || []).filter(id => !seen.has(id));
+  if (rows && more.length) out = { ...out, shared: { ...out.shared, rows: { ...rows, strips: [...had, ...more] } } };
   return out;
 };
 const mergeNote = (x, y) => (nts(y) > nts(x) ? y : x);
@@ -422,9 +428,11 @@ export function mergeDb(local, remote) {
 
 // Merge the remote copy in, then push if anything here isn't in it yet. `quiet` skips the "Saving…" flicker (background polls).
 // One sync at a time. A sync asked for while another is running waits for it and then runs, so a fresh link (or a
-// change made meanwhile) is never skipped.
+// change made meanwhile) is never skipped. join: the caller only wants this device to know what is in the cloud, so a
+// sync that is already running will do, and no second one follows it.
 let syncing = null;
 export async function sync(opts = {}) {
+  if (opts.join && syncing) return syncing.catch(() => {});
   while (syncing) await syncing.catch(() => {});
   if (sealed) { pendingSync = true; return; }
   if (!cloud.adapter) return;

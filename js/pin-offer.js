@@ -8,8 +8,8 @@ import { h, nodes, toast, announce } from './util.js';
 import { PIN_MIN, PIN_MAX, PIN_RULE, pinField, pinProblem, checkPin, setPin, setOption, config, coverAll } from './lock.js';
 import { refreshTour } from './tour.js';
 
-// Shows the offer. done resolves when the screen has gone; drop() takes it away with no answer recorded (the lock
-// screen is coming up over it), so it is offered again after the next unlock.
+// Shows the offer. done resolves when the screen has gone; drop() takes it away with no answer recorded here: the lock
+// screen is coming up over it (it is offered again after the next unlock), or another tab has answered it.
 export function show({ knowsPin }) {
   let finish, view = '', busy = false, over = false;
   const done = new Promise(res => { finish = res; });
@@ -22,7 +22,7 @@ export function show({ knowsPin }) {
     document.removeEventListener('keydown', keys);
     screen.remove(); uncover();
     const main = document.getElementById('page'); main && main.focus({ preventScroll: true }); // as the lock screen does on its way out
-    if (dropped !== true) refreshTour(); // a walkthrough step that was showing the menu or the search shows it again, as after an unlock
+    if (dropped !== true) refreshTour(); // a walkthrough underneath gets the focus back in its card, as after an unlock
     finish();
   };
   const keep = () => { if (busy) return; setOption({ max: PIN_MAX }); end(); announce('Your PIN stays as it is'); };
@@ -84,11 +84,16 @@ export function show({ knowsPin }) {
 
   // The offer can arrive late (its file is fetched after the unlock), over a menu or a search opened meanwhile. They
   // close first, as under the lock screen: left open underneath, their own key handlers would take the Escape meant
-  // for this screen and give the page behind it back to the keyboard.
-  window.logiMenu?.close(); window.logiSearch?.close();
+  // for this screen and give the page behind it back to the keyboard. Not one that a walkthrough is showing (the
+  // unlock has just put it back for the card that points into it): that one has no key handlers and is out of reach,
+  // and closing it would leave the card pointing at nothing, or make the walkthrough skip to its next card.
+  if (!document.querySelector('#menuBack.shown')) window.logiMenu?.close();
+  if (!document.querySelector('#searchBack.shown')) window.logiSearch?.close();
   document.addEventListener('keydown', keys);
   document.body.append(screen);
   const uncover = coverAll(screen);
   choice();
-  return { done, drop: () => end(true) };
+  // drop(answered): answered in another tab, the offer goes as if it had been answered here; without it, the lock
+  // screen is coming up.
+  return { done, drop: answered => end(!answered) };
 }

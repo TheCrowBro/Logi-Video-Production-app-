@@ -11,7 +11,10 @@
 // formula guard in the TC Notes spreadsheet, and an Add whose follow-up cannot be fetched. And what a second check of
 // those fixes found: a contact typed by hand under a name a later link also carries, an invoice headed anew by an
 // update, a link that names no sender, the producer's deliverables, a sync between two devices that took the same
-// link (or of which only one took its update), and a workmate's card under one's own email address.
+// link (or of which only one took its update), and a workmate's card under one's own email address. And what a check
+// of those repairs found: a second device reads the cloud copy before it shows a link, what it adds when it cannot is
+// its own (so nothing done on the first device is replaced, deleted or undone), a preview is drawn again when what it
+// would add has arrived meanwhile, and a sync never forgets a strip that a link made.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const { acceptTerms } = require('../helpers.cjs');
@@ -534,7 +537,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   // ---- a booking shared on is still one's own ----
   const onward = await U.page.evaluate(inc => Promise.all([import('./js/store.js'), import('./js/crew-link.js')]).then(([s, m]) => m.crewLink(s.db.bookings[0], inc)), EVERYTHING);
   await arrive(U.page, hashOf(onward), '.sheet');
-  ok('a booking that came from a link and is shared on is known as one’s own when its link comes back: nothing to add, no copy (the link was made from it, or from someone else’s copy of the same shared booking, which has the same reference)', /This booking is yours/.test(await sheetText(U.page)) && /this link was made from it, or from another copy of the same shared booking, so there is nothing to add/.test(await sheetText(U.page)) && (await U.page.locator('.sheet .add-actions').count()) === 0 && (await db(U.page)).bookings.length === 1);
+  ok('a booking that came from a link and is shared on is known as one’s own when its link comes back: nothing to add, no copy', /This booking is yours/.test(await sheetText(U.page)) && /this link was made from it, so there is nothing to add/.test(await sheetText(U.page)) && (await U.page.locator('.sheet .add-actions').count()) === 0 && (await db(U.page)).bookings.length === 1);
   await U.page.keyboard.press('Escape'); await sleep(200);
 
   // ---- a booking from before Vdex kept what a link supplied ----
@@ -650,54 +653,181 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
     s.update(d => { const x = mine(d); x.checks = { 'x:t': 1 }; x.updatedAt = Date.now() + 5000; });
     const b = JSON.parse(s.serialize()), out = {};
     for (const [k, m] of [['ba', s.mergeDb(b, a)], ['ab', s.mergeDb(a, b)]]) { const x = mine(m), sc = x.board.list.filter(y => y.type === 'scene'); out[k] = { scenes: sc.map(y => y.scene).join(), strips: x.shared.rows.strips.length, ticked: !!(x.checks && x.checks['x:t']), listed: sc.every(y => x.shared.rows.strips.includes(y.id)) }; }
+    // A device still on the version before this one merges the same two copies its own way: its later booking with the
+    // newer stripboard put into it, beside its own, older list of the link's strips. That copy comes back through the
+    // cloud as the newer booking, with the very same board (and once more after a strip was moved on that device,
+    // which makes its board the newer one too). This device knows of one strip more, and does not let go of it.
+    const scenes = d => mine(d).board.list.filter(y => y.type === 'scene').map(y => y.scene).join();
+    out.old = [];
+    for (const edited of [false, true]) {
+      const old = JSON.parse(JSON.stringify(b)), x = mine(old); x.board = JSON.parse(JSON.stringify(mine(a).board));
+      if (edited) { x.board.list.unshift(x.board.list.splice(1, 1)[0]); x.board.updatedAt = Date.now() + 6000; x.updatedAt = Date.now() + 6000; }
+      const handed = { listed: x.shared.rows.strips.length, scenes: scenes(old) };
+      s.replaceAll(s.mergeDb(a, old));
+      const listed = mine(s.db).shared.rows.strips.length, own = si.planBooking(await read(two)).ownStrips;
+      await wait(); si.applyBooking(await read(two));
+      out.old.push({ handed, listed, own, after: scenes(s.db).split(',').sort().join(), strips: mine(s.db).shared.rows.strips.length, ticked: !!(mine(s.db).checks && mine(s.db).checks['x:t']) });
+    }
     s.replaceAll(s.mergeDb(b, a));
     out.own = si.planBooking(await read(two)).ownStrips;
     return out;
   }, [linkOne, linkTwo]);
-  ok('after a sync that keeps one device’s later edit of the booking and the other’s updated stripboard, the list of the strips the link made is the one that goes with that board', ['ba', 'ab'].every(k => synced[k].scenes === '1,2,3' && synced[k].strips === 3 && synced[k].ticked && synced[k].listed) && synced.own === 0, JSON.stringify(synced));
+  ok('a copy that comes back from a device still on the version before, with the newer stripboard beside that device’s older list of the link’s strips (also after a strip was moved there), does not make this device forget a strip the link made: the same link again counts none as one’s own and leaves each scene once', synced.old.length === 2 && synced.old.every(o => o.handed.listed === 2 && o.handed.scenes.split(',').length === 3 && o.listed === 3 && o.own === 0 && o.after === '1,2,3' && o.strips === 3 && o.ticked), JSON.stringify(synced.old));
+  ok('after a sync that keeps one device’s later edit of the booking and the other’s updated stripboard, the list of the strips the link made names every strip the link put on that board', ['ba', 'ab'].every(k => synced[k].scenes === '1,2,3' && synced[k].strips === 3 && synced[k].ticked && synced[k].listed) && synced.own === 0, JSON.stringify(synced));
   await arrive(M.page, linkTwo);
   const againM = await sheetText(M.page);
   await update(M.page);
   const afterM = (await db(M.page)).bookings.find(b => b.shared && b.shared.ref === 'REF-M1').board.list.filter(x => x.type === 'scene').map(x => `${x.scene} ${x.set}`);
   ok('…so the same link again counts no strips as one’s own, and the update leaves each scene once', !/Your strips/.test(againM) && afterM.join('|') === '1 KITCHEN|2 HALL|3 GARDEN', JSON.stringify([(againM.match(/Your strips[^\n]*/) || [''])[0], afterM]));
 
-  // ---- the same links added on two devices before either has read the other's copy ----
+  // ---- the same links added on two devices of one person ----
+  // A link makes records with ids of their own on each device (never an id worked out from the link: two devices would
+  // then hold one record under one id, and the later copy, or a Delete or an Undo of it, would take the other device's
+  // work with it). So a device that cannot read the cloud copy first ends with copies of its own, and nothing is lost.
   const dock = { venue: 'Dock Hall', address: '9 Dock Road, Portside', access: 'Side door', parking: '', power: '', hospital: '', rules: '' };
   const harbour = (over = {}) => shoot({ ref: 'REF-X1', title: 'Harbour film', location: dock, ...over });
-  const kitList = { v: 1, kind: 'gear', made: Date.now(), title: 'Interview kit', currency: '£', by: { name: 'Pat Producer' }, items: [{ ref: 'gx1', name: 'Sony FX6', category: 'Camera', serial: 'FX6-1' }, { ref: 'gx2', name: 'Sigma 24-70', category: 'Lens' }], kits: [{ ref: 'kx1', name: 'Interview kit', items: [[0, 1], [1, 1]] }] };
-  const laterCall = harbour({ made: Date.now() + 1000 }); laterCall.call = { ...laterCall.call, general: '06:15' };
-  const twice = await M.page.evaluate(async ([bk, upd, gear, onward, direct]) => {
+  const kitList = (n = 'x', over = {}) => ({ v: 1, kind: 'gear', made: Date.now(), title: 'Interview kit', currency: '£', by: { name: 'Pat Producer' }, items: [{ ref: `g${n}1`, name: 'Sony FX6', category: 'Camera', serial: `FX6-${n}` }, { ref: `g${n}2`, name: 'Sigma 24-70', category: 'Lens' }], kits: [{ ref: `k${n}1`, name: 'Interview kit', items: [[0, 1], [1, 1]] }], ...over });
+  // An equipment list anyone could write: its item and its kit carry the references of that booking and of its venue.
+  const oddList = kitList('x', { title: 'Spares', by: { name: 'Sam Sender' }, items: [{ ref: 'REF-X1', name: 'Old tripod', category: 'Support' }, { ref: 'REF-X1-venue', name: 'Sandbag', category: 'Grip' }], kits: [{ ref: 'REF-X1', name: 'Spares', items: [[0, 1], [1, 1]] }] });
+  const twice = await M.page.evaluate(async ([bk, gear, odd]) => {
     const s = await import('./js/store.js'), sd = await import('./js/share-data.js'), si = await import('./js/share-import.js'), gi = await import('./js/gear-import.js');
     const read = l => sd.readShared('#' + l), g = await read(gear), wait = () => new Promise(r => setTimeout(r, 25));
-    const addBoth = async () => { si.applyBooking(await read(bk)); gi.applyGearImport(gi.planGearImport(g.items), { kits: g.kits, from: 'Pat Producer' }); return JSON.parse(s.serialize()); };
+    const addBoth = async () => { si.applyBooking(await read(bk)); return gi.applyGearImport(gi.planGearImport(g.items), { kits: g.kits, from: 'Pat Producer' }); };
     const from = x => !!x.shared && /^(REF-X1|gx\d|kx\d)$/.test(x.shared.ref || '');
     const count = d => ({ bookings: d.bookings.filter(from).length, venues: d.venues.filter(from).length, gear: d.gear.filter(from).length, kits: d.kits.filter(from).length });
-    const start = s.serialize();
-    const a = await addBoth(); s.replaceAll(JSON.parse(start)); await wait(); const b = await addBoth(); // device A, then device B from the same start
-    const out = { each: [count(a), count(b)] };
-    s.replaceAll(s.mergeDb(a, b)); out.merged = count(s.db);
-    out.kit = s.db.kits.filter(from).map(k => k.gear.map(id => (s.db.gear.find(x => x.id === id) || {}).name).join('+')).join('|');
-    si.applyBooking(await read(upd)); // the producer's update, on either device after the sync
-    out.calls = s.db.bookings.filter(from).map(x => x.callSheet.generalCall).join('|');
-    out.again = gi.planGearImport(g.items).rows.map(r => r.why + ':' + r.action).join('|');
-    // “Add anyway, as another item” still makes another item, and a booking deleted and added again is a record of its own
-    const plan = gi.planGearImport(g.items); plan.rows.forEach(r => { r.action = 'add'; }); gi.applyGearImport(plan, { kits: [], from: 'Pat Producer' });
-    out.anyway = { gear: s.db.gear.filter(from).length, ids: new Set(s.db.gear.map(x => x.id)).size === s.db.gear.length };
-    const was = s.db.bookings.find(from).id; s.remove('bookings', was); await wait(); si.applyBooking(await read(bk));
-    const back = s.db.bookings.filter(from); out.readded = back.length === 1 && back[0].id !== was && s.mergeDb(JSON.parse(s.serialize()), a).bookings.filter(from).length === 1;
-    // someone who holds a workmate's link made from the workmate's copy of a shoot, and then the producer's own link:
-    // the workmate's link again updates the booking it made, and is not taken for a link made from the other one
-    si.applyBooking(await read(onward)); si.applyBooking(await read(direct));
-    const p = si.planBooking(await read(onward));
-    out.onward = { own: !!p.own, updates: !!p.existing && p.existing.shared.ref === 'link-REF-X2', held: s.db.bookings.filter(x => x.shared && /REF-X2$/.test(x.shared.ref)).length };
+    const start = s.serialize(), out = {};
+    // the phone adds both links, and works on what they made: an invoice, the items on the booking, a place, a name
+    await addBoth(); await wait();
+    s.update(d => { const t = Date.now(), b = d.bookings.find(from), it = d.gear.find(from), k = d.kits.find(from); Object.assign(b, { invoice: { number: 'INV-0007', status: 'Sent', lines: [] }, gear: d.gear.filter(from).map(x => x.id), updatedAt: t }); Object.assign(it, { location: 'Flight case 1', updatedAt: t }); Object.assign(k, { name: 'My interview set', updatedAt: t }); });
+    const a = JSON.parse(s.serialize()), mine = new Set([...a.bookings, ...a.venues, ...a.gear, ...a.kits].filter(from).map(x => x.id));
+    // the phone's work, still whole in a copy of the database
+    const kept = d => { const b = d.bookings.find(x => mine.has(x.id)); return !!b && !!b.invoice && b.invoice.number === 'INV-0007' && b.gear.length === 2 && b.gear.every(id => d.gear.some(x => x.id === id)) && d.venues.some(x => x.id === b.venueId) && d.gear.some(x => mine.has(x.id) && x.location === 'Flight case 1') && d.kits.some(x => mine.has(x.id) && x.name === 'My interview set' && x.gear.length === 2); };
+    // the computer, from the same start and with no way to read the cloud copy, adds them too, a moment later
+    s.replaceAll(JSON.parse(start)); await wait();
+    const doneB = await addBoth(), b1 = JSON.parse(s.serialize());
+    out.each = [count(a), count(b1)];
+    out.apart = [...b1.bookings, ...b1.venues, ...b1.gear, ...b1.kits].filter(from).every(x => !mine.has(x.id));
+    out.both = [s.mergeDb(b1, a), s.mergeDb(a, b1)].map(d => ({ ...count(d), kept: kept(d) }));
+    // …and then takes its own back: Undo on the equipment, Delete on the booking and on the venue
+    await wait(); gi.undoGearImport(doneB); s.remove('bookings', s.db.bookings.find(from).id); s.remove('venues', s.db.venues.find(from).id);
+    const b2 = JSON.parse(s.serialize());
+    out.undone = [s.mergeDb(b2, a), s.mergeDb(a, b2)].map(d => ({ ...count(d), kept: kept(d) }));
+    // the list that borrows the booking's and the venue's references, added on the phone and undone
+    s.replaceAll(JSON.parse(JSON.stringify(a))); await wait();
+    const o = await read(odd), doneO = gi.applyGearImport(gi.planGearImport(o.items), { kits: o.kits, from: 'Sam Sender' });
+    out.oddAdded = doneO.added.length; await wait(); gi.undoGearImport(doneO);
+    const after = s.mergeDb(JSON.parse(s.serialize()), a);
+    out.odd = { ...count(after), kept: kept(after), tombs: Object.keys(s.db.deleted).filter(id => mine.has(id)).length };
     return out;
-  }, [await pack(harbour()), await pack(laterCall), await pack(kitList), await pack(shoot({ ref: 'link-REF-X2', title: 'Second film', by: { name: 'Wes Workmate', business: '', phone: '', email: '' } })), await pack(shoot({ ref: 'REF-X2', title: 'Second film' }))]);
-  ok('each device makes one booking, one venue, two items and one kit from the links', twice.each.every(c => JSON.stringify(c) === JSON.stringify({ bookings: 1, venues: 1, gear: 2, kits: 1 })), JSON.stringify(twice.each));
-  ok('…and after the sync there is still one of each, not two: what a link makes has the same id on every device', JSON.stringify(twice.merged) === JSON.stringify({ bookings: 1, venues: 1, gear: 2, kits: 1 }) && twice.kit === 'Sony FX6+Sigma 24-70', JSON.stringify([twice.merged, twice.kit]));
-  ok('…so the producer’s update reaches the one booking there is, and the equipment link again finds each item once', twice.calls === '06:15' && twice.again === 'ref:update|ref:update', JSON.stringify([twice.calls, twice.again]));
-  ok('“Add anyway” still makes another item with an id of its own, and a booking deleted and added again is a new record that a merge with an older copy does not take away', twice.anyway.gear === 4 && twice.anyway.ids && twice.readded, JSON.stringify([twice.anyway, twice.readded]));
-  ok('a link whose reference is the id of a booking made from another link updates the booking that link made before, and is not taken for one’s own', !twice.onward.own && twice.onward.updates && twice.onward.held === 2, JSON.stringify(twice.onward));
+  }, [await pack(harbour()), await pack(kitList()), await pack(oddList)]);
+  const once = { bookings: 1, venues: 1, gear: 2, kits: 1 }, doubled = { bookings: 2, venues: 2, gear: 4, kits: 2 };
+  ok('each device makes one booking, one venue, two items and one kit from the links, under ids of its own', twice.each.every(c => JSON.stringify(c) === JSON.stringify(once)) && twice.apart, JSON.stringify([twice.each, twice.apart]));
+  ok('a second device that could not read the cloud copy leaves two of each after the sync, and everything done on the first is still there: the invoice, the items on the booking, the place, the kit’s name', twice.both.every(m => JSON.stringify(m) === JSON.stringify({ ...doubled, kept: true })), JSON.stringify(twice.both));
+  ok('…and Undo and Delete on that second device take away its own copies only: the first device’s booking, venue, items and kit stay, on both', twice.undone.every(m => JSON.stringify(m) === JSON.stringify({ ...once, kept: true })), JSON.stringify(twice.undone));
+  ok('an equipment list whose item and kit carry the references of a booking and its venue is added and undone without touching them', twice.oddAdded === 2 && JSON.stringify(twice.odd) === JSON.stringify({ ...once, kept: true, tombs: 0 }), JSON.stringify([twice.oddAdded, twice.odd]));
+
+  // A preview says what the tap would do as things stood when it was drawn. When the booking arrives meanwhile (the
+  // cloud copy came in with it), the tap adds nothing: the sheet is drawn again as an update, and says why.
+  await arrive(M.page, await pack(harbour({ ref: 'REF-X4', title: 'Late film' })));
+  const lateWas = await sheetText(M.page);
+  await M.page.evaluate(async l => { const sd = await import('./js/share-data.js'), si = await import('./js/share-import.js'); si.applyBooking(await sd.readShared('#' + l)); }, await pack(harbour({ ref: 'REF-X4', title: 'Late film' })));
+  await M.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await M.page.waitForSelector('.sheet .add-again', { timeout: 15000 }).catch(() => {}); await sleep(200);
+  const lateNow = await sheetText(M.page).catch(() => '(no sheet)'), lateHeld = (await db(M.page)).bookings.filter(b => b.shared && b.shared.ref === 'REF-X4').length;
+  ok('a booking that arrives while its preview is open is not added a second time by the tap: the preview is drawn again as an update, and says that the Bookings changed', /Add this booking\?/.test(lateWas) && /Update this booking\?/.test(lateNow) && /Your Bookings changed while this was open, so this has been worked out again\. Check it, then tap again\./.test(lateNow) && lateHeld === 1 && (await M.page.locator('.sheet-back').count()) === 1, JSON.stringify([lateNow.slice(0, 200), lateHeld]));
+  if (/Update this booking\?/.test(lateNow)) await update(M.page);
+  ok('…and the second tap updates the one booking there is', /Update this booking\?/.test(lateNow) && (await db(M.page)).bookings.filter(b => b.shared && b.shared.ref === 'REF-X4').length === 1);
   await M.ctx.close();
+
+  // ---- two devices on one cloud folder: the cloud copy is read before a link is looked at ----
+  // A stand-in for the person's own storage (a WebDAV folder), which each device's requests reach through its browser.
+  // held: the storage does not answer that device (no usable connection) until let go; slow: it takes that long to.
+  const cloud = { file: '', held: {}, letGo: {}, slow: {} }; // an empty file to begin with, which reads as no copy yet (a missing file would be a 404 in the console)
+  const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': '*', 'Access-Control-Allow-Methods': '*' };
+  const device = async who => {
+    const D = await open({ init: `try { localStorage.setItem('logi-provider', 'webdav'); localStorage.setItem('logi-webdav', JSON.stringify({ kind: 'webdav', url: 'https://dav.test/vdex', user: 'u', pass: 'p' })); } catch (e) {}` });
+    await D.ctx.route('https://dav.test/**', async r => {
+      const q = r.request(), m = q.method(), main = decodeURIComponent(new URL(q.url()).pathname.split('/').pop()) === 'vdex-production-db.json';
+      if (m === 'OPTIONS') return r.fulfill({ status: 204, headers: CORS });
+      if (cloud.held[who]) await cloud.held[who];
+      if (cloud.slow[who]) await sleep(cloud.slow[who]);
+      if (m === 'PUT') { if (main) cloud.file = q.postData(); return r.fulfill({ status: 201, headers: CORS }); }
+      return main && cloud.file != null ? r.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: cloud.file }) : r.fulfill({ status: 404, headers: CORS });
+    });
+    await D.page.goto(BASE); await D.page.waitForSelector('#rolodex .drum-btn');
+    return D;
+  };
+  const hold = who => { cloud.held[who] = new Promise(res => { cloud.letGo[who] = () => { cloud.held[who] = null; res(); }; }); };
+  const syncNow = page => page.evaluate(() => import('./js/store.js').then(s => s.sync()));
+  const eventually = async (test, ms = 20000) => { for (const end = Date.now() + ms; Date.now() < end;) { if (await test()) return true; await sleep(150); } return false; };
+  const settled = page => eventually(() => page.evaluate(() => import('./js/store.js').then(s => s.cloud.status === 'synced')));
+  // “Add from a link”, as on a device where a link cannot open Vdex by itself: paste it, then Show what it holds.
+  const paste = async (page, packed, slow = false) => {
+    await page.evaluate(() => import('./js/share-add.js').then(m => m.openAddFromLink()));
+    await page.locator('.sheet textarea.share-link').fill(BASE + 'shared.html#' + packed); await page.locator('.sheet button:has-text("Show what it holds")').click();
+    const told = slow ? await page.waitForSelector('.toast:has-text("Checking your cloud storage first…")', { timeout: 8000 }).then(() => true, () => false) : null;
+    await page.waitForSelector('.sheet .add-preview', { timeout: 20000 }); await sleep(150);
+    return told;
+  };
+  const holds = (page, re) => page.evaluate(src => import('./js/store.js').then(s => { const of = x => !!x.shared && new RegExp(src).test(x.shared.ref || ''); const b = s.db.bookings.find(of); return { bookings: s.db.bookings.filter(of).length, venues: s.db.venues.filter(of).length, gear: s.db.gear.filter(of).length, kits: s.db.kits.filter(of).map(k => `${k.name}:${k.gear.length}`).join(), invoice: b && b.invoice ? b.invoice.number : '', on: b ? (b.gear || []).filter(id => s.db.gear.some(g => g.id === id)).length : 0, place: s.db.gear.filter(of).map(g => g.location || '-').join(), ids: [...s.db.bookings, ...s.db.gear, ...s.db.kits].filter(of).map(x => x.id).sort().join() }; }), re.source);
+  const PC = await device('computer'), pcLinked = await settled(PC.page); // open first, and left open: it reads the cloud copy when it starts and not again by itself
+  const PH = await device('phone'), phLinked = await settled(PH.page);
+  // What the phone does with a booking and a list it has added: an invoice, the items on the booking, a place, the kit's name.
+  const work = re => PH.page.evaluate(src => import('./js/store.js').then(s => s.update(d => { const of = x => !!x.shared && new RegExp(src).test(x.shared.ref || ''), t = Date.now(), b = d.bookings.find(of), k = d.kits.find(of); if (b) Object.assign(b, { invoice: { number: 'INV-0009', status: 'Sent', lines: [] }, gear: d.gear.filter(of).map(x => x.id), updatedAt: t }); d.gear.filter(of).forEach(g => Object.assign(g, { location: 'Flight case 1', updatedAt: t })); if (k) Object.assign(k, { name: 'My interview set', updatedAt: t }); })), re.source);
+  const Y = /^(REF-Y1|gy\d|ky\d)$/, bkY = await pack(harbour({ ref: 'REF-Y1' })), gearY = await pack(kitList('y'));
+  await arrive(PH.page, gearY); await PH.page.locator('.sheet .add-go').click(); await PH.page.waitForSelector('.gear-card.just-added');
+  await arrive(PH.page, bkY); await PH.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await PH.page.waitForSelector('.bk-detail');
+  await work(Y); await syncNow(PH.page);
+  const ph1 = await holds(PH.page, Y), pcBefore = await holds(PC.page, Y);
+  await paste(PC.page, bkY);
+  const pcBk = await sheetText(PC.page);
+  ok('a device that was open before another added a link reads the cloud copy before it shows that link: it offers to update the booking, not to add it again', pcLinked && phLinked && pcBefore.bookings === 0 && /Update this booking\?/.test(pcBk) && /is in your Bookings already/.test(pcBk) && (await PC.page.locator('.sheet .add-again').count()) === 0, JSON.stringify([pcBefore, pcBk.slice(0, 120)]));
+  if (/Update this booking\?/.test(pcBk)) await update(PC.page); else { await PC.page.keyboard.press('Escape'); await sleep(200); }
+  await paste(PC.page, gearY);
+  const pcGear = await PC.page.locator('.sheet .add-sum').innerText();
+  ok('…and the equipment list is found there too: its items are set to update, none is new', pcGear === '2 to update', pcGear);
+  await PC.page.keyboard.press('Escape'); await sleep(200);
+  await syncNow(PC.page); await syncNow(PH.page); await syncNow(PC.page);
+  const ph2 = await holds(PH.page, Y), pc2 = await holds(PC.page, Y);
+  ok('…so after the sync both devices hold one booking, one venue, two items and one kit, with what was done on the first: the invoice, the items on the booking, their place, the kit’s name', JSON.stringify(ph2) === JSON.stringify(pc2) && JSON.stringify(ph2) === JSON.stringify({ bookings: 1, venues: 1, gear: 2, kits: 'My interview set:2', invoice: 'INV-0009', on: 2, place: 'Flight case 1,Flight case 1', ids: ph1.ids }), JSON.stringify([ph2, pc2]));
+
+  // The computer's storage stops answering. The phone adds another list and works on it; the computer, which cannot
+  // know, is offered to add it, and does: copies of its own, which Undo takes away again without touching the phone's.
+  const Z = /^(gz\d|kz\d)$/, gearZ = await pack(kitList('z'));
+  hold('computer');
+  await arrive(PH.page, gearZ); await PH.page.locator('.sheet .add-go').click(); await PH.page.waitForSelector('.gear-card.just-added');
+  await work(Z); await syncNow(PH.page);
+  const ph3 = await holds(PH.page, Z), waited = Date.now();
+  const toldZ = await paste(PC.page, gearZ, true);
+  const pcZ = { told: toldZ, sum: await PC.page.locator('.sheet .add-sum').innerText(), after: Date.now() - waited };
+  ok('a device whose storage does not answer is not kept waiting for it: it says that it is checking the cloud storage, and after a few seconds the preview comes as the device knows things', pcZ.told && pcZ.sum === '2 to add' && pcZ.after > 3500 && pcZ.after < 15000, JSON.stringify(pcZ));
+  await PC.page.locator('.sheet .add-go').click(); await PC.page.waitForSelector('.undo-bar');
+  const pcOwn = await holds(PC.page, Z);
+  await PC.page.locator('.undo-bar button', { hasText: 'Undo' }).click(); await sleep(400);
+  // The same list once more, the storage still silent: the preview is up, and only then does the cloud copy come in.
+  await paste(PC.page, gearZ);
+  const lateSum = await PC.page.locator('.sheet .add-sum').innerText();
+  cloud.letGo.computer();
+  await eventually(() => PC.page.evaluate(() => import('./js/store.js').then(s => s.db.gear.filter(g => g.shared && /^gz\d$/.test(g.shared.ref || '')).length >= 2)));
+  const lateBtn = await PC.page.locator('.sheet .add-go').innerText();
+  await PC.page.locator('.sheet .add-go').click(); await PC.page.waitForSelector('.sheet .add-again', { timeout: 15000 }).catch(() => {}); await sleep(200);
+  const lateGear = { text: await sheetText(PC.page), sum: await PC.page.locator('.sheet .add-sum').innerText(), held: await holds(PC.page, Z) };
+  ok('an equipment list whose preview was up before the cloud copy came in is not added a second time by the tap: the preview is drawn again with its items set to update, and says that the Equipment changed', lateSum === '2 to add' && lateBtn === 'Add 2 items to my Equipment' && lateGear.sum === '2 to update' && /Your Equipment changed while this was open, so this has been worked out again\. Check it, then tap again\./.test(lateGear.text) && lateGear.held.gear === 2 && lateGear.held.ids === ph3.ids, JSON.stringify([lateSum, lateBtn, lateGear.sum, lateGear.held]));
+  await PC.page.keyboard.press('Escape'); await sleep(200);
+  await syncNow(PH.page); await syncNow(PC.page); await syncNow(PH.page); await syncNow(PC.page);
+  const ph4 = await holds(PH.page, Z), pc4 = await holds(PC.page, Z);
+  ok('…and the copies the computer made while it could not know, and took back with Undo, were its own: the phone’s items, their place and its kit are as they were, on both devices', pcOwn.gear === 2 && pcOwn.ids !== ph3.ids && JSON.stringify(ph4) === JSON.stringify(ph3) && JSON.stringify(pc4) === JSON.stringify(ph3) && ph3.kits === 'My interview set:2' && ph3.place === 'Flight case 1,Flight case 1', JSON.stringify([pcOwn, ph3, ph4, pc4]));
+  // A device started by the link itself (“Add to my Vdex” on the shared page opens Vdex afresh): its first read of the
+  // cloud copy is still on its way when the link is looked at, and the preview waits for that read.
+  const bkW = await pack(harbour({ ref: 'REF-Y2', title: 'Pier film' }));
+  await arrive(PH.page, bkW); await PH.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await PH.page.waitForSelector('.bk-detail');
+  await syncNow(PH.page);
+  cloud.slow.computer = 700;
+  await arrive(PC.page, bkW);
+  const cold = await sheetText(PC.page);
+  cloud.slow.computer = 0;
+  ok('a device that the link itself starts waits for its first read of the cloud copy before it shows the link: the booking added on the other device is offered as an update', /Update this booking\?/.test(cold) && /“Pier film” is in your Bookings already/.test(cold), cold.slice(0, 160).replace(/\n/g, ' | '));
+  await PC.page.keyboard.press('Escape'); await sleep(200);
+  await PC.ctx.close(); await PH.ctx.close();
 
   /* ============================== a card that only looks like someone on the Crew list ============================== */
   const C = await open();
@@ -1040,7 +1170,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('the same for a contact when the Crew page cannot be fetched: the person is added and said to be, and nothing says otherwise', o2.crew === 'Otto Offline' && o2.toasts.join('|') === 'Added to your Crew' && o2.sheets === 0 && O2.broke.length === 0, JSON.stringify([o2, O2.broke]));
   await O2.ctx.close();
   const origin = new URL(BASE).origin;
-  const outside = requests.filter(u => !u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:') && !/^https:\/\/api\.open-meteo\.com\//.test(u));
+  const outside = requests.filter(u => !u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:') && !/^https:\/\/api\.open-meteo\.com\//.test(u) && !u.startsWith('https://dav.test/')); // dav.test: the stand-in for one's own cloud storage in the two-device cases
   const leaked = requests.filter(u => u.includes(hashOf(cardLink).slice(0, 40)) || u.includes(hashOf(kitLink).slice(0, 40)) || /[?&]add=/.test(u));
   ok('nothing was sent anywhere in all of this: every request was for the app’s own files, and no link’s contents were in any of them', outside.length === 0 && leaked.length === 0, [...outside, ...leaked].slice(0, 3).join(' | '));
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));

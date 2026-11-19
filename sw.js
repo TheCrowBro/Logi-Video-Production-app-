@@ -22,19 +22,33 @@ const dropOld = () => caches.keys().then(ks => Promise.all(ks.filter(k => k !== 
 // Puts back whatever of this build is missing from its cache. The worker of the build before this one can wake while
 // this one is installing and delete this build's half-filled cache as an old one (its own tidy below; builds from
 // before the guard there do it on any request). This build would then take over with a few files, or none, and Vdex
-// would not open offline. So after each tidy the list is checked and the missing files are fetched again.
+// would not open offline. So the list is checked as this build takes over and at each tidy, and the missing files are
+// fetched again. → whether every file is there now (false: one could not be fetched, as with no connection).
 const refill = () => caches.open(CACHE).then(async c => {
   const have = new Set((await c.keys()).map(r => r.url));
-  await Promise.allSettled(SHELL.filter(p => !have.has(new URL(p, self.registration.scope).href)).map(p => c.add(new Request(p, { cache: 'no-cache' }))));
+  return (await Promise.allSettled(SHELL.filter(p => !have.has(new URL(p, self.registration.scope).href)).map(p => c.add(new Request(p, { cache: 'no-cache' }))))).every(d => d.status === 'fulfilled');
 });
+// Taking over: this build's cache is made whole first, here and not only when a page asks for it, because Vdex may be
+// closed by now, and the next start may be one without a connection. (There is one now: the install has just ended.)
+// With nothing missing, which is the rule, no file is fetched. The requests of an open page wait until this is over,
+// so a refill that drags on is given 20 seconds and then carries on beside them.
 self.addEventListener('activate', e => {
-  e.waitUntil(dropOld().then(() => self.clients.claim()));
+  e.waitUntil(Promise.race([refill().catch(() => {}), new Promise(r => setTimeout(r, 20000))]).then(dropOld).then(() => self.clients.claim()));
 });
 // Tidying up after taking over: old caches go and this build's own is made whole. Never while a newer build is
 // installing or waiting: the cache it is filling is not an old one, and deleting it would leave that build to take
 // over with nothing. → whether it was done (false: there is a newer build on its way, so it is left for later).
-const tidy = e => { if (self.registration.installing || self.registration.waiting) return false; e.waitUntil(dropOld().then(refill)); return true; };
-let tidied = false;
+// A tidy that could not put every file back (no connection at that moment) does not count as done: the next request
+// starts another, which begins no sooner than three seconds after the one before, so that a file the server does not
+// have is not asked for with every request. (A newer build may have begun to install during that wait: looked at again.)
+const coming = () => !!(self.registration.installing || self.registration.waiting);
+const tidy = e => {
+  if (coming()) return false;
+  const wait = Math.max(0, triedAt + 3000 - Date.now()); triedAt = Date.now() + wait;
+  e.waitUntil(new Promise(r => setTimeout(r, wait)).then(() => !coming() && dropOld().then(refill)).then(whole => { if (!whole) tidied = false; }, () => { tidied = false; }));
+  return true;
+};
+let tidied = false, triedAt = 0;
 const passed = new Set(); // pages handed over from the server because this build does not hold them (see the fetch handler)
 self.addEventListener('message', e => {
   if (e.data === 'skip-waiting') self.skipWaiting();
@@ -69,7 +83,7 @@ self.addEventListener('fetch', e => {
   }
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   const key = keyOf(req);
-  if (!tidied) tidied = tidy(e); // once each time this worker starts (the browser puts an idle worker to sleep)
+  if (!tidied) tidied = tidy(e); // once each time this worker starts (the browser puts an idle worker to sleep), and again after one that left files missing
   // A page that came from the server because this build does not hold it (below) belongs to a later build, and so do
   // its scripts and styles: they come from the server too, and are not kept. This build's copies stand in only when
   // the server cannot be reached. (Not for the page's next navigation: that request still carries this page's id.)
