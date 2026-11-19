@@ -61,7 +61,10 @@ const bridge = () => {
   const lic = { ref: '2:7', seats: 3, name: 'App Store customer', email: '', comp: false, expires: '' };
   // Sign-in tokens as the licence server signs them: the App Store purchase's, and an email licence's.
   const TA = await shopSign('web', { apple: '2000000007', ref: '2:7', iat: Date.now() }), TE = await shopSign('web', { email: 'jo@example.com', ref: '1:1', iat: Date.now() });
-  const is = (t, T) => !!t && typeof t === 'object' && t.sig === T.sig;
+  // A token is known by whom and which licence it is for: the daily check answers with a new one each time, as the Worker does.
+  const who = t => { try { const v = JSON.parse(t.data); return `${v.apple || v.email}|${v.ref}`; } catch { return ''; } };
+  const is = (t, T) => !!t && typeof t === 'object' && t.kid === T.kid && who(t) === who(T);
+  const renewed = (t, clock) => shopSign('web', { ...JSON.parse(t.data), iat: Date.now(), expires: '', ...(Number.isSafeInteger(clock) ? { clock } : {}) });
   const open = async ({ storage }) => {
     const ctx = await browser.newContext({ viewport: { width: 420, height: 900 }, serviceWorkers: 'block' });
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
@@ -81,7 +84,7 @@ const bridge = () => {
       if (p === '/licence/apple/email/verify') return body.code === '123456' ? ans(200, { ok: true, licence: { ...lic, email: body.email }, code: 'VDEX-FAKE-CODE-2' }) : ans(400, { error: 'wrong-code' });
       if (p === '/licence/web/forget') return ans(is(body.token, TA) ? 200 : 401, is(body.token, TA) ? { ok: true } : { error: 'signed-out' });
       if (p === '/licence/apple/code') return ans(is(body.token, TA) ? 200 : 401, is(body.token, TA) ? { ok: true, code: 'VDEX-FAKE-CODE-3' } : { error: 'signed-out' });
-      if (p === '/licence/web/check') return is(body.token, TA) ? ans(200, { ok: true, licence: lic }) : is(body.token, TE) ? ans(200, { ok: true, licence: { ...lic, ref: '1:1', email: 'jo@example.com' } }) : ans(401, { error: 'signed-out' });
+      if (p === '/licence/web/check') return is(body.token, TA) ? ans(200, { ok: true, licence: lic, token: await renewed(body.token, body.clock) }) : is(body.token, TE) ? ans(200, { ok: true, licence: { ...lic, ref: '1:1', email: 'jo@example.com' }, token: await renewed(body.token, body.clock) }) : ans(401, { error: 'signed-out' });
       if (p === '/licence/web/activate') return ans(200, { ok: true, used: body.release ? 3 : 1, receipt: await shopSign('active', { ref: is(body.token, TE) ? '1:1' : '2:7', install: body.install, at: Date.now() }) });
       if (p === '/licence/web/release') return ans(200, { ok: true });
       return ans(404, { error: 'not-found' });

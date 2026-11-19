@@ -243,6 +243,12 @@ const shown = computers => Promise.all(computers.map(async c => ({ tag: await ta
 // the one before, so two copies cannot take turns for ever. Apps that send no turn (the store apps, older desktop
 // apps) are answered as before, unless their install was given a turn: then a missing one is out of date too.
 const newTurn = () => codes.b64u.enc(crypto.getRandomValues(new Uint8Array(12)));
+// The time on the device's clock when it asked (b.clock, from 1.4.0), signed back into its token or receipt as it came
+// and kept nowhere here: the device counts its 90 days without a check by its own clock where that is ahead of ours.
+const clockOf = b => (b && Number.isSafeInteger(b.clock) && b.clock > 0 ? { clock: b.clock } : {});
+// A sign-in token: who signed in, the licence, when, its end date ('' for none: the page judges an end date by the
+// token, never by what it stores beside it) and the device's clock.
+const tokenFor = (key, who, l, b) => codes.signNote('web', key, SHOP_KID, { ...who, ref: l.ref, iat: Date.now(), expires: l.expires || '', ...clockOf(b) });
 
 async function activate(request, env) {
   const b = await readJson(request); if (!b || !validInstall(b.install)) return json(400, { error: 'invalid' });
@@ -281,7 +287,7 @@ async function takeSeat(env, key, ref, max, b) {
   }
   if (turns) { entry.turn = newTurn(); changed = true; }
   if (changed) await env.LICENCES.put('c:' + ref, JSON.stringify({ computers: list, swaps: rec.swaps }));
-  return json(200, { ok: true, receipt: await codes.signNote('active', key, SHOP_KID, { ref, install: b.install, at: now }), used: list.length, seats: max, ...(turns ? { turn: entry.turn } : {}) });
+  return json(200, { ok: true, receipt: await codes.signNote('active', key, SHOP_KID, { ref, install: b.install, at: now, ...clockOf(b) }), used: list.length, seats: max, ...(turns ? { turn: entry.turn } : {}) });
 }
 async function release(request, env) {
   const b = await readJson(request); if (!b || !validInstall(b.install)) return json(400, { error: 'invalid' });
@@ -517,7 +523,7 @@ async function webVerify(request, env) {
   if (!email || code.length !== 6) return json(400, { error: 'invalid' });
   if (!(isReview(env, email) ? await checkReview(env, code, requesterOf(request)) : await checkCode(env, email, code))) return json(400, { error: 'wrong-code' });
   const list = await licencesFor(env, email); if (!list.length) return json(403, { error: 'no-licence' });
-  const token = await codes.signNote('web', await shopKey(env), SHOP_KID, { email, ref: list[0].ref, iat: Date.now() });
+  const token = await tokenFor(await shopKey(env), { email }, list[0], b);
   return json(200, { ok: true, token, licence: shownLicence(list[0], email) });
 }
 // About once a day: is the signed-in licence still good? Answers with a new token every time (another licence's when
@@ -529,7 +535,7 @@ async function webCheck(request, env) {
   const key = await shopKey(env); if (!key) return json(503, { error: 'not-ready' });
   const list = await licencesForKey(env, identityKey(v), v.email), l = list.find(x => x.ref === v.ref) || list[0];
   if (!l) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : (await endedFor(env, v)) ? 'expired' : 'signed-out' });
-  const token = await codes.signNote('web', key, SHOP_KID, { ...identityOf(v), ref: l.ref, iat: Date.now() });
+  const token = await tokenFor(key, identityOf(v), l, b);
   return json(200, { ok: true, licence: shownLicence(l, l.email || v.email || ''), token });
 }
 // Whether the token's licence is still linked but past its end date (a free licence given until a date).
@@ -551,8 +557,8 @@ async function webActivate(request, env) {
   if (!l && !list.length) return json(403, { error: (await env.LICENCES.get('x:' + v.ref)) ? 'cancelled' : (await endedFor(env, v)) ? 'expired' : 'signed-out' });
   if (!l) { // the signed-in licence ended or was refunded, but the email has another: carry on with that one, as /check does
     l = list[0];
-    const res = await takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os, release: b.release });
-    return json(res.status, { ...(await res.json()), token: await codes.signNote('web', key, SHOP_KID, { ...identityOf(v), ref: l.ref, iat: Date.now() }), licence: shownLicence(l, v.email || '') });
+    const res = await takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os, release: b.release, ...clockOf(b) });
+    return json(res.status, { ...(await res.json()), token: await tokenFor(key, identityOf(v), l, b), licence: shownLicence(l, v.email || '') });
   }
   if (!b.release && list.length > 1) {
     const r = await seats(env, l.ref), tag = await tagOf(b.install);
@@ -561,13 +567,13 @@ async function webActivate(request, env) {
       if (other.ref === l.ref) continue;
       const o = await seats(env, other.ref);
       if (o.computers.some(c => isInstall(c, b.install, tag)) || o.computers.length < (other.seats || 3)) {
-        const res = await takeSeat(env, key, other.ref, other.seats || 3, { install: b.install, os });
+        const res = await takeSeat(env, key, other.ref, other.seats || 3, { install: b.install, os, ...clockOf(b) });
         const body = await res.json();
-        return json(res.status, { ...body, token: await codes.signNote('web', key, SHOP_KID, { ...identityOf(v), ref: other.ref, iat: Date.now() }), licence: shownLicence(other, v.email || '') });
+        return json(res.status, { ...body, token: await tokenFor(key, identityOf(v), other, b), licence: shownLicence(other, v.email || '') });
       }
     }
   }
-  return takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os, release: b.release });
+  return takeSeat(env, key, l.ref, l.seats || 3, { install: b.install, os, release: b.release, ...clockOf(b) });
 }
 
 /* ---------------------------- the App Store ---------------------------- */
@@ -610,7 +616,7 @@ async function appleClaim(request, env) {
   // takes one of the licence's 3 places: those are for its other devices (computers, the Android app, an email sign-in).
   // The desktop code too (with the email once one is added): the same licence on a computer, under Enter licence code.
   const desktopCode = p.sandbox ? undefined : await codes.signCode(key, SHOP_KID, { serial, name: l.name || 'App Store customer', email: l.email || '', issued: today(p.purchased) });
-  return json(200, { ok: true, appleDevices: true, token: await codes.signNote('web', key, SHOP_KID, { apple: aid, ref, iat: Date.now() }), licence: shownLicence(l, l.email || ''), ...(desktopCode ? { code: desktopCode } : {}) });
+  return json(200, { ok: true, appleDevices: true, token: await tokenFor(key, { apple: aid }, l, b), licence: shownLicence(l, l.email || ''), ...(desktopCode ? { code: desktopCode } : {}) });
 }
 // The desktop code of an App Store licence, on demand (the app keeps none): for Enter licence code on a computer.
 async function appleCode(request, env) {

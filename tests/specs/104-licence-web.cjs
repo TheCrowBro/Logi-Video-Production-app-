@@ -51,8 +51,9 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
   const asked = [];
   // status: answers /licence/web/status in place of the licence server (route => fulfil or abort); routes: more of
   // them, set before the page opens.
-  // block: licence server paths whose requests are refused (as a blocked address); tz: the browser's time zone.
-  const open = async ({ width = 420, start = '', storage = null, status = null, routes = null, block = null, tz = '' } = {}) => {
+  // block: licence server paths whose requests are refused (as a blocked address); tz: the browser's time zone;
+  // answers: { path: route => … }, licence server paths answered by the test in place of the Worker (a local answer).
+  const open = async ({ width = 420, start = '', storage = null, status = null, routes = null, block = null, tz = '', answers = null } = {}) => {
     const ctx = await browser.newContext({ viewport: { width, height: 860 }, serviceWorkers: 'block', ...(tz ? { timezoneId: tz } : {}) });
     if (routes) await routes(ctx);
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
@@ -60,6 +61,7 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
       const q = r.request();
       if (status && new globalThis.URL(q.url()).pathname === '/licence/web/status') { asked.push('/licence/web/status'); return status(r); }
       if (block && block.test(new globalThis.URL(q.url()).pathname)) return r.abort('blockedbyclient');
+      if (answers && answers[new globalThis.URL(q.url()).pathname]) return answers[new globalThis.URL(q.url()).pathname](r);
       // The test swaps the fake licence server now and then; a request caught in between gets "unavailable", as it would
       // from a real server that is restarting, instead of crashing the test.
       asked.push(new globalThis.URL(q.url()).pathname);
@@ -346,7 +348,11 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
       const o = await open(opts);
       await o.page.evaluate(() => import('./js/licence.js').then(m => m.initLicence()));
       await sleep(2800); // the first background look (1.5 seconds after the licence loads) has had its answer
-      const st = await o.page.evaluate(() => import('./js/licence.js').then(async m => { const s = m.licenceState(), store = await import('./js/store.js'), kept = JSON.parse(localStorage.getItem('vdex-licence') || '{}'); return { mode: s.mode, canEdit: s.canEdit, paid: store.isPaid(), backups: store.backupsAllowed(), links: store.linksAllowed(), trialLeft: s.trialLeft, trialEnds: s.trialEnds, lapsedAt: s.lapsedAt || 0, iat: kept.token ? JSON.parse(kept.token.data).iat : 0 }; }));
+      const st = await o.page.evaluate(() => import('./js/licence.js').then(async m => {
+        const s = m.licenceState(), store = await import('./js/store.js'), kept = JSON.parse(localStorage.getItem('vdex-licence') || '{}'), panel = m.licencePanel(), line = (panel.el.querySelector('p') || {}).textContent || ''; panel.destroy();
+        return { mode: s.mode, canEdit: s.canEdit, paid: store.isPaid(), backups: store.backupsAllowed(), links: store.linksAllowed(), trialLeft: s.trialLeft, trialEnds: s.trialEnds, lapsedAt: s.lapsedAt || 0, iat: kept.token ? JSON.parse(kept.token.data).iat : 0,
+          seatReceipt: !!kept.seatReceipt, oldSeat: !!kept.oldSeat, line, noble: performance.getEntriesByType('resource').some(e => /\/vendor\/ed25519\.js/.test(e.name)) };
+      }));
       await o.ctx.close(); return st;
     };
     const madeUp = { kid: 2, data: JSON.stringify({ email: 'jo@example.com', ref, iat: Date.now() }), sig: 'A'.repeat(86) };
@@ -356,14 +362,66 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
     ok('…nor is the licence server\'s own token beside a licence it does not name', st.mode === 'ended' && !st.paid, JSON.stringify(st));
     st = await lookAt({ block: blocked, storage: trialOver({ token: await token(), licence: jo }) });
     ok('…while the licence server\'s token for the licence still signs in, with its check blocked', st.mode === 'licensed' && st.paid, JSON.stringify(st));
-    st = await lookAt({ block: blocked, start: 'index.html?src=play', storage: trialOver({ play: true, token: await token(), licence: jo, seat: 'ok', seatChecked: Date.now() + 365 * DAY, seatTried: Date.now(), install: 'inst-play-typed-00001' }) });
-    ok('in the Play app, a place typed in as taken, with its check blocked, is no place: not licensed until the licence server adds the phone', st.mode === 'pending' && st.canEdit === false && !st.paid, JSON.stringify(st));
+    st = await lookAt({ block: blocked, start: 'index.html?src=play', storage: trialOver({ v14: 1, play: true, token: await token(), licence: jo, seat: 'ok', seatChecked: Date.now() + 365 * DAY, seatTried: Date.now(), install: 'inst-play-typed-00001' }) });
+    ok('in the Play app, a place typed in as taken (by this version: an earlier one\'s is below), with its check blocked, is no place: not licensed until the licence server adds the phone', st.mode === 'pending' && st.canEdit === false && !st.paid, JSON.stringify(st));
     st = await lookAt({ block: blocked, storage: trialOver({ token: await token({ iat: Date.now() - 100 * DAY }), licence: jo, checked: Date.now() + 365 * DAY }) });
     ok('a sign-in the licence server last confirmed 100 days ago, with its check blocked and the time of the last check typed a year ahead, turns read-only once the check fails: Export backup still works, cloud storage and spreadsheets do not', st.mode === 'offline' && st.canEdit === false && !st.paid && st.backups, JSON.stringify(st));
     st = await lookAt({ block: blocked, storage: trialOver({ token: await token({ iat: Date.now() - 2 * DAY }), licence: jo, checked: Date.now() - 2 * DAY, tried: Date.now() - 2 * DAY }) });
     ok('…one confirmed 2 days ago stays licensed while the check is blocked', st.mode === 'licensed' && st.paid, JSON.stringify(st));
     st = await lookAt({ storage: trialOver({ token: await token({ iat: Date.now() - 100 * DAY }), licence: jo, checked: Date.now() - 100 * DAY, tried: Date.now() - 100 * DAY }) });
     ok('…and one that can reach the licence server again is confirmed, with a new token from it', st.mode === 'licensed' && st.paid && Date.now() - st.iat < 60e3, JSON.stringify(st));
+    // A check answered from anywhere but the licence server is no check that got through: an answer with no token, or
+    // with the token already kept (played back), leaves a sign-in last confirmed 100 days ago read-only, and a
+    // cancelled browser cancelled.
+    const old = await token({ iat: Date.now() - 100 * DAY }), says = body => ({ '/licence/web/check': r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) }) });
+    st = await lookAt({ answers: says({ ok: true, licence: jo }), storage: trialOver({ token: old, licence: jo, checked: Date.now() - 100 * DAY, tried: Date.now() - 100 * DAY }) });
+    ok('a sign-in last confirmed 100 days ago whose check is answered "ok" from elsewhere, with no new token, turns read-only as with the check blocked', st.mode === 'offline' && !st.paid, JSON.stringify(st));
+    st = await lookAt({ answers: says({ ok: true, licence: jo, token: old }), storage: trialOver({ token: old, licence: jo, checked: Date.now() - 100 * DAY, tried: Date.now() - 100 * DAY }) });
+    ok('…as does one answered with the token it already has, played back', st.mode === 'offline' && !st.paid, JSON.stringify(st));
+    st = await lookAt({ answers: says({ ok: true, licence: jo }), storage: trialOver({ cancelled: true, cancelledToken: await token({ iat: Date.now() - 10 * DAY }), cancelTried: Date.now() - 2 * DAY, licence: jo, v14: 1 }) });
+    ok('…and a browser signed out by a refund stays signed out when its daily look is answered "ok" from elsewhere', st.mode === 'cancelled' && !st.paid, JSON.stringify(st));
+    const oldReceipt = await codes.signNote('active', shopKey, 2, { ref, install: 'inst-play-replay-0001', at: Date.now() - 100 * DAY });
+    st = await lookAt({ start: 'index.html?src=play', answers: { '/licence/web/activate': r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, receipt: oldReceipt }) }) }, storage: trialOver({ v14: 1, play: true, token: await token(), licence: jo, seat: 'ok', seatReceipt: oldReceipt, seatChecked: Date.now() - 100 * DAY, seatTried: Date.now() - 100 * DAY, install: 'inst-play-replay-0001' }) });
+    ok('…and a Play app whose place was last confirmed 100 days ago, with its place check answered by its own receipt played back, turns read-only', st.mode === 'offline' && !st.paid, JSON.stringify(st));
+    // Update day: a store app given its place by an earlier version, which kept no receipt for it, is licensed until
+    // its first place check gets through, also when it is opened with no connection; that check brings the receipt.
+    const before14 = async install => trialOver({ play: true, token: await token(), licence: jo, seat: 'ok', seatChecked: Date.now() - DAY, seatTried: Date.now() - DAY, install });
+    st = await lookAt({ block: /^\/licence\//, start: 'index.html?src=play', storage: await before14('inst-play-update-0001') });
+    ok('update day: a Play app given its place by an earlier version (which kept no receipt for it), opened with no connection, stays licensed, with cloud storage and backup files', st.mode === 'licensed' && st.canEdit && st.paid && st.backups && st.oldSeat, JSON.stringify(st));
+    st = await lookAt({ start: 'index.html?src=play', storage: await before14('inst-play-update-0002') });
+    ok('…and online, its place check brings the licence server\'s receipt, which is kept in its place', st.mode === 'licensed' && st.paid && st.seatReceipt && !st.oldSeat, JSON.stringify(st));
+    await mf.dispatchFetch('https://vdex.crowmade.app/licence/web/release', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: await token(), install: 'inst-play-update-0002' }) });
+    // A browser whose Web Crypto has no Ed25519 (Safari before 17, say) checks the signatures with the bundled checker,
+    // loaded only there: a genuine sign-in opened with no connection is licensed, and a made-up one is not.
+    const noEd = c => c.addInitScript(() => {
+      const su = crypto.subtle, imp = su.importKey.bind(su), ver = su.verify.bind(su), ed = a => a === 'Ed25519' || (a && a.name === 'Ed25519');
+      const no = () => Promise.reject(new DOMException('Unrecognized name.', 'NotSupportedError'));
+      su.importKey = (f, k, a, ...r) => (ed(a) ? no() : imp(f, k, a, ...r)); su.verify = (a, ...r) => (ed(a) ? no() : ver(a, ...r));
+    });
+    st = await lookAt({ routes: noEd, block: /^\/licence\//, storage: trialOver({ token: await token({ iat: Date.now() - DAY }), licence: jo }) });
+    ok('without Ed25519 in Web Crypto, a genuine sign-in opened with no connection is licensed, checked by the bundled vendor/ed25519.js', st.mode === 'licensed' && st.paid && st.backups && st.noble, JSON.stringify(st));
+    st = await lookAt({ routes: noEd, block: blocked, storage: trialOver({ token: madeUp, licence: jo }) });
+    ok('…while a made-up token is still no sign-in there', st.mode === 'ended' && !st.paid, JSON.stringify(st));
+    st = await lookAt({ routes: noEd, answers: says({ ok: true, licence: jo, token: { ...madeUp, data: JSON.stringify({ email: 'jo@example.com', ref, iat: Date.now() + 1000 }) } }), storage: trialOver({ token: madeUp, licence: jo }) });
+    ok('…nor one "confirmed" by an answer from elsewhere', st.mode === 'ended' && !st.paid, JSON.stringify(st));
+    st = await lookAt({ block: blocked, storage: trialOver({ token: await token(), licence: jo }) });
+    ok('…and a browser with Ed25519 never loads the bundled checker', st.mode === 'licensed' && !st.noble, JSON.stringify(st));
+    // A device whose clock is 100 days ahead counts the 90 days by its own clock (the time it sent, signed into the
+    // token), so one failed check does not make it read-only.
+    const ahead = c => c.addInitScript(() => {
+      const D = Date, off = 100 * 86400e3, real = D.now.bind(D);
+      class Ahead extends D { constructor(...a) { super(...(a.length ? a : [real() + off])); } static now() { return real() + off; } }
+      globalThis.Date = Ahead;
+    });
+    st = await lookAt({ routes: ahead, block: blocked, storage: trialOver({ token: await token({ clock: Date.now() + 100 * DAY }), licence: jo }) });
+    ok('a device whose clock is 100 days ahead stays licensed when a check made just after a good one fails', st.mode === 'licensed' && st.paid, JSON.stringify(st));
+    // A free licence's end date counts as the licence server signed it into the token, not as stored beside it.
+    st = await lookAt({ block: blocked, storage: trialOver({ token: await token({ expires: '2026-11-01' }), licence: { ...jo, comp: true, expires: '' } }) });
+    ok('a free licence past the end date in its token has ended, also with the date taken out of the stored licence and the check blocked', st.mode === 'expired' && !st.paid, JSON.stringify(st));
+    // A refund learned by an earlier version kept no token aside, so this browser cannot sign in again by itself.
+    st = await lookAt({ storage: trialOver({ cancelled: true, licence: jo }) });
+    const keptAside = await lookAt({ storage: trialOver({ cancelled: true, cancelledToken: await token({ iat: Date.now() - 10 * DAY }), cancelTried: Date.now(), licence: jo, v14: 1 }) });
+    ok('the cancelled line says to sign in again after a won dispute when this browser kept no sign-in to try again with, and "within a day" when it did', /sign in again to use it here/.test(st.line) && !/within a day/.test(st.line) && /works here again within a day/.test(keptAside.line), `${st.line} | ${keptAside.line}`);
     // The trial: never more than 30 days, and its last day in the browser's own time zone.
     st = await lookAt({ storage: { on: true, statusAt: Date.now(), first: Date.now() + 20 * DAY, seen: Date.now() } });
     ok('a trial start moved into the future gives no more than the 30 days', st.mode === 'trial' && st.trialLeft === 30, JSON.stringify(st));

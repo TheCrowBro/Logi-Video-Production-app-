@@ -71,7 +71,9 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
           }
           list.push(body.install); this.lists.set(ref, list);
         }
-        return { status: 200, body: { ok: true, receipt: await codes.signNote('active', shopKey, 2, { ref, install: this.forge || body.install, at: this.clock ? this.clock() : Date.now() }) } }; // clock: the server's time, when a test sets one
+        // at: the server's time (a test's own clock, when it sets one), never the same twice; clock: the computer's, as sent.
+        this.at = Math.max(this.clock ? this.clock() : Date.now(), (this.at || 0) + 1);
+        return { status: 200, body: { ok: true, receipt: await codes.signNote('active', shopKey, 2, { ref, install: this.forge || body.install, at: this.at, ...(Number.isSafeInteger(body.clock) ? { clock: body.clock } : {}) }) } };
       } };
     const T0 = Date.parse('2026-11-02T10:00:00Z');
     const make = (opts = {}) => { const c = { t: opts.t || T0 }; const lic = createLicence({ dir: opts.dir || dirOf(), keys: 'keys' in opts ? opts.keys : KEYS, now: () => c.t, post: (u, b) => server.post(u, b), priorData: () => !!opts.prior, mirror: opts.mirror, site: 'http://licence.test' }); return { lic, c }; };
@@ -98,7 +100,7 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     tr.c.t = T0 + 31 * DAY; server.calls = [];
     s = await tr.lic.enter(pasted);
     const sent = server.calls[0];
-    ok('a good code is activated online with this install\'s random ID, only "Mac/Windows/Linux" and the turn the server last gave it (none yet)', s.mode === 'licensed' && s.canEdit && sent && sent.url === 'http://licence.test/licence/activate' && /^[A-Za-z0-9_-]{22}$/.test(sent.body.install) && Object.keys(sent.body).sort().join() === 'code,install,os,turn' && sent.body.turn === '' && sent.body.code === paid, JSON.stringify(sent && sent.body));
+    ok('a good code is activated online with this install\'s random ID, only "Mac/Windows/Linux", the turn the server last gave it (none yet) and the time on the computer\'s clock', s.mode === 'licensed' && s.canEdit && sent && sent.url === 'http://licence.test/licence/activate' && /^[A-Za-z0-9_-]{22}$/.test(sent.body.install) && Object.keys(sent.body).sort().join() === 'clock,code,install,os,turn' && sent.body.clock === tr.c.t && sent.body.turn === '' && sent.body.code === paid, JSON.stringify(sent && sent.body));
     ok('the licence shows whom it is for and how many computers', s.licence.name === 'Jane Smith' && s.licence.email === 'jane@example.com' && s.licence.seats === 3 && s.licence.ref === '2:4242');
     ok('the code is kept tidy for "Copy the code"', (await tr.lic.code()) === paid);
 
@@ -184,7 +186,7 @@ const throws = async fn => { try { await fn(); return null; } catch (e) { return
     ok('editing licence.json to take the waits out gives no new wait either (the copy beside it still has them)', s.mode === 'pending' && s.licence.ref === '1:901' && s.daysLeft === 0 && s.canEdit === false && JSON.parse(fs.readFileSync(path.join(wdir, 'licence.json'), 'utf8')).waits['1:901'] === T0 + 40 * DAY);
     s = await w2.enter(wcode2);
     ok('…for any of its codes', s.licence.ref === '1:902' && s.daysLeft === 13);
-    ok('…and nothing about the waits is sent to the licence server', server.calls.every(c => Object.keys(c.body).every(k => ['code', 'install', 'os', 'release', 'turn'].includes(k))));
+    ok('…and nothing about the waits is sent to the licence server', server.calls.every(c => Object.keys(c.body).every(k => ['clock', 'code', 'install', 'os', 'release', 'turn'].includes(k))));
     calls = server.calls.length; w.c.t = T0 + 90 * DAY;
     for (let h = 0; h < 30; h++) { w.c.t += 3600e3; s = await w.lic.recheck(); }
     ok('with the server kept out of reach it keeps trying, and the code never comes to count as activated', s.mode === 'pending' && s.canEdit === false && server.calls.length >= calls + 10, `${server.calls.length - calls} tries`);

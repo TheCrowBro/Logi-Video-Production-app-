@@ -252,6 +252,67 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
       ok('…while a computer whose answer was lost on the way gets its own place back at its next check, as a move that is not counted', afterLost.mode === 'licensed' && placed2.length === 3 && (await adm('look', '1:7002')).swaps === 0, `${afterLost.mode} · ${placed2.length}`);
       for (const d of dirs) fs.rmSync(d, { recursive: true, force: true });
     }
+    { // The desktop app's checks against the real Worker, through what can go wrong on the way. plan: what happens to
+      // each request in turn ('ok'; 'lose': the answer is lost; 'down': never sent; a number: answered that many ms late).
+      const DAY = 86400e3, HOUR = 3600e3, clock = { t: Date.now() }, made = [];
+      const worker = async (url, body) => { const r = await mf.dispatchFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); return { status: r.status, body: await r.json().catch(() => ({})) }; };
+      const rig = (d, { ahead = 0, post } = {}) => {
+        const p = { plan: [], sent: 0 };
+        p.lic = createLicence({ dir: d, keys: KEYS, site: SITE, now: () => clock.t + ahead, post: post || (async (url, body) => {
+          const step = p.plan.shift() || 'ok'; if (step === 'down') throw new Error('offline');
+          p.sent++; const out = await worker(url, body);
+          if (typeof step === 'number') await new Promise(r => setTimeout(r, step));
+          if (step === 'lose') throw new Error('the answer was lost'); return out;
+        }) });
+        return p;
+      };
+      const folder = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'vdex-check-')); made.push(d); return d; };
+      const places = async ref => (((await (await mf.getKVNamespace('LICENCES')).get('c:' + ref, 'json')) || {}).computers || []).length;
+      // Activated after its trial: what follows is the licence alone.
+      const activated = async (serial, opts) => { const d = folder(), pc = rig(d, opts); await pc.lic.state(); clock.t += 31 * DAY; const s = await pc.lic.enter(await codes.signCode(ownerKey, 1, { name: 'Dee Esk', comp: true, issued: '2026-11-02', serial })); return { d, pc, s }; };
+
+      // licence.json cannot be replaced (a full disk) while Vdex stays open over its weekly check, and after a restart.
+      const full = await activated(7101), tmp = path.join(full.d, 'licence.json.tmp'), hours = [];
+      fs.mkdirSync(tmp); clock.t += 8 * DAY;
+      for (let h = 0; h < 8; h++) { hours.push((await full.pc.lic.recheck()).mode + ':' + (await places('1:7101'))); clock.t += HOUR; }
+      const restart = rig(full.d); hours.push((await restart.lic.recheck()).mode + ':' + (await places('1:7101')));
+      fs.rmdirSync(tmp); clock.t += 2 * HOUR;
+      const freed = await restart.lic.recheck(), second = await activated(7101);
+      ok('a computer whose licence.json cannot be written (a full disk) over its weekly check stays licensed and takes no more places, hour after hour and after a restart; once it can be written it checks as before, and the licence\'s other places are still free', full.s.mode === 'licensed' && hours.every(x => x === 'licensed:1') && freed.mode === 'licensed' && second.s.mode === 'licensed' && (await places('1:7101')) === 2, hours.join(' ') + ` · ${freed.mode} · ${second.s.mode}`);
+
+      // A weekly check's answer lost, then the next check answered "stale" and asking again under a new ID failing.
+      const lost = await activated(7102);
+      lost.pc.plan = ['lose']; clock.t += 8 * DAY; const l1 = await lost.pc.lic.recheck();
+      lost.pc.plan = ['ok', 'down']; clock.t += 2 * HOUR; const l2 = await lost.pc.lic.recheck();
+      clock.t += 30 * 60e3; const l3 = await lost.pc.lic.state();
+      clock.t += 2 * HOUR; const l4 = await lost.pc.lic.recheck();
+      ok('a computer whose weekly answer was lost, and which then could not ask again under a new ID, stays licensed throughout, and is back on the list at its next check as a move that is not counted', [l1, l2, l3, l4].every(x => x.mode === 'licensed' && x.canEdit) && (await places('1:7102')) === 1 && (await adm('look', '1:7102')).swaps === 0, [l1, l2, l3, l4].map(x => x.mode).join());
+
+      // The background check and Try again at the same moment, the first answer coming late.
+      const both = await activated(7103);
+      both.pc.plan = [300]; clock.t += 8 * DAY;
+      const [b1, b2] = await Promise.all([both.pc.lic.recheck(false), both.pc.lic.recheck(true)]), b3 = await both.pc.lic.state();
+      ok('a background check and Try again at the same moment both end licensed, with one place on the list', b1.mode === 'licensed' && b2.mode === 'licensed' && b3.mode === 'licensed' && (await places('1:7103')) === 1, `${b1.mode} ${b2.mode} ${b3.mode}`);
+
+      // The check answered from elsewhere with the receipt already in licence.json, played back: no check that got through.
+      const played = await activated(7104), kept = JSON.parse(fs.readFileSync(path.join(played.d, 'licence.json'), 'utf8')).act.receipt, from = clock.t;
+      const replay = rig(played.d, { post: async () => ({ status: 200, body: { ok: true, receipt: kept, turn: 'played-back-turn-0001' } }) }), replayed = [];
+      for (const d of [60, 100, 200]) { clock.t = from + d * DAY; replayed.push((await replay.lic.recheck()).mode); }
+      ok('a computer whose check is answered from elsewhere with the receipt it already has is licensed on day 60 and read-only on days 100 and 200, as with the check blocked', replayed.join() === 'licensed,offline,offline', replayed.join());
+
+      // A computer whose clock is a year ahead.
+      const fast = await activated(7105, { ahead: 365 * DAY });
+      fast.pc.plan = ['down']; clock.t += 2 * HOUR; const f1 = await fast.pc.lic.recheck(true);
+      const sent = fast.pc.sent; clock.t += 2 * HOUR; await fast.pc.lic.recheck();
+      ok('a computer whose clock is a year ahead stays licensed when a check two hours after a good one fails, and is not asked to check again every hour', fast.s.mode === 'licensed' && f1.mode === 'licensed' && fast.pc.sent === sent, `${fast.s.mode} ${f1.mode} ${fast.pc.sent - sent}`);
+
+      // Read-only after 90 days without a check, quit, and reopened with a connection 20 minutes after its last try.
+      const away = await activated(7106);
+      away.pc.plan = ['down']; clock.t += 95 * DAY; const o1 = await away.pc.lic.recheck();
+      clock.t += 20 * 60e3; const back = rig(away.d), o2 = await back.lic.state(), o3 = await back.lic.recheck(false);
+      ok('a computer read-only after 90 days without a check, reopened with a connection within the hour, is licensed again at the check made when it starts', o1.mode === 'offline' && o2.mode === 'offline' && o3.mode === 'licensed', `${o1.mode} ${o2.mode} ${o3.mode}`);
+      for (const d of made) fs.rmSync(d, { recursive: true, force: true });
+    }
 
     /* --------------------------- website sign-in --------------------------- */
     const mails = () => calls.filter(c => c.url === 'https://api.resend.com/emails').map(c => JSON.parse(c.body));
@@ -552,6 +613,9 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     ok('an iPad on the same Apple Account is licensed too, and neither it nor the iPhone takes a place', ipad.body.ok && ipad.body.licence.ref === cb.licence.ref && placesNow.ok && placesNow.computers.length === 0, JSON.stringify([ipad.body, placesNow]).slice(0, 200));
     const chk = await apost('/licence/web/check', { token: cb.token });
     ok('the sign-in works like the website’s: the daily check says licensed, with no email behind it', chk.body.ok && chk.body.licence.ref === cb.licence.ref && chk.body.licence.email === '', JSON.stringify(chk).slice(0, 160));
+    const withClock = await apost('/licence/web/check', { token: cb.token, clock: 1795000000000 }), oddClock = await apost('/licence/web/check', { token: cb.token, clock: '1795000000000' });
+    const tv = await codes.readNote('web', withClock.body.token, { keys: KEYS }), tv2 = await codes.readNote('web', oddClock.body.token, { keys: KEYS });
+    ok('each new token carries the time on the device\'s clock as it was sent and the licence\'s end date (none here), for the page to count by; a time that is not a whole number is left out', !!tv && tv.clock === 1795000000000 && tv.expires === '' && !!tv2 && !('clock' in tv2) && tv2.expires === '', JSON.stringify([tv, tv2]));
     const seat2 = await apost('/licence/web/activate', { token: cb.token, install: iphone, os: 'iPhone' });
     ok('…and an older app’s weekly check of its place is still answered', seat2.body.ok && seat2.body.used === 1, JSON.stringify(seat2).slice(0, 160));
     const refusals = [
@@ -614,7 +678,7 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const real = await apost('/licence/apple/claim', { jws: jws(txn()), install: iphone, os: 'iPhone' });
     const sand = await apost('/licence/apple/claim', { jws: jws(txn({ environment: 'Sandbox' })), install: id(25), os: 'iPhone' });
     ok('a sandbox purchase is taken when the owner allows it (for testing): a licence of its own, apart from the real purchase with the same number', sand.status === 200 && sand.body.ok && real.status === 200 && sand.body.licence.ref !== real.body.licence.ref, JSON.stringify([sand.body.licence, real.body.licence]).slice(0, 160));
-    ok('…for 30 days, with no desktop code and no email', /^\d{4}-\d\d-\d\d$/.test(sand.body.licence.expires) && !sand.body.code && (await apost('/licence/apple/email', { token: sand.body.token, email: 'sand@example.com' })).status === 403 && (await apost('/licence/apple/code', { token: sand.body.token })).status === 403);
+    ok('…for 30 days (its end date signed into its token too), with no desktop code and no email', /^\d{4}-\d\d-\d\d$/.test(sand.body.licence.expires) && (await codes.readNote('web', sand.body.token, { keys: KEYS })).expires === sand.body.licence.expires && !sand.body.code && (await apost('/licence/apple/email', { token: sand.body.token, email: 'sand@example.com' })).status === 403 && (await apost('/licence/apple/code', { token: sand.body.token })).status === 403);
     ok('…and its daily check and its place work like any other', (await apost('/licence/web/check', { token: sand.body.token })).body.ok === true && (await apost('/licence/web/activate', { token: sand.body.token, install: id(25), os: 'iPhone' })).body.ok === true);
     const sandRefund = await apost('/licence/apple/notify', { signedPayload: notice('REFUND', { environment: 'Sandbox' }) });
     ok('a sandbox refund cancels the sandbox licence and leaves the real one alone', sandRefund.body.cancelled === 1 && (await apost('/licence/web/check', { token: sand.body.token })).body.error === 'cancelled' && (await apost('/licence/web/check', { token: real.body.token })).body.ok === true);

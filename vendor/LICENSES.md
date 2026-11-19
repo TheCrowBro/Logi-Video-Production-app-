@@ -1,6 +1,7 @@
 # Bundled libraries
 
 - `qrcode.js` — qrcode-generator 1.4.4, MIT License, © Kazuhiko Arase. https://github.com/kazuhikoarase/qrcode-generator
+- `ed25519.js` — @noble/ed25519 2.1.0 (its `index.js`, unchanged), MIT License, © 2019 Paul Miller. https://github.com/paulmillr/noble-ed25519. Used only to check the licence server's signatures in a browser whose Web Crypto has no Ed25519.
 - `jsQR.js` — jsQR 1.4.0, Apache License 2.0, © Cosmo Wolfe. https://github.com/cozmo/jsQR. Changed here: in the table of versions, version 23's alignment pattern centres read 6, 30, 54, 78, 102 (the published file has 74 in place of 78, so it could not read a version-23 code), as in the QR code standard and in `qrcode.js`.
 
 # Adapted code
