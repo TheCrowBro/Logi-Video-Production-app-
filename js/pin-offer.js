@@ -51,7 +51,7 @@ export function show({ knowsPin }) {
       h('h1', { id: 'pin-offer-title' }, 'Set a new PIN'),
       h('p', { class: 'small muted', id: 'pin-offer-text' }, PIN_RULE + ((config() || {}).bio ? ' Fingerprint or face unlock carries on working.' : '')),
       cur, a, b, err,
-      h('p', { class: 'warn small' }, 'A forgotten PIN cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current.'),
+      h('p', { class: 'warn small' }, 'A forgotten PIN cannot be recovered. The way back is to erase this device and restore from your cloud storage or a backup, so keep one of those current (a cloud copy and backup files need a licence).'),
       save,
       h('button', { class: 'btn ghost', type: 'button', onclick: () => { if (!busy) choice(); } }, 'Back')));
     (cur || a).focus();

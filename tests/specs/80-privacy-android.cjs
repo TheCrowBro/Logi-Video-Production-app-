@@ -1,6 +1,6 @@
 // The privacy policy page, its link from Settings → General → About & Licence, and the Android package's agreement with the site.
 const { chromium } = require('playwright');
-const { acceptTerms, openSetting } = require('../helpers.cjs');
+const { acceptTerms, openSetting, TERMS_VERSION } = require('../helpers.cjs');
 const fs = require('fs');
 const ROOT = process.env.VDEX_ROOT;
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
@@ -35,6 +35,21 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('it fits a phone without sideways scrolling', await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
   ok('the no-warranty and liability sections stand out in their own box, reachable by a link', await page.evaluate(() => { const b = document.getElementById('liability'); return !!b && /merchantability/.test(b.innerText) && /negligence/.test(b.innerText) && getComputedStyle(b).borderTopStyle === 'solid'; }));
   ok('it links the privacy policy and back to the app', (await page.locator('a[href="privacy.html"]').count()) >= 1 && (await page.locator('a.back').getAttribute('href')) === './');
+
+  // The two documents agree with each other and with the app: one date, the version people are asked to agree to,
+  // sections that exist wherever one is named, and no company named as the seller that nobody has confirmed.
+  const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const dated = t => { const m = /Last updated (\d{1,2}) (\w+) (\d{4})/.exec(t); return m ? `${m[3]}-${String(MONTHS.indexOf(m[2]) + 1).padStart(2, '0')}-${m[1].padStart(2, '0')}` : ''; };
+  ok('the terms and the privacy policy carry the same date, and it is the version everyone is asked to agree to', !!dated(terms) && dated(terms) === dated(text) && TERMS_VERSION.startsWith(dated(terms)), `${dated(terms)} / ${dated(text)} / ${TERMS_VERSION}`);
+  const named = (t, top) => [...t.matchAll(/\b[Ss]ections? (\d+)(?:\.\d)?(?:(?: to | and )(\d+)(?:\.\d)?)?/g)].flatMap(m => [m[1], m[2]]).filter(Boolean).map(Number).filter(n => n < 1000 && (n < 1 || n > top)); // 1789.3 is California's Civil Code, not a section of ours
+  const sectionsOf = t => [...t.matchAll(/^\s*(\d+)\. \S/gm)].map(m => Number(m[1]));
+  ok('every section the terms name exists (1 to 21, in order)', JSON.stringify(sectionsOf(terms)) === JSON.stringify(Array.from({ length: 21 }, (_, i) => i + 1)) && named(terms.replace(/section 1789\.3/g, ''), 21).length === 0, named(terms, 21).join(', '));
+  ok('…and every section the privacy policy names (1 to 10)', JSON.stringify(sectionsOf(text)) === JSON.stringify(Array.from({ length: 10 }, (_, i) => i + 1)) && named(text, 10).length === 0, sectionsOf(text).join(', '));
+  ok('the policy lists what changed, newest first, starting with its own date', await (async () => { await page.goto(BASE + 'privacy.html'); const first = await page.locator('#changes li').first().innerText(); return dated('Last updated ' + first.split('.')[0]) === dated(text) && (await page.locator('a[href="#changes"]').count()) === 1; })());
+  ok('neither document names a seller nobody has confirmed, or gives an address or a phone number of the publisher', !/Link, LLC/.test(terms + text) && /postal address and phone number are available upon request/.test(terms) && /postal address and phone number are available upon request/.test(text) && !/\+?\d[\d ().-]{8,}\d/.test((terms + text).replace(/Complaint Assistance Unit[^\n]*/g, ''))); // the one number in the terms is the state's consumer office, in that sentence
+  ok('the policy carries Google\'s Limited Use statement, the rounded weather coordinates and what Open-Meteo keeps', /will adhere to the Google API Services User Data Policy, including the Limited Use requirements/.test(text) && /rounded to two decimal places/.test(text) && /server logs, which can include coordinates, for up to 90 days/.test(text));
+  const del = await (await page.goto(BASE + 'delete-account.html')).text();
+  ok('the deletion page says what else is held, that erasing comes before uninstalling, and what a computer with the code does', /We also have your order in our Stripe account, a note of any free licence we gave you, and emails you sent us/.test(del) && /Erase all data on this device before you uninstall\. Uninstalling alone can leave them on the device\./.test(del) && /puts itself back at its next weekly check/.test(del) && /within 30 days/.test(del) && !/and Google keep/.test(del));
 
   // Reachable from the app, and kept offline with it
   await page.goto(BASE); await page.waitForSelector('#rolodex .drum-btn');

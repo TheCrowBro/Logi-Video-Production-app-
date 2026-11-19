@@ -5,7 +5,7 @@
 import { h } from './util.js';
 import { isApp } from './native.js';
 
-export const TERMS_VERSION = '2026-11-07'; // the terms' date, plus a count for a second change on the same day
+export const TERMS_VERSION = '2026-11-20'; // the terms' date, plus a count for a second change on the same day
 const KEY = 'logi-terms';
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; } };
 export const acceptance = () => { const r = read(); return r && r.v === TERMS_VERSION ? r : null; };
@@ -25,12 +25,12 @@ export function termsGate() {
       h('img', { src: 'icons/icon.svg', alt: '', class: 'terms-icon' }),
       why && h('p', { class: 'warn small', role: 'status' }, why),
       h('h1', { id: 'terms-title' }, changed ? 'The terms have changed' : 'Before you start'),
-      h('p', null, changed ? 'Please read and agree to the updated terms of service to keep using Vdex. Your information is safe and stays where it is.' : (isApp ? 'Vdex is free to try for 30 days. After that it becomes read-only until you buy the Vdex Licence in the app, a one-off purchase whose price the App Store shows before you buy, or sign in with a licence you already have. Cloud storage, backup files and spreadsheets need the licence from the start. ' : 'Vdex is free to try for 30 days, then needs a licence. ') + 'To use it, please read and agree to its terms of service.'),
+      h('p', null, changed ? 'Please read and agree to the updated terms of service to keep using Vdex. Your information has not been changed and stays where it is.' : 'Vdex is free to try for 30 days, then is read-only until you have a licence. Backup files, spreadsheets and cloud storage need the licence from the start. ' + (isApp ? 'In this app the licence is the Vdex Licence, a one-off purchase whose price the App Store shows before you buy; or sign in with a licence you already have. ' : '') + 'To use it, please read and agree to its terms of service.'),
       h('ul', { class: 'terms-points' },
-        h('li', null, 'Vdex comes as it is. It can have mistakes or lose information, so keep your own backups.'),
-        h('li', null, 'You stay responsible for your shoots, your call sheets, quotes and invoices, your taxes, people’s safety, and the information you keep about others.'),
+        h('li', null, 'Vdex can have mistakes or lose information. Until you have a licence there is no backup: your information is only on this device. Once you have one, keep your own backups. If you use Vdex for your business, it comes as it is.'),
+        h('li', null, 'You stay responsible for your shoots, your call sheets, quotes and invoices, your taxes, people’s safety, the information you keep about others, and what you send or add by link.'),
         h('li', null, 'The developer’s responsibility is limited (', link('terms.html#liability', 'sections 13 to 16'), '). If you use Vdex for your business, many kinds of loss are excluded and the rest is capped at 50 US dollars. If you use it as a consumer, you keep your legal rights.'),
-        h('li', null, 'Your work stays on your device, and in storage you link. The developer never receives it.')),
+        h('li', null, 'Your work stays on your device, and in storage you link. The developer never receives it. What you send in a Vdex link is inside the link itself: anyone who has the link can read it, and a sent link cannot be withdrawn.')),
       h('p', { class: 'terms-links' }, link('terms.html', 'Read the terms of service'), link('privacy.html', 'Read the privacy policy')),
       h('label', { class: 'check terms-check', for: 'terms-ok' }, box, h('span', null, 'I am 18 or over, and I have read and agree to the ', link('terms.html', 'terms of service'), '.')),
       h('p', { class: 'small' }, 'The ', link('privacy.html', 'privacy policy'), ' explains how your information is handled.'),

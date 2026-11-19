@@ -253,7 +253,7 @@ function readOnlySheet() {
   const s = S.cur, d = describe(s) || {};
   const sh = sheet('Vdex is read-only', h('div', { class: 'stack' },
     h('p', null, d.line || 'Vdex is read-only here.'),
-    h('p', { class: 'small muted' }, 'That change was not saved. Everything already in Vdex is safe, and with a licence you can change everything again here.'),
+    h('p', { class: 'small muted' }, 'That change was not saved. Nothing already in Vdex was changed, and with a licence you can change everything again here.'),
     h('div', { class: 'actions' }, ...actions(s, d, () => sh.close())), buyNote(d)));
   sh.el.classList.add('licence-readonly');
   S.roClose = sh.close;
@@ -434,8 +434,8 @@ function forgetSheet() {
     set(r); sh.close(); toast('Your licence records have been deleted, and Vdex is signed out here');
   } }, 'Delete my records');
   const sh = sheet('Delete my licence records', h('div', { class: 'stack' },
-    h('p', null, `This deletes what Vdex's licence server keeps about you: ${what}, and the list of devices on your licence. Vdex signs out here, and your other devices are signed out at their next check.`),
-    h('p', { class: 'small muted' }, `Your licence itself is not cancelled: ${ios() ? 'restore your App Store purchase, or ' : ''}sign in again at any time, and the records are made afresh. Stripe, Link and Apple keep their own records of a purchase. Your work in Vdex is not touched.`),
+    h('p', null, `This deletes what Vdex's licence server keeps about you: ${what}, and the list of devices on your licence. Vdex signs out here, and your other devices are signed out at their next check. A computer that still has your licence code puts itself back at its next weekly check: use Release this computer there first.`),
+    h('p', { class: 'small muted' }, `Your licence itself is not cancelled: ${ios() ? 'restore your App Store purchase, or ' : ''}sign in again at any time, and the records are made afresh. Stripe, the seller named on your receipt and Apple keep their own records of a purchase. Your work in Vdex is not touched.`),
     msg, h('div', { class: 'actions' }, go)));
 }
 

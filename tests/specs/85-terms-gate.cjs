@@ -21,7 +21,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     const outside = []; page.on('request', r => { const u = new URL(r.url()); if (!['localhost', '127.0.0.1'].includes(u.hostname)) outside.push(u.hostname); });
     await page.goto(BASE); await page.waitForSelector('.terms-gate'); await sleep(600);
     ok('a first visit opens on the terms, and nothing else has started', (await page.locator('#rolodex .drum-btn').count()) === 0 && (await page.locator('.tour-card').count()) === 0 && /Before you start/.test(await page.locator('.terms-gate h1').innerText()));
-    ok('…with the short version, and links to the terms and the privacy policy', /keep your own backups/.test(await page.locator('.terms-gate').innerText()) && (await page.locator('.terms-gate a[href="terms.html"]').count()) >= 1 && (await page.locator('.terms-gate a[href="privacy.html"]').count()) >= 1);
+    ok('…with the trial and what it leaves out, the short version, and links to the terms and the privacy policy', /free to try for 30 days, then is read-only until you have a licence\. Backup files, spreadsheets and cloud storage need the licence from the start\./.test(await page.locator('.terms-gate').innerText()) && !/Vdex Licence|App Store/.test(await page.locator('.terms-gate').innerText()) && /Until you have a licence there is no backup: your information is only on this device\. Once you have one, keep your own backups\. If you use Vdex for your business, it comes as it is\./.test(await page.locator('.terms-gate').innerText()) && (await page.locator('.terms-gate a[href="terms.html"]').count()) >= 1 && (await page.locator('.terms-gate a[href="privacy.html"]').count()) >= 1);
     ok('…saying plainly how limited the developer’s responsibility is, for business use and for consumers, linked to those sections', /If you use Vdex for your business, many kinds of loss are excluded and the rest is capped at 50 US dollars\. If you use it as a consumer, you keep your legal rights\./.test(await page.locator('.terms-gate').innerText()) && (await page.locator('.terms-gate a[href="terms.html#liability"]').count()) === 1);
     ok('…and asking to confirm the minimum age and agree to the terms, with the privacy policy there to inform, not to be agreed to', /I am 18 or over, and I have read and agree to the terms of service\./.test(await page.locator('.terms-gate label.terms-check').innerText()) && !/privacy/i.test(await page.locator('.terms-gate label.terms-check').innerText()));
     const agree = page.locator('.terms-gate button:has-text("Agree and continue")');
@@ -71,6 +71,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     ok('the client invoice page never shows the terms gate', (await page.locator('.terms-gate').count()) === 0);
     const foot = await page.locator('.foot').innerText();
     ok('…and tells the client Vdex cannot confirm who made the link, to check payment details with the sender', /cannot confirm who made this link/.test(foot) && /confirm the amount and payment details with the sender/.test(foot) && (await page.locator('.foot a[href="terms.html"]').count()) === 1);
+    // All three pages a link opens on say where the information is kept, where to report a page, and link the policy.
+    for (const [file, what] of [['invoice.html', 'the invoice page'], ['crew.html', 'the crew page'], ['shared.html', 'the shared page']]) {
+      await page.goto(BASE + file); await sleep(500);
+      const f = await page.locator('.foot').innerText();
+      ok(`${what}’s footer says Vdex stores nothing online, gives the address to report the page to, and links the terms and the privacy policy`, /Vdex stores nothing online\. The link itself holds the information, so it is kept wherever the link is kept\./.test(f) && /Report this page: support@crowmade\.app/.test(f) && !/nothing was stored online/.test(f) && (await page.locator('.foot a[href="mailto:support@crowmade.app"]').count()) === 1 && (await page.locator('.foot a[href="terms.html"]').count()) === 1 && (await page.locator('.foot a[href="privacy.html"]').count()) === 1 && (await page.locator('.terms-gate').count()) === 0);
+    }
     await ctx.close(); }
 
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));

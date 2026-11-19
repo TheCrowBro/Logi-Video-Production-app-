@@ -1,6 +1,7 @@
 // Day forecast from Open-Meteo (free, no key): temperature range, chance of rain, wind and a one-line summary for a
 // shoot day at the venue or the saved location, up to 16 days ahead. Cached for three hours. Nothing is sent but the
-// coordinates and the date.
+// coordinates, rounded to two decimals first (about a kilometre: the saved location may be the person's own), the
+// date and the units. The privacy policy says exactly this; change both together.
 import { h, nodes, parseISO } from './util.js';
 import { byId } from './store.js';
 
@@ -14,7 +15,8 @@ export function locationFor(b) {
   try { const l = JSON.parse(localStorage.getItem('logi-loc')); if (l && Number.isFinite(Number(l.lat))) return { lat: +l.lat, lon: +l.lon }; } catch { /* none */ }
   return null;
 }
-const cacheKey = (lat, lon, iso) => `${lat.toFixed(2)},${lon.toFixed(2)},${iso},${imperial() ? 'i' : 'm'}`;
+const sent = n => Number(n).toFixed(2); // a coordinate as it leaves the device
+const cacheKey = (lat, lon, iso) => `${sent(lat)},${sent(lon)},${iso},${imperial() ? 'i' : 'm'}`;
 const readCache = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
 // The forecast already fetched for this place and day, if it is still fresh: drawn straight away, with no flash.
 export function cachedForecast(lat, lon, iso) { const hit = readCache()[cacheKey(lat, lon, iso)]; return hit && Date.now() - hit.at < 3 * 3600e3 ? hit.v : undefined; }
@@ -22,7 +24,7 @@ export async function forecast(lat, lon, iso) {
   const key = cacheKey(lat, lon, iso), cache = readCache();
   const hit = cache[key]; if (hit && Date.now() - hit.at < 3 * 3600e3) return hit.v;
   const units = imperial() ? '&temperature_unit=fahrenheit&wind_speed_unit=mph' : '';
-  const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max&timezone=auto&start_date=${iso}&end_date=${iso}${units}`);
+  const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${sent(lat)}&longitude=${sent(lon)}&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max&timezone=auto&start_date=${iso}&end_date=${iso}${units}`);
   if (!r.ok) throw new Error('forecast unavailable');
   const j = await r.json(), d = j.daily || {};
   if (!d.time || !d.time.length) return null;
