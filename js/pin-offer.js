@@ -6,6 +6,7 @@
 // Someone who unlocked with a fingerprint or face types the current PIN first, exactly as Change PIN… asks.
 import { h, nodes, toast, announce } from './util.js';
 import { PIN_MIN, PIN_MAX, PIN_RULE, pinField, pinProblem, checkPin, setPin, setOption, config, coverAll } from './lock.js';
+import { refreshTour } from './tour.js';
 
 // Shows the offer. done resolves when the screen has gone; drop() takes it away with no answer recorded (the lock
 // screen is coming up over it), so it is offered again after the next unlock.
@@ -15,11 +16,13 @@ export function show({ knowsPin }) {
   const card = h('form', { class: 'lock-card stack', noValidate: true });
   const screen = h('div', { class: 'lock lock-setup pin-offer', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pin-offer-title', 'aria-describedby': 'pin-offer-text' }, card);
   const brand = () => h('div', { class: 'brand' }, h('span', { class: 'dot' }), 'VDEX');
-  const end = () => {
+  // dropped: the lock screen is coming up over the offer, so nothing is shown again underneath it.
+  const end = dropped => {
     if (over) return; over = true;
     document.removeEventListener('keydown', keys);
     screen.remove(); uncover();
     const main = document.getElementById('page'); main && main.focus({ preventScroll: true }); // as the lock screen does on its way out
+    if (dropped !== true) refreshTour(); // a walkthrough step that was showing the menu or the search shows it again, as after an unlock
     finish();
   };
   const keep = () => { if (busy) return; setOption({ max: PIN_MAX }); end(); announce('Your PIN stays as it is'); };
@@ -79,9 +82,13 @@ export function show({ knowsPin }) {
   // Escape steps back: from the new PIN to the choice, and from the choice it is the same as keeping the PIN.
   const keys = e => { if (e.key !== 'Escape' || busy) return; e.preventDefault(); if (view === 'form') choice(); else keep(); };
 
+  // The offer can arrive late (its file is fetched after the unlock), over a menu or a search opened meanwhile. They
+  // close first, as under the lock screen: left open underneath, their own key handlers would take the Escape meant
+  // for this screen and give the page behind it back to the keyboard.
+  window.logiMenu?.close(); window.logiSearch?.close();
   document.addEventListener('keydown', keys);
   document.body.append(screen);
   const uncover = coverAll(screen);
   choice();
-  return { done, drop: end };
+  return { done, drop: () => end(true) };
 }

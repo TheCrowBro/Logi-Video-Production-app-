@@ -152,6 +152,7 @@ export async function wipe(reason) {
   letGo(); // nothing of this tab's copy may be written on the way out
   try { const keys = []; for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); keys.filter(k => k && (k.startsWith('logi-') || k.startsWith('msal.'))).forEach(k => localStorage.removeItem(k)); } catch { /* ignore */ }
   try { await new Promise(res => { const r = indexedDB.deleteDatabase('logi'); r.onsuccess = r.onerror = r.onblocked = () => res(); }); } catch { /* ignore */ }
+  try { await caches.delete('logi-share'); } catch { /* no cache storage here */ } // a file shared to Vdex and not picked up yet (sw.js parks it there, in plain form)
   if (reason) { try { sessionStorage.setItem('logi-wiped', reason); } catch { /* ignore */ } }
   location.reload();
 }
@@ -239,18 +240,23 @@ function derToRaw(sig) { // ECDSA signature: DER sequence of two integers → 64
 // inert (sheet() in js/util.js, runTour() in js/tour.js), so a key pressed on this screen stays on this screen. The page
 // itself (#app) is not put back from memory: it is out of reach or not by what is open once the screen has gone.
 // A sheet that code opens while the screen is up was not on the page to be covered: sheet() in js/util.js sees the
-// screen (covered()) and starts it covered, marked data-covered, and it comes back here with the rest.
+// screen (covered()) and starts it covered, marked data-covered, and it comes back here with the rest. The same for a
+// walkthrough that starts under the screen (runTour() in js/tour.js).
+// What had the keyboard focus in a form or a walkthrough gets it back, so typing carries on where it was: the screen's
+// own way out puts the focus on the page (#page), which takes none while something is open over it.
 export function coverAll(screen) {
+  const had = document.activeElement;
   const was = [...document.body.children].filter(el => el !== screen).map(el => [el, el.inert]);
   was.forEach(([el]) => { el.inert = true; });
   const app = document.getElementById('app'); if (app) app.setAttribute('aria-hidden', 'true');
   document.querySelectorAll('.sheet-back').forEach(el => el.classList.add('behind-lock'));
   return () => {
     was.forEach(([el, inert]) => { if (el.isConnected) el.inert = inert; });
-    document.querySelectorAll('.sheet-back[data-covered]').forEach(el => { el.inert = false; el.removeAttribute('data-covered'); });
+    document.querySelectorAll('.sheet-back[data-covered], .tour[data-covered]').forEach(el => { el.inert = false; el.removeAttribute('data-covered'); });
     settleApp();
     if (app) app.removeAttribute('aria-hidden');
     document.querySelectorAll('.sheet-back.behind-lock').forEach(el => el.classList.remove('behind-lock'));
+    if (had && had !== document.body && had.isConnected && !had.closest('#app')) had.focus({ preventScroll: true });
   };
 }
 function showLock(notice = '') {

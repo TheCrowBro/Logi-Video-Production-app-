@@ -125,6 +125,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.keyboard.press('Escape'); await sleep(200);
   await menuClick(page, '#installBtn'); await page.waitForSelector('.sheet');
   ok('Install closes the menu and, with no install prompt from the browser, shows how to install', !(await menuState(page)).open && (await page.locator('.sheet[aria-label="Install Vdex"]').count()) === 1);
+  const installText = await page.locator('.sheet').innerText(), storageRow = await page.evaluate(() => document.querySelector('#cloudBtn .menu-name').textContent);
+  ok('…its steps name the storage row as the menu does, and say that in this browser both ways use the same data', storageRow === 'Storage, sync & backups' && installText.includes(`Link a cloud storage under ${storageRow}, in the menu ☰`) && /Both ways use the same address and the same data\./.test(installText), installText.replace(/\s+/g, ' ').slice(0, 400));
   await page.keyboard.press('Escape'); await sleep(200);
   // The browser's own install prompt opens no sheet of ours: the row itself must have closed the menu before asking.
   await page.evaluate(() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.prompt = () => { window.__prompts = (window.__prompts || 0) + 1; window.__menuAtPrompt = !document.getElementById('menuBack').hidden; }; e.userChoice = Promise.resolve({ outcome: 'dismissed' }); window.dispatchEvent(e); });
@@ -864,6 +866,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('#searchList .sr-group[data-group="crew"] .sr').first().tap(); await sleep(700);
   const tapped = await page.evaluate(() => { const f = document.querySelector('#page .found'); return { tab: window.logiPage(), found: f ? f.querySelector('strong').textContent : '', open: !document.getElementById('searchBack').hidden }; });
   ok('…and a tap on a result opens it', tapped.tab === 'crew' && tapped.found === 'Sam Rivera' && !tapped.open, JSON.stringify(tapped));
+  await ctx.close();
+
+  /* ------------------------------ Install, on an iPhone ------------------------------ */
+  // Safari and the Home Screen app each keep a copy of their own there, so the sheet must not say they share one.
+  ({ ctx, page } = await open({ w: 390, h: 800, options: { hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' } }));
+  await menuClick(page, '#installBtn'); await page.waitForSelector('.sheet[aria-label="Install Vdex"]');
+  const onPhone = await page.locator('.sheet').innerText();
+  ok('on an iPhone the Install sheet says the Home Screen app keeps its own copy, apart from Safari, and how to bring across what was entered; it does not say both ways use the same data', /On an iPhone or iPad the Home Screen app keeps its own copy, apart from Safari: to bring across what you entered here, link the same cloud storage in both, or export a backup here and import it there \(both need a licence\)\./.test(onPhone) && !/the same data/.test(onPhone) && /Add to Home Screen/.test(onPhone), onPhone.replace(/\s+/g, ' ').slice(0, 420));
   await ctx.close();
 
   /* ---------------- extra large buttons on a touch screen: the bar's magnifier ---------------- */

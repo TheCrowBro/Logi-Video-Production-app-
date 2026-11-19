@@ -1,6 +1,6 @@
 // Spotlight walkthrough: dims the page, cuts a hole over the thing being explained, moves the Rolodex as it goes.
 // A step can carry a form (its body) that is saved on Next, so a walkthrough can set things up as well as point.
-import { h, nodes, settleApp } from './util.js';
+import { h, nodes, settleApp, covered } from './util.js';
 
 // The short tour: the fallback when the set-up walkthrough in tutorials.js cannot be fetched.
 const STEPS = [
@@ -43,14 +43,19 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   const layer = h('div', { class: 'tour' }, spot, card);
   window.logiMenu?.close(); window.logiSearch?.close(); // never left open under the tour
   window.logiShowNav?.(); // the Rolodex bar may be slid away: the tour points at it
+  // Started while the lock screen or the offer of a longer PIN is up (the timer of the first-run walkthrough, or a
+  // tutorial chosen a moment before the app was put away): it starts as everything else under that screen is, out of
+  // reach, so it takes no focus and answers no keys there. The screen's way out (coverAll in js/lock.js) gives it back.
+  if (covered()) { layer.inert = true; layer.dataset.covered = ''; }
   document.body.append(layer); if (app) app.inert = true;
   let i = from, target = null, dir = 1;
   const seen = new Set(); // steps already shown: they keep their place in the count when going back
   // On the way out the page is given back only if nothing else is over it by now: a step may have closed the form the
   // walkthrough was started from, or opened a sheet of its own (settleApp looks at what is there).
-  const stop = () => { if (!active) return; active = null; layer.remove(); window.logiMenu?.close(); window.logiSearch?.close(); settleApp(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
-  // again: only a step that shows the menu or the search is shown again. One with a form in its card would lose what was typed.
-  active = { stop, again: () => { const s = STEPS[i]; if (s && (s.menu || s.search)) show(i); } };
+  const stop = () => { if (active !== me) return; active = null; layer.remove(); window.logiMenu?.close(); window.logiSearch?.close(); settleApp(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
+  // again: only a step that shows the menu or the search is shown again. One with a form in its card would lose what was
+  // typed: there, and on any other card, the focus is put back into the card when it is nowhere (after the lock screen).
+  const me = active = { stop, again: () => { const s = STEPS[i]; if (s && (s.menu || s.search)) show(i); else if (!layer.inert && (!document.activeElement || document.activeElement === document.body)) (card.querySelector('.tour-form input, .tour-form textarea, .tour-form select') || card.querySelector('.tour-actions .btn.primary'))?.focus(); } };
   // Arrow keys move between steps, except while typing in a field of the card; Escape always leaves. Under the lock
   // screen or the offer of a longer PIN the walkthrough is out of reach, and so are its keys.
   const keys = e => { if (layer.inert) return; const t = e.target; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && e.key !== 'Escape') return; if (e.key === 'Escape') { e.stopPropagation(); stop(); } else if (e.key === 'ArrowRight') { e.stopPropagation(); next(); } else if (e.key === 'ArrowLeft') { e.stopPropagation(); dir = -1; show(i - 1); } };
@@ -74,13 +79,17 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
     if (n < 0) return;
     if (n >= STEPS.length) return stop();
     i = n; const s = STEPS[n];
-    if (s.go) { window.logiGo?.(s.go); await new Promise(r => setTimeout(r, 650)); }
+    // The walkthrough may be left (Skip, Escape) during any of the waits below. A step that was on its way then stops
+    // where it is: its hook does not run, and a menu or a search panel that arrived after the leaving (its file is
+    // fetched on first use) is closed again, since the walkthrough's own way out ran before there was anything to close.
+    if (s.go) { window.logiGo?.(s.go); await new Promise(r => setTimeout(r, 650)); if (active !== me) return; }
     if (s.menu) await window.logiMenu?.open({ show: true }); else window.logiMenu?.close();
     if (s.search) await window.logiSearch?.open({ show: true, query: '' }); else window.logiSearch?.close();
-    if (s.before) { try { await s.before(); } catch { /* the step still shows */ } await new Promise(r => setTimeout(r, 250)); }
+    if (active !== me) { if (!active) { window.logiMenu?.close(); window.logiSearch?.close(); settleApp(); } return; }
+    if (s.before) { try { await s.before(); } catch { /* the step still shows */ } await new Promise(r => setTimeout(r, 250)); if (active !== me) return; }
     target = find(s);
     if (s.target && !target) return step(n + dir); // nothing to point at here, skip
-    if (target) { target.scrollIntoView({ block: 'center', inline: 'nearest' }); await new Promise(r => setTimeout(r, 250)); }
+    if (target) { target.scrollIntoView({ block: 'center', inline: 'nearest' }); await new Promise(r => setTimeout(r, 250)); if (active !== me) return; }
     const shown = STEPS.map((x, k) => (k === n || (k > n ? willShow(x) : seen.has(k)) ? k : -1)).filter(k => k >= 0), pos = shown.indexOf(n), isLast = pos === shown.length - 1;
     seen.add(n);
     // Leaving the step forwards runs its onNext first (a form's save); Back never saves.

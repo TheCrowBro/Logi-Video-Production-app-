@@ -71,9 +71,11 @@ const noRoom = (what, done, ask) => `This ${what} is bigger than the space Vdex 
 
 /* ----------------------------------- a booking ----------------------------------- */
 async function previewBooking(snap) {
-  const [m, { billTo }] = await Promise.all([import('./share-import.js'), import('./money.js')]), p = m.planBooking(snap), L = snap.location, C = snap.call, was = p.existing;
+  const [m, { billTo }, { derived }] = await Promise.all([import('./share-import.js'), import('./money.js'), import('./gear-import.js')]), p = m.planBooking(snap), L = snap.location, C = snap.call, was = p.existing;
   if (p.own) {
-    const sh = dialog('This booking is yours', h('div', { class: 'stack' }, h('p', null, `“${p.own.title}” is already in your Bookings: this link was made from it, so there is nothing to add.`),
+    // A booking that itself came from a link carries the id that link gives it on anyone's device (linkId in
+    // js/gear-import.js), so a link that names it was made from it or from another person's copy of the same booking.
+    const sh = dialog('This booking is yours', h('div', { class: 'stack' }, h('p', null, `“${p.own.title}” is already in your Bookings: this link was made from it${derived(p.own) ? ', or from another copy of the same shared booking' : ''}, so there is nothing to add.`),
       h('div', { class: 'actions' }, h('button', { class: 'btn primary', type: 'button', onclick: async () => { sh.close(); await window.logiGo('bookings'); (await import('./pages/bookings.js')).openBooking(p.own.id); } }, 'Open it'))));
     return;
   }
@@ -82,6 +84,12 @@ async function previewBooking(snap) {
   // Who a quote or an invoice made on this booking would go to (billTo in js/money.js): the person who shared it.
   const sender = p.booking.shared.producer, head = billTo(p.booking).head, toSender = !!sender && head === (sender.business || sender.name);
   const had = was && was.shared.by, other = had && had !== p.from; // the booking was added from someone, and this link is not from them
+  // A quote or an invoice already made on the booking is not kept apart from it: who it is headed and emailed to is
+  // worked out from the booking each time (billTo). When this update changes that (another sender, a sender where there
+  // was none, a new address), the sheet says so before the tap, since the document may have gone out under the old name.
+  const docs = was ? ['quote', 'invoice'].filter(k => was[k]) : [], toOf = b => { const t = billTo(b); return [t.head, ...t.contacts.map(s => (s.email || '').trim()).filter(Boolean)]; };
+  const toWas = docs.length ? toOf(was) : null, toNow = docs.length ? toOf(p.booking) : null, moved = !!toWas && toWas.join('\n') !== toNow.join('\n');
+  const whom = t => `${t[0] === '—' ? 'nobody' : t[0]}${t.length > 1 ? ` (${t.slice(1).join(', ')})` : ''}`;
   const f = foot([[was ? 'Update the booking' : 'Add to my Bookings', async () => {
     if (!m.roomForBooking(snap)) return f.refuse(noRoom('booking', was ? 'changed' : 'added', 'a link with fewer parts ticked'));
     const done = m.applyBooking(snap); if (!done) return;
@@ -92,6 +100,7 @@ async function previewBooking(snap) {
     h('div', null, h('h3', { class: 'add-title' }, snap.title || 'Shared shoot'), h('div', { class: 'muted small' }, p.from ? `Shared by ${p.from}` : 'From a shared link', snap.made ? ` · sent ${new Date(snap.made).toLocaleDateString()}` : '')),
     was && h('p', { class: 'note small' }, `“${was.title}” is in your Bookings already${was.shared.at ? `, added ${new Date(was.shared.at).toLocaleDateString()}` : ''}. Adding it again updates it from this link.`),
     other && h('p', { class: 'warn small add-other', role: 'note' }, p.from ? `This link is from ${p.from}; the booking in your Bookings came from ${had}. Check that it is the same shoot before you update it.` : `This link does not say who it is from; the booking in your Bookings came from ${had}. Check that it is the same shoot before you update it.`),
+    moved && h('p', { class: 'warn small add-readdress', role: 'note' }, `The ${docs.join(' and the ')} you made on this booking ${docs.length === 1 ? 'is' : 'are'} headed to ${whom(toWas)}. After this update ${docs.length === 1 ? 'it is' : 'they are'} headed to ${whom(toNow)}, even if ${docs.length === 1 ? 'it has' : 'they have'} been sent already.`),
     // What an update replaces and what it leaves, as build() in js/share-import.js does it.
     was && h('div', { class: 'stack add-rules small' },
       h('p', null, h('b', null, 'Replaced: '), was.shared.sent
@@ -148,10 +157,13 @@ async function previewContact(c) {
 async function previewGear(g) {
   const m = await import('./gear-import.js'), plan = m.planGearImport(g.items), from = fromLine(g.by), cur = g.currency || '';
   const dup = plan.rows.filter(r => r.match), fresh = plan.rows.filter(r => !r.match), mine = r => r.match.id === r.item.ref, allMine = dup.length > 0 && dup.every(mine);
+  // An item that itself came from a link has the id that link gives it on anyone's device, so a list that names it was
+  // made from it or from another person's copy of the same item.
+  const orCopy = rows => (rows.some(r => m.derived(r.match)) ? ', or from another copy of the same shared list' : '');
   const sum = h('p', { class: 'add-sum', role: 'status' }), selects = [];
   // A kit that is here already is rewritten only when one of the rows it names is added or updated (applyGearImport).
   const KIT = { make: 'is made as a kit', update: 'is updated', same: 'stays as it is: every item of it is skipped' };
-  const kitDoes = k => (!(k.ref && store.db.kits.find(x => x.id === k.ref || (x.shared && x.shared.ref === k.ref))) ? 'make' : k.items.some(([row]) => { const r = plan.rows[row]; return r && !(r.match && r.action === 'skip'); }) ? 'update' : 'same');
+  const kitDoes = k => (!m.kitOf(store.db.kits, k.ref) ? 'make' : k.items.some(([row]) => { const r = plan.rows[row]; return r && !(r.match && r.action === 'skip'); }) ? 'update' : 'same');
   const kitLines = g.kits.map(k => h('span'));
   const f = foot([['', async () => {
     if (!m.roomForGear(plan, { kits: g.kits, from })) return f.refuse(noRoom('list', 'added', 'the list in parts'));
@@ -175,7 +187,7 @@ async function previewGear(g) {
     go.textContent = c.add && c.update ? `Add ${c.add.toLocaleString()} and update ${c.update.toLocaleString()}` : c.update ? `Update ${plural(c.update, 'item')}` : c.add ? `Add ${plural(c.add, 'item')} to my Equipment` : made ? (made === 1 ? 'Make the kit' : `Make ${made} kits`) : 'Nothing to add';
     go.off = go.disabled = !(c.add + c.update + made);
   };
-  const WHY = { ref: r => (mine(r) ? 'This is your own item: the list was made from it' : `Added from this list before${r.match.name !== r.item.name ? `, as “${r.match.name}”` : ''}`), serial: r => `Same serial number as your “${r.match.name}”`, name: r => `Same name as your “${r.match.name}”` };
+  const WHY = { ref: r => (mine(r) ? 'This is your own item: the list was made from it' + orCopy([r]) : `Added from this list before${r.match.name !== r.item.name ? `, as “${r.match.name}”` : ''}`), serial: r => `Same serial number as your “${r.match.name}”`, name: r => `Same name as your “${r.match.name}”` };
   const line = r => { const x = r.item; return [h('div', null, h('strong', null, x.name), x.qty > 1 && ` × ${x.qty}`), h('div', { class: 'muted small' }, [x.category, x.serial && 'S/N ' + x.serial, x.value !== '' && money(x.value, cur) + (x.qty > 1 ? ' each' : ''), x.location && '📍 ' + x.location].filter(Boolean).join(' · '))]; };
   const pick = r => { const sel = h('select', { 'aria-label': `What to do with ${r.item.name}`, onchange: e => { r.action = e.target.value; paint(); } }, m.ACTIONS.map(([v, label]) => h('option', { value: v, selected: v === r.action }, label))); selects.push(sel); return sel; };
   const all = dup.length > 1 && h('label', { class: 'add-all small' }, 'All of these: ', h('select', { 'aria-label': 'What to do with every item you already have', onchange: e => { if (!e.target.value) return; dup.forEach(r => { r.action = e.target.value; }); selects.forEach(s => { s.value = e.target.value; }); paint(); } }, h('option', { value: '' }, 'Choose…'), m.ACTIONS.map(([v, label]) => h('option', { value: v }, label))));
@@ -184,7 +196,7 @@ async function previewGear(g) {
     h('p', { class: 'small muted' }, 'A copy of each item goes into your Equipment, with its serial number, value, notes and the rest of its details. Values come as the numbers they are, in whatever currency the sender uses.'),
     g.cut > 0 && h('p', { class: 'note small add-cut' }, `This list is longer than one link carries: only its first ${GEAR_MAX.toLocaleString()} items are here, and ${plural(g.cut, 'more item')} ${g.cut === 1 ? 'is' : 'are'} not. Ask for the rest in a second link.`),
     dup.length > 0 && h('section', { class: 'add-group', 'aria-label': 'Items you already have' }, h('h4', null, `Already in your Equipment (${dup.length.toLocaleString()})`),
-      allMine && h('p', { class: 'note small add-mine' }, `${dup.length === 1 ? 'This is your own item: the list was made from it. It is' : 'These are your own items: the list was made from them. They are'} left as ${dup.length === 1 ? 'it is' : 'they are'} unless you choose otherwise.`), all,
+      allMine && h('p', { class: 'note small add-mine' }, `${dup.length === 1 ? 'This is your own item: the list was made from it' : 'These are your own items: the list was made from them'}${orCopy(dup)}. ${dup.length === 1 ? 'It is' : 'They are'} left as ${dup.length === 1 ? 'it is' : 'they are'} unless you choose otherwise.`), all,
       h('ul', { class: 'add-list add-items' }, dup.map(r => h('li', { class: 'add-dup' }, ...line(r), !allMine && h('div', { class: 'small add-why' }, WHY[r.why](r)), pick(r))))),
     fresh.length > 0 && h('section', { class: 'add-group', 'aria-label': 'New items' }, h('h4', null, `New (${fresh.length.toLocaleString()})`), h('ul', { class: 'add-list add-items' }, fresh.map(r => h('li', null, ...line(r))))),
     g.kits.length > 0 && h('section', { class: 'add-group add-kits' }, h('h4', null, g.kits.length === 1 ? 'Kit' : 'Kits'), h('ul', { class: 'add-list' }, kitLines.map(el => h('li', null, el)))),

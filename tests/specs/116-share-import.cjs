@@ -8,7 +8,10 @@
 // own card and one's own equipment, Undo after an equipment link, lists and shoots longer than a link may bring, a
 // link too big for the browser's storage, one preview at a time, the scanner on a long code, and the shared pages'
 // line for people whose Vdex is an app. And: the name an invoice is listed under when the booking came from a link, the
-// formula guard in the TC Notes spreadsheet, and an Add whose follow-up cannot be fetched.
+// formula guard in the TC Notes spreadsheet, and an Add whose follow-up cannot be fetched. And what a second check of
+// those fixes found: a contact typed by hand under a name a later link also carries, an invoice headed anew by an
+// update, a link that names no sender, the producer's deliverables, a sync between two devices that took the same
+// link (or of which only one took its update), and a workmate's card under one's own email address.
 const { chromium } = require('playwright');
 const fs = require('fs');
 const { acceptTerms } = require('../helpers.cjs');
@@ -159,7 +162,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
 
   // the sender's own link, in the sender's own Vdex
   await A.page.goto(BASE + 'index.html#add=' + hashOf(link2)); await A.page.waitForSelector('.sheet');
-  ok('one’s own link has nothing to add: the booking is already there, and there is no Add button', /This booking is yours/.test(await sheetText(A.page)) && (await A.page.locator('.sheet .add-actions').count()) === 0 && (await db(A.page)).bookings.filter(x => x.title === 'Harbour Brewing brand film').length === 1);
+  ok('one’s own link has nothing to add: the booking is already there, and there is no Add button', /This booking is yours/.test(await sheetText(A.page)) && /this link was made from it, so there is nothing to add/.test(await sheetText(A.page)) && (await A.page.locator('.sheet .add-actions').count()) === 0 && (await db(A.page)).bookings.filter(x => x.title === 'Harbour Brewing brand film').length === 1);
   await A.page.keyboard.press('Escape'); await sleep(200);
 
   /* ============================== a contact card ============================== */
@@ -531,7 +534,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   // ---- a booking shared on is still one's own ----
   const onward = await U.page.evaluate(inc => Promise.all([import('./js/store.js'), import('./js/crew-link.js')]).then(([s, m]) => m.crewLink(s.db.bookings[0], inc)), EVERYTHING);
   await arrive(U.page, hashOf(onward), '.sheet');
-  ok('a booking that came from a link and is shared on is known as one’s own when its link comes back: nothing to add, no copy', /This booking is yours/.test(await sheetText(U.page)) && (await U.page.locator('.sheet .add-actions').count()) === 0 && (await db(U.page)).bookings.length === 1);
+  ok('a booking that came from a link and is shared on is known as one’s own when its link comes back: nothing to add, no copy (the link was made from it, or from someone else’s copy of the same shared booking, which has the same reference)', /This booking is yours/.test(await sheetText(U.page)) && /this link was made from it, or from another copy of the same shared booking, so there is nothing to add/.test(await sheetText(U.page)) && (await U.page.locator('.sheet .add-actions').count()) === 0 && (await db(U.page)).bookings.length === 1);
   await U.page.keyboard.press('Escape'); await sleep(200);
 
   // ---- a booking from before Vdex kept what a link supplied ----
@@ -543,6 +546,158 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const u5 = (await db(U.page)).bookings[0];
   ok('…and it does: the client and the venue’s hospital are the link’s again, the strips are the link’s with their notes kept, and from now on the booking keeps the record', u5.client === 'Northwind Ltd' && (await db(U.page)).venues[0].hospital === 'Portside General' && (await db(U.page)).venues[0].shared.sent.hospital === 'Portside General' && !u5.board.list.some(x => x.id === 'mine-1') && u5.board.list.find(x => x.scene === '3').notes === 'NOTE ON THREE' && u5.shared.sent.client === 'Northwind Ltd' && u5.shared.rows.strips.length === 4, JSON.stringify([u5.client, u5.board.list.map(x => x.scene || x.text || x.id)]));
   await U.ctx.close();
+
+  /* ============================== what a second check of those fixes found ============================== */
+  // ---- a contact typed by hand under a name a later link also carries stays one's own ----
+  const J = await open();
+  await J.page.goto(BASE); await J.page.waitForSelector('#rolodex .drum-btn');
+  const jb = ref => db(J.page).then(d => d.bookings.find(b => b.shared && b.shared.ref === ref));
+  const jbill = ref => J.page.evaluate(ref => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => { const b = s.db.bookings.find(x => x.shared && x.shared.ref === ref); return { to: m.snapshot(b, 'invoice').to, mail: decodeURIComponent(m.mailtoFor(b, 'invoice', 'https://x.example/i').split('?')[0]), head: m.billTo(b).head, named: m.billedName(b) }; }), ref);
+  // By hand, on the booking a link made: lists are added to, anything else is set.
+  const jput = (ref, patch) => J.page.evaluate(([ref, patch]) => import('./js/store.js').then(s => s.update(d => { const x = d.bookings.find(b => b.shared && b.shared.ref === ref); for (const [k, v] of Object.entries(patch)) x[k] = Array.isArray(v) ? [...(x[k] || []), ...v] : v; x.updatedAt = Date.now(); })), [ref, patch]);
+  const invoice = number => ({ number, date: day(10), lines: [{ id: 'l1', desc: 'Shoot day', qty: 1, unit: 'day', price: 500 }], status: 'Sent' });
+  const update = async (page = J.page) => { await page.locator('.sheet button:has-text("Update the booking")').click(); await page.waitForSelector('.bk-detail'); await sleep(300); };
+  const first = shoot({ ref: 'REF-J1' }); delete first.contacts; // the producer left "Client contacts" unticked, as it is to begin with
+  await arrive(J.page, await pack(first));
+  await J.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await J.page.waitForSelector('.bk-detail'); await sleep(300);
+  // by hand: the client's contact, with one's own details for him, and an invoice that has gone out
+  await jput('REF-J1', { stakeholders: [{ name: 'Carl Client', role: 'Marketing (my contact)', phone: '+44 7700 900123', email: 'carl.private@example.com' }], invoice: invoice('INV-0041') });
+  const j0 = await jbill('REF-J1');
+  // link 2: the producer ticks the contacts, and their list has Carl with the office address and no phone
+  await arrive(J.page, await pack(shoot({ ref: 'REF-J1', made: Date.now() + 1000, contacts: [{ name: 'Carl Client', role: 'Marketing', phone: '', email: 'carl@northwind.example' }] })));
+  const jp = await sheetText(J.page);
+  ok('a link that carries a contact one typed in by hand under the same name does not count him among the contacts it brings', /Contacts\s+1 contact on the booking \(Pat Producer\)/.test(jp) && /everything you added by hand: your own people, contacts/.test(jp) && !/You changed/.test(jp), (jp.match(/Contacts\s[^\n]*/) || [''])[0]);
+  ok('…and, as nothing about who the invoice goes to would change, says nothing about re-addressing it', (await J.page.locator('.sheet .add-readdress').count()) === 0);
+  await update();
+  const j1 = await jb('REF-J1'), carl1 = j1.stakeholders.filter(s => s.name === 'Carl Client'), j1bill = await jbill('REF-J1');
+  ok('…and the update leaves him exactly as typed: one line, with the role, number and address one gave him, and his name is not the link’s', carl1.length === 1 && carl1[0].role === 'Marketing (my contact)' && carl1[0].phone === '+44 7700 900123' && carl1[0].email === 'carl.private@example.com' && j1.shared.contacts.join('|') === 'pat producer', JSON.stringify([carl1, j1.shared.contacts]));
+  ok('…so he is still on the invoice’s To lines and in its email', JSON.stringify(j1bill) === JSON.stringify(j0) && j1bill.to.length === 3 && j1bill.to[2] === 'Carl Client · Marketing (my contact) · carl.private@example.com' && j1bill.mail === 'mailto:pat@quayfilms.example,carl.private@example.com', JSON.stringify(j1bill));
+  // link 3: other contacts. The link's own are replaced; the typed one was never the link's, and stays
+  await arrive(J.page, await pack(shoot({ ref: 'REF-J1', made: Date.now() + 2000, contacts: [{ name: 'Dana New', role: 'Brand lead', phone: '', email: 'dana@northwind.example' }] })));
+  await update();
+  const j2 = await jb('REF-J1');
+  ok('…and he is still there after a later link with other contacts, which come in beside him', j2.stakeholders.map(s => s.name).join('|') === 'Pat Producer|Dana New|Carl Client' && j2.stakeholders[2].email === 'carl.private@example.com' && j2.shared.contacts.join('|') === 'pat producer|dana new', JSON.stringify(j2.stakeholders));
+
+  // ---- an invoice already made is headed and emailed anew by an update from another sender: the sheet says so ----
+  const olive = { name: 'Olive Other', business: 'Harbour Media', phone: '', email: 'olive@harbour.example' }, dana = [{ name: 'Dana New', role: 'Brand lead', phone: '', email: 'dana@northwind.example' }];
+  await arrive(J.page, await pack(shoot({ ref: 'REF-J1', made: Date.now() + 3000, by: olive, contacts: dana })));
+  const moved = await J.page.locator('.sheet .add-readdress').innerText().catch(() => '(no such line)');
+  ok('an update that changes who an invoice already made is headed and emailed to says so before the tap, with both names and the addresses', moved === 'The invoice you made on this booking is headed to Quay Films (pat@quayfilms.example, carl.private@example.com). After this update it is headed to Harbour Media (olive@harbour.example, carl.private@example.com), even if it has been sent already.' && /quote, invoice and hours/.test(await sheetText(J.page)), moved);
+  await update();
+  const j3bill = await jbill('REF-J1');
+  ok('…which is what the update then does to the invoice that was sent', j3bill.head === 'Harbour Media' && j3bill.named === 'Harbour Media' && j3bill.mail === 'mailto:olive@harbour.example,carl.private@example.com', JSON.stringify(j3bill));
+  await arrive(J.page, await pack(shoot({ ref: 'REF-J1', made: Date.now() + 4000, by: olive, contacts: dana })));
+  ok('…and the same sender’s link again, which changes nothing of that, has no such line', (await J.page.locator('.sheet .add-readdress').count()) === 0 && (await J.page.locator('.sheet .add-other').count()) === 0 && /Update this booking\?/.test(await sheetText(J.page)));
+  await J.page.keyboard.press('Escape'); await sleep(200);
+
+  // ---- a link that names no sender, and a contact typed under the name a later link gives as its sender ----
+  const anon = shoot({ ref: 'REF-J2', title: 'Pier film', by: {}, contacts: [{ name: 'Carl Client', role: 'Marketing', phone: '', email: 'carl@northwind.example' }, { name: 'Paula Agency', role: 'Producer · Tidewater', phone: '', email: 'paula@agency.example' }] });
+  await arrive(J.page, await pack(anon));
+  const nsv = await J.page.locator('.sheet .add-bill').innerText();
+  ok('a link that names no sender says a quote or an invoice on it is headed to nobody, also when one of the client’s contacts has a role that begins with “Producer”', /The link does not say who shared it, so a quote or an invoice you make on it is headed to nobody until you add a contact or change the client/.test(nsv) && !/goes to/.test(nsv), nsv);
+  await J.page.locator('.sheet button:has-text("Add to my Bookings")').click(); await J.page.waitForSelector('.bk-detail'); await sleep(300);
+  await jput('REF-J2', { invoice: invoice('INV-0042') });
+  // The Email button of the Money page, as the page draws it.
+  const mailBtn = ref => J.page.evaluate(ref => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => { const b = ref ? s.db.bookings.find(x => x.shared && x.shared.ref === ref) : s.db.bookings.find(x => x.id === 'plain-job'), a = m.moneyPage(b, 'invoice', () => {}).querySelector('a[href^="mailto:"]'); return { text: a.textContent, tip: a.title, to: decodeURIComponent(a.getAttribute('href').split('?')[0]) }; }), ref);
+  const ns = { ...(await jbill('REF-J2')), producer: (await jb('REF-J2')).shared.producer, btn: await mailBtn('REF-J2') };
+  ok('…and so it is: that contact is not taken for the person who shared it, and the invoice names and emails nobody', ns.producer === null && ns.head === '—' && ns.named === '' && ns.to.join('|') === '—' && ns.mail === 'mailto:', JSON.stringify(ns));
+  const TIP = 'On a booking added from a shared link this goes to the person who shared it and to contacts you add yourself: give one of them an email address on the booking';
+  ok('the Email button, with nobody to write to while the booking shows contacts with addresses, says who it goes to on such a booking instead of “Add contact emails”', ns.btn.text === '✉ Email' && ns.btn.tip === TIP && ns.btn.to === 'mailto:', JSON.stringify(ns.btn));
+  await jput('REF-J2', { stakeholders: [{ name: 'Pat Producer', role: 'Hired me', phone: '', email: 'pat.billing@quay.example' }] });
+  const nb = await mailBtn('REF-J2');
+  ok('…and once a contact of one’s own has an address, it writes to them', nb.text === '✉ Email client (1)' && nb.tip === 'To: pat.billing@quay.example' && nb.to === 'mailto:pat.billing@quay.example', JSON.stringify(nb));
+  await J.page.evaluate(d => import('./js/store.js').then(s => s.update(x => { x.bookings.push({ id: 'plain-job', title: 'Plain job', client: 'Acme', type: 'other', date: d, status: 'Confirmed', crew: [], gear: [], stakeholders: [{ name: 'No Address', role: '', phone: '', email: '' }], notes: '', deliverables: [{ id: 'pd1', name: 'Teaser', duration: '30 s', status: 'Planned' }], invoice: { number: 'INV-0043', date: d, lines: [], status: 'Draft' } }); })), day(12));
+  const pb = await mailBtn('');
+  ok('…while an ordinary booking with no addresses still says to add contact emails', pb.text === '✉ Email' && pb.tip === 'Add contact emails on the booking', JSON.stringify(pb));
+  await J.page.evaluate(() => import('./js/tutorials.js').then(m => m.openMoneyGuide())); await J.page.waitForSelector('.sheet .money-guide-body');
+  ok('the quotes and invoices guide says who Email client writes to on a booking added from a shared link', /Email client, which addresses the contacts on the booking \(on a booking added from a shared link: the person who shared it and the contacts you added yourself\)/.test(await sheetText(J.page)));
+  await J.page.keyboard.press('Escape'); await sleep(200);
+  // the producer's next link names them: the line typed under their name is one's own, and stays through update after update
+  const named = made => { const x = shoot({ ref: 'REF-J2', title: 'Pier film', made }); delete x.contacts; return x; };
+  for (const made of [Date.now() + 1000, Date.now() + 2000]) { await arrive(J.page, await pack(named(made))); await update(); }
+  const j5 = await jb('REF-J2'), j5bill = await jbill('REF-J2'), pats = j5.stakeholders.filter(s => s.name === 'Pat Producer');
+  ok('a contact typed under the name a later link gives as its sender stays as typed through two updates, and the invoice is headed to the sender’s business and emailed to the typed address', pats.length === 1 && pats[0].role === 'Hired me' && pats[0].email === 'pat.billing@quay.example' && j5.shared.producer.business === 'Quay Films' && !j5.shared.contacts.includes('pat producer') && j5bill.head === 'Quay Films' && j5bill.mail === 'mailto:pat.billing@quay.example', JSON.stringify([j5.stakeholders, j5.shared.contacts, j5bill]));
+  // a booking from before the producer was recorded apart still finds them among the link's contacts, by their role
+  await J.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings.find(b => b.shared && b.shared.ref === 'REF-J1'), sh = x.shared; x.shared = { ref: sh.ref, by: sh.by, at: sh.at, updated: sh.updated, made: sh.made, note: sh.note, contacts: sh.contacts }; x.updatedAt = Date.now(); })));
+  const oldBill = await jbill('REF-J1');
+  ok('a booking added before the sender was recorded apart is still billed to the contact the link brought as “Producer”', oldBill.head === 'Harbour Media' && oldBill.mail === 'mailto:olive@harbour.example,carl.private@example.com', JSON.stringify(oldBill));
+
+  // ---- the producer's deliverables are not suggested as lines of one's own quote or invoice ----
+  const sug = ref => J.page.evaluate(ref => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => m.suggestLines(ref ? s.db.bookings.find(x => x.shared && x.shared.ref === ref) : s.db.bookings.find(x => x.id === 'plain-job'), 'invoice').map(l => l.desc)), ref);
+  const sug1 = await sug('REF-J2');
+  // one added by hand, and the link's own edited in its form (which writes the line anew, without the link's mark)
+  await J.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.bookings.find(b => b.shared && b.shared.ref === 'REF-J2'); x.deliverables = [...x.deliverables.map(({ shared, ...dl }) => ({ ...dl, link: 'https://my.example/cut' })), { id: 'mydl', name: 'Sound stems', duration: '', due: '', status: 'Planned', link: '', delivered: '' }]; x.updatedAt = Date.now(); })));
+  const sug2 = await sug('REF-J2');
+  ok('the deliverables a link brought are the producer’s, and are not suggested as lines of one’s own invoice; one added by hand is', !sug1.some(l => /Main film/.test(l)) && sug1.some(l => /^Shoot day/.test(l)) && !sug2.some(l => /Main film/.test(l)) && sug2.includes('Sound stems'), JSON.stringify([sug1, sug2]));
+  ok('…and an ordinary booking’s deliverables are suggested as before', (await sug('')).includes('Teaser (30 s)'));
+  await J.ctx.close();
+
+  // ---- two devices of one person: a link update on one, a later edit of the booking on the other, then the sync ----
+  const M = await open();
+  await M.page.goto(BASE); await M.page.waitForSelector('#rolodex .drum-btn');
+  const strip = (scene, set) => ({ scene, ie: 'INT', set, tod: 'DAY', desc: '', cast: [], pages: '1', kind: 'sb-int-day' });
+  const board = (...sets) => [{ n: 1, date: day(10), pages: String(sets.length), items: sets.map((set, i) => strip(String(i + 1), set)) }];
+  const mk = (over = {}) => shoot({ ref: 'REF-M1', title: 'Kitchen film', endDate: '', scenes: board('KITCHEN', 'HALL'), ...over });
+  const linkOne = await pack(mk()), linkTwo = await pack(mk({ made: Date.now() + 1000, scenes: board('KITCHEN', 'HALL', 'GARDEN') }));
+  const synced = await M.page.evaluate(async ([one, two]) => {
+    const s = await import('./js/store.js'), sd = await import('./js/share-data.js'), si = await import('./js/share-import.js');
+    const read = l => sd.readShared('#' + l), mine = d => d.bookings.find(b => b.shared && b.shared.ref === 'REF-M1'), wait = () => new Promise(r => setTimeout(r, 25));
+    si.applyBooking(await read(one));
+    const before = s.serialize(); // both devices hold the booking with scenes 1 and 2
+    await wait(); si.applyBooking(await read(two)); // device A takes the producer's new link: scene 3 comes in
+    const a = JSON.parse(s.serialize());
+    s.replaceAll(JSON.parse(before)); // device B, still open and not synced, ticks a checklist line a moment later
+    s.update(d => { const x = mine(d); x.checks = { 'x:t': 1 }; x.updatedAt = Date.now() + 5000; });
+    const b = JSON.parse(s.serialize()), out = {};
+    for (const [k, m] of [['ba', s.mergeDb(b, a)], ['ab', s.mergeDb(a, b)]]) { const x = mine(m), sc = x.board.list.filter(y => y.type === 'scene'); out[k] = { scenes: sc.map(y => y.scene).join(), strips: x.shared.rows.strips.length, ticked: !!(x.checks && x.checks['x:t']), listed: sc.every(y => x.shared.rows.strips.includes(y.id)) }; }
+    s.replaceAll(s.mergeDb(b, a));
+    out.own = si.planBooking(await read(two)).ownStrips;
+    return out;
+  }, [linkOne, linkTwo]);
+  ok('after a sync that keeps one device’s later edit of the booking and the other’s updated stripboard, the list of the strips the link made is the one that goes with that board', ['ba', 'ab'].every(k => synced[k].scenes === '1,2,3' && synced[k].strips === 3 && synced[k].ticked && synced[k].listed) && synced.own === 0, JSON.stringify(synced));
+  await arrive(M.page, linkTwo);
+  const againM = await sheetText(M.page);
+  await update(M.page);
+  const afterM = (await db(M.page)).bookings.find(b => b.shared && b.shared.ref === 'REF-M1').board.list.filter(x => x.type === 'scene').map(x => `${x.scene} ${x.set}`);
+  ok('…so the same link again counts no strips as one’s own, and the update leaves each scene once', !/Your strips/.test(againM) && afterM.join('|') === '1 KITCHEN|2 HALL|3 GARDEN', JSON.stringify([(againM.match(/Your strips[^\n]*/) || [''])[0], afterM]));
+
+  // ---- the same links added on two devices before either has read the other's copy ----
+  const dock = { venue: 'Dock Hall', address: '9 Dock Road, Portside', access: 'Side door', parking: '', power: '', hospital: '', rules: '' };
+  const harbour = (over = {}) => shoot({ ref: 'REF-X1', title: 'Harbour film', location: dock, ...over });
+  const kitList = { v: 1, kind: 'gear', made: Date.now(), title: 'Interview kit', currency: '£', by: { name: 'Pat Producer' }, items: [{ ref: 'gx1', name: 'Sony FX6', category: 'Camera', serial: 'FX6-1' }, { ref: 'gx2', name: 'Sigma 24-70', category: 'Lens' }], kits: [{ ref: 'kx1', name: 'Interview kit', items: [[0, 1], [1, 1]] }] };
+  const laterCall = harbour({ made: Date.now() + 1000 }); laterCall.call = { ...laterCall.call, general: '06:15' };
+  const twice = await M.page.evaluate(async ([bk, upd, gear, onward, direct]) => {
+    const s = await import('./js/store.js'), sd = await import('./js/share-data.js'), si = await import('./js/share-import.js'), gi = await import('./js/gear-import.js');
+    const read = l => sd.readShared('#' + l), g = await read(gear), wait = () => new Promise(r => setTimeout(r, 25));
+    const addBoth = async () => { si.applyBooking(await read(bk)); gi.applyGearImport(gi.planGearImport(g.items), { kits: g.kits, from: 'Pat Producer' }); return JSON.parse(s.serialize()); };
+    const from = x => !!x.shared && /^(REF-X1|gx\d|kx\d)$/.test(x.shared.ref || '');
+    const count = d => ({ bookings: d.bookings.filter(from).length, venues: d.venues.filter(from).length, gear: d.gear.filter(from).length, kits: d.kits.filter(from).length });
+    const start = s.serialize();
+    const a = await addBoth(); s.replaceAll(JSON.parse(start)); await wait(); const b = await addBoth(); // device A, then device B from the same start
+    const out = { each: [count(a), count(b)] };
+    s.replaceAll(s.mergeDb(a, b)); out.merged = count(s.db);
+    out.kit = s.db.kits.filter(from).map(k => k.gear.map(id => (s.db.gear.find(x => x.id === id) || {}).name).join('+')).join('|');
+    si.applyBooking(await read(upd)); // the producer's update, on either device after the sync
+    out.calls = s.db.bookings.filter(from).map(x => x.callSheet.generalCall).join('|');
+    out.again = gi.planGearImport(g.items).rows.map(r => r.why + ':' + r.action).join('|');
+    // “Add anyway, as another item” still makes another item, and a booking deleted and added again is a record of its own
+    const plan = gi.planGearImport(g.items); plan.rows.forEach(r => { r.action = 'add'; }); gi.applyGearImport(plan, { kits: [], from: 'Pat Producer' });
+    out.anyway = { gear: s.db.gear.filter(from).length, ids: new Set(s.db.gear.map(x => x.id)).size === s.db.gear.length };
+    const was = s.db.bookings.find(from).id; s.remove('bookings', was); await wait(); si.applyBooking(await read(bk));
+    const back = s.db.bookings.filter(from); out.readded = back.length === 1 && back[0].id !== was && s.mergeDb(JSON.parse(s.serialize()), a).bookings.filter(from).length === 1;
+    // someone who holds a workmate's link made from the workmate's copy of a shoot, and then the producer's own link:
+    // the workmate's link again updates the booking it made, and is not taken for a link made from the other one
+    si.applyBooking(await read(onward)); si.applyBooking(await read(direct));
+    const p = si.planBooking(await read(onward));
+    out.onward = { own: !!p.own, updates: !!p.existing && p.existing.shared.ref === 'link-REF-X2', held: s.db.bookings.filter(x => x.shared && /REF-X2$/.test(x.shared.ref)).length };
+    return out;
+  }, [await pack(harbour()), await pack(laterCall), await pack(kitList), await pack(shoot({ ref: 'link-REF-X2', title: 'Second film', by: { name: 'Wes Workmate', business: '', phone: '', email: '' } })), await pack(shoot({ ref: 'REF-X2', title: 'Second film' }))]);
+  ok('each device makes one booking, one venue, two items and one kit from the links', twice.each.every(c => JSON.stringify(c) === JSON.stringify({ bookings: 1, venues: 1, gear: 2, kits: 1 })), JSON.stringify(twice.each));
+  ok('…and after the sync there is still one of each, not two: what a link makes has the same id on every device', JSON.stringify(twice.merged) === JSON.stringify({ bookings: 1, venues: 1, gear: 2, kits: 1 }) && twice.kit === 'Sony FX6+Sigma 24-70', JSON.stringify([twice.merged, twice.kit]));
+  ok('…so the producer’s update reaches the one booking there is, and the equipment link again finds each item once', twice.calls === '06:15' && twice.again === 'ref:update|ref:update', JSON.stringify([twice.calls, twice.again]));
+  ok('“Add anyway” still makes another item with an id of its own, and a booking deleted and added again is a new record that a merge with an older copy does not take away', twice.anyway.gear === 4 && twice.anyway.ids && twice.readded, JSON.stringify([twice.anyway, twice.readded]));
+  ok('a link whose reference is the id of a booking made from another link updates the booking that link made before, and is not taken for one’s own', !twice.onward.own && twice.onward.updates && twice.onward.held === 2, JSON.stringify(twice.onward));
+  await M.ctx.close();
 
   /* ============================== a card that only looks like someone on the Crew list ============================== */
   const C = await open();
@@ -588,6 +743,14 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const ownApplied = await C.page.evaluate(() => import('./js/share-import.js').then(m => m.applyContact({ kind: 'contact', name: 'Uma Owner', email: 'uma@ownerfilms.example', phone: '', title: '', business: '', website: '', location: '' })));
   ok('…and one is never put on one’s own Crew list', ownApplied === false && (await crewOf()).length === before5 && !(await crewOf()).some(x => x.name === 'Uma Owner'));
   await C.page.locator('.sheet button:has-text("Close")').click(); await sleep(200);
+  // a workmate's card under the company's address is theirs, not one's own
+  await arrive(C.page, await cardOf({ name: 'Wes Workmate', title: 'Editor', phone: '+1 555 0444', email: 'uma@ownerfilms.example' }), '.sheet');
+  ok('a card in another name that carries the email address of one’s own profile (a company address) is not one’s own card: it can be added', /Add this contact\?/.test(await sheetText(C.page)) && (await C.page.locator('.sheet .add-actions .btn').allInnerTexts()).join('|') === 'Add to my Crew|Cancel', (await sheetText(C.page)).replace(/\s+/g, ' ').slice(0, 160));
+  await C.page.locator('.sheet button:has-text("Add to my Crew")').click().catch(() => {}); await C.page.waitForSelector('.crew-card.just-added', { timeout: 8000 }).catch(() => {}); await sleep(200);
+  ok('…and the tap adds them to the Crew list', (await crewOf()).some(x => x.name === 'Wes Workmate' && x.email === 'uma@ownerfilms.example' && x.role === 'Editor'));
+  if (await C.page.locator('.sheet').count()) { await C.page.keyboard.press('Escape'); await sleep(200); }
+  const owns = await C.page.evaluate(() => import('./js/share-import.js').then(m => { const p = { name: 'Uma Owner', business: 'Owner Films', email: 'uma@ownerfilms.example', phone: '+1 555 0500' }, c = o => m.ownCard({ name: '', business: '', email: '', phone: '', ...o }, p); return [c({ name: 'Uma Owner', email: 'UMA@ownerfilms.example' }), c({ name: 'Owner Films', email: 'uma@ownerfilms.example' }), c({ email: 'uma@ownerfilms.example' }), c({ name: 'Uma Owner', email: 'other@elsewhere.example', phone: '+1 555 0500' }), c({ name: 'Wes Workmate', email: 'uma@ownerfilms.example', phone: '+1 555 0500' }), m.ownCard({ name: 'Wes Workmate', business: '', email: 'x@y.example', phone: '' }, { name: '', business: '', email: 'x@y.example', phone: '' })]; }));
+  ok('…while one’s own name or business under that address, or the address with no name, is still one’s own card; one’s name and number under another address is not; and a profile with no name goes by the address alone', JSON.stringify(owns) === JSON.stringify([true, true, true, false, false, true]), JSON.stringify(owns));
 
   // ---- one link at a time ----
   const three3 = [await cardOf({ name: 'Ann Test', phone: '555 0001 01' }), await cardOf({ name: 'Ben Test', phone: '555 0001 02' }), await cardOf({ name: 'Cy Test', phone: '555 0001 03' })];
@@ -603,14 +766,15 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   await C.page.evaluate(() => window.logiGo('crew')); await sleep(300);
   // a camera that shows a picture of ours: a QR code drawn on a canvas, moved a little all the time, as a hand does
   // fill: how much of the picture's height the code takes, at its middle size (it swings a little, as a hand does)
-  const fakeCamera = (page, text, fill = 0.72) => page.evaluate(async ([t, fill]) => {
+  // still: the code does not move at all. The camera notes what it is asked for (window.__camAsked).
+  const fakeCamera = (page, text, fill = 0.72, still = false) => page.evaluate(async ([t, fill, still]) => {
     const { qrSvg } = await import('./js/qr.js'), img = new Image();
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(await qrSvg(t, { cellSize: 4 })); await img.decode();
     const c = document.createElement('canvas'); c.width = 1920; c.height = 1080; const g = c.getContext('2d'); let k = 0;
-    const draw = () => { const d = 1080 * 0.9 * (fill + (fill < 0.6 ? 0.03 : 0.06) * Math.sin(k / 3)), x = 960 - d / 2 + 6 * Math.sin(k / 2), y = 540 - d / 2 + 6 * Math.cos(k / 2); k++; g.filter = 'none'; g.fillStyle = '#cfcfcf'; g.fillRect(0, 0, 1920, 1080); g.filter = 'blur(1px)'; g.fillStyle = '#fff'; g.fillRect(x - 12, y - 12, d + 24, d + 24); g.drawImage(img, x, y, d, d); };
+    const draw = () => { const sw = still ? 0 : 1, d = 1080 * 0.9 * (fill + sw * (fill < 0.6 ? 0.03 : 0.06) * Math.sin(k / 3)), x = 960 - d / 2 + sw * 6 * Math.sin(k / 2), y = 540 - d / 2 + sw * 6 * Math.cos(k / 2); k++; g.filter = 'none'; g.fillStyle = '#cfcfcf'; g.fillRect(0, 0, 1920, 1080); g.filter = 'blur(1px)'; g.fillStyle = '#fff'; g.fillRect(x - 12, y - 12, d + 24, d + 24); g.drawImage(img, x, y, d, d); };
     draw(); clearInterval(window.__cam); window.__cam = setInterval(draw, 100);
-    const stream = c.captureStream(10); navigator.mediaDevices.getUserMedia = async () => stream;
-  }, [text, fill]);
+    const stream = c.captureStream(10); window.__camAsked = []; navigator.mediaDevices.getUserMedia = async asked => { window.__camAsked.push(asked); return stream; };
+  }, [text, fill, still]);
   await C.page.locator('#page button', { hasText: 'Add from a link' }).click(); await C.page.waitForSelector('.sheet textarea');
   const boxSize = await C.page.evaluate(() => ({ box: parseFloat(getComputedStyle(document.querySelector('.sheet textarea.share-link')).fontSize), root: parseFloat(getComputedStyle(document.documentElement).fontSize) }));
   ok('the box a link is pasted into is as large as the page’s text, not 12 pixels', boxSize.box === boxSize.root && boxSize.box >= 16, JSON.stringify(boxSize));
@@ -623,22 +787,30 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   await C.page.waitForFunction(() => { const a = document.querySelector('.sheet [role=alert]'); return a && !a.hidden; }, null, { timeout: 30000 });
   ok('scanning the Phone contacts code says it is a QR code that is not a Vdex link, and which code to scan', /That QR code is not a Vdex link\. On their Me page the code has to be set to Contact card/.test(await C.page.locator('.sheet [role=alert]').innerText()) && !/long run of letters/.test(await C.page.locator('.sheet [role=alert]').innerText()), await C.page.locator('.sheet [role=alert]').innerText());
   const own = await C.page.evaluate(() => import('./js/share-data.js').then(m => m.QR_OWN));
+  // The filler is the same text in every run (a fixed sequence, not Math.random), so every run scans the same code.
   const longCard = n => C.page.evaluate(async ([n, base]) => { const { pack } = await import('./js/link-pack.js'), o = { v: 1, kind: 'contact', name: 'Long Link Lou', phone: '555 0190', location: '' }, link = async () => base + 'shared.html#' + await pack(o); let l = await link();
-    while (l.length <= n) { o.location += Math.random().toString(36).slice(2); l = await link(); } while (l.length > n) { o.location = o.location.slice(0, -2); l = await link(); } return l; }, [n, BASE]);
+    let x = 20261118; const more = () => { x = (Math.imul(x, 1664525) + 1013904223) >>> 0; return x.toString(36); };
+    while (l.length <= n) { o.location += more(); l = await link(); } while (l.length > n) { o.location = o.location.slice(0, -2); l = await link(); } return l; }, [n, BASE]);
   const ownLink = await longCard(own);
   await fakeCamera(C.page, ownLink);
   await C.page.locator('.sheet button:has-text("Scan a QR code")').click();
   const scanned = await C.page.waitForSelector('.sheet .add-preview', { timeout: 60000 }).then(() => true, () => false);
   ok(`Vdex’s own scanner reads a link of the longest length it is said to read (${ownLink.length} characters, held at about three quarters of the frame, slightly blurred)`, scanned && own >= 1000 && ownLink.length > own - 12 && /Long Link Lou/.test(await sheetText(C.page)), `${ownLink.length} of ${own}`);
+  const asked = await C.page.evaluate(() => window.__camAsked[window.__camAsked.length - 1] || null);
+  ok('…having asked for the back camera and a 1080-line picture, which the squares of a long code need', !!asked && asked.audio === false && !!asked.video && asked.video.facingMode === 'environment' && !!asked.video.width && asked.video.width.ideal >= 1920 && !!asked.video.height && asked.video.height.ideal >= 1080, JSON.stringify(asked));
   await C.page.evaluate(() => clearInterval(window.__cam)); await C.page.keyboard.press('Escape'); await sleep(200);
   // Held further away, so the code takes about half of the picture: its squares are then too fine for the small
-  // sample alone (1.5 pixels each), and only the look at full size reads it.
+  // sample alone (1.5 pixels each), and only the look at full size reads it. The code is held still here, so the
+  // case does not lean on the luck of a swinging picture against the clock: each look of the scanner is noted with
+  // its size and whether it read the code, and what counts is which look read it.
   await C.page.locator('#page button', { hasText: 'Add from a link' }).click(); await C.page.waitForSelector('.sheet textarea');
   const farLink = await longCard(own);
-  await fakeCamera(C.page, farLink, 0.5);
+  await fakeCamera(C.page, farLink, 0.5, true);
+  await C.page.evaluate(() => { const real = window.jsQR; window.__looks = []; window.jsQR = (data, w, h, o) => { const r = real(data, w, h, o); window.__looks.push([w, !!(r && r.data)]); return r; }; });
   await C.page.locator('.sheet button:has-text("Scan a QR code")').click();
   const far = await C.page.waitForSelector('.sheet .add-preview', { timeout: 60000 }).then(() => true, () => false);
-  ok('…and reads it held further away, at about half of the frame, which takes the look at full size', far && /Long Link Lou/.test(await sheetText(C.page)), `${farLink.length} characters`);
+  const looks = await C.page.evaluate(() => window.__looks), SMALL = await C.page.evaluate(() => import('./js/qr.js').then(m => m.SCAN.SMALL)), last = looks[looks.length - 1] || [0, false];
+  ok('…and reads it held further away, at about half of the frame: the small look does not read it, and the look at full size does', far && /Long Link Lou/.test(await sheetText(C.page)) && last[1] && last[0] > SMALL && looks.some(([w]) => w <= SMALL) && !looks.some(([w, read]) => read && w <= SMALL), `${farLink.length} characters; looks (size, read): ${JSON.stringify(looks.slice(-8))}`);
   await C.page.evaluate(() => clearInterval(window.__cam)); await C.page.keyboard.press('Escape'); await sleep(200);
   await C.ctx.close();
 
@@ -714,6 +886,19 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   await E.page.goto(BASE + 'index.html?src=play#add=' + hashOf(cardLink)); await E.page.waitForSelector('.sheet .add-preview', { timeout: 15000 });
   ok('…and the app keeps that mark in its address while the link itself is taken out of it', (await E.page.evaluate(() => location.search + '|' + location.hash)) === '?src=play|' && /Add this contact\?/.test(await sheetText(E.page)));
   await E.page.keyboard.press('Escape'); await sleep(200);
+  // The pages themselves have to pass the browser's referrer on, which the call above does not show. A referrer stands
+  // in here on the two shared pages only, as in real use: the Play app opens the shared page, and the app's own page
+  // is then opened from that page, so its referrer is the shared page and the mark can only come with the link.
+  for (const [ref, mark] of [['android-app://app.crowmade.vdex/', '?src=play'], ['android-app://com.example.other/', '']]) {
+    const P = await open({ init: `if (/\\/(crew|shared)\\.html$/.test(location.pathname)) Object.defineProperty(Document.prototype, 'referrer', { configurable: true, get: () => ${JSON.stringify(ref)} });` });
+    const got = [];
+    for (const link of [cardLink, link1]) { await P.page.goto(link); await P.page.waitForSelector('a.btn.primary'); got.push(await P.page.locator('a.btn.primary').first().getAttribute('href')); }
+    await Promise.all([P.page.waitForURL(/index\.html/), P.page.locator('a.btn.primary', { hasText: 'Add to my Vdex' }).click()]);
+    await P.page.waitForSelector('.sheet .add-preview', { timeout: 15000 }); await sleep(400);
+    const at = await P.page.evaluate(() => location.search + '|' + location.hash), kept = await P.page.evaluate(() => { try { return JSON.parse(localStorage.getItem('vdex-licence')).play === true; } catch { return false; } });
+    ok(mark ? 'the contact card’s page and the shoot’s page, opened by the Play app, put the app’s mark in their Add to my Vdex link, and the app it opens starts with the mark and keeps it' : '…and opened by another app they do not, and the app keeps no mark', got.join('|') === [cardLink, link1].map(l => `index.html${mark}#add=${hashOf(l)}`).join('|') && at === mark + '|' && kept === !!mark, JSON.stringify([got.map(g => g.replace(/#add=.*/, '#add=…')), at, kept]));
+    await P.ctx.close();
+  }
 
   // ---- the Me page's code ----
   await E.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'Uma Owner', phone: '+1 555 0500', email: 'uma@ownerfilms.example', updatedAt: Date.now() }; })));

@@ -90,7 +90,9 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   const opener = document.activeElement;
   // If a redraw replaces the opener while the sheet is open, its stand-in (same data-fk) gets the focus back.
   const fk = opener && opener.closest && opener.closest('[data-fk]') ? opener.closest('[data-fk]').dataset.fk : null;
-  const back = h('div', { class: 'sheet-back' });
+  // data-keeps: a sheet that a tap beside it does not close, because what was entered or chosen in it is work to lose.
+  // Whatever would close it on the way to something else asks first (overForm in js/tutorials.js).
+  const back = h('div', { class: 'sheet-back', 'data-keeps': dismissOnBackdrop ? null : '' });
   let closed = false;
   const close = () => {
     if (closed) return; closed = true;
@@ -119,7 +121,10 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
     h('div', { class: 'sheet-head' }, h('h2', null, title), h('div', { class: 'sheet-tools' }, window.logiHelp && h('button', { class: 'icon-btn sheet-help', 'aria-label': 'Tutorial for this', title: 'Tutorial', onclick: () => window.logiHelp() }, '?'), h('button', { class: 'icon-btn', 'aria-label': 'Close', onclick: close }, '✕'))),
     h('div', { class: 'sheet-body' }, body));
   back.append(box);
-  if (dismissOnBackdrop) back.addEventListener('pointerdown', e => { if (e.target === back) close(); });
+  // A tap beside the sheet closes it, on the whole tap and not on its first touch (as the menu and the search do): the
+  // page is given back the moment the sheet closes, and a tap that closed it on the way down would finish on whatever
+  // lies under the finger there (the lock button, a Rolodex tab, a line of a checklist) and press that as well.
+  if (dismissOnBackdrop) { let downOnBack = false; back.addEventListener('pointerdown', e => { downOnBack = e.target === back; }); back.addEventListener('click', e => { if (e.target === back && downOnBack) close(); }); }
   document.addEventListener('keydown', keys);
   // Opened by code while the lock screen or the offer of a longer PIN is up (a save that finished, a file that arrived):
   // the sheet starts as everything else under that screen is, out of reach and out of sight, so no key pressed on that

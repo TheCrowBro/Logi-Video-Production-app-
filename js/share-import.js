@@ -10,11 +10,14 @@ import { db, byId, update } from './store.js';
 import { TYPES, DELIV_STATUS } from './workflow.js';
 import { parseEighths } from './board.js';
 import { isTime, mail, fromLine } from './share-data.js';
-import { roomFor } from './gear-import.js';
+import { roomFor, linkId } from './gear-import.js';
 
 const low = v => String(v == null ? '' : v).trim().toLowerCase();
 const squash = v => low(v).replace(/[\s,]+/g, ' ');
 const hhmm = t => (isTime(t) ? t.padStart(5, '0') : ''); // "7:30" → "07:30", as the time boxes want it
+// The id of a record a link makes: worked out from the link's own reference (linkId in js/gear-import.js), so the same
+// link added on two devices of one person makes the same record on both, and the sync folds them into one.
+const fromRef = (d, list, ref, tail = '') => linkId(ref && ref + tail, new Set(d[list].map(x => x.id)), d.deleted);
 // Two values of a detail are the same whatever their line ends and the white space around them (a form may tidy those).
 const plain = v => String(v == null ? '' : v).replace(/\r\n?/g, '\n').trim();
 const same = (a, b) => plain(a) === plain(b);
@@ -32,10 +35,13 @@ export function producerOf(snap) {
   }
   return out;
 }
-// The link was made from a booking of one's own: there is nothing to add. A booking's id is made on this device and
-// is the link's reference, so a link that names it can only have been made from it, also when that booking itself
-// came from someone's link and was shared on.
-export const ownBooking = snap => (snap.ref && byId('bookings', snap.ref)) || null;
+// The link was made from a booking of one's own: there is nothing to add. A booking's id is the reference of the
+// links made from it, so a link that names a booking here was made from it, also when that booking itself came from
+// someone's link and was shared on. One case apart: a booking added from this very reference before is what the link
+// updates (build() finds it), whatever else carries that id. (A booking a link made has an id worked out from that
+// link, the same on every device that adds it, so someone can hold both the booking from the first link and the one
+// from a workmate's link made from their copy of it.)
+export const ownBooking = snap => (snap.ref && !db.bookings.some(b => b.shared && b.shared.ref === snap.ref) && byId('bookings', snap.ref)) || null;
 
 // The stripboard from the days the link carries, merged into the board the booking has (old). The link's strips come
 // in the link's order, day by day. A strip the link made before (made(id) says so) is found again by what it is (a
@@ -147,7 +153,7 @@ function build(snap, d) {
       } else for (const [k, v] of Object.entries(details)) if (v && !String(twin[k] || '').trim()) record[k] = v;
       const shown = x => JSON.stringify([x.name, ...Object.keys(details).map(k => x[k] || '')]);
       venue = { record, isNew: false, changed: JSON.stringify(record) !== JSON.stringify(twin), filled: shown(record) !== shown(twin) };
-    } else venue = { isNew: true, changed: true, filled: true, record: { id: uid(), name, type: '', ...details, permit: 'Unknown', notes: from ? `Shared by ${from} with “${snap.title || 'a booking'}”.` : 'Added with a shared booking.',
+    } else venue = { isNew: true, changed: true, filled: true, record: { id: fromRef(d, 'venues', snap.ref, '-venue'), name, type: '', ...details, permit: 'Unknown', notes: from ? `Shared by ${from} with “${snap.title || 'a booking'}”.` : 'Added with a shared booking.',
       shared: { ref: snap.ref, by: from, at: now, sent: Object.fromEntries(Object.entries({ name, ...details }).filter(([, v]) => v)) } } };
   }
 
@@ -170,11 +176,17 @@ function build(snap, d) {
   const producer = who.name || who.business ? { name: who.name || who.business, business: who.business } : null;
   const brought = snap.contacts.filter(p => p.name).map(p => ({ name: p.name, role: p.role, phone: p.phone, email: mail(p.email) }));
   const people = [producer && { name: producer.name, role: who.name && who.business ? `Producer · ${who.business}` : 'Producer', phone: who.phone, email: who.email }, ...brought].filter(Boolean);
-  const hadNames = was.contacts || [], hadProducer = was.producer ? low(was.producer.name) : '', gone = new Set(people.map(p => low(p.name)));
+  // A contact on the booking under a name no link has brought was added by hand, and is one's own: it stays exactly as
+  // it is. A person of the same name on the link does not replace it or come in beside it (contacts are told apart by
+  // name, so the two could never be kept apart afterwards), and the name does not become the link's.
+  const hadNames = was.contacts || [], hadProducer = was.producer ? low(was.producer.name) : '';
+  const byHand = new Set(((cur && cur.stakeholders) || []).filter(s => s && s.name).map(s => low(s.name)).filter(n => !hadNames.includes(n)));
+  const fresh = people.filter(p => !byHand.has(low(p.name))), gone = new Set(fresh.map(p => low(p.name)));
   if (brought.length) hadNames.forEach(n => { if (n !== hadProducer) gone.add(n); });
   if (producer && hadProducer) gone.add(hadProducer);
-  const stakeholders = [...people, ...((cur && cur.stakeholders) || []).filter(s => !gone.has(low(s.name)))];
-  const contacts = [...new Set([...people.map(p => low(p.name)), ...hadNames.filter(n => !gone.has(n))])]; // every contact on the booking that a link brought, by name
+  byHand.forEach(n => gone.delete(n));
+  const stakeholders = [...fresh, ...((cur && cur.stakeholders) || []).filter(s => !gone.has(low(s && s.name)))];
+  const contacts = [...new Set([...fresh.map(p => low(p.name)), ...hadNames.filter(n => !gone.has(n))])]; // every contact on the booking that a link brought, by name
 
   // The call sheet: times, the schedule, and the notes for the day.
   const cs = (cur && cur.callSheet) || {}, sched = Array.isArray(cs.schedule) ? cs.schedule : [], lineMade = madeIn('schedule');
@@ -208,7 +220,7 @@ function build(snap, d) {
   const note = whole ? was.note : [kitNote, ...odd].filter(Boolean).join('\n');
   const notes = held ? own.replace(was.note, () => note).trim() : [own, note && !own.includes(note) ? note : ''].filter(Boolean).join('\n\n');
 
-  const booking = { ...(cur || { id: uid(), status: 'Confirmed', type: type || 'other', crew: [], gear: [] }),
+  const booking = { ...(cur || { id: fromRef(d, 'bookings', snap.ref), status: 'Confirmed', type: type || 'other', crew: [], gear: [] }),
     title, client, date, start, end, address, stakeholders, hires, crewCall, crewStatus, shots, deliverables, callSheet, notes, updatedAt: now };
   if (lastDay) booking.endDate = lastDay; else delete booking.endDate;
   if (breakMinutes !== '') booking.breakMinutes = breakMinutes;
@@ -221,7 +233,7 @@ function build(snap, d) {
   // For the preview: who the link is from, the contacts it brings, the details kept as they were changed by hand, and
   // how much of one's own is on the board.
   const theirs = new Set(rows.strips), ownStrips = board ? board.board.list.filter(x => x.type !== 'break' && !theirs.has(x.id)).length : 0;
-  return { booking, venue, existing: cur, from, people, kept: [...kept], ownStrips };
+  return { booking, venue, existing: cur, from, people: fresh, kept: [...kept], ownStrips };
 }
 // For the preview: what adding would do, with nothing changed.
 export const planBooking = snap => ({ own: ownBooking(snap), ...build(snap, db) });
@@ -247,11 +259,12 @@ export function applyBooking(snap) {
 /* ---------------------------------- a contact card ---------------------------------- */
 const digits = p => String(p || '').replace(/\D+/g, '');
 const differ = (a, b) => !!a && !!b && a !== b;
-// The card was made from one's own details (the Me page): there is nobody to add. The same email address says so;
-// without one on both sides, the same name with the same phone number, or the same name on a card that has nothing else.
+// The card was made from one's own details (the Me page): there is nobody to add. The same email address says so,
+// unless the card is in another name than one's own: a workmate's card under the company's address is theirs. Without
+// an address on both sides, the same name with the same phone number, or the same name on a card that has nothing else.
 export function ownCard(c, p = db.profile || {}) {
   const e = low(c.email), pe = low(p.email), ph = digits(c.phone), pph = digits(p.phone), name = fold(c.name || c.business);
-  if (e && pe) return e === pe;
+  if (e && pe) return e === pe && (!name || !(fold(p.name) || fold(p.business)) || name === fold(p.name) || name === fold(p.business));
   const named = !!name && (name === fold(p.name) || name === fold(p.business));
   return named && (ph.length >= 6 ? ph === pph : !e && !ph);
 }

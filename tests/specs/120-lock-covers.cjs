@@ -8,6 +8,11 @@
 // (the wait, how many digits are in) is said from inside it, where it can be heard. The two PIN fields do not take the
 // cursor back from someone already in the second; arrow keys do not turn the Rolodex under a cover; Enter presses the
 // lock screen's own buttons (never a digit key); and a sheet that code opens while a cover is up starts covered.
+// And what is over what, beyond the lock: a tap beside a sheet on a touch screen presses nothing underneath; a
+// walkthrough left while its next step is still being fetched leaves nothing open; the offer of a longer PIN closes
+// the menu and the search it arrives over; a course asks before it closes a sheet that holds work without a box to
+// type in; a file handed to Vdex waits for the PIN; a walkthrough that begins under the lock screen starts covered;
+// and the keyboard focus goes back to where it was once the lock screen has gone.
 // ONLY=<part of a case's name> runs just those cases, for working on one.
 const { chromium } = require('playwright');
 const { TERMS_RECORD } = require('../helpers.cjs');
@@ -44,8 +49,8 @@ const PHONE = { width: 360, height: 740 };
   // The page can be used: the hamburger takes a tap and opens the menu.
   const usable = async page => { const tapped = await page.locator('#menuBtn').click({ timeout: 4000 }).then(() => true, () => false); const open = tapped && await page.locator('#menu').waitFor({ state: 'visible', timeout: 4000 }).then(() => true, () => false); if (open) { await page.keyboard.press('Escape'); await sleep(150); } return open && !(await page.evaluate(() => document.getElementById('app').inert)); };
   // An existing user with sample data and a PIN. old: the config as every version before longer PINs wrote it (no max).
-  const existing = async ({ pin = OLD, old = false, patch = null, terms = null } = {}) => {
-    const ctx = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 1 });
+  const existing = async ({ pin = OLD, old = false, patch = null, terms = null, options = {} } = {}) => {
+    const ctx = await browser.newContext({ viewport: PHONE, deviceScaleFactor: 1, ...options });
     await ctx.addInitScript(t => { if (!localStorage.getItem('spec-seeded')) { localStorage.setItem('spec-seeded', '1'); localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); localStorage.setItem('logi-lock-setup', 'skip'); } }, TERMS_RECORD);
     const page = await ctx.newPage(); watch(page);
     await page.goto(BASE); await app(page);
@@ -705,9 +710,231 @@ const PHONE = { width: 360, height: 740 };
     await ctx.close();
   });
 
-  const only = process.env.ONLY;
-  for (const [name, fn] of cases) {
-    if (only && !name.includes(only)) continue;
+  /* ------------------------------ a tap beside a sheet, on a touch screen ------------------------------ */
+  the('tap beside a sheet', async () => {
+    const { ctx, page } = await existing({ options: { hasTouch: true, isMobile: true } });
+    // A short sheet, as a link's preview or "Add to calendar" is: most of the page shows, dimmed, above it.
+    const short = () => page.evaluate(() => import('./js/util.js').then(u => { u.sheet('A short sheet', u.h('p', null, 'The page shows above this sheet.')); }));
+    const point = sel => page.evaluate(s => { const r = document.querySelector(s).getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2; return { x, y, on: document.elementFromPoint(x, y).className }; }, sel);
+    const tapOver = async sel => { await short(); await sleep(350); const p = await point(sel); await page.touchscreen.tap(p.x, p.y); await sleep(500); return p.on; };
+    const on1 = await tapOver('#menuBtn'), s1 = { ...(await state(page)), ...(await shown(page)) };
+    ok('one tap beside a sheet, where the hamburger lies underneath, closes the sheet and does nothing else: the menu does not open', on1 === 'sheet-back' && s1.sheets === 0 && !s1.menu && !s1.appInert, JSON.stringify([on1, s1]));
+    const on2 = await tapOver('#lockBtn'), s2 = await state(page);
+    ok('…where the lock button lies underneath, Vdex is not locked', on2 === 'sheet-back' && s2.sheets === 0 && s2.lock === 0, JSON.stringify([on2, s2]));
+    const was = await page.evaluate(() => window.logiPage());
+    const on3 = await tapOver('#rolodex .drum-btn.down'), s3 = { ...(await state(page)), section: await page.evaluate(() => window.logiPage()) };
+    ok('…and where the Rolodex lies underneath, the section stays the one that was open', on3 === 'sheet-back' && s3.sheets === 0 && s3.section === was, JSON.stringify([on3, was, s3]));
+    // with a mouse: a click beside it still closes it; a press that begins in the sheet and ends beside it does not
+    await short(); await sleep(350);
+    const box = await page.locator('.sheet').boundingBox(), x = box.x + box.width / 2;
+    await page.mouse.move(x, box.y + box.height / 2); await page.mouse.down(); await page.mouse.move(x, box.y - 60, { steps: 4 }); await page.mouse.up(); await sleep(300);
+    const dragged = (await state(page)).sheets;
+    await page.mouse.click(x, box.y - 60); await sleep(300);
+    ok('a press that begins inside the sheet and ends beside it leaves the sheet open; a click beside it closes it', dragged === 1 && (await state(page)).sheets === 0, `after the drag: ${dragged} sheet`);
+    await ctx.close();
+  });
+
+  /* --------------------- a walkthrough left while its next step is still on its way --------------------- */
+  the('walkthrough left mid-step', async () => {
+    // The search and the menu are fetched the first time they are used: here that takes over a second.
+    const slow = (ctx, file) => ctx.route('**/js/' + file, async r => { await sleep(1200); await r.continue().catch(() => {}); });
+    const leave = async page => { await page.locator('.tour-card .btn.primary').click(); await sleep(150); await page.locator('.tour-card button', { hasText: 'Skip' }).click(); await sleep(2200); };
+    const A = await existing();
+    await slow(A.ctx, 'search.js');
+    await A.page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await A.page.waitForSelector('.tour-card h2'); await sleep(300);
+    ok('(Getting around is on the card before the one that shows the search)', await toCard(A.page, 'Search everything'));
+    await leave(A.page); // Next, and Skip while the search is still being fetched
+    const st = { ...(await state(A.page)), ...(await shown(A.page)) };
+    ok('a walkthrough left while its next step was still fetching the search leaves nothing open: no panel appears afterwards, and the page is in reach', st.tour === 0 && !st.search && !st.appInert && await usable(A.page), JSON.stringify(st));
+    await A.page.keyboard.press('/'); await sleep(700);
+    ok('…and the search still opens when it is asked for', (await shown(A.page)).search && await A.page.evaluate(() => (document.activeElement || {}).id === 'searchInput'));
+    await A.ctx.close();
+    // the same for the menu, here with the walkthrough started from a form's ?
+    const B = await existing();
+    await slow(B.ctx, 'menu.js');
+    await addForm(B.page);
+    await B.page.locator('.sheet .sheet-help').last().click(); await B.page.waitForSelector('.tour-card h2'); await sleep(300);
+    await B.page.getByRole('button', { name: 'Other pages…' }).click(); await B.page.waitForSelector('.sheet .card.tap');
+    await B.page.locator('.sheet .card.tap', { hasText: 'Getting around' }).click(); await B.page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(300);
+    ok('(Getting around, started from a form’s ?, is on the card before the first one that shows the menu)', await toCard(B.page, 'What comes back'));
+    await leave(B.page);
+    const sm = { ...(await state(B.page)), ...(await shown(B.page)) };
+    ok('…left while the menu was still being fetched, no menu is drawn over the form afterwards, and the form can be used', sm.tour === 0 && !sm.menu && sm.sheets === 1 && sm.typed === 'Robin Example' && await B.page.locator('.sheet form [data-key="name"]').fill('Robin Example-Hale', { timeout: 2500 }).then(() => true, () => false), JSON.stringify(sm));
+    await B.page.keyboard.press('Escape'); await sleep(250);
+    ok('…and once the form is closed the page is usable', (await state(B.page)).sheets === 0 && await usable(B.page), JSON.stringify(await state(B.page)));
+    await B.ctx.close();
+    // a step that prepares something first (it goes to Settings and opens a section) does not do so after Skip
+    const C = await existing();
+    await C.page.evaluate(() => import('./js/tutorials.js').then(m => m.openChooser())); await C.page.waitForSelector('.sheet .card.tap');
+    await C.page.locator('.sheet .card.tap', { hasText: 'Quotes & invoices, start to finish' }).click(); await C.page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(600);
+    ok('(the money course is on the card before the one that opens a Settings section)', await toCard(C.page, 'How it works'));
+    await C.page.locator('.tour-card .btn.primary').click(); await sleep(150); await C.page.locator('.tour-card button', { hasText: 'Skip' }).click(); await sleep(1800);
+    const opened = await C.page.evaluate(() => { const d = document.querySelector('#page details[data-s="Quotes & invoices"]'); return d ? d.open : 'not there'; });
+    ok('a step left during its wait does not run what it had prepared to do: the Settings section it opens stays shut', (await state(C.page)).tour === 0 && opened !== true && await usable(C.page), String(opened));
+    await C.ctx.close();
+  });
+
+  /* ------------------- the offer of a longer PIN arriving over the open menu or search ------------------- */
+  the('offer over the menu', async () => {
+    for (const what of ['menu', 'search']) {
+      const { ctx, page } = await existing();
+      await page.evaluate(() => import('./js/lock.js').then(l => l.setOption({ max: undefined }))); // the config as an older version left it
+      // The offer's file is a moment late, so the person has opened the menu (or the search) by the time it comes up.
+      let release; const held = new Promise(r => { release = r; });
+      await ctx.route('**/js/pin-offer.js', async r => { await held; await r.continue().catch(() => {}); });
+      await lockNow(page); await unlock(page);
+      if (what === 'menu') { await page.locator('#menuBtn').click(); await page.locator('#menu').waitFor({ state: 'visible' }); } else { await page.keyboard.press('/'); await page.waitForSelector('#searchInput', { timeout: 8000 }); }
+      await sleep(300);
+      const open = (await shown(page))[what];
+      release(); await page.waitForSelector('.pin-offer', { timeout: 10000 }); await sleep(300);
+      const under = { ...(await state(page)), ...(await shown(page)) };
+      ok(`the offer of a longer PIN arriving over the open ${what} closes it first, as the lock screen does`, open && under.offer === 1 && !under[what] && under.focus === 'lock', JSON.stringify(under));
+      await page.keyboard.press('Escape'); await sleep(350);
+      const st = { ...(await state(page)), ...(await shown(page)) };
+      ok('…so Escape answers the offer (the PIN is kept) and leaves nothing open behind it', st.offer === 0 && (await cfg(page)).max === 20 && !st.menu && !st.search && !st.appInert && await usable(page), JSON.stringify(st));
+      await ctx.close();
+    }
+    // over a walkthrough card that points into the menu: the menu is shown again for the card once the offer is answered
+    const { ctx, page } = await existing();
+    await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await page.waitForSelector('.tour-card h2'); await sleep(400);
+    ok('(Getting around is on its menu step, the menu shown)', (await toCard(page, 'How syncing is going')) && (await shown(page)).menu);
+    await page.evaluate(() => import('./js/lock.js').then(l => l.setOption({ max: undefined })));
+    let release; const held = new Promise(r => { release = r; });
+    await ctx.route('**/js/pin-offer.js', async r => { await held; await r.continue().catch(() => {}); });
+    await lockNow(page); await unlock(page); await sleep(700);
+    release(); await page.waitForSelector('.pin-offer', { timeout: 10000 }); await sleep(300);
+    await page.keyboard.press('Escape'); await sleep(1000);
+    const st = { ...(await state(page)), ...(await shown(page)), card: await card(page), onNext: await page.evaluate(() => { const a = document.activeElement; return !!a && !!a.closest('.tour-card') && a.classList.contains('primary'); }), pointsAt: await page.evaluate(() => { const el = document.getElementById('menuStatus'); return !!el && el.offsetParent !== null; }) };
+    ok('an offer answered over a walkthrough card that points into the menu leaves the menu shown for that card again, with the focus on the card', st.offer === 0 && st.tour === 1 && st.menu && st.pointsAt && st.card === 'How syncing is going' && st.onNext, JSON.stringify(st));
+    await page.keyboard.press('Escape'); await sleep(300);
+    ok('…and when the walkthrough ends the page is usable', (await state(page)).tour === 0 && !(await shown(page)).menu && await usable(page));
+    await ctx.close();
+  });
+
+  /* ------------- a course started from a sheet that holds work but has no box to type in ------------- */
+  the('course from a sheet with work in it', async () => {
+    const { ctx, page } = await existing();
+    const titles = () => page.evaluate(() => [...document.querySelectorAll('.sheet')].map(x => x.getAttribute('aria-label')));
+    // The ? of the sheet on top, then Other pages…, then a course (which closes every sheet on its way).
+    const toCourse = async () => { await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.tour-card h2'); await sleep(300); await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap'); await page.locator('.sheet .card.tap', { hasText: 'Quotes & invoices, start to finish' }).click(); await sleep(400); };
+    const question = async () => ({ titles: await titles(), text: await page.locator('.sheet').last().locator('.sheet-body p').first().innerText().catch(() => ''), buttons: await page.locator('.sheet').last().locator('.actions button').allInnerTexts().catch(() => []), tour: (await state(page)).tour });
+    // Equipment → Import…, a pasted list, and one column put right: nothing is left to type into, and there is work to lose
+    await page.evaluate(() => window.logiGo('gear')); await page.locator('#page .subactions button', { hasText: 'Import…' }).click(); await page.waitForSelector('.sheet .gi-choose');
+    await page.locator('#gi-paste').fill('Sony FX6,FX6-0001,Van\nZoom H6,H6-00003,Shelf A\nRode NTG,RD-00011,Shelf A\n'); await page.locator('.sheet .gi-use').click(); await page.waitForSelector('.sheet .gi-cols', { timeout: 20000 });
+    const cols = () => page.evaluate(() => [...document.querySelectorAll('.sheet .gi-col select')].map(s => s.value).join());
+    await page.locator('.sheet .gi-col select').nth(2).selectOption('notes'); await sleep(150);
+    const set = await cols();
+    await toCourse();
+    const q1 = await question();
+    ok('a course chosen from the ? of the Import sheet, with its columns set and nothing in it to type into, asks before it closes the sheet', q1.titles.join('|') === 'Import equipment|Tutorials|“Import equipment” is still open' && q1.text === 'This walkthrough closes “Import equipment”, and what was entered or chosen in it would be lost.' && q1.buttons.join('|') === 'Back to it|Close it and carry on' && q1.tour === 0, JSON.stringify(q1));
+    await page.locator('.sheet').last().locator('button', { hasText: 'Back to it' }).click().catch(() => {}); await sleep(300);
+    const b1 = { titles: await titles(), cols: await cols(), tour: (await state(page)).tour, focus: await page.evaluate(() => { const a = document.activeElement; return !!a && !!a.closest('.sheet') && a.offsetParent !== null && a.type !== 'file'; }) };
+    ok('Back to it goes back to the sheet: the columns are as they were set, the focus is on something in it that can be seen, and no course runs', b1.titles.join('|') === 'Import equipment' && /notes/.test(set) && b1.cols === set && b1.tour === 0 && b1.focus, JSON.stringify([set, b1]));
+    if ((await state(page)).tour) { await page.keyboard.press('Escape'); await sleep(300); }
+    while (await page.locator('.sheet').count()) { await page.keyboard.press('Escape'); await sleep(250); }
+    // the preview of a shared link, with a choice made on a row: once shown, its link is no longer waiting
+    const link = await page.evaluate(async () => { const lp = await import('./js/link-pack.js'), s = await import('./js/store.js'); s.upsert('gear', { id: 'own-cam', name: 'Sony FX6', category: 'Camera', serial: 'FX6-77' }); return lp.pack({ v: 1, kind: 'gear', made: Date.now(), title: 'Two things', by: { name: 'Pat Producer' }, items: [{ ref: 'p1', name: 'Sony FX6', category: 'Camera', serial: 'FX6-77' }, { ref: 'p2', name: 'Sigma 24-70', category: 'Lens' }], kits: [] }); });
+    await page.evaluate(l => { import('./js/share-add.js').then(m => m.arrived(l)); }, link); await page.waitForSelector('.sheet .add-preview', { timeout: 15000 }); await sleep(200);
+    await page.locator('.sheet .add-dup select').first().selectOption('update'); await sleep(150);
+    await toCourse();
+    const q2 = await question();
+    ok('the same from the ? of a shared link’s preview', q2.titles.join('|') === 'Add this equipment?|Tutorials|“Add this equipment?” is still open' && q2.text === 'This walkthrough closes “Add this equipment?”, and what was entered or chosen in it would be lost.' && q2.tour === 0, JSON.stringify(q2));
+    await page.locator('.sheet').last().locator('button', { hasText: 'Back to it' }).click().catch(() => {}); await sleep(300);
+    const b2 = { titles: await titles(), choice: await page.locator('.sheet .add-dup select').first().inputValue().catch(() => '(gone)'), tour: (await state(page)).tour };
+    ok('…and going back leaves the preview with the choice that was made in it', b2.titles.join('|') === 'Add this equipment?' && b2.choice === 'update' && b2.tour === 0, JSON.stringify(b2));
+    await toCourse();
+    await page.locator('.sheet').last().locator('button', { hasText: 'Close it and carry on' }).click().catch(() => {});
+    await page.waitForSelector('.tour-card h2', { timeout: 15000 }).catch(() => {}); await sleep(300);
+    ok('Close it and carry on closes it and starts the course', (await state(page)).sheets === 0 && (await card(page)) === 'Quotes and invoices, start to finish', JSON.stringify(await state(page)));
+    await page.keyboard.press('Escape'); await sleep(300);
+    // a sheet of switches and lists, which take effect as they are set, is still closed without a question
+    await page.evaluate(() => import('./js/a11y.js').then(m => m.openDisplaySettings())); await page.waitForSelector('.sheet'); await sleep(200);
+    await toCourse(); await page.waitForSelector('.tour-card h2', { timeout: 15000 }).catch(() => {}); await sleep(300);
+    ok('from a sheet that only holds switches (text size and theme) the course still starts without asking: there is nothing in it to lose', (await state(page)).tour === 1 && !(await titles()).some(t => /still open/.test(t)) && (await card(page)) === 'Quotes and invoices, start to finish', JSON.stringify([await titles(), await state(page)]));
+    await page.keyboard.press('Escape'); await sleep(300);
+    await ctx.close();
+  });
+
+  /* ----------------------------- a file handed to Vdex while it is locked ----------------------------- */
+  the('file handed over while locked', async () => {
+    const { ctx, page } = await existing();
+    // What the iPhone app does when the phone hands it a file ("Copy to Vdex"), which also brings Vdex to the front.
+    const hand = (name, text, type) => page.evaluate(([name, text, type]) => { import('./js/share-in.js').then(m => m.arrived(new File([text], name, { type }))); }, [name, text, type]);
+    let phase = 'unlocked'; const asked = []; page.on('dialog', d => asked.push(`${phase}: ${d.message()}`)); // (the question is answered OK, by watch above)
+    const before = await bookings(page);
+    await lockNow(page); await lockUp(page); phase = 'locked';
+    await hand('vdex-backup.json', JSON.stringify({ bookings: [], gear: [], crew: [] }), 'application/json'); await sleep(1500);
+    const locked = { asked: [...asked], bookings: await bookings(page), toasts: await page.locator('.toast').count(), lock: (await state(page)).lock };
+    ok('a backup file handed to Vdex while it is locked asks nothing over the lock screen and replaces nothing', before > 0 && locked.asked.length === 0 && locked.bookings === before && locked.toasts === 0 && locked.lock === 1, JSON.stringify([before, locked]));
+    phase = 'unlocked'; await page.keyboard.type(OLD); await lockGone(page);
+    await page.waitForFunction(() => document.querySelectorAll('.toast').length > 0, null, { timeout: 8000 }).catch(() => {});
+    ok('…the question comes once the PIN has been entered, and only then is the file taken', asked.join('|') === 'unlocked: Replace your current data with this file?' && (await bookings(page)) === 0, JSON.stringify([asked, await bookings(page)]));
+    // any other file waits the same way: no sheet is made under the lock screen
+    await lockNow(page); await lockUp(page);
+    await hand('script.txt', 'INT. ROOM - DAY\nA line.', 'text/plain'); await sleep(1200);
+    const under = await state(page);
+    await page.keyboard.type(OLD); await lockGone(page);
+    const came = await page.waitForSelector('.sheet[aria-label="A file for Vdex"]', { timeout: 8000 }).then(() => true, () => false); await sleep(200);
+    ok('a script handed over while locked opens no sheet under the lock screen: its sheet comes after the PIN, in reach', under.sheets === 0 && under.lock === 1 && came && !(await page.evaluate(() => document.querySelector('.sheet-back').inert)), JSON.stringify(under));
+    await page.keyboard.press('Escape'); await sleep(250);
+    // unlocked, nothing waits
+    await hand('script.txt', 'INT. ROOM - DAY\nA line.', 'text/plain');
+    ok('…and while Vdex is unlocked a file is asked about at once, as before', await page.waitForSelector('.sheet[aria-label="A file for Vdex"]', { timeout: 3000 }).then(() => true, () => false));
+    await ctx.close();
+  });
+
+  /* ------------------------- a walkthrough that begins while the lock screen is up ------------------------- */
+  the('walkthrough that starts under the lock', async () => {
+    const { ctx, page } = await existing({ patch: { autoLock: 0 } }); // Lock: straight away
+    await page.evaluate(() => import('./js/tutorials.js').then(m => m.openChooser())); await page.waitForSelector('.sheet .card.tap');
+    await page.locator('.sheet .card.tap', { hasText: /^Equipment$/ }).click();
+    await setVis(page, true); await sleep(100); await setVis(page, false); // put away and brought back before the tutorial has started
+    await lockUp(page);
+    await page.waitForSelector('.tour-card h2', { state: 'attached', timeout: 15000 }); await sleep(900);
+    const first = await card(page);
+    const under = await page.evaluate(() => ({ inert: document.querySelector('.tour').inert, focus: document.activeElement.closest('.lock') ? 'lock' : document.activeElement.closest('.tour') ? 'the walkthrough' : document.activeElement.tagName }));
+    ok('a walkthrough that begins while the lock screen is up starts out of reach, and does not take the focus from the lock screen', (await state(page)).lock === 1 && first !== '' && under.inert && under.focus === 'lock', JSON.stringify([first, under]));
+    await page.keyboard.press('ArrowRight'); await sleep(900);
+    const moved = await card(page);
+    await page.keyboard.press('Escape'); await sleep(300);
+    ok('…and an arrow key and Escape pressed on the lock screen neither move it nor end it', moved === first && (await state(page)).tour === 1, `${first} → ${moved}, walkthroughs ${(await state(page)).tour}`);
+    await page.keyboard.type(OLD); await lockGone(page); await sleep(400);
+    const after = await page.evaluate(() => ({ inert: document.querySelector('.tour').inert, inCard: !!document.activeElement.closest('.tour-card') }));
+    await page.keyboard.press('ArrowRight'); await sleep(900);
+    ok('after the PIN it is in reach, with the focus on its card, and its keys work', !after.inert && after.inCard && (await card(page)) !== first && (await card(page)) !== '', JSON.stringify([after, await card(page)]));
+    await page.keyboard.press('Escape'); await sleep(300);
+    ok('…and Escape ends it, leaving the page usable', (await state(page)).tour === 0 && await usable(page), JSON.stringify(await state(page)));
+    await ctx.close();
+  });
+
+  /* ------------------------ where the keyboard focus is after the lock screen has gone ------------------------ */
+  the('focus after the unlock', async () => {
+    const { ctx, page } = await existing();
+    const again = async () => { await lockNow(page); await lockUp(page); await page.keyboard.type(OLD); await lockGone(page); await sleep(300); };
+    await addForm(page, 'Robin'); // the cursor is in the Name box
+    await again();
+    const box = await page.evaluate(() => document.activeElement.getAttribute('data-key') || document.activeElement.tagName);
+    await page.keyboard.type(' Example'); await sleep(100);
+    ok('after the PIN the cursor is back in the box of the form it was in, and typing carries on there', box === 'name' && (await state(page)).typed === 'Robin Example', JSON.stringify([box, (await state(page)).typed]));
+    await page.keyboard.press('Escape'); await sleep(250);
+    await page.evaluate(() => import('./js/tutorials.js').then(m => m.openTutorial('around'))); await page.waitForSelector('.tour-card h2'); await sleep(400);
+    const c1 = await card(page);
+    await again();
+    const onNext = await page.evaluate(() => { const a = document.activeElement; return !!a.closest('.tour-card') && a.classList.contains('primary'); });
+    await page.keyboard.press('Enter'); await sleep(900);
+    ok('…over a walkthrough it is back on the card’s Next, which Enter presses', onNext && (await card(page)) !== c1 && (await card(page)) !== '', `${c1} → ${await card(page)}`);
+    await page.keyboard.press('Escape'); await sleep(300);
+    await again();
+    ok('…and with nothing open it goes to the page itself, as before', await page.evaluate(() => document.activeElement.id === 'page'), await page.evaluate(() => document.activeElement.id || document.activeElement.tagName));
+    await ctx.close();
+  });
+
+  // ONLY is for working on one case by hand. It is never taken from a runner's environment (CI), a filtered run says
+  // that it is one, and a filter that matches nothing fails: the spec must not pass with its cases left out.
+  const only = process.env.CI ? '' : process.env.ONLY || '';
+  const chosen = cases.filter(([name]) => !only || name.includes(only));
+  if (only) console.log(chosen.length ? `NOTE ONLY=${only}: ${chosen.length} of ${cases.length} cases run, the others are not tested in this run` : `FAIL ONLY=${only} matches none of the ${cases.length} cases: nothing was tested`);
+  for (const [name, fn] of chosen) {
     try { await fn(); } catch (e) { console.log(`FAIL ${name}: the case stopped early — ` + String(e.stack || e.message).split('\n').slice(0, 3).join(' / ')); }
   }
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));

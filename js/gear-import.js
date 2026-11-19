@@ -35,7 +35,7 @@ export function planGearImport(items, { existing = db.gear, onSerial = 'skip', o
     if (k && !bySerial.has(k)) bySerial.set(k, g);
     if (!k && !byName.has(nameKey(g))) byName.set(nameKey(g), g);
   }
-  for (const g of existing) byRef.set(g.id, g); // an item's own id comes before a copy made from it
+  for (const g of existing) if (!(derived(g) && byRef.has(g.id))) byRef.set(g.id, g); // an item's own id comes before a copy made from it
   const rows = (items || []).filter(x => x && String(x.name || '').trim()).map(item => {
     const k = serialKey(item.serial), ref = item.ref && byRef.get(item.ref), ser = k && bySerial.get(k), nam = matchNames && !k && byName.get(nameKey(item));
     return ref ? { item, match: ref, why: 'ref', action: ref.id === item.ref ? 'skip' : 'update' } : ser ? { item, match: ser, why: 'serial', action: onSerial } : nam ? { item, match: nam, why: 'name', action: onName } : { item, match: null, why: '', action: 'add' };
@@ -58,6 +58,22 @@ const fields = (item, fresh) => {
 const servicedOn = g => (g.log || []).filter(e => ['service', 'clean', 'calibration', 'check'].includes(e.kind) && e.date).map(e => e.date).sort().pop() || '';
 const serviceLine = (g, date) => (/^\d{4}-\d{2}-\d{2}$/.test(date || '') && date > servicedOn(g) ? [...(g.log || []), { id: uid(), date, kind: 'service', note: 'Last service, as an imported list gave it', cost: '' }] : null);
 
+// The id of a record made from a link: worked out from the reference the link gives it (the id it has where the link
+// was made), not drawn at random. The same link added on two of one person's devices, before either has read the
+// other's copy, then makes the same record on both, and the sync (which merges by id) folds the two into one instead of
+// keeping two of everything, of which later updates would reach only one. taken: the ids in use in that list; dead:
+// the tombstones (db.deleted). An id in use ("Add anyway, as another item") or one that was deleted here before (also
+// by an Undo) is not used again: the record then gets a random id, as one that has no reference does.
+// (A reference is used only when it is written as an id is: letters, digits, hyphens and underscores.)
+export const linkId = (ref, taken, dead) => { const id = /^[\w-]{1,100}$/.test(ref || '') ? 'link-' + ref : ''; return id && !taken.has(id) && !(dead && dead[id]) ? id : uid(); };
+// Such an id says only that the record was made from a link; the same id is made on anyone's device that adds the link.
+// So where a list names a record by id ("this is your own item: the list was made from it"), a record whose id came from
+// a link stands back for a copy that was made from that very reference: someone who has the first list and one a
+// workmate made from their copy of it holds both, and the workmate's list is about the second.
+export const derived = x => !!(x && x.shared && x.shared.ref && x.id === 'link-' + x.shared.ref);
+// The kit a list's kit is here already as: one's own (the list was made from it), or one made from that kit before.
+export const kitOf = (kits, ref) => { if (!ref) return null; const own = kits.find(x => x.id === ref), copy = kits.find(x => x.shared && x.shared.ref === ref); return (own && !(copy && derived(own)) ? own : copy || own) || null; };
+
 // The plan carried out on the database it is given: the stored one inside update() (applyGearImport), or a copy of it
 // when the question is only how big the database would become (roomForGear). out collects what was done.
 const outcome = () => ({ added: [], updated: [], skipped: 0, ids: [], kits: [], at: Date.now(), before: [], kitsAdded: [], kitsBefore: [] });
@@ -68,7 +84,7 @@ function carry(d, plan, { kits = [], from = '' } = {}, out) {
   const owned = new Map(d.gear.map(g => [g.id, g])), changed = new Set(); // one look-up per row, so a list of thousands stays quick
   plan.rows.forEach((r, i) => {
     const cur = r.match ? owned.get(r.match.id) || null : null, act = acts[i] = doing({ ...r, match: cur });
-    if (act === 'add') { const g = { id: uid(), ...fields(r.item, true), ...mark(r.item.ref), updatedAt: now }, log = serviceLine(g, r.item.lastService); if (log) g.log = log; d.gear.push(g); out.added.push(g.id); out.ids[i] = g.id; }
+    if (act === 'add') { const g = { id: linkId(r.item.ref, owned, d.deleted), ...fields(r.item, true), ...mark(r.item.ref), updatedAt: now }, log = serviceLine(g, r.item.lastService); if (log) g.log = log; d.gear.push(g); owned.set(g.id, g); out.added.push(g.id); out.ids[i] = g.id; }
     else if (act === 'update') {
       if (!changed.has(cur.id)) { changed.add(cur.id); out.before.push(copy(cur)); out.updated.push(cur.id); }
       const log = serviceLine(cur, r.item.lastService);
@@ -80,13 +96,13 @@ function carry(d, plan, { kits = [], from = '' } = {}, out) {
     const gear = [], gearQty = {};
     for (const [row, n] of k.items || []) { const id = out.ids[row]; if (!id || gear.includes(id)) continue; gear.push(id); if (qty(n) > 1) gearQty[id] = qty(n); }
     if (!gear.length || !String(k.name || '').trim()) continue;
-    const cur = k.ref ? d.kits.find(x => x.id === k.ref || (x.shared && x.shared.ref === k.ref)) : null;
+    const cur = kitOf(d.kits, k.ref);
     // A kit that is here already (one's own, or made from this source before) is left as it is when every row it
     // names was skipped: with nothing taken from the list, the kit is not rewritten from the list either.
     if (cur && !(k.items || []).some(([row]) => acts[row] === 'add' || acts[row] === 'update')) continue;
     if (cur) out.kitsBefore.push(copy(cur));
     if (cur) Object.assign(cur, { name: k.name, description: k.description || cur.description || '', notes: k.notes || cur.notes || '', gear, gearQty, updatedAt: now }, cur.id === k.ref ? {} : mark(k.ref));
-    else d.kits.push({ id: uid(), name: k.name, description: k.description || '', gear, gearQty, notes: k.notes || '', ...mark(k.ref), updatedAt: now });
+    else d.kits.push({ id: linkId(k.ref, new Set(d.kits.map(x => x.id)), d.deleted), name: k.name, description: k.description || '', gear, gearQty, notes: k.notes || '', ...mark(k.ref), updatedAt: now });
     out.kits.push(cur ? cur.id : d.kits[d.kits.length - 1].id);
     if (!cur) out.kitsAdded.push(d.kits[d.kits.length - 1].id);
   }

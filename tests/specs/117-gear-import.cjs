@@ -7,7 +7,8 @@
 // And what a review found afterwards: quantities a list does not give, a row holding only a word (item or heading),
 // number cells of an .xlsx, workbooks and lists made to waste time, a list made from one's own items and kits, room
 // in the browser's storage (with and without a PIN) and saying so when a save is refused, a tap beside the sheet,
-// where Undo goes, and a spreadsheet shared to the installed web app.
+// where Undo goes, and a spreadsheet shared to the installed web app. And: a copy of a kit that came from a link is
+// one's own, and a file shared while Vdex was locked is offered at the next unlocked start and goes with an erase.
 const { chromium } = require('playwright');
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const { acceptTerms } = require('../helpers.cjs');
@@ -739,6 +740,36 @@ const ODD_XLSX = zip({
   ok('items added from someone else’s list before still start on Update; with every row skipped, the kit made from that list is left as it is (an item put into it since stays)', same(own.againRows, [['ref', 'update'], ['ref', 'update']]) && same(own.skippedKit, [1, 3, true, 0, 2]), JSON.stringify([own.againRows, own.skippedKit]));
   ok('…with the rows updated, that kit is the list’s again; and a new kit whose rows were all skipped is still made of the owned items', same(own.updatedKit, [1, 2, false]) && same(own.newKit, [1, 'Second kit', 2]), JSON.stringify([own.updatedKit, own.newKit]));
 
+  /* ============================== a copy of a kit that came from a link is one's own ============================== */
+  const K = await open();
+  const kitLinks = await K.page.evaluate(async () => {
+    const lp = await import('./js/link-pack.js'), s = await import('./js/store.js');
+    s.update(d => { d.gear = [{ id: 'own1', name: 'My light', category: 'Lighting', serial: '', qty: 1, value: 100, updatedAt: 1 }]; d.kits = []; d.bookings = []; });
+    const raw = (extra = []) => ({ v: 1, kind: 'gear', made: Date.now(), title: 'Kit', currency: '$', by: { name: 'Pat Producer' }, items: [{ ref: 's1', name: 'Sony FX6', category: 'Camera', serial: 'FX6-1' }, { ref: 's2', name: 'Sigma 24-70', category: 'Lens' }, ...extra], kits: [{ ref: 'k1', name: 'Interview kit', items: [[0, 1], [1, 1], ...(extra.length ? [[2, 1]] : [])] }] });
+    return [await lp.pack(raw()), await lp.pack(raw([{ ref: 's3', name: 'Aputure 600d', category: 'Lighting' }]))];
+  });
+  const linkIn = async l => { await K.page.goto(BASE + 'index.html#add=' + l); await K.page.waitForSelector('.sheet .add-preview', { timeout: 15000 }); await sleep(200); };
+  const linkAdd = async () => { await K.page.locator('.sheet .add-go').click(); await K.page.waitForFunction(() => !document.querySelector('.sheet'), null, { timeout: 15000 }); await sleep(400); };
+  const kitsNow = () => K.page.evaluate(() => import('./js/store.js').then(s => s.db.kits.map(k => ({ name: k.name, marked: !!k.shared, gear: k.gear.map(id => (s.byId('gear', id) || {}).name).join('+') }))));
+  await linkIn(kitLinks[0]); await linkAdd();
+  await K.page.evaluate(() => window.logiGo('gear')); await sleep(300);
+  await K.page.locator('#page [role=tab]', { hasText: /^Kits/ }).click(); await sleep(300);
+  await K.page.locator('button[aria-label="Duplicate Interview kit"]').click(); await sleep(300);
+  const dup = await kitsNow();
+  ok('Duplicate on a kit that came from a link makes a kit of one’s own: the copy does not carry the link’s mark', dup.length === 2 && dup[0].name === 'Interview kit' && dup[0].marked && dup[1].name === 'Interview kit (copy)' && !dup[1].marked && dup[1].gear === 'Sony FX6+Sigma 24-70', JSON.stringify(dup));
+  // the copy is renamed and given a light of one's own, and the original is deleted
+  await K.page.locator('button[aria-label="Edit Interview kit (copy)"]').click(); await K.page.waitForSelector('.sheet form');
+  await K.page.locator('.sheet form input').first().fill('My interview set');
+  await K.page.locator('.sheet form .checks label', { hasText: 'My light' }).locator('input[type=checkbox]').check();
+  await K.page.locator('.sheet form button[type=submit]').click(); await sleep(400);
+  await K.page.evaluate(() => import('./js/store.js').then(s => s.remove('kits', s.db.kits.find(k => k.name === 'Interview kit').id)));
+  await linkIn(kitLinks[1]); // the sender's next link: one more item in the kit
+  const kitLine = (await K.page.locator('.sheet .add-kits li').allInnerTexts()).join(' | ');
+  await linkAdd();
+  const after2 = await kitsNow(), myKit = after2.find(k => k.name === 'My interview set') || {}, patKit = after2.find(k => k.name === 'Interview kit') || {};
+  ok('…so the sender’s next link makes its kit anew beside the copy, which keeps its name and the item put into it', /“Interview kit” \(3 items\) is made as a kit/.test(kitLine) && after2.length === 2 && myKit.gear === 'Sony FX6+Sigma 24-70+My light' && !myKit.marked && patKit.gear === 'Sony FX6+Sigma 24-70+Aputure 600d' && patKit.marked, JSON.stringify([kitLine, after2]));
+  await K.ctx.close();
+
   /* ============================== a tap beside the sheet, and where Undo goes ============================== */
   await seed(Q.page, []);
   await openImport(Q.page); await paste(Q.page, 'Sony FX6,FX6-0001,Van\nZoom H6,H6-00003,Shelf A\nSigma 18-35,SIG-0002,Shelf B\nRode NTG,RD-00011,Shelf A\n'); await previewed(Q.page);
@@ -853,6 +884,28 @@ const ODD_XLSX = zip({
   await sp.evaluate(() => import('./js/share-in.js').then(m => m.arrived(new File(['Item,Serial number\nSony FX6,FX6-1\n'], 'shared', { type: 'text/csv' })))); await sp.waitForSelector('.sheet'); await sleep(150);
   ok('a spreadsheet that arrives without a name that says so is known by its type', (await sp.locator('.sheet button.btn').allInnerTexts()).includes('🎥 Kit list for Equipment'));
   await sp.keyboard.press('Escape'); await sleep(200);
+  // Shared while Vdex is locked: the share opens Vdex on its lock screen, and the file waits, parked, behind it.
+  const SPIN = '246810';
+  const postKit = () => sp.evaluate(() => { const f = document.createElement('form'), i = document.createElement('input'), dt = new DataTransfer(); f.method = 'POST'; f.action = './share'; f.enctype = 'multipart/form-data'; i.type = 'file'; i.name = 'file'; dt.items.add(new File(['Item,Serial number,Value\nSony FX6,FX6-120934,6000\n'], 'insured kit.csv', { type: 'text/csv' })); i.files = dt.files; f.append(i); document.body.append(f); f.submit(); });
+  const parked = () => sp.evaluate(async () => { if (!(await caches.has('logi-share'))) return 'no cache'; const r = await (await caches.open('logi-share')).match('shared-file'); return r ? decodeURIComponent(r.headers.get('X-Name')) : 'nothing parked'; });
+  await sp.evaluate(p => import('./js/lock.js').then(l => l.setPin(p)), SPIN); await sp.waitForFunction(() => !!localStorage.getItem('logi-vault'), null, { timeout: 60000 }); await sleep(400);
+  await postKit(); await sp.waitForSelector('.lock:not(.lock-setup)', { timeout: 30000 }); await sleep(300);
+  const waiting = { url: sp.url(), parked: await parked(), sheets: await sp.locator('.sheet').count() };
+  // Vdex is closed without the PIN, and opened later from its icon: a start like any other, with no ?share=1
+  await sp.goto(BASE + 'index.html'); await sp.waitForSelector('.lock:not(.lock-setup)', { timeout: 30000 });
+  await sp.keyboard.type(SPIN);
+  const fileOffered = await sp.waitForSelector('.sheet[aria-label="A file for Vdex"]', { timeout: 15000 }).then(() => true, () => false);
+  ok('a file shared while Vdex was locked, and not picked up then, is offered at the next start once the PIN is entered, and is no longer parked', /share=1/.test(waiting.url) && waiting.parked === 'insured kit.csv' && waiting.sheets === 0 && fileOffered && /insured kit\.csv/.test(await text(sp, '.sheet')) && (await parked()) === 'nothing parked', JSON.stringify([waiting, fileOffered, await parked()]));
+  if (fileOffered) { await sp.keyboard.press('Escape'); await sleep(250); }
+  // Shared while locked again, and this time the device is erased on that very lock screen
+  await postKit(); await sp.waitForSelector('.lock:not(.lock-setup)', { timeout: 30000 }); await sleep(300);
+  const before2 = await parked();
+  await sp.locator('.lock .btn[aria-controls="lock-forgot"]').click();
+  await Promise.all([sp.waitForEvent('load', { timeout: 30000 }), sp.locator('.lock-forgot button', { hasText: 'Erase this device' }).click()]);
+  await sp.waitForSelector('#rolodex .drum-btn', { timeout: 30000 }); await sleep(1500);
+  const sure = dialogs.indexOf('Erase all Vdex data on this device?'); if (sure >= 0) dialogs.splice(sure, 1); // the one question this spec asks for itself; any other dialog still counts at the end
+  const erased = { parked: await parked(), sheets: await sp.locator('.sheet').count(), pin: await sp.evaluate(() => localStorage.getItem('logi-lock')), caches: (await sp.evaluate(() => caches.keys())).join() };
+  ok('Erase this device takes a parked file with it: nothing of it is left in the browser, and the Vdex that starts afterwards is not handed it', before2 === 'insured kit.csv' && sure >= 0 && erased.parked === 'no cache' && erased.sheets === 0 && erased.pin === null && !/logi-share/.test(erased.caches), JSON.stringify([before2, erased]));
   await SW.close();
 
   /* ============================== how it looks: 360 px and 1200 px ============================== */

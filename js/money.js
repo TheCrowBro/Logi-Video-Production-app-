@@ -47,8 +47,13 @@ export const rateOf = r => parseRate(r).amount;
 // The people hired for a job who belong in its money. A booking added from someone's shared link (js/share-import.js)
 // carries that producer's whole crew as its hires, to read and to call: they are not one's own costs or charges, so
 // the ones the link made are left out until one is given a rate. (To count them all again, return hiredPeople(b).)
-const linkMade = (b, hr) => hr.shared === true || !!(b.shared && b.shared.rows && (b.shared.rows.hires || []).includes(hr.id));
+// The same goes for the deliverables the link brought: they are what the producer owes their client, so they are not
+// suggested as lines of one's own quote or invoice; a deliverable added by hand is. (ownDeliverables below; to suggest
+// them all again, return b.deliverables.) A line counts as the link's by its mark, or by its id in shared.rows (a form
+// writes a line anew without the mark).
+const linkMade = (b, x, rows = 'hires') => x.shared === true || !!(b.shared && b.shared.rows && (b.shared.rows[rows] || []).includes(x.id));
 const paidHires = b => hiredPeople(b).filter(hr => !(linkMade(b, hr) && (hr.rate === '' || hr.rate == null)));
+const ownDeliverables = b => (b.deliverables || []).filter(x => x && !linkMade(b, x, 'deliverables'));
 
 // Suggested lines: from the booking, from the quote, or from the hours logged.
 export function suggestLines(b, kind, source = 'booking') {
@@ -70,7 +75,7 @@ export function suggestLines(b, kind, source = 'booking') {
   for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const r = personRate(c); line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, r.hourly ? days * standardDay() : days, r.hourly ? 'hour' : 'day', r.amount); } }
   for (const hr of paidHires(b)) { const r = personRate(hr), n = Number(hr.days) || days; line(`Crew: ${hr.name}${hr.role ? ' (' + hr.role + ')' : ''}`, r.hourly ? n * standardDay() : n, r.hourly ? 'hour' : 'day', r.amount); }
   if ((b.gear || []).length || (b.kits || []).length) line('Equipment package', days, 'day', bl.kitRate);
-  for (const dl of b.deliverables || []) line(`${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
+  for (const dl of ownDeliverables(b)) line(`${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
   if (kind === 'invoice') for (const hr of rentalsOf(b)) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
   return lines;
 }
@@ -127,8 +132,10 @@ export function billTo(b) {
   const all = (b.stakeholders || []).filter(Boolean), named = all.filter(s => s.name), sh = b.shared && b.shared.ref ? b.shared : null;
   if (!sh) return { head: b.client || (named[0] && named[0].name) || '—', contacts: all };
   const brought = new Set(sh.contacts || []);
-  // A booking added before Vdex recorded the producer apart: they are the contact the link brought as "Producer".
-  const old = !sh.producer && named.find(s => brought.has(lowName(s.name)) && /^Producer( · |$)/.test(s.role || ''));
+  // A booking added before Vdex recorded the producer apart (it has no shared.sent either, which came in with it):
+  // they are the contact the link brought as "Producer". On a booking added since, no producer means the link named no
+  // sender, and a client's contact whose role happens to begin with "Producer" is not taken for one.
+  const old = !sh.producer && !sh.sent && named.find(s => brought.has(lowName(s.name)) && /^Producer( · |$)/.test(s.role || ''));
   const producer = sh.producer || (old ? { name: old.name, business: (old.role.split(' · ')[1] || '') } : null), who = producer ? lowName(producer.name) : '';
   const contacts = all.filter(s => !brought.has(lowName(s.name)) || lowName(s.name) === who), mine = contacts.filter(s => s.name);
   const linkClient = sh.sent ? sh.sent.client || '' : b.client || ''; // no record of what the link supplied: it counts as unchanged
@@ -233,7 +240,10 @@ export function moneyNudge() {
 const slug = s => String(s || 'doc').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 export function moneyPage(b, kind, go) {
   const K = KINDS[kind], doc = docOf(b, kind), refresh = () => go({});
-  const emails = billTo(b).contacts.map(s => (s.email || '').trim()).filter(Boolean);
+  const to = billTo(b), emails = to.contacts.map(s => (s.email || '').trim()).filter(Boolean);
+  // On a booking added from a shared link the contacts the link brought are not written to (billTo above), so the
+  // booking can show an email address while this button has nobody to address: its tip then says who it goes to.
+  const leftOut = (b.stakeholders || []).some(s => s && (s.email || '').trim() && !to.contacts.includes(s));
   const text = () => moneyText(byId('bookings', b.id), kind);
   const share = async () => { if (navigator.share) { try { await navigator.share({ title: `${K.label} ${doc.number}`, text: text() }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const copy = async () => { try { await navigator.clipboard.writeText(text()); toast('Copied'); } catch { toast('Select the text and copy it'); } };
@@ -245,7 +255,7 @@ export function moneyPage(b, kind, go) {
   const t = doc && totals(doc);
   const stateCls = doc && (doc.status === 'Paid' || doc.status === 'Accepted' ? 'synced' : isOverdue(b) || doc.status === 'Declined' ? 'error' : '');
   // The email carries the client's link once it is made (it is packed asynchronously); the plain text goes first.
-  const mailA = doc && h('a', { class: 'btn ghost', href: `mailto:${emails.join(',')}?` + new URLSearchParams({ subject: `${K.label} ${doc.number} — ${b.title}`, body: text() }).toString().replace(/\+/g, '%20'), title: emails.length ? `To: ${emails.join(', ')}` : 'Add contact emails on the booking' }, emails.length ? `✉ Email client (${emails.length})` : '✉ Email');
+  const mailA = doc && h('a', { class: 'btn ghost', href: `mailto:${emails.join(',')}?` + new URLSearchParams({ subject: `${K.label} ${doc.number} — ${b.title}`, body: text() }).toString().replace(/\+/g, '%20'), title: emails.length ? `To: ${emails.join(', ')}` : leftOut ? 'On a booking added from a shared link this goes to the person who shared it and to contacts you add yourself: give one of them an email address on the booking' : 'Add contact emails on the booking' }, emails.length ? `✉ Email client (${emails.length})` : '✉ Email');
   if (doc) shareLink(b, kind).then(url => { mailA.href = mailtoFor(b, kind, url, 'send'); }).catch(() => {});
   const remind = () => shareLink(b, kind).then(url => { location.href = mailtoFor(b, kind, url, 'remind'); }).catch(e => toast('Could not make the link: ' + (e.message || e)));
   const partPaid = doc && kind === 'invoice' && doc.status !== 'Paid' && t.received > 0;

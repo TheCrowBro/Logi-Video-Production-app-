@@ -11,9 +11,14 @@ const here = dirname(fileURLToPath(import.meta.url)), repo = resolve(here, '..')
 const only = process.argv.slice(2);
 const root = scratchCopy(repo);
 const out = join(repo, 'tests', 'output'); rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true });
-// An interrupted run (Ctrl-C, a killed process) must not leave its 40 MB scratch copy behind in the temp folder.
-const clean = () => { try { rmSync(root, { recursive: true, force: true }); } catch { /* already gone */ } };
-process.on('SIGINT', () => { clean(); process.exit(130); }); process.on('SIGTERM', () => { clean(); process.exit(143); });
+// A run that ends early must not leave its 40 MB scratch copy behind in the temp folder, nor a spec still running
+// against it: whichever way the runner goes (to its end, Ctrl-C, a killed process, a crash, or its output pipe closed
+// by whoever was reading it, as in `… | head`), the spec in hand is stopped and the copy removed on the way out.
+let running = null;
+const clean = () => { try { if (running) running.kill(); } catch { /* already gone */ } try { rmSync(root, { recursive: true, force: true }); } catch { /* already gone */ } };
+process.on('exit', clean);
+process.on('SIGINT', () => process.exit(130)); process.on('SIGTERM', () => process.exit(143));
+process.stdout.on('error', () => process.exit(1)); // nobody is reading any more: end quietly instead of crashing on the next line
 const server = await serve(root);
 const url = `http://localhost:${server.address().port}/`;
 let failed = 0, passed = 0;
@@ -21,13 +26,12 @@ for (const f of readdirSync(join(here, 'specs')).filter(n => /\.(c?js|mjs)$/.tes
   if (only.length && !only.some(o => f.includes(o))) continue;
   process.stdout.write(`\n=== ${f} ===\n`);
   const code = await new Promise(res => {
-    const child = spawn(process.execPath, [join(here, 'specs', f)], { env: { ...process.env, S: out, VDEX_ROOT: root, VDEX_URL: url }, stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = running = spawn(process.execPath, [join(here, 'specs', f)], { env: { ...process.env, S: out, VDEX_ROOT: root, VDEX_URL: url }, stdio: ['ignore', 'pipe', 'inherit'] });
     child.stdout.on('data', d => { const t = String(d); process.stdout.write(t); passed += (t.match(/^PASS /gm) || []).length; failed += (t.match(/^FAIL /gm) || []).length; });
-    child.on('close', res);
+    child.on('close', code => { running = null; res(code); });
   });
   if (code !== 0) { failed++; console.log(`(spec exited with code ${code})`); }
 }
 server.close();
-rmSync(root, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

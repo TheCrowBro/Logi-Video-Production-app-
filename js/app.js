@@ -168,9 +168,13 @@ addEventListener('hashchange', () => { if (parkAdd()) showAdd(); });
 // A file handed to Vdex: the iPhone app gets it from the phone ("Copy to Vdex"); on Android the share sheet's file is
 // parked by the service worker. Either way js/share-in.js asks what it is.
 if (native.isApp) native.files.onShared(file => import('./share-in.js').then(m => m.arrived(file)));
-if (new URLSearchParams(location.search).get('share') === '1' && 'caches' in window) {
-  history.replaceState(null, '', location.pathname);
-  caches.open('logi-share').then(async c => {
+// The parked file is looked for at every start, which is always an unlocked one (this runs after the PIN), and not
+// only at the start the share itself made: a file shared while Vdex was locked, and never unlocked on that page, would
+// otherwise stay parked in plain form for good. caches.has() comes first, so no empty cache is made at every start.
+if ('caches' in window) {
+  if (new URLSearchParams(location.search).get('share') === '1') history.replaceState(null, '', location.pathname);
+  caches.has('logi-share').then(has => has && caches.open('logi-share')).then(async c => {
+    if (!c) return;
     const r = await c.match('shared-file'); if (!r) return;
     const name = decodeURIComponent(r.headers.get('X-Name') || 'shared.docx');
     const file = new File([await r.blob()], name, { type: r.headers.get('Content-Type') || '' });

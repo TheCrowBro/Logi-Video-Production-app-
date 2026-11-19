@@ -3,9 +3,9 @@ const { acceptTerms, openSetting } = require('../helpers.cjs');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const ROOT = process.env.VDEX_ROOT;
-const swPath = ROOT + '/sw.js', verPath = ROOT + '/js/version.js', laterPath = ROOT + '/later-page.html';
-const origSw = fs.readFileSync(swPath, 'utf8'), origVer = fs.readFileSync(verPath, 'utf8');
-const restore = () => { fs.writeFileSync(swPath, origSw); fs.writeFileSync(verPath, origVer); fs.rmSync(laterPath, { force: true }); };
+const swPath = ROOT + '/sw.js', verPath = ROOT + '/js/version.js', laterPath = ROOT + '/later-page.html', laterJs = ROOT + '/js/later-page.js', utilPath = ROOT + '/js/util.js';
+const origSw = fs.readFileSync(swPath, 'utf8'), origVer = fs.readFileSync(verPath, 'utf8'), origUtil = fs.readFileSync(utilPath, 'utf8');
+const restore = () => { fs.writeFileSync(swPath, origSw); fs.writeFileSync(verPath, origVer); fs.writeFileSync(utilPath, origUtil); fs.rmSync(laterPath, { force: true }); fs.rmSync(laterJs, { force: true }); };
 process.on('exit', restore);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -28,13 +28,18 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   // A page this installed build does not hold: a newer build added it, and a link to it is opened before this copy has
   // updated. The worker asks the server for it; only an address the server has nothing for, or no connection, gets the app.
   const base = process.env.VDEX_URL || 'http://localhost:8123/';
-  fs.writeFileSync(laterPath, '<!doctype html><meta charset="utf-8"><title>A later page</title><p id="later">Added by a later build.</p>');
+  // The later page has a script of its own, which needs something the later build added to a module this build
+  // also holds (js/util.js, here with one more export on the server than in the installed copy).
+  fs.writeFileSync(laterPath, '<!doctype html><meta charset="utf-8"><title>A later page</title><p id="later">Added by a later build.</p><script type="module" src="js/later-page.js"></script>');
+  fs.writeFileSync(laterJs, "import { h, brandNew } from './util.js';\ndocument.getElementById('later').dataset.ran = brandNew;\ndocument.body.append(h('p', null, 'The later page ran.'));\n");
+  fs.writeFileSync(utilPath, origUtil + "\nexport const brandNew = 'with the later build';\n");
   const other = await ctx.newPage();
-  const seen = () => other.evaluate(async () => ({ title: document.title, own: !!document.getElementById('later'), app: !!document.getElementById('rolodex'), controlled: !!navigator.serviceWorker.controller, hash: location.hash, kept: (await (await caches.open('logi-dev')).keys()).filter(r => /later-page|no-such-page/.test(r.url)).length }));
-  await other.goto(base + 'later-page.html#1.abc');
+  const seen = () => other.evaluate(async () => ({ title: document.title, own: !!document.getElementById('later'), ran: (document.getElementById('later') || { dataset: {} }).dataset.ran || '', app: !!document.getElementById('rolodex'), controlled: !!navigator.serviceWorker.controller, hash: location.hash, kept: (await (await caches.open('logi-dev')).keys()).filter(r => /later-page|no-such-page/.test(r.url)).length }));
+  await other.goto(base + 'later-page.html#1.abc'); await sleep(300);
   const later = await seen();
   ok('a page the installed build does not hold is fetched from the server and shown as itself, not replaced by the app, with the link’s fragment still in the address', later.controlled && later.title === 'A later page' && later.own && !later.app && later.hash === '#1.abc', JSON.stringify(later));
-  ok('…and it is not added to the offline copy, which stays one build’s files', later.kept === 0 && (await page.evaluate(async () => (await (await caches.open('logi-dev')).keys()).length)) === cached, JSON.stringify(later));
+  ok('…what that page loads comes from the server too, so its script runs with the later build’s modules, not with the installed ones', later.ran === 'with the later build', JSON.stringify(later));
+  ok('…and neither the page nor anything it loaded is added to the offline copy, which stays one build’s files', later.kept === 0 && (await page.evaluate(async () => (await (await caches.open('logi-dev')).keys()).length)) === cached, JSON.stringify(later));
   await other.goto(base + 'no-such-page.html'); await other.waitForSelector('#rolodex .drum-btn', { timeout: 20000 }).catch(() => {});
   const none = await seen();
   ok('an address the server has no page for still opens the app', none.controlled && none.title === 'Vdex' && none.app && none.kept === 0, JSON.stringify(none));
@@ -43,7 +48,84 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const cut = await seen().catch(e => ({ error: e.message }));
   await ctx.setOffline(false);
   ok('…and so does that later page while there is no connection', cut.title === 'Vdex' && cut.app && !cut.own, JSON.stringify(cut));
-  await other.close(); fs.rmSync(laterPath, { force: true });
+  await other.close(); fs.rmSync(laterPath, { force: true }); fs.rmSync(laterJs, { force: true }); fs.writeFileSync(utilPath, origUtil);
+  ok('…while this build’s own pages keep its own copy of that module', !/brandNew/.test(await page.evaluate(() => fetch('js/util.js').then(r => r.text()))));
+  // The offline copy gone (the next cases show one way it goes): the next start with a connection puts back what it
+  // fetches, the app's own page among it, so that Vdex opens again without one. (On a page of its own: a start with
+  // no connection logs the requests that fail, which are not errors of the app.)
+  const lost = await ctx.newPage();
+  const held = () => lost.evaluate(async () => { const keys = (await (await caches.open('logi-dev')).keys()).map(r => new URL(r.url).pathname); return { files: keys.length, page: keys.filter(k => /\/(index\.html)?$/.test(k)).length }; });
+  await lost.goto(base); await lost.waitForSelector('#rolodex .drum-btn');
+  await lost.evaluate(() => caches.delete('logi-dev'));
+  await lost.reload(); await lost.waitForSelector('#rolodex .drum-btn'); await sleep(800);
+  const refilled = await held();
+  await ctx.setOffline(true);
+  const offline = await lost.reload().then(async () => { await lost.waitForSelector('#rolodex .drum-btn', { timeout: 15000 }); return 'opened'; }).catch(e => String(e.message).split('\n')[0]);
+  await ctx.setOffline(false);
+  ok('after the offline copy was lost, a start with a connection keeps the app’s own page again with the files it fetched', refilled.page >= 1 && refilled.files > 20, JSON.stringify(refilled));
+  ok('…so the next start without a connection opens Vdex', offline === 'opened', offline);
+  await lost.close();
+
+  // An older worker that wakes while a new build installs. This runs on an address of its own (the same files on
+  // another port, which the browser takes for another site, with its own worker and offline copy), where the server
+  // can be told to answer slowly: the new build's install then lasts long enough to be met half-way.
+  const { serve } = await import('../lib.mjs');
+  const files = await serve(ROOT), answer = files.listeners('request')[0]; files.close();
+  // Its worker script is answered from here, so a build deployed on this site is never seen by the other one.
+  let slow = 0, swNow = origSw;
+  const slowSite = require('http').createServer((req, res) => { if (/^\/sw\.js(\?|$)/.test(req.url)) { res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'no-cache' }); return res.end(swNow); } setTimeout(() => answer(req, res), slow); });
+  await new Promise(r => slowSite.listen(0, '127.0.0.1', r));
+  const site = `http://localhost:${slowSite.address().port}/`;
+  const ctx2 = await browser.newContext({ viewport: { width: 420, height: 860 } });
+  await ctx2.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await ctx2.addInitScript(acceptTerms());
+  const p2 = await ctx2.newPage(); p2.on('dialog', d => d.accept());
+  await p2.goto(site); await p2.waitForSelector('#rolodex .drum-btn'); await p2.waitForFunction(() => navigator.serviceWorker.controller != null, null, { timeout: 20000 });
+  const SHELL = [...origSw.match(/const SHELL = \[([\s\S]*?)\n\];/)[1].matchAll(/'([^']+)'/g)].map(m => m[1]);
+  // How many of the build's files its cache lacks (-1: there is no such cache).
+  const missing = name => p2.evaluate(async ([n, shell]) => { if (!(await caches.has(n))) return -1; const have = new Set((await (await caches.open(n)).keys()).map(r => r.url)); return shell.filter(f => !have.has(new URL(f, location.origin + '/').href)).length; }, [name, SHELL]);
+  const cdp = await ctx2.newCDPSession(p2); await cdp.send('ServiceWorker.enable');
+  // deploy: a new build number on the server, found by the page; the install has begun once the new cache exists
+  const until = async (ms, test) => { for (const end = Date.now() + ms; Date.now() < end;) { if (await test()) return true; await sleep(100); } return false; };
+  const deploy = async build => {
+    swNow = origSw.replace("const BUILD = 'dev';", `const BUILD = '${build}';`);
+    slow = 1500;
+    await p2.evaluate(() => { navigator.serviceWorker.getRegistration().then(r => r.update()); });
+    return until(15000, () => p2.evaluate(async n => (await caches.has(n)) && !!(await navigator.serviceWorker.getRegistration()).installing, 'logi-' + build));
+  };
+  // …and it has taken over once the cache of the build before it is gone (a worker drops the old caches as it takes
+  // over). The page's own "cleanup" goes out 3 s after that; what is missing is then waited for, for a while.
+  const settled = async build => {
+    slow = 0;
+    await until(30000, () => p2.evaluate(async n => (await caches.keys()).every(k => k === n || k === 'logi-share'), 'logi-' + build));
+    await until(12000, async () => (await missing('logi-' + build)) === 0);
+  };
+  const startMissing = await missing('logi-dev');
+  await sleep(3500); // (the page's "cleanup" after its own first take-over has gone out by now)
+  await cdp.send('ServiceWorker.stopAllWorkers'); // the browser puts an idle worker to sleep after half a minute
+  const begun = await deploy('test0');
+  await p2.evaluate(() => fetch('js/pages/crew.js').then(r => r.text())); await sleep(400); // a first tap on Crew: the sleeping worker wakes to answer it, and tidies up
+  const during = (await p2.evaluate(() => caches.keys())).sort().join();
+  ok('a worker that wakes while a newer build is installing leaves that build’s half-filled cache alone', startMissing === 0 && begun && during === 'logi-dev,logi-test0', `${startMissing} missing at the start; install begun: ${begun}; caches then: ${during}`);
+  // the same for the page's "cleanup", which goes to whichever worker answers for it
+  await p2.evaluate(() => navigator.serviceWorker.controller.postMessage('cleanup')); await sleep(400);
+  const during2 = (await p2.evaluate(() => caches.keys())).sort().join();
+  ok('…also when the page asks it to tidy up at that moment', during2 === 'logi-dev,logi-test0', during2);
+  await settled('test0');
+  const took = { missing: await missing('logi-test0'), old: await missing('logi-dev') };
+  ok('…and the new build takes over with its whole offline copy', took.missing === 0 && took.old === -1, JSON.stringify(took));
+  // A worker from before that rule (the one published until now) deletes the new build's cache at that moment. This
+  // build cannot stop it, so it puts back afterwards what is missing: here the cache is deleted for it mid-install.
+  const begun2 = await deploy('test00');
+  const deleted = await p2.evaluate(() => caches.delete('logi-test00')); await sleep(200);
+  await settled('test00');
+  const healed = { missing: await missing('logi-test00'), page: await p2.evaluate(async () => ((await caches.has('logi-test00')) ? (await (await caches.open('logi-test00')).keys()).filter(r => /\/(index\.html)?$/.test(new URL(r.url).pathname)).length : 0)) };
+  ok('a new build whose cache was deleted while it installed puts back what is missing once it has taken over: every file, the app’s own page among them', begun2 && deleted && healed.missing === 0 && healed.page >= 1, JSON.stringify([begun2, deleted, healed]));
+  await p2.reload(); await p2.waitForSelector('#rolodex .drum-btn');
+  await ctx2.setOffline(true);
+  const cut2 = await p2.reload().then(async () => { await p2.waitForSelector('#rolodex .drum-btn', { timeout: 15000 }); await p2.evaluate(() => window.logiGo('venues')); await p2.waitForSelector('.page-card[aria-label="Venues"]', { timeout: 8000 }); return 'opened, and a section not opened before came up'; }).catch(e => String(e.message).split('\n')[0]);
+  await ctx2.setOffline(false);
+  ok('…so after that update Vdex opens without a connection, with the sections that were never opened', /^opened/.test(cut2), cut2);
+  await ctx2.close(); slowSite.close();
   fs.writeFileSync(verPath, origVer.replace(/VERSION = '[^']+'/, "VERSION = '9.9.9'"));
   const served = await page.evaluate(() => fetch('js/version.js', { cache: 'no-store' }).then(r => r.text()));
   ok('cache-first: a changed file on the server is not mixed into the running version', !/9\.9\.9/.test(served) && /VERSION = /.test(served));

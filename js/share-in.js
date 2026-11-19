@@ -8,14 +8,22 @@
 // - the iPhone app ("Copy to Vdex") takes the document types in its Info.plist: text, Word and CSV, not .tsv or .xlsx.
 // Everywhere else, and for everything not listed, Equipment → Import… is the way in.
 import { h, sheet, toast } from './util.js';
-import { activeBookings } from './store.js';
+import { activeBookings, isSealed } from './store.js';
+import { isLocked } from './lock.js';
 
 // A spreadsheet by its name or, when the name says nothing (a file shared without one), by the type it came with.
 const TABLE_TYPE = /^(?:text\/csv|text\/comma-separated-values|application\/csv|text\/tab-separated-values|application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet)\b/i;
 const isWorkbook = file => /\.xlsx$/i.test(file.name || '') || /spreadsheetml\.sheet/i.test(file.type || '');
 const isTable = file => /\.(csv|tsv|xlsx)$/i.test(file.name || '') || TABLE_TYPE.test(file.type || '');
 
+// A file can be handed over while Vdex is locked: the hand-over itself brings the app to the front, where the lock
+// screen is usually up. Nothing is asked and nothing is read until the PIN has been entered (and the terms agreed), as
+// with a shared link (ready() in js/share-add.js): a backup's "Replace your current data with this file?" is the
+// browser's own question, which no lock screen covers.
+const ready = async () => { while (isLocked() || isSealed() || document.querySelector('body > .lock, body > .terms-gate')) await new Promise(r => setTimeout(r, 400)); };
+
 export async function arrived(file) {
+  await ready();
   const name = file.name || 'file';
   if (/\.json$/i.test(name)) { const b = await import('./backup.js'); return b.importData(file); }
   const bookings = activeBookings(), table = isTable(file), workbook = isWorkbook(file);

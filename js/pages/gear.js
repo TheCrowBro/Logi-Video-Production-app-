@@ -48,7 +48,9 @@ export function editKit(k = {}) {
 }
 
 function kitsView(sym) {
-  const dupe = k => upsert('kits', { ...k, id: undefined, name: k.name + ' (copy)' });
+  // A copy is one's own kit: it does not carry the mark of the link the original came from (kit.shared), or the
+  // sender's next link would find the copy by that mark and rewrite it.
+  const dupe = k => upsert('kits', { ...k, id: undefined, shared: undefined, name: k.name + ' (copy)' });
   return h('div', null,
     h('p', { class: 'muted small' }, 'A kit is a saved list of gear for a type of shoot. Tick a kit when you create a booking and its equipment is added for you.'),
     db.kits.length

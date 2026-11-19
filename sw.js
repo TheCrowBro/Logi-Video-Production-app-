@@ -19,13 +19,26 @@ self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL.map(u => new Request(u, { cache: 'no-cache' })))).then(() => self.skipWaiting()));
 });
 const dropOld = () => caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE && k !== 'logi-share').map(k => caches.delete(k))));
+// Puts back whatever of this build is missing from its cache. The worker of the build before this one can wake while
+// this one is installing and delete this build's half-filled cache as an old one (its own tidy below; builds from
+// before the guard there do it on any request). This build would then take over with a few files, or none, and Vdex
+// would not open offline. So after each tidy the list is checked and the missing files are fetched again.
+const refill = () => caches.open(CACHE).then(async c => {
+  const have = new Set((await c.keys()).map(r => r.url));
+  await Promise.allSettled(SHELL.filter(p => !have.has(new URL(p, self.registration.scope).href)).map(p => c.add(new Request(p, { cache: 'no-cache' }))));
+});
 self.addEventListener('activate', e => {
   e.waitUntil(dropOld().then(() => self.clients.claim()));
 });
+// Tidying up after taking over: old caches go and this build's own is made whole. Never while a newer build is
+// installing or waiting: the cache it is filling is not an old one, and deleting it would leave that build to take
+// over with nothing. → whether it was done (false: there is a newer build on its way, so it is left for later).
+const tidy = e => { if (self.registration.installing || self.registration.waiting) return false; e.waitUntil(dropOld().then(refill)); return true; };
 let tidied = false;
+const passed = new Set(); // pages handed over from the server because this build does not hold them (see the fetch handler)
 self.addEventListener('message', e => {
   if (e.data === 'skip-waiting') self.skipWaiting();
-  else if (e.data === 'cleanup') e.waitUntil(dropOld()); // a request the old worker was still handling can leave an empty cache behind
+  else if (e.data === 'cleanup') tidy(e); // a request the old worker was still handling can leave an empty cache behind
   else if (e.data === 'build' && e.source) e.source.postMessage({ type: 'build', build: BUILD });
 });
 
@@ -56,17 +69,32 @@ self.addEventListener('fetch', e => {
   }
   if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
   const key = keyOf(req);
-  if (!tidied) { tidied = true; e.waitUntil(dropOld()); }
+  if (!tidied) tidied = tidy(e); // once each time this worker starts (the browser puts an idle worker to sleep)
+  // A page that came from the server because this build does not hold it (below) belongs to a later build, and so do
+  // its scripts and styles: they come from the server too, and are not kept. This build's copies stand in only when
+  // the server cannot be reached. (Not for the page's next navigation: that request still carries this page's id.)
+  if (req.mode !== 'navigate' && e.clientId && passed.has(e.clientId)) {
+    e.respondWith(fetch(req).catch(() => caches.open(CACHE).then(c => c.match(key)).then(hit => hit || Response.error())));
+    return;
+  }
   e.respondWith(caches.open(CACHE).then(async c => {
     if (req.mode === 'navigate' || shellKeys.has(key)) {
       // The app's own files: this build's copy, always. New files come with a new build.
       const hit = await c.match(key) || await c.match(req, { ignoreSearch: true });
       if (hit) return hit;
       if (req.mode === 'navigate') {
+        // A page of this build that has gone missing from its cache is fetched and put back, like any other file of
+        // the build (below): nothing else ever asks for the app's own page, and without it Vdex cannot open offline.
         // A page this build does not hold (one a newer build added, opened before this copy has updated): the
-        // server's own answer when it has one, passed on and not kept, so the cache stays one build's files. Only
-        // when the server has no such page, or cannot be reached, is it the app itself.
-        try { const r = await fetch(req); if (r.ok || r.type === 'opaqueredirect') return r; } catch { /* offline */ }
+        // server's own answer when it has one, passed on and not kept, so the cache stays one build's files; what
+        // that page then loads is not kept either (passed, above), and the server is asked for the newer build.
+        // Only when the server has no such page, or cannot be reached, is it the app itself.
+        try {
+          const r = await fetch(req);
+          if (r.ok && shellKeys.has(key)) c.put(key, r.clone());
+          else if (r.ok && e.resultingClientId) { passed.add(e.resultingClientId); self.registration.update().catch(() => {}); }
+          if (r.ok || r.type === 'opaqueredirect') return r;
+        } catch { /* offline */ }
         return await c.match('./') || await c.match('index.html') || fetch(req);
       }
       const r = await fetch(req); if (r.ok) c.put(key, r.clone()); return r;
