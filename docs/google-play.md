@@ -98,7 +98,7 @@ Google's reviewers cannot read someone else's mailbox, so they do not get the em
 
 1. Choose a review address (any address at your own domain; it needs no mailbox) and a review code of 6 digits, which is what the sign-in box takes. Keep both in your password manager.
 2. Add them to the licence server as two **Secrets**, in the same place as the other settings (Cloudflare → Workers & Pages → the Worker **vdex** → Settings → Variables and Secrets; docs/selling-desktop.md names the two settings). With either one missing, the reviewers' sign-in does not exist.
-3. Give the review address a free licence with an end date a few weeks after the review, in the generator page (docs/selling-desktop.md, part 8), as for any other person: without a licence the address cannot sign in.
+3. Give the review address a free licence with an end date a few weeks after the review, in the generator page (docs/selling-desktop.md, part 10, step 3, which also says how many devices to allow), as for any other person: without a licence the address cannot sign in.
 4. Paste these instructions under App access, with the address and the code in place of the two placeholders:
 
    ```
@@ -106,7 +106,7 @@ Google's reviewers cannot read someone else's mailbox, so they do not get the em
    ```
 5. After each review, change the review code (step 2), and let the free licence run out.
 
-Wrong tries are limited at least as strictly as for anyone else, so the code cannot be guessed by trying.
+Wrong codes are limited, so the code cannot be found by trying: 5 a day from one internet connection, and 20 a day from everyone together, which is what an ordinary address allows in a day (4 codes, 5 tries each). Because the review code does not change, those 20 a day add up over the days, but at that rate finding it takes about 68 years on average. Part 10 of docs/selling-desktop.md has the details.
 
 ## Step 6. Upload the app to a closed test
 
