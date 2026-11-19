@@ -122,13 +122,15 @@ const vdex = page('Vdex', `
 <p>Vdex keeps your shoots, your crew, your camera gear, the places you film and your insurance in one place. On the day of a shoot it clocks your hours, prints your call sheet and tells you when the sun sets. Afterwards it makes the quote and the invoice.</p>
 <div class="btns"><a class="btn" href="${VDEX}">Open Vdex</a><a class="btn alt" href="${VDEX}download.html">Download for Windows, Mac or Linux</a></div>
 <div class="price"><p class="big">Free for 30 days, then ${PRICE} US dollars once.</p><a class="btn" href="${VDEX}buy">Buy a licence</a>
-<p class="note">Works on iPhone, Android and computers. Free to try for 30 days, then ${PRICE} US dollars once plus any tax where you live, for up to 3 of your devices. With tax that is ${TAXED} (<a href="${VDEX}download.html#price">every country's price</a>). No subscription, and no account for your work: your information stays on your own device unless you choose to copy it somewhere.</p>
+<p class="note">Works on iPhone, Android and computers. Free to try for 30 days, then ${PRICE} US dollars once plus any tax where you live, for one person on up to 3 of their devices. After the trial, Vdex stays open to read until there is a licence. With tax that is ${TAXED} (<a href="${VDEX}download.html#price">every country's price</a>). No subscription, and no account for your work: your information stays on your own device unless you choose to copy it somewhere.</p>
 <p class="note">You are buying a licence to use Vdex, not ownership of a copy. It can be cancelled in the cases the <a href="${VDEX}terms.html#paid">terms</a> describe. At checkout you can pay in US dollars, or in your own currency at Stripe's exchange rate (2 to 4% more).</p></div>
-<div class="shots"><img src="shot-booking.jpg" alt="A booking: the shoot, the client and the address, with its call sheet, stripboard and crew link"><img src="shot-call-sheet.jpg" alt="A call sheet filled in from the booking: call and wrap times, sunrise and sunset, the venue"><img src="shot-timecode.jpg" alt="Timecode notes: the camera's running timecode, ready to stamp a note"><img src="shot-money.jpg" alt="Money: what is invoiced, overdue, quoted and paid, shoot by shoot"></div>
+<div class="shots"><img src="shot-booking.jpg" alt="A booking: the shoot, the client and the address, with its call sheet, stripboard and crew link"><img src="shot-call-sheet.jpg" alt="A call sheet filled in from the booking: call and wrap times, sunrise and sunset, the venue"><img src="shot-equipment.jpg" alt="Equipment: your kit with serial numbers and values, imported from a list you already keep, or shared by link"><img src="shot-money.jpg" alt="Money: what is invoiced, overdue, quoted and paid, shoot by shoot"></div>
 <h2>What it does</h2>
 <div class="features">
 ${feature('Bookings', 'A calendar of shoots. Tap a day, then a shoot, to see everything about it: the client, the address, the crew and the kit you\'re taking.')}
-${feature('Crew, equipment, venues and insurance', 'The people you work with, everything you own with serial numbers and where each item is, the places you film with their rules and parking, and when your policies run out.')}
+${feature('Crew, equipment, venues and insurance', 'The people you work with, grouped by 315 film and video roles; everything you own with serial numbers and where each item is, imported from the list you already keep (CSV, Excel, pasted text or an asset register); the places you film with their rules and parking; and when your policies run out.')}
+${feature('Search everything', 'One search at the top finds bookings, crew, kit, quotes, invoices, call sheets and notes.')}
+${feature('Pass it on by link or QR code', 'Send someone a booking, your contact card or an equipment list. They add it to their own Vdex, and a newer link updates it.')}
 ${feature('The shoot-day clock', 'Tap Start work, Break and Stop work, and the hours are counted for you.')}
 ${feature('Call sheets and a crew link', 'The call sheet is already filled in from the booking: add the schedule, then email it or print it. Or send your cast and crew a link to the schedule, location and shot list, with no prices in it.')}
 ${feature('Stripboard', 'Pick the script and every scene becomes a colour-coded strip with its cast and page count. Drag the strips into shooting days.')}
@@ -140,8 +142,8 @@ ${feature('Safe and in sync', 'Lock it with a PIN, fingerprint or face. With a l
 <h2>Get started</h2>
 <ol class="steps">
 <li><b>Open Vdex</b> at <a href="${VDEX}">vdex.crowmade.app</a>, or download the desktop app from the <a href="${VDEX}download.html">download page</a>.</li>
-<li><b>Put it on your home screen</b> so it works like a normal app, even with no signal. iPhone: Safari's Share button, then <i>Add to Home Screen</i>. Android and computers: tap <i>Install</i> at the top of the page.</li>
-<li><b>Tap ?</b> at the top of any page for a walkthrough of that page, box by box.</li>
+<li><b>Put it on your home screen</b> so it works like a normal app, even with no signal. iPhone: Safari's Share button, then <i>Add to Home Screen</i>. Android and computers: open the menu <b>☰</b> at the top right and tap <i>Install Vdex</i>.</li>
+<li><b>Open the menu ☰</b> and tap <i>Tutorial for this page</i> for a walkthrough of that page, box by box.</li>
 </ol>
 <p class="note"><a href="${VDEX}privacy.html">Privacy policy</a> · <a href="${VDEX}terms.html">Terms of service</a></p>`,
 { desc: 'Vdex: bookings, crew, kit, venues, insurance, call sheets, stripboards, budgets, quotes and invoices for freelance videographers.', icon: '/vdex/icon.svg', here: '/vdex/', image: '/vdex/icon.png' });
