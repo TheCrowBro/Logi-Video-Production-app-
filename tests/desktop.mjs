@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Desktop smoke test: launches the Electron app (under xvfb-run on Linux), checks the window, the local server,
 // the update bridge, and that no page errors or policy violations occur.
-import { _electron as electron } from 'playwright';
+import { _electron as electron, chromium } from 'playwright';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -81,9 +81,30 @@ console.log((priceOk ? 'PASS' : 'FAIL') + ' the desktop bridge answers the price
 const policy = await (await fetch(base + '/privacy.html')).text(), deletion = await fetch(base + '/delete-account.html');
 const deletionOk = /href="delete-account\.html"/.test(policy) && deletion.status === 200 && /^text\/html/.test(deletion.headers.get('content-type') || '') && /support@crowmade\.app/.test(await deletion.text());
 console.log((deletionOk ? 'PASS' : 'FAIL') + ' the desktop app serves the deletion page the privacy policy links to');
+// The app's local address opened in an ordinary web browser (not the app's window, so no desktop licence): the
+// website's licence check runs there, finds no licence server at that address (the app's server answers with its own
+// page), and so licences are on: a 30-day trial, then read-only, like any other browser (report item 1).
+const browser = await chromium.launch();
+const inBrowser = {};
+try {
+  const ctx = await browser.newContext();
+  await ctx.addInitScript(t => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-terms', t); localStorage.setItem('logi-lock-setup', 'skip'); }, TERMS_RECORD);
+  const tab = await ctx.newPage();
+  const look = () => tab.evaluate(() => import('./js/licence.js').then(async m => { await m.initLicence(); const s = m.licenceState(), store = await import('./js/store.js'); return { bridge: !!window.vdexDesktop, mode: s && s.mode, trialLeft: s && s.trialLeft, canEdit: s && s.canEdit, paid: store.isPaid(), changed: store.update(d => { d.profile = { ...d.profile, name: 'Browser ' + Date.now() }; }) }; }));
+  await tab.goto(base + '/'); await tab.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
+  inBrowser.first = await look();
+  // As if the browser had first opened it 31 days ago (an earlier version's stored "off" included): read-only.
+  await tab.evaluate(() => localStorage.setItem('vdex-licence', JSON.stringify({ on: false, statusAt: Date.now() - 7 * 3600e3, first: Date.now() - 31 * 86400e3, seen: Date.now() - 60e3 })));
+  await tab.reload(); await tab.waitForSelector('#rolodex .drum-btn', { timeout: 30000 });
+  inBrowser.later = await look();
+  await ctx.close();
+} finally { await browser.close(); }
+const browserOk = !inBrowser.first.bridge && inBrowser.first.mode === 'trial' && inBrowser.first.trialLeft === 30 && inBrowser.first.paid === false && inBrowser.first.changed === true
+  && inBrowser.later.mode === 'ended' && inBrowser.later.canEdit === false && inBrowser.later.changed === false && inBrowser.later.paid === false;
+console.log((browserOk ? 'PASS' : 'FAIL') + ' the app\'s local address in an ordinary web browser gets the website\'s trial and then read-only, not a free Vdex —', JSON.stringify(inBrowser));
 const signinOk = Object.values(signin).every(Boolean);
 console.log((signinOk ? 'PASS' : 'FAIL') + ' desktop sign-ins open in the web browser and come back only for sign-ins the app started —', JSON.stringify(signin));
 await app.close();
-const ok = licenceOk && signinOk && priceOk && deletionOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
+const ok = licenceOk && signinOk && priceOk && deletionOk && browserOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
 console.log((ok ? 'PASS' : 'FAIL') + ' desktop app launches, serves locally, exposes the update bridge, keeps no service worker, no errors —', JSON.stringify(info), bad.join(' | '));
 process.exit(ok ? 0 : 1);

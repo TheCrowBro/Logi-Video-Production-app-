@@ -40,7 +40,7 @@ const READ_FOR = 4000;
 async function ready() {
   const clear = async () => { while (lock.isLocked() || store.isSealed() || !tourSeen() || tourActive() || document.querySelector('.terms-gate, .lock')) await sleep(400); };
   await clear();
-  await import('./licence.js').then(m => m.initLicence()).catch(() => {}); // whether changes are allowed is known before Add is offered
+  await store.licenceKnown(); // whether changes are allowed is known before Add is offered
   const slow = setTimeout(() => { if (store.cloud.adapter && !store.cloud.paused) toast('Checking your cloud storage first…'); }, 800);
   await Promise.race([store.cloudKnown.then(() => (store.cloud.adapter && !store.cloud.paused ? store.sync({ quiet: true, join: true }) : null)).catch(() => {}), sleep(READ_FOR)]);
   clearTimeout(slow);

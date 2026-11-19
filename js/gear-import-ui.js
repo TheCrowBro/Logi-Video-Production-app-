@@ -68,7 +68,7 @@ export function offerUndo(done, name) {
 /* ------------------------------------ the sheet ------------------------------------ */
 // file: a list that is already in hand (one another app handed to Vdex, js/share-in.js); it is read straight away.
 export async function openGearImport({ file = null } = {}) {
-  await import('./licence.js').then(m => m.initLicence()).catch(() => {}); // whether changes are allowed is known before Add is offered
+  await store.licenceKnown(); // whether changes are allowed is known before Add is offered
   const body = h('div', { class: 'stack gi' });
   let open = true, reading = 0; // reading: which read is the one being waited for (a later choice overtakes an earlier one)
   // A tap beside the sheet does not close it, as with every form: the columns set and the list pasted are work to lose.

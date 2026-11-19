@@ -1,7 +1,11 @@
 // The website's licence (js/licence-web.js and js/licence.js), with the page's /licence/… requests answered by the real
-// Worker (cloudflare/worker.mjs) in Cloudflare's runtime and Resend faked: nothing until the owner switches it on, then a
-// 30-day trial, read-only after it, signing in with an emailed 6-digit code, signing out, and the Google Play app (no
-// Buy button; it takes one of the licence's places). Needs `npm ci --prefix cloudflare` (CI does it).
+// Worker (cloudflare/worker.mjs) in Cloudflare's runtime and Resend faked: nothing while the owner has it switched off
+// (the Worker's note, signed with the shop's key), then a 30-day trial, read-only after it, signing in with an emailed
+// 6-digit code, signing out, and the Google Play app (no Buy button; it takes one of the licence's places). Licences are
+// on unless such a note says off: no answer, a blocked one, a plain, unsigned, wrongly signed, old or replayed one, and
+// an "off" stored by an earlier version all mean on; and with the licence check's own files blocked, Vdex is read-only
+// until they load. Needs `npm ci --prefix cloudflare` (CI does it), and the test run's key (tests/run.mjs), which the
+// Worker here uses as its shop key, since the page under test carries its public half.
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
@@ -15,12 +19,15 @@ const OUT = process.env.S || '/tmp';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const codes = require(path.join(ROOT, 'desktop/licence-codes.js'));
 const DAY = 86400e3;
+const STATUS_KEY = process.env.VDEX_STATUS_KEY;
 
 (async () => {
   if (!fs.existsSync(path.join(NM, 'miniflare'))) { console.log('FAIL the website licence spec needs Wrangler\'s runtime — run: npm ci --prefix cloudflare'); process.exit(1); }
+  if (!STATUS_KEY) { console.log('FAIL the website licence spec needs the test run\'s key — run it with node tests/run.mjs 104'); process.exit(1); }
+  const { statusNote } = await import(require('url').pathToFileURL(path.join(__dirname, '..', 'lib.mjs')).href);
   const esbuild = require(path.join(NM, 'esbuild'));
   const { Miniflare, convertV4MiniflareOptions } = require(path.join(NM, 'miniflare'));
-  const owner = await codes.newKeyPair(), shop = await codes.newKeyPair();
+  const owner = await codes.newKeyPair(), shop = { pkcs8: codes.b64u.dec(STATUS_KEY), publicKey: await codes.publicOf(await codes.importPrivate(STATUS_KEY, true)) };
   const KEYS = { 1: owner.publicKey, 2: shop.publicKey };
   const ownerKey = await codes.importPrivate(codes.b64u.enc(owner.pkcs8));
   const out = await esbuild.build({ entryPoints: [path.join(ROOT, 'cloudflare/worker.mjs')], bundle: true, format: 'esm', platform: 'browser', write: false, logLevel: 'silent',
@@ -42,11 +49,15 @@ const DAY = 86400e3;
   // The country the licence server sees each request come from (Cloudflare's request.cf), and the paths asked for.
   let country = '';
   const asked = [];
-  const open = async ({ width = 420, start = '', storage = null } = {}) => {
+  // status: answers /licence/web/status in place of the licence server (route => fulfil or abort); routes: more of
+  // them, set before the page opens.
+  const open = async ({ width = 420, start = '', storage = null, status = null, routes = null } = {}) => {
     const ctx = await browser.newContext({ viewport: { width, height: 860 }, serviceWorkers: 'block' });
+    if (routes) await routes(ctx);
     await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
     await ctx.route(u => new globalThis.URL(u).pathname.startsWith('/licence/'), async r => {
       const q = r.request();
+      if (status && new globalThis.URL(q.url()).pathname === '/licence/web/status') { asked.push('/licence/web/status'); return status(r); }
       // The test swaps the fake licence server now and then; a request caught in between gets "unavailable", as it would
       // from a real server that is restarting, instead of crashing the test.
       asked.push(new globalThis.URL(q.url()).pathname);
@@ -76,6 +87,95 @@ const DAY = 86400e3;
     await about(page); await sleep(1800);
     ok('until the owner switches it on, the website shows nothing about licences and everything works', (await page.locator('.licence-panel:not([hidden])').count()) === 0 && (await page.locator('.licence-bar').count()) === 0 && (await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'Free' }; })))) === true);
     await ctx.close();
+
+    // Licences are on unless the licence server's note, signed with the shop's key, says off (report item 1).
+    const repoKeys = JSON.parse(fs.readFileSync(path.join(REPO, 'desktop/licence-keys.json'), 'utf8'));
+    const pageKeys = JSON.parse((fs.readFileSync(path.join(REPO, 'js/licence-web.js'), 'utf8').match(/^const KEYS = (\{[^\n]*\});$/m) || [])[1] || 'null');
+    ok('the page checks notes with the public keys the desktop app and the Worker use (desktop/licence-keys.json)', Object.keys(repoKeys).length > 0 && JSON.stringify(pageKeys) === JSON.stringify(repoKeys), JSON.stringify(pageKeys));
+    const answer = body => r => r.fulfill({ status: 200, contentType: 'application/json', body: typeof body === 'string' ? body : JSON.stringify(body) });
+    const meet = async opts => {
+      const o = await open(opts);
+      const st = await o.page.evaluate(() => import('./js/licence.js').then(async m => { await m.initLicence(); const s = m.licenceState(), store = await import('./js/store.js'); return { mode: s.mode, trialLeft: s.trialLeft, canEdit: s.canEdit, paid: store.isPaid() }; }));
+      await o.ctx.close(); return st;
+    };
+    const isOn = st => st.mode === 'trial' && st.trialLeft === 30 && st.canEdit === true && st.paid === false;
+    const fresh = await statusNote(STATUS_KEY), stranger = codes.b64u.enc((await codes.newKeyPair()).pkcs8);
+    let st = await meet({});
+    ok('the licence server\'s own note, signed with the shop\'s key, switches licences off (the test server sends one to every other spec)', st.mode === 'off' && st.paid === true, JSON.stringify(st));
+    st = await meet({ status: answer({ on: false, note: fresh }) });
+    ok('…as does the same note from anywhere, while it is fresh', st.mode === 'off', JSON.stringify(st));
+    const flip = t => t.slice(0, -2) + (t.slice(-2, -1) === 'A' ? 'B' : 'A') + t.slice(-1);
+    for (const [what, how] of [
+      ['no answer (the address blocked)', r => r.abort('blockedbyclient')],
+      ['a server error', r => r.fulfill({ status: 500, contentType: 'application/json', body: '{"on":false}' })],
+      ['a plain {"on":false}, as the test server and the Worker answered before', answer('{"on":false}')],
+      ['a note whose signature was changed', answer({ on: false, note: { ...fresh, sig: flip(fresh.sig) } })],
+      ['a note whose words were changed', answer({ on: false, note: { ...fresh, data: JSON.stringify({ off: true, at: Date.now() + 1 }) } })],
+      ['a note signed with another key', answer({ on: false, note: await statusNote(stranger) })],
+      ['a note signed with the shop\'s key for something else (a sign-in token)', answer({ on: false, note: await codes.signNote('web', await codes.importPrivate(STATUS_KEY), 2, { off: true, at: Date.now() }) })],
+      ['a note that says something other than off', answer({ on: false, note: await statusNote(STATUS_KEY, { off: 'yes', at: Date.now() }) })],
+      ['a note signed more than 3 days ago, kept and played back', answer({ on: false, note: await statusNote(STATUS_KEY, { off: true, at: Date.now() - 3 * DAY - 60e3 }) })],
+      ['a note dated more than 3 days ahead', answer({ on: false, note: await statusNote(STATUS_KEY, { off: true, at: Date.now() + 3 * DAY + 60e3 }) })],
+      ['the app\'s own page, as the desktop app\'s local server answers that address', r => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Vdex</title>' })],
+    ]) { st = await meet({ status: how }); ok(`…but ${what} means on: the 30-day trial runs, and cloud storage and files wait for a licence`, isOn(st), JSON.stringify(st)); }
+    // A request held open (a proxy that never answers) does not keep the licence unknown, and Vdex unchecked, for long.
+    const began = Date.now();
+    st = await meet({ status: () => new Promise(() => {}) });
+    ok('…and a status request that is never answered keeps the licence unknown for 3 seconds at most: licences are on', isOn(st) && Date.now() - began < 9000, `${JSON.stringify(st)} in ${Date.now() - began} ms`);
+    // What is kept in the browser: an "off" stored by a version from before notes, and notes kept from earlier answers
+    // (the address is not asked again within 6 hours, nor when it cannot be reached).
+    const kept = extra => ({ on: false, statusAt: Date.now() - 60e3, ...extra });
+    st = await meet({ storage: kept({}) });
+    ok('an "off" stored by an earlier version counts for nothing: the trial starts', isOn(st), JSON.stringify(st));
+    st = await meet({ status: r => r.abort(), storage: kept({ note: await statusNote(STATUS_KEY, { off: true, at: Date.now() - 2 * DAY }), statusAt: Date.now() - 7 * 3600e3 }) });
+    ok('a note kept from 2 days ago still says off while the licence server cannot be reached', st.mode === 'off', JSON.stringify(st));
+    st = await meet({ status: r => r.abort(), storage: kept({ note: await statusNote(STATUS_KEY, { off: true, at: Date.now() - 3 * DAY - 60e3 }), statusAt: Date.now() - 7 * 3600e3 }) });
+    ok('…and after its 3 days no longer: licences are on, and the trial starts', isOn(st), JSON.stringify(st));
+    st = await meet({ storage: kept({ note: fresh, seen: Date.now() + 4 * DAY }) });
+    ok('winding the clock back gains nothing: a note more than 3 days older than the latest time this browser has seen means on', st.mode === 'trial' && st.paid === false, JSON.stringify(st));
+    st = await meet({ storage: kept({ note: { ...fresh, sig: flip(fresh.sig) } }) });
+    ok('a note changed in the browser\'s storage means on', isOn(st), JSON.stringify(st));
+    // Only the address is asked, at most every 6 hours, and with nothing about the person.
+    asked.length = 0;
+    let statusReq = null;
+    // A cookie the site might have set is not sent with it.
+    ({ ctx, page } = await open({ status: r => { statusReq = r.request(); return answer({ on: false, note: fresh })(r); }, routes: c => c.addCookies([{ name: 'seen', value: 'yes', url: URL }]) }));
+    await page.evaluate(() => import('./js/licence.js').then(m => m.initLicence())); await page.reload(); await page.waitForSelector('#rolodex .drum-btn');
+    await page.evaluate(() => import('./js/licence.js').then(m => m.initLicence())); await sleep(300);
+    ok('the page asks once in 6 hours, with a plain GET that carries nothing about the person (no cookie, no address of the page)', asked.filter(x => x === '/licence/web/status').length === 1 && statusReq.method() === 'GET' && !statusReq.postData() && !/[?#]/.test(statusReq.url()) && !Object.keys(await statusReq.allHeaders()).some(k => /cookie|authorization|referer/i.test(k)), asked.join(' ') + ' ' + JSON.stringify(await statusReq.allHeaders()));
+    await ctx.close();
+    // A request that could not be sent (no connection) never reached the server, so the next look asks again; one that
+    // was answered, even with no note, waits its 6 hours.
+    asked.length = 0;
+    let tries = 0;
+    ({ ctx, page } = await open({ status: r => (++tries === 1 ? r.abort('internetdisconnected') : tries === 2 ? answer({ on: false, note: fresh })(r) : answer('{"on":true}')(r)) }));
+    const looks = [];
+    const lookAgain = () => page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(false))).then(s => looks.push(s.mode));
+    await page.evaluate(() => import('./js/licence.js').then(m => m.initLicence())); // the first look; the next comes 1.5 seconds later
+    for (let i = 0; i < 50 && tries < 2; i++) await sleep(100);
+    await sleep(400); await lookAgain(); await lookAgain();
+    ok('a status request that could not be sent is asked again at the next look (here licences are off), and an answered one not for 6 hours', tries === 2 && looks.join() === 'off,off', `${tries} asked: ${looks.join()}`);
+    await ctx.close();
+
+    // The licence check's own files cannot be loaded: Vdex is read-only until they can, then carries on.
+    for (const file of ['js/licence.js', 'js/licence-web.js']) {
+      let blocked = true;
+      const seen = [];
+      ({ ctx, page } = await open({ routes: c => c.route(u => new globalThis.URL(u).pathname === '/' + file, r => { seen.push(r.request().url().replace(/^.*\//, '') + (blocked ? ' refused' : ' sent')); return blocked ? r.abort('blockedbyclient') : r.fallback(); }) }));
+      await page.evaluate(() => { window.__toasts = []; new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true }); });
+      await sleep(3500); // Vdex loads it once it is up
+      const refused = await page.evaluate(() => import('./js/store.js').then(s => ({ changed: s.update(d => { d.profile = { ...d.profile, name: 'Free for all' }; }), paid: s.isPaid(), name: s.db.profile.name })));
+      await sleep(200);
+      const said = await page.evaluate(() => window.__toasts.join(' | '));
+      ok(`with ${file} blocked, Vdex is read-only and nothing is saved as a file or copied, and it says why`, refused.changed === false && refused.paid === false && refused.name !== 'Free for all' && /could not load the part of itself that checks the licence, so it is read-only until it can/.test(said), JSON.stringify(refused) + ' ' + said);
+      blocked = false;
+      await page.evaluate(() => window.dispatchEvent(new Event('online')));
+      for (let i = 0; i < 40 && !(await page.evaluate(() => import('./js/store.js').then(s => s.isPaid()))); i++) await sleep(200); // at most 8 seconds
+      const after = await page.evaluate(() => import('./js/store.js').then(s => ({ changed: s.update(d => { d.profile = { ...d.profile, name: 'Back again' }; }), paid: s.isPaid(), missing: s.licenceMissing() })));
+      after.seen = seen;
+      ok(`…and once ${file} can be loaded (the connection is back), the licence check takes over: here licences are off, so everything works`, after.changed === true && after.paid === true, JSON.stringify(after));
+      await ctx.close();
+    }
     await mf.dispose(); mf = worker(true); await link();
 
     // Switched on: the 30-day trial.
@@ -138,10 +238,16 @@ const DAY = 86400e3;
 
     // Switched off and on again: the trial carries on where it was, it did not run while off.
     ({ ctx, page } = await open({ storage: { on: true, statusAt: Date.now() - 7 * 3600e3, first: Date.now() - 25 * DAY, seen: Date.now() - 15 * DAY } })); // 10 days of trial used
-    await mf.dispose(); mf = worker(false);
-    await page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(true)));
+    // The page asks at most every 6 hours, Try again included: each step below is 7 hours after the one before.
+    const hoursLater = () => page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.statusAt = Date.now() - 7 * 3600e3; localStorage.setItem('vdex-licence', JSON.stringify(s)); });
+    await page.evaluate(() => import('./js/licence.js').then(m => m.initLicence())); // the page's own first look is over (it asked as it opened)
+    await mf.dispose(); mf = worker(false); await hoursLater();
+    const offNow = await page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(true)));
     await page.evaluate(() => { const s = JSON.parse(localStorage.getItem('vdex-licence')); s.offAt = Date.now() - 15 * 86400e3; localStorage.setItem('vdex-licence', JSON.stringify(s)); }); // switched off 15 days ago
     await mf.dispose(); mf = worker(true); await link();
+    const stillOff = await page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(true)));
+    ok('switched off, the page learns it from the Worker\'s note; switched on again, Try again within 6 hours does not ask again', offNow.mode === 'off' && stillOff.mode === 'off', `${offNow.mode} ${stillOff.mode}`);
+    await hoursLater();
     const resumed = await page.evaluate(() => import('./js/licence-web.js').then(m => m.webLicence().recheck(true)));
     ok('switching sign-in off pauses the trial: switched on again, it carries on rather than ending at once', resumed.mode === 'trial' && resumed.trialLeft >= 19 && resumed.trialLeft <= 21, `${resumed.mode} ${resumed.trialLeft}`);
     await ctx.close();

@@ -632,7 +632,7 @@ html[data-motion=off] .lock.shake .pin-dots { animation: none; }
 .cs-paper .cs-sec { margin-top: 12px; } .cs-paper .cs-sec h4 { margin: 0 0 4px; font-size: .68rem; letter-spacing: .14em; text-transform: uppercase; opacity: .7; border-bottom: 1px solid #0002; padding-bottom: 2px; }
 .cs-paper .cs-kv { display: grid; grid-template-columns: 110px 1fr; gap: 8px; padding: 2px 0; } .cs-paper .cs-kv span { opacity: .7; } .cs-paper .cs-kv a { color: inherit; word-break: break-all; }
 .cs-paper table { width: 100%; border-collapse: collapse; margin: 2px 0 6px; } .cs-paper th, .cs-paper td { text-align: left; vertical-align: top; padding: 4px 5px; border-bottom: 1px solid #0002; font-size: .8rem; } .cs-paper th { font-size: .66rem; text-transform: uppercase; letter-spacing: .06em; opacity: .7; }
-.cs-paper .cs-day { font-weight: 700; margin: 6px 0 2px; } .cs-paper .cs-pre { white-space: pre-wrap; margin: 3px 0; } .cs-paper .cs-foot { margin-top: 14px; padding-top: 6px; border-top: 1px solid #0002; font-size: .72rem; opacity: .75; }
+.cs-paper .cs-day { font-weight: 700; margin: 6px 0 2px; } .cs-paper .cs-pre { white-space: pre-wrap; margin: 3px 0; } .cs-paper .cs-foot { margin-top: 14px; padding-top: 6px; border-top: 1px solid #0002; font-size: .72rem; opacity: .75; } .cs-paper .cs-check { margin-top: 3px; }
 .sheet .crew-line { margin-bottom: 6px; }
 
 .cs-page .cs-paper { max-height: none; }

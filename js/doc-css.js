@@ -15,7 +15,7 @@ const RULES = [
   ['th', 'font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#666'],
   ['.money-parties', 'display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0'], ['.money-parties h4', 'margin:0 0 4px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#555'],
   ['.money-totals', 'margin:8px 0 0 auto;max-width:320px'], ['.money-totals .cs-kv', 'grid-template-columns:1fr auto;text-align:right'], ['.money-totals .total b', 'font-size:15px'], ['th.num,td.num', 'text-align:right;white-space:nowrap'],
-  ['.cs-day', 'font-weight:700;margin:8px 0 2px'], ['.cs-pre', 'white-space:pre-wrap;margin:4px 0'], ['.cs-foot', 'margin-top:22px;padding-top:8px;border-top:1px solid #ddd;font-size:11px;color:#666'],
+  ['.cs-day', 'font-weight:700;margin:8px 0 2px'], ['.cs-pre', 'white-space:pre-wrap;margin:4px 0'], ['.cs-foot', 'margin-top:22px;padding-top:8px;border-top:1px solid #ddd;font-size:11px;color:#666'], ['.cs-check', 'margin-top:4px'],
   ['.sb-row td', 'vertical-align:top;-webkit-print-color-adjust:exact;print-color-adjust:exact'], ['.sb-int-day td', 'background:#fbfaf6'], ['.sb-ext-day td', 'background:#f6dc5c'],
   ['.sb-int-night td', 'background:#35609f;color:#fff'], ['.sb-ext-night td', 'background:#226b43;color:#fff'], ['.sb-banner td', 'background:#6b5640;color:#fff;text-align:center;font-weight:700'],
   ['.pay-buttons', 'display:flex;flex-wrap:wrap;gap:8px;margin:8px 0'],

@@ -1,10 +1,17 @@
 // The website's licence (vdex.crowmade.app, and the Google Play app, which is the website in an Android app). The desktop
 // app has its own (desktop/licence.js); js/licence.js shows either one, and both answer the same questions.
 //
-// Nothing changes until the owner switches it on (the Worker's WEB_SIGN_IN; /licence/web/status says so). From the
-// first time this browser sees it on, there is a 30-day trial, for people who used the website before as well as new
-// visitors. After that the website is read-only until someone signs in with the email address their licence belongs
-// to: the Worker emails a 6-digit code, and the page keeps the signed token it gets back, checking it about once a day.
+// The licence check is on unless the licence server says it is off in a note signed with the shop's key, which the page
+// checks against the public keys below (the Worker sends one while the owner has WEB_SIGN_IN switched off). No answer,
+// a blocked or failed request, a plain or made-up answer, a note signed with another key or one more than 3 days old
+// (by the latest time this browser has seen) all mean on, and so does an "off" stored by a version from before notes.
+// The page asks at most every 6 hours, and the request carries nothing about the person or their trial.
+// From the first time this browser sees it on, there is a 30-day trial, for people who used the website before as well
+// as new visitors. After that the website is read-only until someone signs in with the email address their licence
+// belongs to: the Worker emails a 6-digit code, and the page keeps the signed token it gets back, checking it about once
+// a day. When a licence that covered this browser or phone stops covering it (cancelled, refunded or charged back, past
+// its end date, or the phone's place moved to another device), the time it learned so is kept here (`lapsed`, never
+// sent), and Export backup stays open for 30 days from it (js/licence.js).
 // The Google Play app also takes one of the licence's 3 places (like a computer running the desktop app), and never
 // links to the shop: Google Play does not allow a Play app to send people to another way to pay.
 // The iPhone app (apple/) takes a place the same way, and can also buy the licence through the App Store: Apple's
@@ -18,15 +25,45 @@ const CHECK_EVERY = DAY;           // confirm a sign-in about once a day
 const SEAT_EVERY = 7 * DAY;        // the Play app confirms its place about once a week
 const OFFLINE_LIMIT = 90 * DAY;    // a sign-in must be confirmed at least once in 90 days
 const SEATS = 3;
+const NOTE_LIFE = 3 * DAY;         // how long a note that licences are off is believed after it was signed
+// The public keys of the licence server's signed notes: the same as desktop/licence-keys.json (spec 104 checks).
+// The tests serve a copy of the page with a key of their own here (tests/lib.mjs).
+const KEYS = {"1":"wSlaz7v7fQD63KBI5hQYpzcHfApySBg3Q9in2PNQyRo","2":"4b5NeFpKfxHay0HhdL5K_djauqO6LQ-kc6XLMx0kS9M","9":"wfsECLa4vjGuWnstxsrc5vxTXRroOYodT_ymBhfdmjw"};
 
 const now = () => Date.now();
 const read = () => { try { const s = JSON.parse(localStorage.getItem(KEY)); return s && typeof s === 'object' ? s : {}; } catch { return {}; } };
 const write = s => { try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private mode: asked again next time */ } };
 const rand = () => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-async function call(path, body) {
+const unb64 = t => Uint8Array.from(atob(String(t).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+
+// The licence server's note { kid, data, sig } that licences are off: its value ({ off: true, at }) when it is signed
+// by one of KEYS with the status prefix (desktop/licence-codes.js), else null. A browser without Ed25519 in Web Crypto
+// cannot check it, and so counts licences as on.
+const checked = new Map(); // a note -> its value, or null: each note is checked once per page
+const noteId = n => (n && typeof n === 'object' ? `${n.kid}.${n.sig}.${n.data}` : '');
+function readOff(note) {
+  if (!note || typeof note !== 'object' || typeof note.data !== 'string' || typeof note.sig !== 'string' || note.data.length > 400 || note.sig.length > 200
+    || !Number.isInteger(note.kid) || !Object.prototype.hasOwnProperty.call(KEYS, note.kid)) return Promise.resolve(null);
+  const id = noteId(note);
+  if (!checked.has(id)) checked.set(id, (async () => {
+    try {
+      const key = await crypto.subtle.importKey('raw', unb64(KEYS[note.kid]), { name: 'Ed25519' }, false, ['verify']);
+      if (!(await crypto.subtle.verify({ name: 'Ed25519' }, key, unb64(note.sig), new TextEncoder().encode('VDEX-STATUS\0' + note.data)))) return null;
+      const v = JSON.parse(note.data);
+      return v && v.off === true && Number.isFinite(v.at) ? { at: v.at } : null;
+    } catch { return null; }
+  })());
+  return checked.get(id);
+}
+// Whether the stored note (already checked: `off`) still says licences are off at this time.
+const fresh = (off, latest) => !!off && latest < off.at + NOTE_LIFE && off.at < latest + NOTE_LIFE;
+
+// bare: nothing but the request itself (no cookie, no address of the page it comes from), for the status question.
+async function call(path, body, { bare = false } = {}) {
   const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 15e3);
   try {
-    const r = await fetch(path.startsWith('/') ? path : '/licence/web/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store', signal: ctl.signal } : { cache: 'no-store', signal: ctl.signal });
+    const r = await fetch(path.startsWith('/') ? path : '/licence/web/' + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), cache: 'no-store', signal: ctl.signal }
+      : { cache: 'no-store', signal: ctl.signal, ...(bare ? { credentials: 'omit', referrerPolicy: 'no-referrer' } : {}) });
     const b = await r.json().catch(() => null);
     return { status: r.status, body: b || {}, answered: !!b };
   } finally { clearTimeout(t); }
@@ -44,27 +81,39 @@ const inApp = s => !!(s.play || s.ios); // a store app: never links to the shop,
 // …except an iPhone or iPad licensed by an App Store purchase: Apple's licence covers all of the Apple Account's devices.
 const viaOf = s => s.via || (s.token && s.licence && s.ios && !s.licence.email ? 'apple' : s.token ? 'email' : ''); // older sign-ins carry no via
 const seated = s => inApp(s) && !(s.ios && viaOf(s) === 'apple');
+// Whether a licence covers this browser or phone now: signed in, and in a store app that takes a place, on its list.
+const covered = s => !!(s.token && s.licence) && !(seated(s) && s.seat !== 'ok');
+const ended = (l, t) => !!(l && l.expires && t >= Date.parse(l.expires + 'T00:00:00Z') + DAY); // a free licence given until a date
+const latestOf = (s, t) => Math.max(t, s.seen || 0); // the latest time this browser has shown: winding the clock back gains nothing
+// When a licence that covered this device stopped covering it: noted once, and kept (also after signing out, or in
+// again with a licence that is still cancelled) until a licence covers it again.
+const lapse = (s, t) => { if (!(s.lapsed > 0)) s.lapsed = latestOf(s, t); };
 
 export function webLicence() {
   markApp();
   const listeners = new Set();
   let last = '';
   const emit = st => { const sig = JSON.stringify(st); if (sig !== last) { last = sig; listeners.forEach(f => { try { f(st); } catch { /* ignore */ } }); } };
+  // The stored note, once its signature has been checked (`id` says which note `off` belongs to). Checking takes a
+  // moment, so it is done before every look from outside (state, recheck); the state is worked out from it.
+  const known = { id: '', off: null };
+  async function learn() { const n = read().note, id = noteId(n); if (id !== known.id) { const off = await readOff(n); if (noteId(read().note) === id) { known.id = id; known.off = off; } } }
 
-  function describe(s, t) {
+  function describe(s, t, on) {
     const via = viaOf(s);
-    const base = { kind: 'web', play: !!s.play, ios: !!s.ios, app: inApp(s), enabled: !!s.on, seats: (s.licence && s.licence.seats) || SEATS, os: s.play ? 'Android' : s.ios ? native.device() : 'Web', price: s.price || '', via };
-    if (!s.on) return { ...base, mode: 'off', canEdit: true };
+    const base = { kind: 'web', play: !!s.play, ios: !!s.ios, app: inApp(s), enabled: on, seats: (s.licence && s.licence.seats) || SEATS, os: s.play ? 'Android' : s.ios ? native.device() : 'Web', price: s.price || '', via };
+    if (!on) return { ...base, mode: 'off', canEdit: true };
     const left = Math.max(0, TRIAL_DAYS - Math.floor(((s.seen || t) - (s.first || t)) / DAY));
-    const trial = { trialLeft: left, trialEnds: new Date((s.first || t) + TRIAL_DAYS * DAY).toISOString().slice(0, 10) };
+    const trial = { trialLeft: left, trialEnds: new Date((s.first || t) + TRIAL_DAYS * DAY).toISOString().slice(0, 10), ...(s.lapsed > 0 ? { lapsedAt: s.lapsed } : {}) };
     if (s.cancelled && !s.token) return { ...base, ...trial, licence: s.licence || null, mode: 'cancelled', canEdit: left > 0 };
-    const ended = l => !!(l && l.expires && t >= Date.parse(l.expires + 'T00:00:00Z') + DAY);
-    if (s.licence && (s.expired || ended(s.licence))) return { ...base, ...trial, licence: s.licence, mode: 'expired', canEdit: left > 0 }; // a free licence given until a date
+    if (s.licence && (s.expired || ended(s.licence, t))) return { ...base, ...trial, licence: s.licence, mode: 'expired', canEdit: left > 0 }; // a free licence given until a date
     if (!s.token || !s.licence) return { ...base, ...trial, mode: left > 0 ? 'trial' : 'ended', canEdit: left > 0 };
     const licence = s.licence;
     // Past the limit, read-only only once a check made after it has failed (not while it is still checking).
     if (t - (s.checked || 0) > OFFLINE_LIMIT && (s.tried || 0) > (s.checked || 0) + OFFLINE_LIMIT) return { ...base, licence, mode: 'offline', canEdit: false };
     if (seated(s)) {
+      // Not on the licence's list: its place was moved to another device, or it signed in while all were taken. The
+      // licence does not cover it, so Vdex is as it is without one here (js/licence.js).
       if (s.seat === 'released' || s.seat === 'full') return { ...base, ...trial, licence, mode: 'released', canEdit: left > 0 };
       if (s.seat !== 'ok') return { ...base, ...trial, licence, mode: 'pending', daysLeft: 0, canEdit: left > 0 };
     }
@@ -72,27 +121,48 @@ export function webLicence() {
   }
   function state() {
     const s = read(), t = now();
-    if (s.on && !s.first) s.first = t;
+    // On unless the stored note, checked, still says off. Before its check (a moment after the page opens) the last
+    // answer stands in, and nothing is changed on account of it.
+    const sure = noteId(s.note) === known.id;
+    const on = sure ? !fresh(known.off, latestOf(s, t)) : s.on !== false;
+    if (sure && s.on !== on) {
+      // The trial only runs while the licence check is on: switched off and on again, it carries on where it was.
+      if (s.on && !on) s.offAt = t;
+      if (!s.on && on && s.first && s.offAt) { s.first = Math.min(t, s.first + Math.max(0, t - s.offAt)); s.seen = latestOf(s, t); }
+      if (on) delete s.offAt;
+      s.on = on;
+    }
+    if (on && !s.first) s.first = t;
     if (!s.seen || t > s.seen + 60e3) s.seen = Math.max(s.seen || 0, t); // the latest time seen: winding the clock back gains no trial days
+    if (on && covered(s) && ended(s.licence, t)) lapse(s, t); // a licence given until a date that has passed here
+    if (on && seated(s) && s.token && s.licence && s.seat === 'released') lapse(s, t); // moved off the list (a place moved before this version kept no day: from now)
+    const st = describe(s, t, on);
+    if (st.mode === 'licensed') delete s.lapsed; // covered again
     write(s);
-    const st = describe(s, t); emit(st); return st;
+    emit(st); return st;
   }
   const update = fn => { const s = read(); fn(s); write(s); return state(); };
 
-  async function status(force) {
-    const s = read();
-    if (!force && s.statusAt && now() - s.statusAt < STATUS_EVERY && now() >= s.statusAt) return;
-    try {
-      const r = await call('status');
-      if (r.status === 200 && r.answered) update(x => {
-        const on = !!r.body.on, t = now();
-        // The trial only runs while the licence check is on: switched off and on again, it carries on where it was.
-        if (x.on && !on) x.offAt = t;
-        if (!x.on && on && x.first && x.offAt) { x.first = Math.min(t, x.first + Math.max(0, t - x.offAt)); x.seen = t; }
-        if (on) delete x.offAt;
-        x.on = on; x.statusAt = t;
-      });
-    } catch { /* offline: keep what we knew */ }
+  // Asks whether licences are on: at most every 6 hours, "Try again" included, and whether or not an answer comes (the
+  // privacy policy says so), with a plain GET that carries nothing about the person. Only a note this page can check,
+  // and fresh, is kept; any other answer means on. With no answer, a note already kept goes on counting until its 3 days
+  // are up, and licences are on meanwhile if there is none.
+  async function status() {
+    const s = read(), before = s.statusAt;
+    if (s.statusAt && now() - s.statusAt < STATUS_EVERY && now() >= s.statusAt) return;
+    write({ ...s, statusAt: now() }); // the time it was asked, before asking
+    let r;
+    try { r = await call('status', null, { bare: true }); } catch (e) {
+      // A request that could not be sent (no connection, or blocked) never reached the server: asked again at the next
+      // look. One that timed out may have, so it waits its 6 hours.
+      if (!(e && e.name === 'AbortError')) { const x = read(); if (before) x.statusAt = before; else delete x.statusAt; write(x); }
+      return;
+    }
+    if (!(r.status === 200 && r.answered)) return; // something answered, not the licence server: as no answer
+    const n = r.body.on === false && r.body.note && typeof r.body.note === 'object' ? { kid: r.body.note.kid, data: r.body.note.data, sig: r.body.note.sig } : null;
+    const off = await readOff(n), keep = fresh(off, latestOf(read(), now()));
+    known.id = keep ? noteId(n) : ''; known.off = keep ? off : null;
+    update(x => { if (keep) x.note = n; else delete x.note; });
   }
   // The Play app's place on the licence. { ok } | { full, computers, swapsLeft } | { error }.
   async function seat(release) {
@@ -102,7 +172,7 @@ export function webLicence() {
     const b = r.body;
     if (r.status === 200 && b.ok) { update(x => { x.seat = 'ok'; x.seatChecked = x.seatTried = now(); if (b.token) { x.token = b.token; x.licence = b.licence || x.licence; } }); return { ok: true }; } // b.token: moved to another of this email's licences, which had room
     if (b.token) update(x => { x.token = b.token; x.licence = b.licence || x.licence; }); // moved to another of this email's licences
-    if (b.error === 'full') { update(x => { x.seat = x.seat === 'ok' ? 'released' : 'full'; x.seatTried = now(); }); return { full: true, computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft }; }
+    if (b.error === 'full') { update(x => { if (x.seat === 'ok') lapse(x, now()); x.seat = x.seat === 'ok' ? 'released' : 'full'; x.seatTried = now(); }); return { full: true, computers: Array.isArray(b.computers) ? b.computers.slice(0, 20) : [], swapsLeft: b.swapsLeft }; }
     if (b.error === 'swaps') return { error: 'This licence has been moved between devices 3 times in the last 30 days, so it cannot move again yet. Reply to the email your licence came in and we will sort it out.' };
     if (r.answered && ['cancelled', 'signed-out', 'expired'].includes(b.error)) { signedOut(b.error); return { error: { cancelled: 'This licence has been cancelled.', 'signed-out': 'You have been signed out. Sign in again.', expired: 'This licence has ended.' }[b.error] }; }
     update(x => { x.seatTried = now(); }); return { offline: true };
@@ -114,8 +184,9 @@ export function webLicence() {
     if (!inApp(s) || s.seat !== 'ok' || !s.token || !s.licence || (next && next.ref === s.licence.ref)) return;
     try { await call('release', { token: s.token, install: s.install }); } catch { /* the place can still be moved from the chooser later */ }
   }
-  // Only when the licence server itself says so: a firewall's or a network filter's refusal is not an answer.
-  function signedOut(why) { update(x => { delete x.token; delete x.seat; if (why === 'cancelled') x.cancelled = true; if (why === 'expired') x.expired = true; else delete x.licence; }); }
+  // Only when the licence server itself says so: a firewall's or a network filter's refusal is not an answer. A
+  // licence that covered this device and is now cancelled or ended: the day this device learned so is kept.
+  function signedOut(why) { update(x => { if ((why === 'cancelled' || why === 'expired') && covered(x)) lapse(x, now()); delete x.token; delete x.seat; if (why === 'cancelled') x.cancelled = true; if (why === 'expired') x.expired = true; else delete x.licence; }); }
 
   /* ------------------------------ the App Store ------------------------------ */
   // Apple's signed purchase → a licence, with this phone on it. Answers like verify(): the state, or { error }.
@@ -183,7 +254,9 @@ export function webLicence() {
       const s = read(); if (s.ios || s.play) return null;
       try { const r = await call('/licence/price'); return r.status === 200 ? r.body : null; } catch { return null; }
     },
-    state: async () => { await status(false); return state(); },
+    // The answer to the status question is waited for 3 seconds at most: one that never comes (a request held open)
+    // must not keep the licence unknown, and so Vdex unchecked. A later answer still counts, through onChange.
+    state: async () => { await learn(); await Promise.race([status(), new Promise(r => setTimeout(r, 3000))]); return state(); },
     onChange: cb => { listeners.add(cb); return () => listeners.delete(cb); },
     // The shop in a new tab; in the iPhone app, the App Store purchase (answers like verify(), or { cancelled } / { pending }).
     buy: async () => { const s = read(); if (s.ios) return buyInApp(); if (!s.play) window.open('/buy', '_blank', 'noopener'); return true; },
@@ -220,13 +293,13 @@ export function webLicence() {
     seat: async release => { const r = await seat(release); return r.full ? { error: 'full', ...r } : r.error ? r : r.offline ? { ...state(), offline: true } : state(); },
     // Background: about once a day, and "Try again".
     recheck: async (force = false) => {
-      await status(force);
-      let s = read(); const t = now();
+      await learn(); await status();
+      let s = read(); const t = now(), on = state().enabled;
       if (s.ios && !s.price && native.purchases.available()) await askPrice(); // the App Store's price, until it has said it once
       // The iPhone app, signed out: a purchase this Apple ID already owns (a reinstall, a second iPhone) licenses it by itself,
       // unless the person signed out on purpose (Sign out): then only Restore purchases or a new purchase signs in again.
-      if (s.on && !s.token && s.ios && !s.signedOut && native.purchases.available() && (force || !s.autoAt || t - s.autoAt > DAY || t < s.autoAt)) { update(x => { x.autoAt = t; }); await restoreInApp(true).catch(() => null); s = read(); }
-      if (!s.on || !s.token) return state();
+      if (on && !s.token && s.ios && !s.signedOut && native.purchases.available() && (force || !s.autoAt || t - s.autoAt > DAY || t < s.autoAt)) { update(x => { x.autoAt = t; }); await restoreInApp(true).catch(() => null); s = read(); }
+      if (!on || !s.token) return state();
       if (force || t - (s.checked || 0) > CHECK_EVERY || t < (s.checked || 0)) {
         try {
           const r = await call('check', { token: s.token });

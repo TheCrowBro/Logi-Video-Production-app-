@@ -5,7 +5,7 @@ import { spawn } from 'node:child_process';
 import { readdirSync, mkdirSync, rmSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { scratchCopy, serve } from './lib.mjs';
+import { scratchCopy, serve, testKey } from './lib.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url)), repo = resolve(here, '..');
 const only = process.argv.slice(2);
@@ -19,14 +19,15 @@ const clean = () => { try { if (running) running.kill(); } catch { /* already go
 process.on('exit', clean);
 process.on('SIGINT', () => process.exit(130)); process.on('SIGTERM', () => process.exit(143));
 process.stdout.on('error', () => process.exit(1)); // nobody is reading any more: end quietly instead of crashing on the next line
-const server = await serve(root);
+const key = await testKey(root); // licences off, with a note signed by a key of this run's own (tests/lib.mjs)
+const server = await serve(root, 0, key);
 const url = `http://localhost:${server.address().port}/`;
 let failed = 0, passed = 0;
 for (const f of readdirSync(join(here, 'specs')).filter(n => /\.(c?js|mjs)$/.test(n)).sort()) {
   if (only.length && !only.some(o => f.includes(o))) continue;
   process.stdout.write(`\n=== ${f} ===\n`);
   const code = await new Promise(res => {
-    const child = running = spawn(process.execPath, [join(here, 'specs', f)], { env: { ...process.env, S: out, VDEX_ROOT: root, VDEX_URL: url }, stdio: ['ignore', 'pipe', 'inherit'] });
+    const child = running = spawn(process.execPath, [join(here, 'specs', f)], { env: { ...process.env, S: out, VDEX_ROOT: root, VDEX_URL: url, VDEX_STATUS_KEY: key }, stdio: ['ignore', 'pipe', 'inherit'] });
     child.stdout.on('data', d => { const t = String(d); process.stdout.write(t); passed += (t.match(/^PASS /gm) || []).length; failed += (t.match(/^FAIL /gm) || []).length; });
     child.on('close', code => { running = null; res(code); });
   });

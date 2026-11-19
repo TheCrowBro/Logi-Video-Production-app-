@@ -4,9 +4,10 @@
 //   website: js/licence-web.js (30-day trial → sign in with the licence's email; the Play app takes one of the 3 places)
 // When the trial is over and there is no working licence, Vdex is read-only: the store refuses changes (store.setGate)
 // and says why, while opening, searching and printing keep working. Cloud storage and saving backup and spreadsheet
-// files need a licence from the start (store.setPaid).
+// files need a licence from the start (store.setPaid). Making a link or QR code that passes on the contact card or
+// equipment needs the trial or a licence. A device a paid licence stopped covering keeps Export backup for 30 days.
 import { h, sheet, toast, announce, muteToasts } from './util.js';
-import { setGate, redraw, setPaid } from './store.js';
+import { setGate, redraw, setPaid, importChecked } from './store.js';
 
 let P = null; // the licence: the desktop app's bridge, or the website's own
 let ready = null;
@@ -47,15 +48,23 @@ const once = () => (T.local ? `${T.local.total} USD once in ${T.local.place}, in
 export const offer = () => ({ buy: !play(), price: ios() || play() ? '' : once() });
 
 // The states in which this device counts as having a licence (or licences are not switched on): cloud storage and
-// saving data files work only in these (store.setPaid). In the desktop app a code that is still waiting to be activated
-// online ('pending') is not a licence yet: those begin once the computer has been added to the code's list.
-const PAID = new Set(['off', 'founder', 'licensed', 'pending', 'offline', 'released']);
-const paid = s => PAID.has(s.mode) && !(s.mode === 'pending' && !web());
+// saving data files work only in these (store.setPaid). A licence that is still waiting to be added to this device
+// online ('pending': a code on a computer, a sign-in in a store app) is not a licence here yet: those begin once the
+// device is on the licence's list. A device the licence does not cover ('released': its place was moved, or a store
+// app signed in while all were taken) is as it is without a licence.
+const PAID = new Set(['off', 'founder', 'licensed', 'offline']);
+const paid = s => PAID.has(s.mode);
+const DAY = 86400e3, BACKUP_DAYS = 30;
+// Links and QR codes that pass on the contact card or equipment: during the trial, or with a licence.
+const links = s => paid(s) || s.trialLeft > 0;
+// When a licence stopped covering this device (`lapsedAt`, kept on the device by either licence), Export backup works
+// for 30 days from then. Someone who only ever had the trial has none.
+const backupUntil = s => (Number.isFinite(s.lapsedAt) && s.lapsedAt > 0 ? s.lapsedAt + BACKUP_DAYS * DAY : 0);
 function set(s) {
   if (!s || s.error || !s.mode) return;
   S.cur = s;
   if (['trial', 'ended', 'cancelled', 'expired'].includes(s.mode)) askLocalPrice(); // the states that offer Buy
-  setPaid(paid(s), needsLicence);
+  setPaid(paid(s), needsLicence, { links: links(s), backupUntil: backupUntil(s) });
   if (paid(s) && S.needClose) closeWhenOnTop('licence-needed', 'needClose'); // just signed in: the offer is out of date
   if (s.canEdit !== false && S.roClose) closeWhenOnTop('licence-readonly', 'roClose'); // licensed now: the read-only explanation is out of date
   S.listeners.forEach(f => { try { f(s); } catch { /* ignore */ } });
@@ -63,13 +72,17 @@ function set(s) {
 }
 const refresh = async () => { await ready; const l = L(); if (l) set(await l.state().catch(() => null)); return S.cur; };
 
+// A start that failed (the website's licence file could not be loaded) is tried again at the next call: store.js
+// keeps Vdex read-only meanwhile, and calls again when the connection returns. The file is fetched before it is
+// imported, as store.js does with this one (importChecked: a browser remembers a module that failed to load).
+const WEB = { tries: 0, renamed: false };
 export function initLicence() {
-  if (!ready) ready = start();
+  if (!ready) ready = start().catch(e => { ready = null; P = null; throw e; });
   return ready;
 }
 async function start() {
   P = window.vdexDesktop && window.vdexDesktop.licence ? Object.assign(Object.create(window.vdexDesktop.licence), { kind: 'desktop' })
-    : (await import('./licence-web.js')).webLicence();
+    : (await importChecked(new URL('./licence-web.js', import.meta.url), 'js/licence-web.js', WEB)).webLicence();
   set(await P.state().catch(() => null));
   P.onChange(set);
   // Another window signed in or out (the website keeps its sign-in in this browser's storage).
@@ -119,7 +132,7 @@ function describe(s) {
           : `${s.via === 'apple' ? 'Licensed through the App Store' + (l.email ? ' · ' + l.email : '') : `Signed in as ${l.email}`}${l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}${app() ? ', and this phone is one of them' : ''}.`, tone: 'ok', release: true, addEmail: s.via === 'apple' && !l.email, copy: s.via === 'apple' }
       : { line: `Licensed to ${who(l)}${l && l.comp ? ' · free licence' : ''} · up to ${plural(seats, 'device')}.`, tone: 'ok', copy: true, release: true };
     case 'pending': return web()
-      ? { line: `Signed in as ${l.email}, but this phone is not on your licence yet: Vdex needs the internet once to add it.`, tone: s.canEdit ? '' : 'warn', retry: true, release: true }
+      ? { line: `Signed in as ${l.email}, but this phone is not on your licence yet: Vdex needs the internet once to add it. Cloud storage, backup files and spreadsheets start once it is added.`, tone: s.canEdit ? '' : 'warn', retry: true, release: true }
       : { line: `Licensed to ${who(l)}, but not activated on this computer yet: Vdex needs the internet once to do that${s.daysLeft > 0 ? ` (${plural(s.daysLeft, 'day')} left)` : ''}. Cloud storage, backup files and spreadsheets start once it is activated.`, tone: s.daysLeft > 0 ? '' : 'warn', retry: true, remove: true };
     case 'released': return { line: `This ${here()} is not on your licence: it is in use on ${plural(seats, 'other device')}, its limit. ${web() ? 'Add this phone' : 'Activate it here again'} to choose which device to take off.`, tone: 'warn', again: true, [web() ? 'release' : 'remove']: true };
     case 'cancelled': return { line: `This licence has been cancelled, for example after a refund. If you think that is a mistake, reply to the email your licence came in${ios() ? ', or to Apple for an App Store purchase' : ''}.`, tone: 'warn', buy: shop, enter: true, restore, remove: !web() };
@@ -197,7 +210,7 @@ export function licencePanel() {
   };
   draw();
   const off = onLicence(draw);
-  initLicence().then(() => { if (!S.cur) refresh(); else draw(); });
+  initLicence().then(() => { if (!S.cur) refresh(); else draw(); }).catch(() => {}); // not loaded: store.js keeps Vdex read-only and tries again
   return { el, destroy: off };
 }
 
@@ -264,17 +277,23 @@ function readOnlySheet() {
   sh.el.tabIndex = -1;
   setTimeout(() => sh.el.focus(), 50);
 }
-// Asked for something that comes with a licence (cloud storage, a backup or a spreadsheet): say so, and offer one.
+// Asked for something that comes with a licence (cloud storage, a backup or a spreadsheet, a link or QR code that
+// passes on the contact card or equipment): say so, and offer one.
+const longDay = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' });
 function needsLicence(what) {
   const s = S.cur || {};
-  const thing = what === 'cloud' ? 'Keeping a copy in your own cloud storage' : 'Saving backups and spreadsheet files';
-  // A licence code that is still waiting to be activated: its own line and next step, never an offer to buy again.
-  const d = s.mode === 'pending' && !web() ? describe(s) : null;
+  const keep = backupUntil(s) > Date.now() ? backupUntil(s) : 0; // a licence stopped covering this device less than 30 days ago
+  const thing = what === 'cloud' ? 'Keeping a copy in your own cloud storage' : what === 'link' ? 'Sending your contact card or equipment as a link or QR code'
+    : keep ? 'Saving spreadsheet files' : 'Saving backups and spreadsheet files';
+  // A licence that is still waiting to be added to this device, or a device whose place on the licence was moved: its
+  // own line and next step, never an offer to buy again.
+  const d = s.mode === 'pending' || s.mode === 'released' ? describe(s) : null;
   const sh = sheet('Comes with a licence', h('div', { class: 'stack' },
     h('p', null, `${thing} comes with a Vdex licence.`),
     d ? h('p', { class: 'small' }, d.line) : '',
+    keep ? h('p', { class: 'small' }, `Export backup still saves a backup file of everything here until ${longDay(keep)}.`) : '',
     h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
-    h('div', { class: 'actions' }, ...actions(s, d ? { retry: true } : { buy: !play(), enter: true, restore: ios() }, () => sh.close())), buyNote({ buy: !d })));
+    h('div', { class: 'actions' }, ...actions(s, d ? { retry: d.retry, again: d.again } : { buy: !play(), enter: true, restore: ios() }, () => sh.close())), buyNote({ buy: !d })));
   sh.el.classList.add('licence-needed');
   S.needClose = sh.close;
   sh.el.tabIndex = -1; setTimeout(() => sh.el.focus(), 50); // not a button: someone still typing must not press Buy by accident

@@ -9,8 +9,8 @@
 //   /licence/release           a desktop app takes its computer off the list
 //   /licence/admin             the owner's generator page: look at, clear, cancel or restore a code (signed requests)
 //   /licence/web/…             the website's sign-in: a 6-digit code emailed to a licence holder, then a signed token
-//                              (status, start, verify, check), and a place on the licence for the Google Play app
-//                              (activate, release)
+//                              (start, verify, check), and a place on the licence for the Google Play app (activate,
+//                              release); status says whether licences are on, with a signed note when they are not
 //   /licence/apple/claim       the iPhone app bought the licence through the App Store: Apple's signed receipt becomes a licence and a sign-in
 //   /licence/apple/notify      App Store Server Notifications: a refund or a revocation cancels that licence
 //   /licence/apple/status      whether App Store purchases are switched on (APPLE_BUNDLE_ID set)
@@ -33,7 +33,8 @@
 //   BUY_URL                the payment link's address (https://buy.stripe.com/…)
 //   RESEND_API_KEY         Resend, to email codes (optional: without it the code is only shown after paying)
 //   MAIL_FROM, REPLY_TO    the email's sender (default "Vdex <licences@vdex.crowmade.app>") and where replies go
-//   WEB_SIGN_IN            "on" makes the website and the Google Play app ask for a licence after their 30-day trial
+//   WEB_SIGN_IN            "on" makes the website and the Google Play app ask for a licence after their 30-day trial;
+//                          without it the status answer carries a note, signed with LICENCE_SHOP_KEY, that they do not
 //   REVIEW_EMAIL, REVIEW_CODE  the store reviewers' sign-in: an address that signs in with a fixed 6-digit code and is
 //                          never emailed one (both must be set, or there is no such address)
 //   FORGET_SECRET          20 characters or more: lets the owner's generator page delete what is held for an email address
@@ -296,6 +297,17 @@ const CODE_TTL = 15 * 60e3, CODE_TRIES = 5, CODES_PER_HOUR = 5, CODES_PER_DAY = 
 // emails always have room. SIGN_IN_EMAILS_PER_DAY raises it on a paid Resend plan.
 const emailsPerDay = env => Math.max(1, Number(env.SIGN_IN_EMAILS_PER_DAY) || 60);
 async function webReady(env) { return env.WEB_SIGN_IN === 'on' && !!env.LICENCES && !!env.RESEND_API_KEY && !!(await shopKey(env)); }
+// Whether the website and the store apps ask for a licence. They do unless this answer carries a note, signed with the
+// shop's key, saying they do not (js/licence-web.js checks it with the public keys built into the page), so no answer,
+// a blocked one or one made up anywhere else all mean on. The note carries the time it was signed and the page believes
+// it for 3 days at most, so a note kept from an earlier answer cannot keep licences off for ever. Without the shop's
+// key no note can be signed, so licences are then on too. The request carries nothing about the person.
+const STATUS_HEADERS = { 'Cache-Control': 'public, max-age=300' };
+async function webStatus(env) {
+  if (await webReady(env)) return json(200, { on: true }, STATUS_HEADERS);
+  const key = await shopKey(env);
+  return json(200, { on: false, ...(key ? { note: await codes.signNote('status', key, SHOP_KID, { off: true, at: Date.now() }) } : {}) }, STATUS_HEADERS);
+}
 // A sign-in token names who signed in: the email a licence belongs to, or (on an iPhone) the App Store purchase.
 const appleId = v => (/^(s:)?\d{1,40}$/.test(String(v || '')) ? String(v) : ''); // s: a sandbox purchase (testing and App Review)
 const identityKey = v => (v.apple ? 'a:' + v.apple : 'e:' + v.email);
@@ -678,7 +690,7 @@ export default {
       if (p === '/licence/stripe-webhook' && m === 'POST') return await webhook(request, env);
       if (p === '/licence/activate' && m === 'POST') return await activate(request, env);
       if (p === '/licence/release' && m === 'POST') return await release(request, env);
-      if (p === '/licence/web/status' && m === 'GET') return json(200, { on: await webReady(env) }, { 'Cache-Control': 'public, max-age=300' });
+      if (p === '/licence/web/status' && m === 'GET') return await webStatus(env);
       if (p === '/licence/web/start' && m === 'POST') return await webStart(request, env);
       if (p === '/licence/web/verify' && m === 'POST') return await webVerify(request, env);
       if (p === '/licence/web/check' && m === 'POST') return await webCheck(request, env);

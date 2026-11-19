@@ -4,8 +4,12 @@
 // based). An equipment list is a one-off copy and carries everything that describes each item (GEAR_FIELDS in
 // js/gear-import.js: name, category, serial number, where it is kept, quantity, value, purchase and warranty dates,
 // service interval, firmware, notes), never its service log or the bookings it is on. Loaded on first use.
+// Making either link or its QR code works during the trial and with a licence (requireLicence('link')); once the trial
+// has ended without one, the same offer of a licence as for other licensed features is shown instead. The Me page's
+// Contact card code is made the same way (js/pages/me.js). Opening a link, and booking, quote and invoice links, never
+// need a licence.
 import { h, sheet, toast, groupBy, money } from './util.js';
-import { db, byId, qtyOf, usedQty, totalValue } from './store.js';
+import { db, byId, qtyOf, usedQty, totalValue, requireLicence } from './store.js';
 import { pack } from './link-pack.js';
 import { SITE } from './version.js';
 import { QR_MAX, QR_LARGE, GEAR_MAX, qrCaution, fromLine } from './share-data.js';
@@ -36,6 +40,7 @@ export const contactSnapshot = (p = db.profile) => ({ v: 1, kind: 'contact', ...
 export async function contactLink(p) { return siteBase() + 'shared.html#' + await pack(contactSnapshot(p)); }
 // Me → My card's link…: the link the Me page's QR code holds, to send instead of showing the code.
 export async function openContactShare(p = db.profile) {
+  if (!(await requireLicence('link'))) return;
   let url; try { url = await contactLink(p); } catch (e) { return toast('Could not make the link: ' + (e.message || e)); }
   const me = fromLine(p);
   const panel = linkPanel(url, { label: 'Link to your contact card', title: p.name || 'Contact card', subject: `Contact details${p.name ? ': ' + p.name : ''}`,
@@ -67,7 +72,8 @@ function chosen(S) {
 
 // Equipment page → Share…: choose what goes, read what goes with it, then make the link. The link is only made on the
 // button, after the notice; changing the choice takes the old link away.
-export function openGearShare() {
+export async function openGearShare() {
+  if (!(await requireLicence('link'))) return;
   const S = { scope: 'all', kit: db.kits[0] ? db.kits[0].id : '', picked: new Set() };
   const sym = db.profile.currency || '$', count = n => `${n} item${n === 1 ? '' : 's'}`;
   const choice = h('div', { class: 'stack' }), result = h('div', { class: 'stack share-result', 'aria-live': 'polite' });
@@ -91,6 +97,7 @@ export function openGearShare() {
 
   const make = async () => {
     const n = ++seq, c = chosen(S); if (!c.items.length) return;
+    if (!(await requireLicence('link')) || n !== seq) return; // the trial may have ended since the sheet opened
     // One link carries GEAR_MAX items (js/share-data.js cuts a longer list on the other side), so a longer list is not made into one.
     if (c.items.length > GEAR_MAX) return void result.replaceChildren(h('p', { class: 'warn small share-many', role: 'alert' }, `One link carries ${GEAR_MAX.toLocaleString()} items at most, and this is ${c.items.length.toLocaleString()}. Share it in parts: one kit at a time, or pick items.`));
     makeBtn.disabled = true;

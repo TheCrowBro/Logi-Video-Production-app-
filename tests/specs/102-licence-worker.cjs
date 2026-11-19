@@ -207,7 +207,8 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     const mails = () => calls.filter(c => c.url === 'https://api.resend.com/emails').map(c => JSON.parse(c.body));
     const lastCode = to => { const m = mails().filter(x => x.to[0] === to).at(-1); return m && (m.subject.match(/^(\d{6}) is your Vdex sign-in code$/) || [])[1]; };
     const web = (path, body, m = mf) => post('/licence/web/' + path, body, m).then(async r => ({ status: r.status, ...(await r.json()) }));
-    ok('the website is told sign-in is on once the owner switches it on', (await (await get('/licence/web/status')).json()).on === true);
+    const onAnswer = await (await get('/licence/web/status')).json();
+    ok('the website is told sign-in is on once the owner switches it on, with no note (on needs none)', onAnswer.on === true && !('note' in onAnswer), JSON.stringify(onAnswer));
     calls.length = 0;
     const stranger1 = await web('start', { email: 'nobody@example.com' });
     ok('an email with no licence gets the same answer, and no email is sent to it', stranger1.status === 200 && stranger1.ok && !stranger1.email && mails().length === 0);
@@ -443,7 +444,18 @@ const { createLicence } = require(path.join(ROOT, 'desktop/licence.js'));
     /* ----------------------------- not set up ----------------------------- */
     mf2 = new Miniflare(opts({}));
     ok('before the owner switches it on, the website is told sign-in is off', (await (await mf2.dispatchFetch(SITE + '/licence/web/status')).json()).on === false && (await post('/licence/web/start', { email: 'pat@example.com' }, mf2)).status === 503);
+    // The page believes "off" only from a note signed with the shop's key (js/licence-web.js), so without the key there
+    // is none, and licences are on.
+    const keyless = await (await mf2.dispatchFetch(SITE + '/licence/web/status')).json();
+    ok('…but with no shop key it can sign no note, so to the page licences are on', keyless.on === false && !keyless.note, JSON.stringify(keyless));
     ok('before the shop is set up, /buy says it is not on sale yet and activation says "not ready"', (await mf2.dispatchFetch(SITE + '/buy', { redirect: 'manual' })).status === 200 && (await post('/licence/activate', { code, install: id(1) }, mf2)).status === 503 && (await mf2.dispatchFetch(SITE + '/licence/thanks?session_id=' + sid)).status === 503);
+    await mf2.dispose();
+    const { WEB_SIGN_IN: _on, ...offEnv } = env;
+    mf2 = new Miniflare(opts(offEnv));
+    const offRes = await mf2.dispatchFetch(SITE + '/licence/web/status'), offAnswer = await offRes.json(), offNote = await codes.readNote('status', offAnswer.note, { keys: KEYS });
+    ok('with sign-in switched off, the answer carries a note signed with the shop\'s key for that purpose alone, saying off and when', offAnswer.on === false && offAnswer.note && offAnswer.note.kid === 2 && !!offNote && offNote.off === true && Math.abs(offNote.at - Date.now()) < 60e3
+      && !(await codes.readNote('web', offAnswer.note, { keys: KEYS })) && !(await codes.readNote('active', offAnswer.note, { keys: KEYS })), JSON.stringify(offAnswer).slice(0, 200));
+    ok('…and nothing about the person is asked for or given: a plain GET, cached for 5 minutes like the answer before notes', offRes.headers.get('cache-control') === 'public, max-age=300' && Object.keys(offAnswer).sort().join() === 'note,on' && Object.keys(JSON.parse(offAnswer.note.data)).sort().join() === 'at,off');
     await mf2.dispose();
     mf2 = new Miniflare(opts({ ...env, LICENCE_SHOP_KEY: codes.b64u.enc(stranger.pkcs8) }));
     ok('a shop key that is not the one built into Vdex keeps the shop closed instead of selling codes no app accepts', (await post('/licence/activate', { code, install: id(1) }, mf2)).status === 503 && (await mf2.dispatchFetch(SITE + '/licence/thanks?session_id=' + sid)).status === 404);

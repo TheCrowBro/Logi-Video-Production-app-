@@ -37,6 +37,8 @@ export function healthLine() {
   return el;
 }
 function healthText() {
+  // A licence stopped covering this device less than 30 days ago: backup files still work, until a date.
+  if (!store.isPaid() && store.backupsAllowed()) return h('p', { class: 'warn small' }, `Your licence no longer covers this device. Export backup still saves a backup file of everything here until ${new Date(store.backupsUntil()).toLocaleDateString(undefined, { day: 'numeric', month: 'long', year: 'numeric' })}; cloud storage and spreadsheets need a licence.`);
   if (!store.isPaid()) return h('p', { class: 'small muted' }, 'Backup files and cloud storage come with a Vdex licence. Your data is kept on this device.');
   const hl = health();
   return h('p', { class: hl.level === 'ok' ? 'status-line' : hl.level === 'empty' ? 'small muted' : 'warn small', 'data-state': hl.level === 'ok' ? 'synced' : undefined },
@@ -63,8 +65,9 @@ export async function saveOrShare(text, name, type) {
 }
 
 // always: the changed-terms screen, where anyone may save their information before deciding (terms section 18).
+// Otherwise with a licence, and for 30 days after a licence stopped covering this device (terms section 11).
 export async function exportFile({ encrypted = false, always = false } = {}) {
-  if (!always && !store.requirePaid('export')) return;
+  if (!always && !(await store.requireLicence('backup'))) return;
   let text = store.exportJSON(), name = `vdex-backup-${todayISO()}.json`;
   if (encrypted) {
     const pass = await askSecret({ title: 'Passphrase for this backup', confirm: true, numeric: false, minLength: 8, intro: 'Anyone with the file and this passphrase can open it, and a forgotten passphrase cannot be recovered.' });

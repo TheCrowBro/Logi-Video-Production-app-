@@ -240,4 +240,4 @@ let provider = null; try { provider = localStorage.getItem('logi-provider'); } c
 if (provider === 'gdrive' || store.db.calSync?.provider === 'google') import('./providers.js').then(p => p.signIn.available('google') && p.loadGIS()).catch(() => {}); // service and overdue-invoice reminders, once the first paint is out of the way
 if (!tourSeen()) setTimeout(() => startTour(), 700); // first launch: the set-up walkthrough (your details, calendar, sample people)
 initUpdates(); // service worker, offline copy, and the "new version" bar
-idle(() => import('./licence.js').then(m => m.initLicence()).catch(() => {})); // the trial and licence (desktop app, website and Play app)
+idle(() => store.loadLicence()); // the trial and licence (desktop app, website and Play app); read-only while it cannot be loaded

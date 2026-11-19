@@ -116,7 +116,8 @@ const Codes = (() => { const module = { exports: {} };
 // A code is "VDEX-" followed by Crockford base32 (no I, L, O or U) of payload + Ed25519 signature, in groups of five.
 // The signature covers "VDEX-LICENCE\0" + payload. Notes signed with the same keys use other prefixes ("VDEX-ACTIVE\0"
 // for a computer's activation receipt, "VDEX-ADMIN\0" for the owner's requests to the Worker), so nothing signed for
-// one purpose can be passed off as another. "VDEX-WEB\0" signs the website's sign-in tokens.
+// one purpose can be passed off as another. "VDEX-WEB\0" signs the website's sign-in tokens, and "VDEX-STATUS\0" the
+// licence server's note that the website's licence check is switched off (js/licence-web.js reads it).
 //
 // Payload, format 1: version(1) kid(1) flags(1: bit 0 = free licence) edition(1: 1 = desktop) seats(1) serial(4)
 // issued(2) expires(2: 0 = never; both in days from 1 Jan 2026) nameLength(1) name nameLength... emailLength(1) email.
@@ -129,7 +130,7 @@ const DAY = 86400e3;
 const HEADER = 13, SIG = 64, MAX_TEXT = 64, SEATS = 3;
 const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 const FLAG_COMP = 1, EDITION_DESKTOP = 1;
-const PREFIX = { licence: 'VDEX-LICENCE\0', active: 'VDEX-ACTIVE\0', admin: 'VDEX-ADMIN\0', web: 'VDEX-WEB\0' };
+const PREFIX = { licence: 'VDEX-LICENCE\0', active: 'VDEX-ACTIVE\0', admin: 'VDEX-ADMIN\0', web: 'VDEX-WEB\0', status: 'VDEX-STATUS\0' };
 // Key numbers: 1 = the owner's key (generator), 2 = the shop's key (a Worker secret), 9 = the owner's spare, kept
 // apart. Only the owner's keys may sign requests to change what the Worker holds about a code.
 const OWNER_KIDS = [1, 9];

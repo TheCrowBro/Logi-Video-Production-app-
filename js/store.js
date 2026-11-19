@@ -301,24 +301,80 @@ function setStatus(status, error = '') { cloud.status = status; cloud.error = er
 // device has one. Without one (the trial included) linking storage and exporting are refused with an explanation, and
 // a storage linked before is paused: nothing is copied either way, and syncing starts again once there is a licence.
 // Until the licence is known, the last answer this device saw is used, so a paused link stays paused from the start.
-let paid = lsGet('vdex-paid') !== '0', paidPrompt = null;
+// Two things follow the licence a little differently: links and QR codes that pass on the contact card or equipment
+// also work during the trial (`links`), and saving a backup file also works until `backupUntil`, 30 days after a
+// licence stopped covering this device.
+let paid = lsGet('vdex-paid') !== '0', paidPrompt = null, links = paid, backupUntil = 0;
 cloud.paused = !paid;
 export const isPaid = () => paid;
-export function setPaid(on, prompt) {
+export const linksAllowed = () => paid || links;
+export const backupsAllowed = () => paid || Date.now() < backupUntil;
+export const backupsUntil = () => (paid ? 0 : backupUntil); // when saving backups stops here, while a licence's 30 days run
+export function setPaid(on, prompt, more = {}) {
   if (prompt) paidPrompt = prompt;
-  const was = paid; paid = !!on; cloud.paused = !paid;
+  const was = paid, wasMore = linksAllowed() + '|' + backupUntil; paid = !!on; cloud.paused = !paid;
+  links = !!more.links; backupUntil = Number(more.backupUntil) || 0;
   lsSet('vdex-paid', paid ? '1' : '0');
-  if (was === paid) return;
+  if (was === paid) { if (wasMore !== linksAllowed() + '|' + backupUntil) emit('licence'); return; }
   // 'licence': panels that show it (storage) redraw themselves; the page is not redrawn, so focus stays where it is.
   if (paid) { if (cloud.adapter) sync(); else emit('licence'); }
   else { clearTimeout(timer); if (cloud.adapter) setStatus('paused'); else emit('licence'); }
 }
-// True when this device may (licensed, or licences not switched on); otherwise explains, offering a licence, and false.
+const may = what => paid || (what === 'link' && links) || (what === 'backup' && Date.now() < backupUntil);
+const NO_CHECK = 'Vdex could not load the part of itself that checks the licence, so it is read-only until it can. Check the internet connection.';
+// True when this device may (licensed, or licences not switched on; for 'link' also the trial, for 'backup' also the
+// 30 days after a licence ended here); otherwise explains, offering a licence, and false.
 export function requirePaid(what) {
-  if (paid) return true;
+  if (may(what)) return true;
   if (paidPrompt) paidPrompt(what);
-  else import('./licence.js').then(m => m.initLicence()).then(() => (paidPrompt ? paidPrompt(what) : toast('This comes with a Vdex licence.'))).catch(() => toast('This comes with a Vdex licence.'));
+  else loadLicence().then(() => { if (may(what)) return; if (paidPrompt) paidPrompt(what); else toast(L.waiting ? NO_CHECK : 'This comes with a Vdex licence.'); });
   return false;
+}
+// The same for a button that can wait a moment: the licence loads just after Vdex starts, and is known by the answer
+// (the last answer this device saw is not taken on trust here).
+export async function requireLicence(what) {
+  await loadLicence();
+  return requirePaid(what);
+}
+
+// The licence check itself (js/licence.js, and the website's js/licence-web.js), loaded once Vdex is up. While it
+// cannot be loaded (a first visit that lost its connection, or a blocked file), or has not loaded 30 seconds after it
+// was asked for, Vdex is read-only and nothing is copied or saved as a file; it is tried again when the connection
+// comes back, when Vdex comes to the front and every minute, and js/licence.js sets the real rules once it is in.
+// A browser remembers a module that failed to load, under its address, for as long as the page is open, and so would
+// every module that imports it (Settings' licence panel, the tutorials). So the file is fetched first and imported only
+// once that has worked; should the import fail all the same, later tries ask for it under a new address (js/licence.js
+// does the same for the file it loads). Never fails: resolves once the licence is known, or not loaded.
+const L = { mod: null, tries: 0, busy: null, waiting: false, timer: 0, heard: false, renamed: false };
+export const licenceKnown = () => loadLicence();
+export const licenceMissing = () => L.waiting; // the licence check could not be loaded (yet): Vdex is read-only
+export async function importChecked(url, name, state) {
+  const n = ++state.tries;
+  if (!state.renamed) { const r = await fetch(url, { cache: 'no-cache' }); if (!r.ok) throw new Error(`${name} could not be loaded (${r.status})`); }
+  try { return await import(state.renamed ? `${url.href}?try=${n}` : url.href); } catch (e) { state.renamed = true; throw e; }
+}
+export function loadLicence() {
+  if (!L.busy) {
+    L.busy = (L.mod ? Promise.resolve(L.mod) : importChecked(new URL('./licence.js', import.meta.url), 'js/licence.js', L).then(m => (L.mod = m)))
+      .then(m => m.initLicence())
+      .then(() => { clearInterval(L.timer); L.timer = 0; if (L.waiting) { L.waiting = false; emit('licence'); } }, waitForLicence)
+      .finally(() => { L.busy = null; });
+  }
+  const busy = L.busy;
+  return new Promise(done => { const slow = setTimeout(() => { waitForLicence(); done(); }, 30e3); busy.then(() => { clearTimeout(slow); done(); }); });
+}
+function waitForLicence() {
+  if (L.waiting) return;
+  L.waiting = true;
+  let said = 0;
+  setGate(({ quiet = false } = {}) => {
+    if (!quiet && Date.now() - said > 5e3) { said = Date.now(); toast(NO_CHECK); announce('Vdex is read-only. Nothing was changed.'); } // once, not for every background change
+    return false;
+  });
+  setPaid(false); emit('licence');
+  const again = () => { if (L.waiting && !document.hidden) loadLicence(); };
+  if (!L.timer) L.timer = setInterval(again, 60e3);
+  if (!L.heard) { L.heard = true; window.addEventListener('online', again); document.addEventListener('visibilitychange', again); }
 }
 
 // Resolves once initCloud() has found out whether a storage is linked: cloud.adapter is set by then, or stays null.

@@ -1,5 +1,5 @@
 import { h, safeUrl, telUrl, toast } from '../util.js';
-import { db } from '../store.js';
+import { db, subscribe, linksAllowed, licenceKnown, licenceMissing } from '../store.js';
 
 import { loadQR } from '../qr.js';
 import * as native from '../native.js';
@@ -11,11 +11,22 @@ import { contactLink, openContactShare } from '../share-out.js';
 // server holds it. "Phone contacts" is the plain vCard a phone's camera adds to its address book with no page between.
 // The card's page has to be fetched by the phone that scans it, so it needs a connection there; the vCard needs none.
 // The code last chosen is remembered on this device, so someone who works where there is no signal sets it once.
+// The card's code (and its link) is made during the trial and with a licence; after the trial without one, the page
+// says it needs a licence instead, while Phone contacts and Website still work (js/share-out.js has the rule).
 const MODES = [['card', 'Contact card'], ['vcard', 'Phone contacts'], ['site', 'Website']];
 const KEY = 'logi-me-code';
 const chosen = () => { let m = ''; try { m = localStorage.getItem(KEY) || ''; } catch { /* the usual one */ } return MODES.some(([k]) => k === m) ? m : 'card'; };
 const S = { mode: chosen() };
 const choose = mode => { S.mode = mode; try { localStorage.setItem(KEY, mode); } catch { /* kept until Vdex is closed */ } };
+// The licence decides whether the card's code is made: the Me page on screen draws its code again when that changes (a
+// sign-in, the trial's end). One listener for the page, whichever copy of it is on screen.
+const R = { paint: null, box: null, could: '' };
+const could = () => `${linksAllowed()}|${licenceMissing()}`;
+subscribe(reason => {
+  if (reason !== 'licence' || !R.paint) return;
+  if (!R.box.isConnected) { R.paint = R.box = null; return; }
+  if (could() !== R.could) { R.could = could(); R.paint(); }
+});
 
 // The details are changed in one place only: Settings → General → Profile.
 const edit = () => import('./settings.js').then(m => m.openSettingsSection('Profile'));
@@ -34,6 +45,16 @@ export const me = {
       caption.textContent = mode === 'site' ? site || 'Add your website first' : mode === 'vcard' ? 'Scan to save my details straight into a phone’s contacts. No connection needed.' : 'Scan to open my contact card: save it to a phone, or add it to Vdex. The other phone needs a connection; Phone contacts works without one.';
       caption.classList.toggle('words', mode !== 'site'); // a sentence wraps between words; a web address may break anywhere
       if ((mode === 'site' && !site) || (mode !== 'site' && !hasData)) { qrBox.textContent = 'Add your details to generate a QR code.'; return; }
+      if (mode === 'card') {
+        await licenceKnown(); // known a moment after Vdex starts
+        if (mode !== S.mode || !qrBox.isConnected) return;
+        if (!linksAllowed()) {
+          qrBox.textContent = licenceMissing() ? 'The Contact card code comes back once Vdex can check its licence. Check the internet connection.' : 'The Contact card code needs a Vdex licence once the free trial has ended.';
+          qrBox.setAttribute('aria-label', 'No QR code');
+          caption.textContent = 'Phone contacts and Website still work without one.';
+          return;
+        }
+      }
       try {
         const text = mode === 'site' ? site : mode === 'vcard' ? vcard(p) : await contactLink(p);
         if (mode !== S.mode || !qrBox.isConnected) return; // another code was asked for meanwhile
@@ -56,6 +77,7 @@ export const me = {
     // The card's link, to send instead of showing the code: copy, share or email (js/share-out.js).
     const sendLink = () => openContactShare(p);
 
+    Object.assign(R, { paint: paintQR, box: qrBox, could: could() });
     root.append(h('div', null,
       h('div', { class: 'page-head' }, h('h1', null, 'Me'), h('button', { class: 'btn ghost', onclick: edit, title: 'Your details are changed under Settings → General → Profile' }, 'Edit in Settings →')),
       h('div', { class: 'card id-card' },

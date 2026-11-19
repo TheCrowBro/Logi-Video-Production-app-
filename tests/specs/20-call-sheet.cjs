@@ -101,6 +101,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   // Multi-day grouping and escaping through the builders
   const multi = await page.evaluate(() => import('./js/store.js').then(async s => { const m = await import('./js/callsheet.js'); const b = s.db.bookings.find(x => /Wedding/.test(x.title)); const cs = { ...m.sheetOf(b), schedule: [{ id: '1', date: b.date, time: '10:00', item: 'Bridal prep' }, { id: '2', date: b.endDate, time: '11:00', item: 'Brunch' }] }; const html = m.callSheetHtml({ ...b, callSheet: cs, title: 'Evil <b>x</b> & co' }); const doc = m.renderDoc({ ...b, callSheet: cs }); return { days: doc.querySelectorAll('.cs-day').length, escaped: /Evil &lt;b&gt;x&lt;\/b&gt; &amp; co/.test(html) && !/<b>x<\/b>/.test(html), pdfOk: (await m.callSheetPdf({ ...b, callSheet: cs })).length > 1000 }; }));
   ok('multi-day schedule groups by day; user text escaped; PDF builds for multi-day', multi.days === 2 && multi.escaped && multi.pdfOk, JSON.stringify(multi));
+  // The crew page's notice goes on the printed sheet, the saved web page and the PDF (report item 2), not in the editor.
+  const NOTICE = 'The times, places, weather, sun times and emergency details here were entered or chosen by the producer. Vdex has not checked them and they may be out of date. Confirm with the producer.';
+  const notice = await page.evaluate(() => import('./js/store.js').then(async s => {
+    const m = await import('./js/callsheet.js'), b = s.db.bookings.find(x => /Wedding/.test(x.title));
+    const pdf = new TextDecoder('latin1').decode(await m.callSheetPdf(b)), words = [...pdf.matchAll(/\((.*?)\) Tj/g)].map(x => x[1]).join(' ');
+    return { doc: m.renderDoc(b).querySelector('.cs-foot').textContent, html: m.callSheetHtml(b), edit: m.renderDoc(b, { edit: { touch() {}, redraw() {} } }).querySelector('.cs-foot').textContent, pdf: words };
+  }));
+  ok('a printed call sheet, its web page and its PDF carry the notice that the producer chose the details and nobody checked them', notice.doc.includes(NOTICE) && notice.html.includes(NOTICE) && notice.pdf.replace(/\s+/g, ' ').includes(NOTICE) && !notice.edit.includes('Vdex has not checked'), notice.doc);
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.error('TEST CRASHED', e); process.exit(1); });

@@ -32,10 +32,10 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 |---|---|
 | 📅 **Bookings** | Your calendar of shoots. Tap a day, then a shoot, to see everything about it. |
 | 👥 **Crew** | The people you work with and how to reach them. |
-| 🎥 **Equipment** | Everything you own, with serial numbers and where each item is. Bring in the list you already keep (a spreadsheet, another app's export, pasted text), make kits for the shoots you do often, and share the list or a kit with a workmate. |
+| 🎥 **Equipment** | Everything you own, with serial numbers and where each item is. Bring in the list you already keep (a spreadsheet, another app's export, pasted text), make kits for the shoots you do often, and share the list or a kit with a workmate by link or QR code (made during the free trial or with a licence). |
 | 📍 **Venues** | The places you film: rules, parking, a map. |
 | 🛡 **Insurance** | Your policies and when they run out. |
-| 🪪 **Me** | Your own details, with a QR code that hands your contact card to anyone who scans it: they can save it to their phone, or add you to their own Vdex. |
+| 🪪 **Me** | Your own details, with a QR code that hands your contact card to anyone who scans it: they can save it to their phone, or add you to their own Vdex. The contact card's code and link are made during the free trial or with a licence; the Phone contacts and Website codes always work. |
 | ☀️ **Field** | Sunrise and sunset, a white balance reader, a noise meter, a range finder. |
 | 🎬 **TC Notes** | Shoot notes that are stamped with the camera's timecode. |
 | ⚙️ **Settings** | Everything else, including your templates, backups and the lock. |

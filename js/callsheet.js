@@ -89,6 +89,9 @@ export function callSheetText(b) {
 }
 
 /* --------------------------------- document --------------------------------- */
+// The crew page's notice (js/crew-page.js), printed at the foot of the call sheet and its PDF as well: the producer
+// chose what is on it, and nobody has checked it.
+export const CHECK_NOTICE = 'The times, places, weather, sun times and emergency details here were entered or chosen by the producer. Vdex has not checked them and they may be out of date. Confirm with the producer.';
 // One DOM for the in-app page, the print view and the saved web page. In edit mode the editable spots become inputs.
 export function renderDoc(b, { cs = sheetOf(b), crewCall = b.crewCall || {}, edit = null } = {}) {
   const d = callSheetData(b, cs, crewCall), { v, p } = d, inc = cs.include, multi = multiDay(b);
@@ -137,7 +140,7 @@ export function renderDoc(b, { cs = sheetOf(b), crewCall = b.crewCall || {}, edi
       d.breaks && kv('Breaks', d.breaks),
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'Instructions'), area('notes', 'Parking passes, radio channels, quiet zones, release forms, catering…', 3)) : cs.notes && h('p', { class: 'cs-pre' }, cs.notes),
       include('notes') && b.notes && b.notes !== cs.notes && h('p', { class: 'cs-pre' }, b.notes)),
-    h('footer', { class: 'cs-foot' }, `Produced by ${d.producerLine} · Made with Vdex on ${new Date().toLocaleDateString()}`));
+    h('footer', { class: 'cs-foot' }, `Produced by ${d.producerLine} · Made with Vdex on ${new Date().toLocaleDateString()}`, !edit && h('div', { class: 'cs-check' }, CHECK_NOTICE)));
 }
 
 // The document's own styles: used as-is in the saved web page, and scoped under #print-root for printing from the app.
@@ -189,6 +192,7 @@ export async function callSheetPdf(b) {
   if (cs.notes) notes.push({ type: 'text', text: cs.notes });
   if (inc.notes && b.notes && b.notes !== cs.notes) notes.push({ type: 'text', text: b.notes });
   if (notes.length) blocks.push({ type: 'heading', text: 'Day notes' }, ...notes);
+  blocks.push({ type: 'space', h: 10 }, { type: 'text', text: CHECK_NOTICE, size: 8, gray: 0.35 });
   return makePdf({ title: `Call sheet — ${b.title}`, blocks, footer: `Produced by ${d.producerLine} · Made with Vdex on ${new Date().toLocaleDateString()}` });
 }
 
