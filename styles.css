@@ -997,6 +997,7 @@ body:has(.prompter) .update-bar, body:has(.prompter) .licence-bar, body:has(.pro
 .tc-rate.good { background: var(--ok); border-color: var(--ok); color: #fff; } .tc-rate.ng { background: var(--danger); border-color: var(--danger); color: #fff; } .tc-rate:focus-visible { outline: 3px solid var(--focus); }
 .imp-recent-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .tc-modes { margin: 10px 0; }
+.tc-markers { display: grid; gap: 6px; } .tc-marker-file p { margin: 2px 0 6px; } .tc-marker-file .btn { width: 100%; justify-content: flex-start; }
 .pr-elsewhere { display: grid; gap: 6px; } .pr-elsewhere .btn { justify-content: center; } .pr-elsewhere p { margin: 0; }
 /* The remote for a prompter shown elsewhere (js/prompter.js): the same dark look, its buttons first, then the script */
 .pr-remote { display: flex; flex-direction: column; }

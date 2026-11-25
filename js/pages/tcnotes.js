@@ -9,6 +9,8 @@ import { RATES, rate, framesToTc, tcToFrames, tcAt, framesAt, durationText } fro
 import { haptic } from '../a11y.js';
 import { textToLines, buildScript, SAMPLE_SCRIPT } from '../docx.js';
 import { readScriptFile, SCRIPT_ACCEPT } from '../script-files.js';
+import { MARKER_FILES, markerFileName } from '../marker-files.js';
+import { CLOUD_APPS } from '../cloud-config.js';
 import * as native from '../native.js';
 import { csvText } from '../backup.js';
 
@@ -27,6 +29,8 @@ export const fmt = (frames, log) => framesToTc(frames, rate(log.rate));
 let PR = null;
 const prompter = () => (PR ? Promise.resolve(PR) : import('../prompter.js').then(m => (PR = m)));
 const VIEWS = ['notes', 'script', 'prompter'];
+// Whether to offer Google's file picker (js/gdocs-pick.js, which says the same, loaded only when used).
+const googleDocsReady = () => !!(CLOUD_APPS.google && CLOUD_APPS.googlePickerKey) && !window.vdexDesktop && !native.isApp;
 
 function newLog() {
   openForm({
@@ -213,7 +217,18 @@ function openExport(log) {
     h('button', { class: 'btn primary', onclick: () => shareFile(base + '.txt', 'text/plain', asText(log)) }, 'Share as text (.txt)'),
     h('button', { class: 'btn ghost', onclick: () => store.requirePaid('export') && shareFile(base + '.csv', 'text/csv', asCsv(log)) }, 'Share as spreadsheet (.csv)'),
     h('button', { class: 'btn ghost', onclick: copy }, 'Copy to clipboard'),
+    markersCard(log),
     h('pre', { class: 'export-preview' }, asText(log))));
+}
+// Markers for the edit (js/marker-files.js): a file for each editor, every note with a timecode as a marker at the
+// camera's timecode. A data file, so it comes with a licence, as the spreadsheet does.
+function markersCard(log) {
+  const n = log.notes.filter(x => Number.isFinite(x.frames)).length;
+  return h('div', { class: 'card tc-markers' }, h('strong', null, 'Markers for the edit'),
+    h('p', { class: 'small muted' }, n ? `${n} note${n === 1 ? '' : 's'} with the camera’s timecode, as markers there: takes with their rating, ⚑ marks, notes, and the script line each is pinned to. Try one on a copy of the project first.` : 'No note has the camera’s timecode yet: sync the log, and the notes and takes after it carry it.'),
+    n > 0 && h('div', { class: 'stack' }, MARKER_FILES.map(f => h('div', { class: 'tc-marker-file' },
+      h('button', { class: 'btn ghost', 'data-marker': f.key, onclick: () => store.requirePaid('export') && shareFile(markerFileName(log, f), f.type, f.make(log)) }, f.label),
+      h('p', { class: 'small muted' }, f.how)))));
 }
 
 /* --------------------------------- page --------------------------------- */
@@ -603,6 +618,7 @@ export function openImport(log, preset, { view = 'script' } = {}) {
     } catch (e) { fail(e); }
   };
   const fileIn = h('input', { type: 'file', accept: SCRIPT_ACCEPT, onchange: e => { const f = e.target.files[0]; if (f) readFile(f); } });
+  const gdocs = googleDocsReady(); // Google's file picker, once Vdex's Google project has a key for it (js/gdocs-pick.js)
   const paste = h('textarea', { rows: 5, placeholder: 'Paste the script text here', 'aria-label': 'Pasted script text' });
   // The clipboard in one tap, where the browser lets a page read it (it may ask first).
   const fromClipboard = async () => { try { const t = await navigator.clipboard.readText(); const lines = textToLines(t); if (!lines.length) throw new Error('empty'); paste.value = t; show('Pasted script', lines); } catch { fail(new Error('Nothing to paste, or this browser does not let Vdex read the clipboard. Paste into the box instead.')); } };
@@ -615,7 +631,8 @@ export function openImport(log, preset, { view = 'script' } = {}) {
       h('p', { class: 'small muted' }, 'Word (.docx, from Word, Pages or a Google Doc downloaded as Word), PDF, Final Draft (.fdx), Fountain or plain text. A script set out in VIDEO and AUDIO columns is read that way: the audio column is what is read. On a computer you can also drop the file here.'),
       h('label', { class: 'btn ghost file-btn' }, '📄 Choose file…', fileIn)),
     h('div', { class: 'card imp-gdocs' }, h('strong', null, 'Google Docs'),
-      h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on your phone (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
+      gdocs && h('button', { class: 'btn primary imp-gdrive', type: 'button', onclick: async () => { try { preview.textContent = 'Opening Google Drive…'; const m = await import('../gdocs-pick.js'); const f = await m.pickGoogleDoc(); if (f) readFile(f); else preview.textContent = ''; } catch (e) { if (e && e.name === 'AbortError') { preview.textContent = ''; return; } fail(e); } } }, '📄 Choose from Google Docs'),
+      h('p', { class: 'small muted' }, gdocs ? 'Choose the Doc in Google’s picker (you sign in to Google the first time), or select all, copy, and paste it here:' : 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on your phone (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
       paste, h('div', { class: 'actions' },
         h('button', { class: 'btn ghost small', onclick: () => { const lines = textToLines(paste.value); lines.length ? show('Pasted script', lines) : fail(new Error('Nothing pasted yet')); } }, 'Use pasted text'),
         navigator.clipboard && navigator.clipboard.readText && h('button', { class: 'btn ghost small imp-clip', type: 'button', onclick: fromClipboard }, '📋 Paste from the clipboard'))),
