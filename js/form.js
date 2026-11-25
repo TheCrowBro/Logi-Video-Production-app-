@@ -4,10 +4,12 @@ import { parseMapLink, geocode } from './map.js';
 import { canChange } from './store.js';
 
 /*
- fields: [{ key, label, type, options, required, placeholder, list, rows, columns, empty, hint }]
+ fields: [{ key, label, type, options, required, placeholder, list, rows, columns, empty, hint, missing }]
  types: text tel email url number date time textarea select checks rows matrix place role
+ validate(values): { key, message } for a box that cannot be saved as it is (the form stays open, the message on that
+ box), or nothing. A select whose stored value is no longer among its options keeps it (named by `missing`).
 */
-export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save' }) {
+export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save', validate = null }) {
   const readers = [];
   const saved = []; // run after a save went through
   const boxesByKey = {};
@@ -69,7 +71,11 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
       readers.push(() => [f.key, role]);
       saved.push(() => { if (picker && role) picker.rememberRole(role); });
     } else if (f.type === 'select') {
-      control = h('select', { id }, f.options.map(o => {
+      // A stored value that is no longer on the list (a template since deleted, an older category) stays chosen: a
+      // select without it would show its first option, and saving anything else on the form would save that too.
+      const known = f.options.some(o => (Array.isArray(o) ? o[0] : o) === val);
+      const options = known || val == null || val === '' ? f.options : [...f.options, [val, f.missing || String(val)]];
+      control = h('select', { id, 'data-key': f.key }, options.map(o => {
         const [v, l] = Array.isArray(o) ? o : [o, o];
         return h('option', { value: v, selected: v === (val ?? f.options[0]) }, l);
       }));
@@ -124,7 +130,8 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
       };
       draw();
       control = h('div', null, list, h('button', { type: 'button', class: 'btn ghost small', onclick: () => { rows.push({}); draw(); } }, '+ Add'));
-      readers.push(() => [f.key, rows.filter(r => Object.values(r).some(v => String(v || '').trim()))]);
+      // A row counts by the boxes shown: one emptied by hand goes, whatever it carries unseen (a saved line's id).
+      readers.push(() => [f.key, rows.filter(r => f.columns.some(c => String(r[c.key] ?? '').trim()))]);
     } else {
       let listEl;
       if (f.list) listEl = h('datalist', { id: id + '-l' }, f.list.map(o => h('option', { value: o })));
@@ -148,10 +155,22 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     h('button', { type: 'button', class: 'btn ghost', onclick: close }, 'Cancel'),
     h('button', { type: 'submit', class: 'btn primary' }, saveLabel));
   form.append(actions);
+  // A box the form refuses says why, in the browser's own bubble, and the form stays open with what was typed. The
+  // message goes as soon as anything in the form changes, so a second try is judged afresh.
+  const refused = new Set();
+  const refuse = (el, message) => { if (!el || !el.setCustomValidity) return; el.setCustomValidity(message); refused.add(el); el.reportValidity(); };
+  const clearRefused = () => { refused.forEach(el => el.setCustomValidity('')); refused.clear(); };
+  form.addEventListener('input', clearRefused); form.addEventListener('change', clearRefused);
   form.addEventListener('submit', e => {
     e.preventDefault();
+    clearRefused();
+    // Spaces alone are not an answer: the browser lets them through "required", and they would be saved as nothing.
+    const blank = [...form.querySelectorAll('input[required], textarea[required]')].find(el => !el.value.trim());
+    if (blank) return refuse(blank, 'Fill this in');
     const out = { ...values };
     readers.forEach(r => { const [k, v] = r(); out[k] = v; });
+    const bad = validate && validate(out);
+    if (bad) return refuse(form.querySelector(`[data-key="${bad.key}"]`), bad.message);
     if (!canChange()) return; // read-only (the desktop app after its trial): keep the form and what was typed
     close();
     onSave(out);

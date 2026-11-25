@@ -11,7 +11,7 @@ const imperial = () => { try { return localStorage.getItem('logi-units') === 'ft
 export const canForecast = iso => { const d = (parseISO(iso) - new Date()) / 864e5; return d > -1 && d < 16; };
 export function locationFor(b) {
   const v = b && b.venueId ? byId('venues', b.venueId) : null;
-  if (v && v.geo && Number.isFinite(Number(v.geo.lat)) && Number.isFinite(Number(v.geo.lon))) return { lat: +v.geo.lat, lon: +v.geo.lon };
+  if (v && v.geo && Number.isFinite(Number(v.geo.lat)) && Number.isFinite(Number(v.geo.lon))) return { lat: +v.geo.lat, lon: +v.geo.lon, venue: true }; // the venue's own place, not where this device is
   try { const l = JSON.parse(localStorage.getItem('logi-loc')); if (l && Number.isFinite(Number(l.lat))) return { lat: +l.lat, lon: +l.lon }; } catch { /* none */ }
   return null;
 }

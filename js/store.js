@@ -190,9 +190,15 @@ export const gearClash = (booking, gearId) => {
   return need > qtyOf(g) ? others : [];
 };
 
+// A restore (a backup file, or a backup kept in the cloud) replaces what is on this device. Everything restored counts
+// as changed now: a record deleted by mistake and brought back this way must outrank the deletion mark the other
+// devices and the cloud copy still hold for it, or the next sync would take it away again without a word.
 export function replaceAll(data) {
   db = normalise(data);
-  db.updatedAt = Date.now();
+  const now = Date.now();
+  for (const list of LISTS) db[list] = (db[list] || []).map(x => (x && typeof x === 'object' ? { ...x, updatedAt: now } : x));
+  db.logs = db.logs.map(l => ({ ...l, updatedAt: now, notes: l.notes.map(n => (n && typeof n === 'object' ? { ...n, upd: now } : n)) }));
+  db.updatedAt = now;
   persistLocal();
   emit();
   schedulePush();
@@ -405,7 +411,7 @@ export async function initCloud() {
   try {
     const intent = await microsoftFinish();
     if (intent === 'onedrive') { lsSet('logi-provider', 'onedrive'); cloud.notice = ''; say('Connected to OneDrive'); }
-    else if (intent === 'calendar') { update(d => { d.calSync = { ...d.calSync, provider: 'microsoft', updatedAt: Date.now() }; }); say('Connected to Outlook'); import('./calendar.js').then(m => m.syncCalendar({ interactive: false })).catch(() => {}); }
+    else if (intent === 'calendar') { update(d => { const was = d.calSync || {}; d.calSync = { ...was, provider: 'microsoft', calendarId: (was.calendarFor || was.provider || 'microsoft') === 'microsoft' ? was.calendarId || null : null, calendarFor: 'microsoft', updatedAt: Date.now() }; }); /* a calendar id kept from another service's link is not Outlook's */ say('Connected to Outlook'); import('./calendar.js').then(m => m.syncCalendar({ interactive: false })).catch(() => {}); }
   } catch (e) {
     cloud.notice = e.message; say(e.message);
     if (e.intent === 'onedrive' && e.first && lsGet('logi-provider') === 'onedrive') lsSet('logi-provider', null);
@@ -434,6 +440,7 @@ export async function initCloud() {
 }
 
 /* --------------------------------- merging --------------------------------- */
+const LISTS = ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates', 'myRoles']; // merged record by record (the logs too, with their notes)
 // Two devices may edit at once, so copies are merged record by record rather than one copy replacing the other.
 const ts = r => Number(r && r.updatedAt) || 0;
 const nts = n => Number(n && n.upd) || Date.parse(n && n.at) || 0;
@@ -453,10 +460,18 @@ const budgetAt = b => Number(b && b.budget && b.budget.updatedAt) || 0, boardAt 
 // With one copy's list alone, a merge that takes the other's stripboard (or a copy handed back by a device on a
 // version that merged the board without the list) would leave strips of the link unlisted, and the next update from
 // the link would take them for the receiver's own and add them a second time. (An id whose strip has gone does no harm.)
+// The quote and the invoice keep their own time too (js/money.js stamps each save, and leaves quoteGoneAt or
+// invoiceGoneAt behind a deleted one): a payment recorded on the phone is not lost because the laptop, not yet in
+// step, changed the booking's notes a minute later, and a document deleted on one device does not come back.
+const docAt = (b, k) => (b && b[k] ? Number(b[k].updatedAt) || 0 : Number(b && b[k + 'GoneAt']) || 0);
 const mergeBooking = (x, y) => {
   const base = newer(x, y), other = base === x ? y : x; let out = base;
   if (budgetAt(other) > budgetAt(base)) out = { ...out, budget: other.budget };
   if (boardAt(other) > boardAt(base)) out = { ...out, board: other.board };
+  for (const k of ['quote', 'invoice']) if (docAt(other, k) > docAt(base, k)) {
+    out = { ...out }; delete out[k]; delete out[k + 'GoneAt'];
+    if (other[k]) out[k] = other[k]; else out[k + 'GoneAt'] = other[k + 'GoneAt'];
+  }
   const rows = base.shared && base.shared.rows, had = (rows && rows.strips) || [], seen = new Set(had), more = ((other.shared && other.shared.rows && other.shared.rows.strips) || []).filter(id => !seen.has(id));
   if (rows && more.length) out = { ...out, shared: { ...out.shared, rows: { ...rows, strips: [...had, ...more] } } };
   return out;
@@ -478,8 +493,17 @@ export function mergeDb(local, remote) {
   const dead = { ...local.deleted };
   for (const [id, t] of Object.entries(remote.deleted || {})) dead[id] = Math.max(dead[id] || 0, t);
   const out = { ...local, deleted: dead };
-  for (const list of ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates', 'myRoles']) out[list] = mergeList(local[list] || [], remote[list] || [], dead, list === 'bookings' ? mergeBooking : newer);
+  for (const list of LISTS) out[list] = mergeList(local[list] || [], remote[list] || [], dead, list === 'bookings' ? mergeBooking : newer);
   out.logs = mergeList(local.logs, remote.logs, dead, (x, y) => mergeLog(x, y, dead));
+  // A crew member, an item or a kit deleted on another device arrives as a deletion mark only: its id is taken out of
+  // the bookings and kits here as well, as remove() does on the device that deleted it (and never for a record that
+  // is still on a list, such as one restored from a backup).
+  { const gone = list => { const ids = new Set(out[list].map(x => x.id)); return id => !!dead[id] && !ids.has(id); };
+    const noGear = gone('gear'), noCrew = gone('crew'), noKit = gone('kits');
+    const less = (o, k, test) => (Array.isArray(o[k]) && o[k].some(test) ? { ...o, [k]: o[k].filter(id => !test(id)) } : o);
+    const lessQty = o => (o.gearQty && Object.keys(o.gearQty).some(noGear) ? { ...o, gearQty: Object.fromEntries(Object.entries(o.gearQty).filter(([id]) => !noGear(id))) } : o);
+    out.bookings = out.bookings.map(b => lessQty(less(less(less(b, 'gear', noGear), 'crew', noCrew), 'kits', noKit)));
+    out.kits = out.kits.map(k => lessQty(less(k, 'gear', noGear))); }
   out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking
     const a = local.calSync || {}, b = remote.calSync || {}, base = ts(b) > ts(a) ? b : a;

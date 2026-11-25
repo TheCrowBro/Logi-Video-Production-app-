@@ -22,6 +22,9 @@ export function h(tag, attrs, ...kids) {
 // Children for replaceChildren/append with h()'s rules: skip null/false, flatten arrays, strings become text.
 export const nodes = (...kids) => kids.flat(Infinity).filter(k => k != null && k !== false && k !== '').map(k => (k.nodeType ? k : document.createTextNode(String(k))));
 
+// A short mark of a text that is the same on every device and in every version (FNV-1a over its characters): for
+// telling whether something changed, and for an id of a line that has no letters to make one from.
+export const shortHash = t => { let n = 2166136261; for (const ch of String(t)) { n ^= ch.codePointAt(0); n = Math.imul(n, 16777619); } return (n >>> 0).toString(36); };
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 export const pad = n => String(n).padStart(2, '0');
@@ -31,6 +34,10 @@ export const parseISO = s => { const [y, m, d] = s.split('-').map(Number); retur
 export const fmtLong = s => parseISO(s).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 export const fmtShort = s => parseISO(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 export const fmtTime = d => d instanceof Date && !isNaN(d) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+// Text in a calendar file (RFC 5545): a backslash before a backslash, a semicolon and a comma, and \n for a new line;
+// and a line folded at 75 bytes, counted over whole characters, so no letter or emoji is ever cut in half.
+export const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+export const icsFold = line => { const out = [], te = new TextEncoder(); let cur = '', bytes = 0; for (const ch of line) { const n = te.encode(ch).length; if (bytes + n > 74) { out.push(cur); cur = ' '; bytes = 1; } cur += ch; bytes += n; } out.push(cur); return out.join('\r\n'); };
 export const daysUntil = s => Math.round((parseISO(s) - parseISO(todayISO())) / 864e5);
 
 export function money(n, sym = '$') {
@@ -80,6 +87,27 @@ export function settleApp() {
 // A full screen that covers everything else is up: the lock screen, the PIN set-up or the offer of a longer PIN
 // (coverAll in js/lock.js makes what is on the page at that moment inert and hides the sheets).
 export const covered = () => !!document.querySelector('body > .lock');
+
+// A page drawn again from the store replaces every control on it, and the page is drawn again after every change
+// (also one that arrives by itself: a calendar or a cloud sync). What identifies a control across that is its kind,
+// its id or label and the text around it (a checklist box is known by its line), and, where several share all of that
+// (the "add an item" box of each stage), its place among them. The same control in the new page gets the focus back,
+// so ticking by keyboard stays in place, and a box that was being typed in keeps what was typed and where the cursor was.
+const CONTROLS = 'button, input, select, textarea, a[href], summary, [tabindex]';
+const controlKey = el => [el.tagName, el.type || '', el.id || el.getAttribute('aria-label') || el.name || '', ((el.closest('label') || el).textContent || '').trim().slice(0, 80)].join('|');
+export function redrawKeeping(root, draw) {
+  const el = document.activeElement, mine = el && el !== document.body && root.contains(el), key = mine ? controlKey(el) : null;
+  const twins = key ? [...root.querySelectorAll(CONTROLS)].filter(x => controlKey(x) === key) : [], at = twins.indexOf(el);
+  const typing = mine && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'file', 'button', 'submit', 'range', 'color'].includes(el.type)));
+  const typed = typing ? { value: el.value, start: null, end: null } : null;
+  if (typed) try { typed.start = el.selectionStart; typed.end = el.selectionEnd; } catch { /* a date or time box has no cursor to keep */ }
+  draw();
+  if (!key) return;
+  const now = [...root.querySelectorAll(CONTROLS)].filter(x => controlKey(x) === key), sure = now.length === twins.length && at >= 0, again = sure ? now[at] : now[0];
+  if (!again) return;
+  again.focus({ preventScroll: true });
+  if (typed && sure && again.value !== typed.value) { again.value = typed.value; if (typed.start != null) try { again.setSelectionRange(typed.start, typed.end); } catch { /* no cursor in this kind of box */ } }
+}
 
 const sheetStack = []; // open sheets, newest last: only the top one answers Escape and keeps Tab inside it
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"])';

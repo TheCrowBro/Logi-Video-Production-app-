@@ -1,6 +1,6 @@
 // Project pipeline: every booking moves through stages, each with a checklist from a template for its job type.
 // Also the smaller post/pre lists that hang off a booking: hires, shot list, media offload log, deliverables, licences.
-import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes, parseISO, personRate, rateText, hasUnit, keepTypedRate, typedRateHint } from './util.js';
+import { h, sheet, toast, uid, fmtShort, daysUntil, telUrl, nodes, parseISO, personRate, rateText, hasUnit, keepTypedRate, typedRateHint, shortHash } from './util.js';
 import { db, byId, update, upsert, remove, subscribe, endOf, splitHires } from './store.js';
 import { openForm } from './form.js';
 import { boardPlan } from './board.js';
@@ -100,7 +100,9 @@ export function editProjectTemplate(t, onDone) {
       item.gearQty = Object.fromEntries(Object.entries(item.gearQty || {}).filter(([id]) => (item.gear || []).includes(id)));
       upsert('projectTemplates', item); toast(isNew ? 'Template created' : 'Template saved'); onDone && onDone(item);
     },
-    onDelete: isNew ? null : () => { remove('projectTemplates', t.id); toast('Template deleted'); onDone && onDone(null); },
+    // Its bookings go back to the built-in type its checklists started from: left pointing at a template that is gone,
+    // they would lose those checklists and read "Other".
+    onDelete: isNew ? null : () => { const base = TYPES.some(x => x[0] === t.base) ? t.base : 'other'; if (db.bookings.some(b => b.type === t.id)) update(d => { for (const b of d.bookings) if (b.type === t.id) { b.type = base; b.updatedAt = Date.now(); } }); remove('projectTemplates', t.id); toast('Template deleted'); onDone && onDone(null); },
   });
 }
 export function saveBookingAsTemplate(b, onDone) { editProjectTemplate({ ...templateFromBooking(b) }, onDone); }
@@ -170,10 +172,15 @@ export function templateFor(type) {
 }
 export const defaultLines = (type, stage) => [...(BASE[stage] || []), ...((EXTRA[baseType(type)] || {})[stage] || [])].map(x => (typeof x === 'string' ? x : x.t));
 
+// A line's tick is kept under its id. The id made of a-z and 0-9 is empty for a line in another script (Cyrillic, Greek,
+// Arabic, Chinese, emoji…) and the same for two lines that differ only in punctuation, and those lines would share
+// one tick: such a line gets a short stable mark of its whole text after the id. A line whose id is its own keeps it,
+// so the ticks already on bookings stay.
 export function itemsFor(b, stage) {
-  const tpl = templateFor(b.type)[stage] || [];
+  const tpl = templateFor(b.type)[stage] || [], used = new Set();
+  const idOf = t => { let id = itemId(stage, t); if (id.endsWith(':') || used.has(id)) id += '~' + shortHash(t); used.add(id); return id; };
   const extra = (b.extraChecks || []).filter(x => x.stage === stage).map(x => ({ t: x.text, id: x.id, custom: true }));
-  return [...tpl.map(x => ({ ...x, id: itemId(stage, x.t) })), ...extra].map(x => ({ ...x, done: !!(b.checks && b.checks[x.id]) }));
+  return [...tpl.map(x => ({ ...x, id: idOf(x.t) })), ...extra].map(x => ({ ...x, done: !!(b.checks && b.checks[x.id]) }));
 }
 export const progress = (b, stage) => { const items = itemsFor(b, stage); return { done: items.filter(x => x.done).length, total: items.length }; };
 export const setCheck = (b, id, done) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (!x) return; x.checks = { ...(x.checks || {}) }; if (done) x.checks[id] = Date.now(); else delete x.checks[id]; x.updatedAt = Date.now(); });
@@ -365,7 +372,11 @@ export const CREW_STATES = [['', 'Not asked'], ['asked', 'Asked'], ['confirmed',
 export function crewRow(b, c, { sub = '', onEdit = null } = {}) {
   const st = (b.crewStatus || {})[c.id] || '', call = (b.crewCall || {})[c.id] || '';
   const sel = h('select', { 'aria-label': `${c.name} status`, onchange: e => patch(b, x => { x.crewStatus = { ...(x.crewStatus || {}), [c.id]: e.target.value }; }) }, CREW_STATES.map(([v, l]) => h('option', { value: v, selected: v === st }, l)));
-  const callIn = h('input', { type: 'time', value: call, 'aria-label': `${c.name} call time`, onchange: e => patch(b, x => { x.crewCall = { ...(x.crewCall || {}), [c.id]: e.target.value }; }) });
+  // Saved when the box is left or Enter is pressed, not on every change: with a keyboard a browser reports a change
+  // after each part of a time typed over another, and each save draws the page again under the box. A time chosen in
+  // a phone's picker (no keyboard: a coarse pointer) comes as one change and is saved at once.
+  const saveCall = () => { const v = callIn.value, cur = ((byId('bookings', b.id) || b).crewCall || {})[c.id] || ''; if (v !== cur) patch(b, x => { x.crewCall = { ...(x.crewCall || {}), [c.id]: v }; }); };
+  const callIn = h('input', { type: 'time', value: call, 'aria-label': `${c.name} call time`, onblur: saveCall, onchange: () => { if (window.matchMedia && matchMedia('(pointer: coarse)').matches) saveCall(); }, onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); saveCall(); } } });
   const ask = `Hi ${String(c.name || '').split(' ')[0]}, are you free for "${b.title}" on ${fmtShort(b.date)}${b.start ? ' from ' + b.start : ''}${b.address ? ' at ' + b.address.split('\n')[0] : ''}? Role: ${c.role || 'crew'}. Let me know and I’ll send the call sheet.`;
   return h('div', { class: 'card crew-line' },
     h('div', { class: 'card-row' }, h('div', null, h('strong', null, c.name), h('div', { class: 'muted' }, [c.role, sub].filter(Boolean).join(' · '))), h('span', { class: 'pill ' + (st === 'confirmed' ? 'st-confirmed' : st === 'declined' ? 'st-cancelled' : st === 'asked' ? 'st-enquiry' : '') }, CREW_STATES.find(x => x[0] === st)[1])),

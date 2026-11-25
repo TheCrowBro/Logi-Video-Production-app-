@@ -190,7 +190,8 @@ body.search-open .update-bar { z-index: 80; } /* as under the menu: behind the p
 .icon-btn { background: transparent; border: 0; color: var(--muted); font-size: 1.15rem; cursor: pointer; width: var(--hit); height: var(--hit); border-radius: 10px; flex: none; } .icon-btn:hover { color: var(--accent); background: var(--bg2); }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin-bottom: 10px; display: block; width: 100%; text-align: left; color: inherit; font: inherit; }
 .card.tap { cursor: pointer; } .card.tap:hover { border-color: var(--accent); }
-.card.hero { border-left: 4px solid var(--accent); display: grid; gap: 4px; }
+.card.hero { border-left: 4px solid var(--accent); display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; overflow-wrap: anywhere; } .card.hero .card-row > h2 { min-width: 0; } /* a long unbroken name, client or pasted map link wraps inside the card: the column is the card's width, never its widest word */
+.card.tap { overflow-wrap: anywhere; } .cs-page > .muted, .sb-page > .muted { overflow-wrap: anywhere; }
 .card.center { text-align: center; }
 .card-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; } .card-row.wraps { flex-wrap: wrap; } /* a title and a button: the button under the title where the two do not fit side by side */
 .card-row > div:first-child { min-width: 0; overflow-wrap: break-word; } .card.stack { grid-template-columns: minmax(0, 1fr); } /* text wraps by word, buttons stay on screen */
@@ -769,8 +770,8 @@ html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .s
 /* Budget on a booking */
 .budget-amts { display: grid; justify-items: end; gap: 2px; text-align: right; white-space: nowrap; }
 #bk-budget .card.stack { grid-template-columns: minmax(0, 1fr); }
-#bk-budget .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-#bk-budget .stat b { font-size: clamp(.9rem, 3.8vw, 1.15rem); overflow-wrap: anywhere; }
+#bk-budget .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); } /* three across where the figures fit, fewer where they do not */
+#bk-budget .stat b { font-size: clamp(.9rem, 3.8vw, 1.15rem); white-space: nowrap; overflow-wrap: normal; } /* an amount is never split inside the number */
 .budget-cat > summary { grid-template-columns: minmax(0, 1fr) auto; } /* name and chevron: the chevron turns in place */
 .budget-cat .twirl-body { gap: 8px; }
 .crew-parts { display: grid; gap: 2px; }

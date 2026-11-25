@@ -1,5 +1,5 @@
 import { h, empty, fmtShort, safeUrl, telUrl, parseISO, daysUntil } from '../util.js';
-import { db, byId, upsert, remove, activeBookings, endOf } from '../store.js';
+import { db, byId, upsert, update, remove, activeBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
 import { miniMap, mapButtons, hasGeo } from '../map.js';
 
@@ -56,7 +56,10 @@ export function editVenue(v = {}, afterSave) {
       { key: 'checked', label: 'Rules last confirmed', type: 'date', hint: 'Set the date you last checked these rules with the venue.' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
-    onSave: val => { const item = { ...val, id: val.id || undefined }; upsert('venues', item); afterSave && afterSave(); },
+    // A corrected address goes to the bookings at this venue that still hold the old one (one typed by hand is left).
+    onSave: val => { const item = { ...val, id: val.id || undefined }, old = v.id ? (v.address || '').trim() : '', now = (item.address || '').trim(); upsert('venues', item);
+      if (old && old !== now && db.bookings.some(b => b.venueId === v.id && (b.address || '').trim() === old)) update(d => { for (const b of d.bookings) if (b.venueId === v.id && (b.address || '').trim() === old) { b.address = item.address || ''; b.updatedAt = Date.now(); } });
+      afterSave && afterSave(); },
     onDelete: v.id ? () => { remove('venues', v.id); S.view = 'list'; afterSave && afterSave(); } : null,
   });
 }

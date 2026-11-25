@@ -2,7 +2,7 @@
 //  1. Add-to-calendar links and .ics files (any service, one booking or all, one-way, on demand).
 //  2. A live .ics feed written into the linked cloud storage, which any calendar app can subscribe to.
 //  3. Two-way sync with Google Calendar or Microsoft 365 / Outlook through their APIs.
-import { h, sheet, toast, parseISO, ymd, fmtLong, fmtShort } from './util.js';
+import { h, sheet, toast, parseISO, ymd, fmtLong, fmtShort, icsText, icsFold } from './util.js';
 import { db, byId, update, subscribe, activeBookings, endOf, cloud, editDaysOf } from './store.js';
 import * as store from './store.js';
 import * as providers from './providers.js';
@@ -15,6 +15,11 @@ const dateOnly = iso => iso.replace(/-/g, '');
 const nextDay = iso => { const d = parseISO(iso); d.setDate(d.getDate() + 1); return ymd(d); };
 const localDate = (iso, hm) => { const [y, m, d] = iso.split('-').map(Number); const [hh, mm] = (hm || '00:00').split(':').map(Number); return new Date(y, m - 1, d, hh || 0, mm || 0); };
 const hm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+// A finish that is not after the start on its own day is the next morning's: an overnight shoot. The next calendar
+// day, not 24 hours on, so the night the clocks change still ends at the time on the clock. No finish: an hour.
+const endAfter = (start, iso, finish) => { const end = localDate(iso, finish || '00:00'); if (finish && end > start) return end; if (!finish) return new Date(start.getTime() + 36e5); end.setDate(end.getDate() + 1); return end; };
+const daysApart = (a, b) => Math.round((parseISO(b) - parseISO(a)) / 864e5);
+const addDays = (iso, n) => { const d = parseISO(iso); d.setDate(d.getDate() + n); return ymd(d); };
 export const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
 const CAL_NAME = 'Vdex bookings';
 const NAMES = { google: 'Google Calendar', microsoft: 'Microsoft 365 / Outlook', apple: 'This phone’s calendar' };
@@ -27,18 +32,18 @@ export function eventOf(b) {
   const start = allDay ? b.date : localDate(b.date, b.start);
   let end;
   if (allDay) end = nextDay(endOf(b)); // all-day end is exclusive
-  else { end = localDate(endOf(b), b.end || b.start); if (end <= start) end = new Date(start.getTime() + 36e5); }
+  else { end = localDate(endOf(b), b.end || b.start); if (end <= start) end = endAfter(start, endOf(b), b.end); }
   const crew = (b.crew || []).map(id => byId('crew', id)).filter(Boolean).map(c => c.name + (c.role ? ` (${c.role})` : ''));
+  const gearN = (b.gear || []).filter(id => byId('gear', id)).length;
   const lines = [b.client && 'Client: ' + b.client, 'Status: ' + b.status, venue && 'Venue: ' + venue.name, crew.length && 'Crew: ' + crew.join(', '),
     (b.stakeholders || []).length && 'Contacts: ' + b.stakeholders.map(s => [s.name, s.role, s.phone].filter(Boolean).join(' ')).join('; '),
-    (b.gear || []).length && `Equipment: ${b.gear.length} item${b.gear.length === 1 ? '' : 's'}`, b.notes && '\n' + b.notes, '\nVdex booking ' + b.id].filter(Boolean);
+    gearN > 0 && `Equipment: ${gearN} item${gearN === 1 ? '' : 's'}`, b.notes && '\n' + b.notes, '\nVdex booking ' + b.id].filter(Boolean);
   return { id: b.id, uid: `vdex-${b.id}@vdex.app`, title: b.title + (b.client ? ' — ' + b.client : ''), allDay, start, end, location, description: lines.join('\n'), status: b.status === 'Cancelled' ? 'CANCELLED' : b.status === 'Enquiry' ? 'TENTATIVE' : 'CONFIRMED' };
 }
 const hashOf = e => JSON.stringify([e.title, e.allDay, e.allDay ? e.start : e.start.getTime(), e.allDay ? e.end : e.end.getTime(), e.location, e.description, e.status]);
 
 /* --------------------------------- .ics --------------------------------- */
-const esc = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
-const fold = line => { const out = []; let s = line; while (s.length > 74) { out.push(s.slice(0, 74)); s = ' ' + s.slice(74); } out.push(s); return out.join('\r\n'); };
+const esc = icsText, fold = icsFold; // shared with the crew page's calendar file (js/util.js)
 export function icsFor(bookings, extra = [], name = CAL_NAME) {
   const now = utc(new Date());
   const out = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vdex//Production Deck//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:' + esc(name), 'X-PUBLISHED-TTL:PT1H', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
@@ -61,7 +66,7 @@ export function editEvents(bookings = activeBookings()) {
   const out = [];
   for (const b of bookings) for (const d of editDaysOf(b)) {
     const allDay = !d.start, start = allDay ? d.date : localDate(d.date, d.start);
-    let end; if (allDay) end = nextDay(d.date); else { end = localDate(d.date, d.end || d.start); if (end <= start) end = new Date(start.getTime() + 36e5); }
+    let end; if (allDay) end = nextDay(d.date); else end = endAfter(start, d.date, d.end);
     out.push({ id: 'edit:' + b.id + ':' + d.date, uid: `vdex-edit-${b.id}-${d.date}@vdex.app`, title: `Edit: ${b.title}${b.client ? ' — ' + b.client : ''}`, allDay, start, end, location: '', description: `Edit day for ${b.title}${b.client ? ' (' + b.client + ')' : ''}\n\nVdex booking ${b.id}`, status: b.status === 'Cancelled' ? 'CANCELLED' : 'CONFIRMED', updatedAt: b.updatedAt });
   }
   return out;
@@ -123,14 +128,36 @@ const LINKS = {
 };
 const which = w => (w === 'phone' ? [LINKS.phone] : w === 'account' ? [LINKS.account] : [LINKS.account, LINKS.phone]);
 
-// What a calendar edit means for the booking: date(s), times, title and address follow the event.
+// What a calendar edit means for the booking: date(s), times, title and address follow the event. The event is set
+// against what Vdex sent (eventOf), never against the booking's own boxes: a finish Vdex had to make up for the
+// calendar (an hour for a shoot with no finish, the next morning for an overnight one) is not an edit, and only a
+// start or an end that was moved in the calendar is written back.
 function patchFromEvent(b, r) {
-  const patch = {};
-  if (r.allDay) { if (r.start !== b.date) patch.date = r.start; const last = (() => { const d = parseISO(r.end); d.setDate(d.getDate() - 1); return ymd(d); })(); const endDate = last > r.start ? last : undefined; if ((b.endDate || undefined) !== endDate) patch.endDate = endDate; if (b.start) { patch.start = ''; patch.end = ''; } }
-  else { const s = new Date(r.start), e = new Date(r.end); if (ymd(s) !== b.date) patch.date = ymd(s); const endDate = ymd(e) > ymd(s) ? ymd(e) : undefined; if ((b.endDate || undefined) !== endDate) patch.endDate = endDate; if (hm(s) !== (b.start || '')) patch.start = hm(s); if (hm(e) !== (b.end || '')) patch.end = hm(e); }
+  const patch = {}, ev = eventOf(b), multi = endOf(b) > b.date;
+  const put = (k, v) => { if ((b[k] || '') !== (v || '')) patch[k] = v || undefined; };
+  if (r.allDay) {
+    if (!ev.allDay || r.start !== ev.start || r.end !== ev.end) {
+      const last = addDays(r.end, -1);
+      put('date', r.start); put('endDate', last > r.start ? last : ''); put('start', ''); put('end', '');
+    }
+  } else {
+    const s = new Date(r.start), e = new Date(r.end);
+    const startMoved = ev.allDay || s.getTime() !== ev.start.getTime(), endMoved = ev.allDay || e.getTime() !== ev.end.getTime();
+    if (startMoved || endMoved) {
+      const date = ymd(s), start = hm(s), sameLength = !ev.allDay && e.getTime() - s.getTime() === ev.end.getTime() - ev.start.getTime();
+      let end, endDate;
+      if (!ev.allDay && !b.end && (!endMoved || sameLength)) { // no finish in Vdex, and the event was only moved: still no finish
+        end = ''; endDate = !multi ? '' : endMoved ? addDays(b.endDate, daysApart(b.date, date)) : b.endDate;
+      } else { // a finish the next morning, on a one-day shoot, is an overnight finish and not a second day
+        end = hm(e); const span = daysApart(date, ymd(e));
+        endDate = span <= 0 || (span === 1 && !multi && end <= start) ? '' : ymd(e);
+      }
+      put('date', date); put('start', start); put('end', end); put('endDate', endDate > date ? endDate : '');
+    }
+  }
   const title = b.client && r.title.endsWith(' — ' + b.client) ? r.title.slice(0, -(' — ' + b.client).length) : r.title;
   if (title && title !== b.title) patch.title = title;
-  if ((r.location || '') !== eventOf(b).location) patch.address = r.location || ''; // eventOf: the booking's address, or its venue's
+  if ((r.location || '') !== ev.location) patch.address = r.location || ''; // eventOf: the booking's address, or its venue's
   return Object.keys(patch).length ? patch : null;
 }
 
@@ -143,19 +170,33 @@ function spanOf(events, mapping) {
 }
 async function runSync(link, interactive) {
   const cs = link.get(); const ad = link.adapter();
-  if (!ad || link.busy) return;
-  link.busy = true; setState(link.state, 'syncing');
+  if (!ad) return;
+  if (link.busy) { link.again = true; return; } // asked for while one is running (a booking changed meanwhile): it runs once more when this one ends
+  link.busy = true; link.reached = false; setState(link.state, 'syncing');
   const mapping = { ...(cs.events || {}) }; let calendarId = cs.calendarId;
   try {
-    calendarId = await ad.ensureCalendar(calendarId, interactive);
+    calendarId = await ad.ensureCalendar(calendarId, interactive); link.reached = true;
     const wanted = () => [...activeBookings().map(b => ({ key: b.id, e: eventOf(b) })), ...dueEvents().map(e => ({ key: e.id, e })), ...editEvents().map(e => ({ key: e.id, e }))];
     const remote = await ad.list(calendarId, interactive, spanOf(wanted().map(w => w.e), mapping));
     const byLogi = new Map(remote.filter(r => r.logiId).map(r => [r.logiId, r]));
     // adopt events another device already created, so they are updated rather than duplicated
     for (const r of remote) if (r.logiId && !mapping[r.logiId] && (byId('bookings', r.logiId) || r.logiId.startsWith('del:') || r.logiId.startsWith('edit:'))) mapping[r.logiId] = { id: r.id, hash: '', at: 0 };
-    // pull: edits made in the calendar since we last touched the event
+    // pull: edits made in the calendar. The two clocks are never set against each other (this device's can be seconds or
+    // minutes out, and Vdex's own push would then pass for a calendar edit and undo what was just changed here):
+    //  - a booking changed in Vdex since its last push (its hash differs), or an event taken over without one, goes out
+    //    as Vdex has it, in the push below;
+    //  - otherwise the event is looked at when the calendar's own stamp has moved since Vdex last looked at it (seen),
+    //    or when that stamp is not known yet (the first listing after a push), and what differs from what was sent is
+    //    a calendar edit.
     const changes = [];
-    for (const [bid, m] of Object.entries(mapping)) { if (bid.startsWith('del:') || bid.startsWith('edit:')) continue; const r = byLogi.get(bid), b = byId('bookings', bid); if (r && b && r.updated > m.at + 2000 && r.updated > (Number(b.updatedAt) || 0)) { const p = patchFromEvent(b, r); if (p) changes.push([bid, p]); } }
+    for (const [bid, m] of Object.entries(mapping)) {
+      if (bid.startsWith('del:') || bid.startsWith('edit:')) continue;
+      const r = byLogi.get(bid), b = byId('bookings', bid); if (!r || !b) continue;
+      if (!m.hash || hashOf(eventOf(b)) !== m.hash) continue;
+      if (m.seen != null && r.updated && r.updated <= m.seen) continue;
+      const p = patchFromEvent(b, r); if (p) changes.push([bid, p]);
+      if ((m.seen || null) !== (r.updated || null)) mapping[bid] = { ...m, seen: r.updated || null };
+    }
     if (changes.length) update(d => { for (const [bid, p] of changes) { const b = d.bookings.find(x => x.id === bid); if (b) { Object.assign(b, p); for (const k of ['endDate', 'start', 'end']) if (b[k] === undefined || b[k] === '') delete b[k]; b.updatedAt = Date.now(); } } });
     // push: what the bookings are now, after the pull
     const want = wanted(), wantIds = new Set(want.map(w => w.key));
@@ -173,8 +214,11 @@ async function runSync(link, interactive) {
     if (status === 'needs-auth' && !interactive && !pausedSaid && link === LINKS.account) { pausedSaid = true; toast(`${link.name()} is paused until you sign in again: Bookings → Calendar & email → Sync now.`); }
   } finally {
     link.busy = false;
-    if (link.adapter()) link.save(calendarId, mapping); // unless it was disconnected meanwhile
+    // Saved only when something changed (a save redraws the page and writes the cloud copy), and never after a disconnect.
+    const now = link.adapter() && link.get();
+    if (now && (calendarId !== now.calendarId || JSON.stringify(mapping) !== JSON.stringify(now.events || {}))) link.save(calendarId, mapping);
   }
+  if (link.again) { link.again = false; await runSync(link, false); }
 }
 // Keeps the calendars in step now: both links, or one of them (which: 'account' | 'phone').
 export async function syncCalendar({ interactive = false, which: w } = {}) { await Promise.all(which(w).map(l => runSync(l, interactive))); }
@@ -192,14 +236,17 @@ export async function connectCalendar(provider) {
   // (Microsoft's sign-in goes to its page and back; the way back connects it.)
   try { await ADAPTERS[provider].signIn(); }
   catch (e) { if (e.name === 'AbortError') return; if (/^Carry on in your web browser/.test(e.message)) { toast(e.message); return; } throw e; }
-  update(d => { d.calSync = { ...d.calSync, provider, calendarId: null, events: {}, updatedAt: Date.now() }; });
+  // The calendar Vdex made for this service before a Disconnect is used again (calendarFor names the service its id
+  // belongs to): ensureCalendar makes a new one only when that one is gone, as with another account. Without it every
+  // Disconnect and Connect left one more "Vdex bookings" calendar behind, with every booking in it.
+  update(d => { const was = d.calSync || {}; d.calSync = { ...was, provider, calendarId: (was.calendarFor || was.provider) === provider ? was.calendarId || null : null, calendarFor: provider, events: {}, updatedAt: Date.now() }; });
   await runSync(LINKS.account, true);
   if (/^Carry on in your web browser/.test(calState.error || '')) { toast(calState.error); return; } // carries on in the web browser (desktop app)
-  if (['error', 'needs-auth'].includes(calState.status) && !db.calSync?.calendarId) { const msg = calState.error || 'Sign-in did not finish'; update(d => { d.calSync = { ...d.calSync, provider: null, updatedAt: Date.now() }; }); setState(calState, 'idle'); throw new Error(msg); }
+  if (['error', 'needs-auth'].includes(calState.status) && (!db.calSync?.calendarId || !LINKS.account.reached)) { const msg = calState.error || 'Sign-in did not finish'; update(d => { d.calSync = { ...d.calSync, provider: null, updatedAt: Date.now() }; }); setState(calState, 'idle'); throw new Error(msg); }
 }
 export function disconnectCalendar(w = 'account') {
   if (w === 'phone') { savePhone(null); setState(phoneState, 'idle'); return; }
-  ADAPTERS[db.calSync?.provider]?.signOut?.(); update(d => { d.calSync = { ...d.calSync, provider: null, calendarId: null, events: {}, updatedAt: Date.now() }; }); setState(calState, 'idle');
+  ADAPTERS[db.calSync?.provider]?.signOut?.(); update(d => { const was = d.calSync || {}; d.calSync = { ...was, provider: null, calendarFor: was.provider || was.calendarFor || null, events: {}, updatedAt: Date.now() }; }); setState(calState, 'idle'); // the calendar's id is kept for the next Connect
 }
 
 // Push automatically after booking edits while a link is connected (only when a token is already in hand).

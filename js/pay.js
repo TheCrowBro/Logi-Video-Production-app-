@@ -56,7 +56,7 @@ export const labelFor = m => clean(m.label) || DEFAULT_LABEL[m.type] || 'Pay onl
 export function linkFor(m, { amount = 0, code = 'USD', reference = '', payee = '' } = {}) {
   const amt = amountStr(amount), v = clean(m.value);
   switch (m.type) {
-    case 'paypal': return v ? `https://paypal.me/${esc(handle(v))}/${amt}${code}` : '';
+    case 'paypal': return v ? `https://paypal.me/${esc(handle(v))}/${amt}${/^[A-Z]{3}$/.test(code || '') ? code : ''}` : ''; // no currency known: PayPal asks in the payee's own
     case 'venmo': return v ? `https://venmo.com/${esc(handle(v))}?txn=pay&amount=${amt}&note=${esc(reference)}` : '';
     case 'cashapp': return v ? `https://cash.app/$${esc(handle(v))}/${amt}` : '';
     case 'revolut': return v ? `https://revolut.me/${esc(handle(v))}` : '';
@@ -81,11 +81,15 @@ export function payTexts(pay = {}) {
   return lines;
 }
 export const bankLines = payTexts; // older name
-// EPC069-12, the "GiroCode" most European banking apps scan to fill in a transfer. Amounts only in euro.
+// EPC069-12, the "GiroCode" most European banking apps scan to fill in a transfer. Amounts only in euro, and only for
+// an account that is an IBAN (its shape and its check digits are tested): any other account number would make a code
+// no banking app can use, under a caption that says to scan it.
+export const isIban = v => { const s = clean(v).replace(/\s+/g, '').toUpperCase(); if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(s)) return false; let r = 0; for (const ch of s.slice(4) + s.slice(0, 4)) for (const d of String(parseInt(ch, 36))) r = (r * 10 + Number(d)) % 97; return r === 1; };
 export function epcPayload(pay = {}, { amount = 0, code = 'USD', reference = '' } = {}) {
   const m = methodsOf(pay).find(x => x.type === 'bank') || (pay.iban ? pay : null);
   const iban = m ? clean(m.iban).replace(/\s+/g, '').toUpperCase() : '';
-  if (!iban) return '';
-  return ['BCD', '002', '1', 'SCT', clean(m.bic).replace(/\s+/g, '').toUpperCase(), (clean(m.accountName) || 'Payee').slice(0, 70), iban, code === 'EUR' && Number(amount) > 0 ? 'EUR' + amountStr(amount) : '', '', '', clean(reference).slice(0, 140)].join('\n');
+  if (!iban || !isIban(iban)) return '';
+  const bic = clean(m.bic).replace(/\s+/g, '').toUpperCase();
+  return ['BCD', '002', '1', 'SCT', /^[A-Z0-9]{8}([A-Z0-9]{3})?$/.test(bic) ? bic : '', (clean(m.accountName) || 'Payee').slice(0, 70), iban, code === 'EUR' && Number(amount) > 0 ? 'EUR' + amountStr(amount) : '', '', '', clean(reference).slice(0, 140)].join('\n');
 }
 export const hasPay = pay => payLinks(pay, { amount: 1 }).length > 0 || payTexts(pay).length > 0;

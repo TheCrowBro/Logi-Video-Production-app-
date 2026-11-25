@@ -1,4 +1,4 @@
-import { h, sheet, toast } from './util.js';
+import { h, sheet, toast, redrawKeeping } from './util.js';
 import { createRolodex } from './rolodex.js';
 import * as store from './store.js';
 import { storagePanel, backupPanel } from './storage-ui.js';
@@ -103,21 +103,20 @@ function show(i, dir = 0) {
 // Re-render the active page when data changes (field tools keep their own live state).
 // Redraws are coalesced: a burst of changes in one go (an import, a template applied, a merge) draws the page once.
 let redrawQueued = false;
-// What identifies a control across a redraw: its kind, its id or label, and the text around it (a checklist box is
-// known by its line). The same control in the new page gets the focus back, so ticking by keyboard stays in place.
-const focusKey = el => (el && el !== document.body && page.contains(el) ? [el.tagName, el.type || '', el.id || el.getAttribute('aria-label') || el.name || '', ((el.closest('label') || el).textContent || '').trim().slice(0, 80)].join('|') : null);
+// The control that had the focus has it again afterwards, with what was being typed in it (redrawKeeping in js/util.js).
 function redraw() {
   redrawQueued = false;
   const p = current >= 0 && tabs[current] && tabs[current].page;
   if (!p || p.static) return; // a section still loading draws itself fresh when it arrives
-  const y = window.scrollY, key = focusKey(document.activeElement);
+  const y = window.scrollY;
   const holder = page.firstElementChild;
   if (!holder) return;
-  cleanup && cleanup();
-  holder.replaceChildren();
-  cleanup = p.render(holder) || null;
-  window.scrollTo(0, y);
-  if (key) { const again = [...holder.querySelectorAll('button, input, select, textarea, a[href], summary, [tabindex]')].find(el => focusKey(el) === key); if (again) again.focus({ preventScroll: true }); }
+  redrawKeeping(holder, () => {
+    cleanup && cleanup();
+    holder.replaceChildren();
+    cleanup = p.render(holder) || null;
+    window.scrollTo(0, y);
+  });
 }
 store.subscribe(reason => {
   paintCloud();

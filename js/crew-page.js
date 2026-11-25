@@ -2,7 +2,7 @@
 // copy of Vdex, drawn here read-only. No store, no account, nothing fetched but this page. Only the fields below are
 // ever shown, and the link never carries money: no prices, rates, budgets, quotes or invoices. Someone who uses Vdex
 // can add the shoot to their own Bookings: "Add to my Vdex" hands the same packed link to the app (js/share-add.js).
-import { h, fmtLong, fmtShort, mapsUrl, telUrl } from './util.js';
+import { h, fmtLong, fmtShort, mapsUrl, telUrl, icsText, icsFold as fold } from './util.js';
 import { readShared, addHref, elsewhere, isDate } from './share-data.js';
 
 const bar = document.getElementById('bar'), box = document.getElementById('doc');
@@ -15,16 +15,14 @@ const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
 // A calendar file for the shoot, made here from what the link carries. Every value is cleaned first (a link can be
 // made by anyone), each line is folded at 75 bytes, and the event keeps one id per shoot so a newer link updates it.
-const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
-const fold = line => { const out = []; let cur = '', bytes = 0; for (const ch of line) { const n = new TextEncoder().encode(ch).length; if (bytes + n > 74) { out.push(cur); cur = ' '; bytes = 1; } cur += ch; bytes += n; } out.push(cur); return out.join('\r\n'); };
 const TIME = /^(\d{1,2}):(\d{2})$/;
-const at = (d, t) => { const [y, m, dd] = d.split('-').map(Number), x = TIME.exec(t || ''); return x ? new Date(y, m - 1, dd, Number(x[1]), Number(x[2])) : null; };
+const at = (d, t, add = 0) => { const [y, m, dd] = d.split('-').map(Number), x = TIME.exec(t || ''); return x ? new Date(y, m - 1, dd + add, Number(x[1]), Number(x[2])) : null; };
 const stamp = x => `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}T${String(x.getHours()).padStart(2, '0')}${String(x.getMinutes()).padStart(2, '0')}00`;
 const dayStamp = (d, add = 0) => { const [y, m, dd] = d.split('-').map(Number), x = new Date(y, m - 1, dd + add); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
 function ics(snap) {
   const last = snap.endDate || snap.date, start = at(snap.date, snap.call.general || snap.start);
   let end = at(last, snap.call.wrap || snap.end);
-  if (start && end && end <= start) end = new Date(end.getTime() + 864e5); // an overnight shoot wraps the next morning
+  if (start && end && end <= start) end = at(last, snap.call.wrap || snap.end, 1); // an overnight shoot wraps the next morning: the next day at that time, also on the night the clocks change
   if (start && !end) end = new Date(start.getTime() + 36e5);              // no wrap time: an hour, rather than no length
   const made = snap.made || Date.now();
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vdex//Crew//EN', 'BEGIN:VEVENT',

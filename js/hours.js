@@ -75,12 +75,17 @@ export const deleteShift = id => remove('shifts', id);
 // Manual entry or correction: date, times and a single break total.
 export function editShift(s, bookingId) {
   const toTime = ms => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
-  const vals = s ? { bookingId: s.bookingId, kind: kindOf(s), date: s.date, start: toTime(s.start), end: s.end ? toTime(s.end) : '', breakMin: Math.round(breakMs(s) / 6e4), note: s.note || '' } : { bookingId: bookingId || '', kind: 'shoot', date: todayISO(), start: '08:00', end: '18:00', breakMin: defaultBreak(), note: '' };
+  // A break that is still running (the entry is opened from Hours & statistics while on a break) is not one of the
+  // minutes in the box: it stays as it is when the entry is saved, and ends with the entry when a finish is entered.
+  const open = s && !s.end ? (s.breaks || []).filter(b => !b.end) : [];
+  const doneMs = s ? (s.breaks || []).filter(b => b.end).reduce((t, b) => t + Math.max(0, b.end - b.start), 0) : 0;
+  // Hours whose booking is gone belong to no project, and stay that way unless one is chosen.
+  const vals = s ? { bookingId: byId('bookings', s.bookingId) ? s.bookingId : '', kind: kindOf(s), date: s.date, start: toTime(s.start), end: s.end ? toTime(s.end) : '', breakMin: Math.round(doneMs / 6e4), note: s.note || '' } : { bookingId: bookingId || '', kind: 'shoot', date: todayISO(), start: '08:00', end: '18:00', breakMin: defaultBreak(), note: '' };
   openForm({
     title: s ? 'Edit hours' : 'Add hours',
     values: vals,
     fields: [
-      { key: 'bookingId', label: 'Project', type: 'select', options: [...db.bookings].sort((a, b) => b.date.localeCompare(a.date)).map(b => [b.id, `${fmtShort(b.date)} — ${b.title}`]) },
+      { key: 'bookingId', label: 'Project', type: 'select', options: [['', 'No project'], ...[...db.bookings].sort((a, b) => b.date.localeCompare(a.date)).map(b => [b.id, `${fmtShort(b.date)} — ${b.title}`])] },
       { key: 'kind', label: 'Kind', type: 'select', options: [['shoot', 'Shoot day'], ['edit', 'Edit / post']] },
       { key: 'date', label: 'Date', type: 'date', required: true },
       { key: 'start', label: 'Start', type: 'time', required: true },
@@ -91,12 +96,15 @@ export function editShift(s, bookingId) {
     onSave: v => {
       const [sh, sm] = v.start.split(':').map(Number); const base = parseISO(v.date); const start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), sh, sm).getTime();
       let end = null;
-      if (v.end) { const [eh, em] = v.end.split(':').map(Number); end = new Date(base.getFullYear(), base.getMonth(), base.getDate(), eh, em).getTime(); if (end <= start) end += 864e5; }
+      // A finish that is not after the start is the next morning's: the next day at that time, not 24 hours on, so the
+      // night the clocks change still counts the hours that were worked.
+      if (v.end) { const [eh, em] = v.end.split(':').map(Number); end = new Date(base.getFullYear(), base.getMonth(), base.getDate(), eh, em).getTime(); if (end <= start) end = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1, eh, em).getTime(); }
       const bm = Math.max(0, Number(v.breakMin) || 0) * 6e4;
-      const breaks = bm ? [{ start, end: start + bm }] : [];
+      const breaks = [...(bm ? [{ start, end: start + bm }] : []), ...open.map(b => (end ? { ...b, end: Math.max(b.start, Math.min(end, Date.now())) } : b))];
+      const bookingId = v.bookingId || null;
       update(d => {
-        if (s) { const x = d.shifts.find(y => y.id === s.id); if (x) Object.assign(x, touch({ bookingId: v.bookingId, kind: v.kind, date: v.date, start, end, breaks, note: v.note })); }
-        else d.shifts.push(touch({ id: uid(), bookingId: v.bookingId, kind: v.kind, date: v.date, start, end, breaks, note: v.note }));
+        if (s) { const x = d.shifts.find(y => y.id === s.id); if (x) Object.assign(x, touch({ bookingId, kind: v.kind, date: v.date, start, end, breaks, note: v.note })); }
+        else d.shifts.push(touch({ id: uid(), bookingId, kind: v.kind, date: v.date, start, end, breaks, note: v.note }));
       });
     },
     onDelete: s ? () => deleteShift(s.id) : null,
@@ -105,6 +113,7 @@ export function editShift(s, bookingId) {
 
 /* --------------------------------- chart --------------------------------- */
 // Hours per week, one series: single hue, thin columns rounded only at the data end, hairline solid grid, tooltip per bar.
+// The top margin leaves room for this week's figure over a bar that reaches the top line of the scale.
 function weeklyChart(shifts, weeks = 12) {
   const ns = 'http://www.w3.org/2000/svg';
   const el = (n, a, ...kids) => { const e = document.createElementNS(ns, n); for (const k in a) e.setAttribute(k, a[k]); kids.forEach(k => e.append(k)); return e; };
@@ -113,7 +122,7 @@ function weeklyChart(shifts, weeks = 12) {
   for (const s of shifts) { const k = ymd(weekStart(parseISO(s.date))); const c = cols.find(x => x.key === k); if (c) { c.ms += workedMs(s); c.breaks += breakMs(s); c.days.add(s.date); } }
   const max = Math.max(1, ...cols.map(c => hrs(c.ms)));
   const step = max <= 10 ? 2 : max <= 25 ? 5 : max <= 50 ? 10 : 20, top = Math.ceil(max / step) * step;
-  const W = 360, Hh = 170, padL = 30, padR = 8, padT = 10, padB = 26, pw = W - padL - padR, ph = Hh - padT - padB;
+  const W = 360, Hh = 170, padL = 30, padR = 8, padT = 18, padB = 26, pw = W - padL - padR, ph = Hh - padT - padB;
   const y = v => padT + ph - (v / top) * ph, slot = pw / weeks, bw = Math.min(24, slot * 0.6);
   const svg = el('svg', { viewBox: `0 0 ${W} ${Hh}`, class: 'hrs-chart', role: 'img', 'aria-label': `Hours worked per week, last ${weeks} weeks` });
   for (let v = 0; v <= top; v += step) {
@@ -139,11 +148,12 @@ function weeklyChart(shifts, weeks = 12) {
   return h('div', { class: 'hrs-chart-wrap' }, h('div', { class: 'hrs-tipwrap' }, tip), svg, table);
 }
 
+const projectName = id => byId('bookings', id)?.title || (id ? 'Deleted booking' : 'No project');
 // Hours by project: nominal categories, so one hue; values at the tip; at most eight bars, the rest folded.
 function projectBars(shifts) {
   const by = new Map();
   for (const s of shifts) by.set(s.bookingId, (by.get(s.bookingId) || 0) + workedMs(s));
-  let rows = [...by].map(([id, ms]) => ({ id, name: byId('bookings', id)?.title || 'Deleted booking', ms })).sort((a, b) => b.ms - a.ms);
+  let rows = [...by].map(([id, ms]) => ({ id, name: projectName(id), ms })).sort((a, b) => b.ms - a.ms);
   if (rows.length > 8) rows = [...rows.slice(0, 7), { id: null, name: 'Other', ms: rows.slice(7).reduce((t, r) => t + r.ms, 0) }];
   const max = Math.max(1, ...rows.map(r => r.ms));
   return h('div', { class: 'hrs-projects' }, rows.map(r => h('div', { class: 'hrs-row', title: fmtHm(r.ms) },
@@ -165,12 +175,12 @@ export function hoursPanel({ bookingId = null } = {}) {
       all.some(s => kindOf(s) === 'edit') && h('div', { class: 'chips', role: 'group', 'aria-label': 'Kind of work' }, [['all', 'Shoot + edit'], ['shoot', 'Shoot days'], ['edit', 'Edit / post']].map(([k, l]) => h('button', { class: 'chip' + (kind === k ? ' on' : ''), 'aria-pressed': kind === k, onclick: () => { kind = k; draw(); } }, l))),
       h('div', { class: 'stats' }, tile('hours', fmtHm(st.worked)), tile('days', String(st.days)), tile('avg day', fmtHm(st.avg)), tile('breaks', fmtHm(st.breaks)), tile('overtime', fmtHm(st.overtime), `over ${standardDay()}h days`), tile('longest day', fmtHm(st.longest))),
       live && h('div', { class: 'warn small' }, `Clock running on “${byId('bookings', live.bookingId)?.title || 'a booking'}” since ${new Date(live.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}${onBreak(live) ? ' (on break)' : ''}.`),
-      h('h3', null, 'Hours per week'), weeklyChart(all),
+      h('h3', null, 'Hours per week'), weeklyChart(all.filter(s => kind === 'all' || kindOf(s) === kind)),
       !bookingId && shifts.length > 0 && [h('h3', null, 'By project'), projectBars(shifts)],
       h('div', { class: 'card-row' }, h('h3', null, `Days (${shifts.length})`), h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => editShift(null, bookingId) }, '+ Add hours'), shifts.length > 0 && h('button', { class: 'btn ghost small', onclick: () => exportCsv(shifts) }, '⬇ CSV'))),
       shifts.length
         ? h('div', { class: 'list' }, shifts.map(s => h('button', { class: 'card tap hrs-shift', type: 'button', onclick: () => editShift(s) },
-          h('div', { class: 'card-row' }, h('div', null, h('strong', null, fmtShort(s.date), kindOf(s) === 'edit' && h('span', { class: 'tag' }, ' ✂ edit')), !bookingId && h('div', { class: 'muted small' }, byId('bookings', s.bookingId)?.title || 'Deleted booking')), h('span', { class: 'pill ' + (s.end ? '' : 'st-cancelled rec') }, s.end ? fmtHm(workedMs(s)) : 'running')),
+          h('div', { class: 'card-row' }, h('div', null, h('strong', null, fmtShort(s.date), kindOf(s) === 'edit' && h('span', { class: 'tag' }, ' ✂ edit')), !bookingId && h('div', { class: 'muted small' }, projectName(s.bookingId))), h('span', { class: 'pill ' + (s.end ? '' : 'st-cancelled rec') }, s.end ? fmtHm(workedMs(s)) : 'running')),
           h('div', { class: 'muted small' }, `${new Date(s.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${s.end ? new Date(s.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '…'} · breaks ${fmtHm(breakMs(s))}${s.note ? ' · ' + s.note : ''}`))))
         : h('p', { class: 'muted small' }, 'No hours in this period. Start work from the booking on the day, or add hours by hand.'),
       h('p', { class: 'muted small' }, `Overtime counts anything beyond a ${standardDay()}-hour day. Change the standard day and the default approved break under Settings → Work & billing → Hours & breaks.`)));
@@ -188,7 +198,7 @@ function exportCsv(shifts) {
   if (!requirePaid('export')) return; // spreadsheets come with a licence
   const q = csvText; // a project, a client or a note is text: never run as a formula by the spreadsheet that opens the file
   const rows = ['Date,Project,Client,Kind,Start,Finish,Breaks (min),Worked (h),Note', ...shifts.map(s => { const b = byId('bookings', s.bookingId) || {}; return [s.date, q(b.title || ''), q(b.client || ''), kindOf(s), new Date(s.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), s.end ? new Date(s.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '', Math.round(breakMs(s) / 6e4), hrs(workedMs(s)), q(s.note || '')].join(','); })];
-  const file = new File([rows.join('\n') + '\n'], 'vdex-hours.csv', { type: 'text/csv' });
+  const file = new File(['\ufeff' + rows.join('\r\n') + '\r\n'], 'vdex-hours.csv', { type: 'text/csv' }); // the mark Excel needs to read accented names, as in the budget and invoice files
   if (native.canShareFiles()) { native.files.share(file.name, file, file.type, { title: 'Vdex hours' }).catch(() => {}); return; }
   if (navigator.canShare?.({ files: [file] })) { navigator.share({ files: [file], title: 'Vdex hours' }).catch(() => {}); return; }
   const a = h('a', { href: URL.createObjectURL(file), download: file.name }); document.body.append(a); a.click(); a.remove(); toast('CSV saved');

@@ -1,9 +1,16 @@
 // A small PDF writer with no library: A4 pages, Helvetica and Helvetica-Bold, word wrapping, simple tables and page
-// numbers. Enough for a call sheet. Characters outside the Latin set (emoji, other scripts) are dropped or become '?'.
+// numbers. Enough for a call sheet. Emoji are dropped; a letter of another script becomes '?'.
 const W = 595.28, H = 841.89, M = 42, FOOT = 24;
 // Helvetica glyph widths for codes 32–126 (per 1000 units); bold is a touch wider, so it is scaled when measuring.
 const WIDTHS = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584];
-const MAP = { '—': 0x97, '–': 0x96, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95, '…': 0x85, '€': 0x80, '™': 0x99, ' ': 0x20, '→': 0x3e, '×': 0xd7 };
+const MAP = { '—': 0x97, '–': 0x96, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95, '…': 0x85, '€': 0x80, '™': 0x99, ' ': 0x20, '→': 0x3e, '×': 0xd7,
+  'Š': 0x8a, 'š': 0x9a, 'Ž': 0x8e, 'ž': 0x9e, 'Œ': 0x8c, 'œ': 0x9c, 'Ÿ': 0x9f, 'ƒ': 0x83, '‚': 0x82, '„': 0x84, '‹': 0x8b, '›': 0x9b, '‰': 0x89, '†': 0x86, '‡': 0x87,
+  '\u202f': 0x20, '\u2009': 0x20, '\u2007': 0x20, '\u2002': 0x20, '\u2003': 0x20 }; // the spaces number formatting puts between thousands (French, Polish, Czech…)
+// Letters and currency signs the two fonts have no glyph for get a readable stand-in, never a '?': the plain letter for
+// one that carries a mark (ę → e, č → c, ő → o), and words for the signs, so an amount stays an amount.
+const PLAIN = { 'ł': 'l', 'Ł': 'L', 'đ': 'd', 'Đ': 'D', 'ı': 'i', 'ħ': 'h', 'Ħ': 'H', 'ŧ': 't', 'Ŧ': 'T', 'ĸ': 'k', 'ŉ': 'n', 'ŋ': 'n', 'Ŋ': 'N', 'ſ': 's',
+  '₹': 'Rs ', '₪': 'ILS ', '₺': 'TL ', '₽': 'RUB ', '₩': 'KRW ', '₴': 'UAH ', '₱': 'PHP ', '₦': 'NGN ', '฿': 'THB ', '₫': 'VND ', '₡': 'CRC ', '₲': 'PYG ', '₸': 'KZT ', '₼': 'AZN ', '₾': 'GEL ', '₵': 'GHS ',
+  '‐': '-', '‑': '-', '‒': '-', '−': '-', '′': '\'', '″': '"', '⁄': '/' };
 function enc(str) { // JS string → WinAnsi bytes held in a latin1 string
   let out = '';
   for (const ch of String(str == null ? '' : str)) {
@@ -11,8 +18,12 @@ function enc(str) { // JS string → WinAnsi bytes held in a latin1 string
     if (c < 0x80) out += c >= 32 ? ch : ' ';
     else if (MAP[ch] != null) out += String.fromCharCode(MAP[ch]);
     else if (c >= 0x80 && c <= 0xff) out += ch; // Latin-1, and WinAnsi bytes from text that was already encoded once (wrapped lines)
+    else if (PLAIN[ch] != null) out += PLAIN[ch];
     else if (c > 0xffff || (c >= 0x2190 && c <= 0x2bff) || (c >= 0xfe00 && c <= 0xfe0f) || c === 0x200d) { /* emoji and symbols: dropped */ }
-    else out += '?';
+    else { // a Latin letter with a mark the fonts lack: the same letter with a mark they have, else the letter alone
+      const parts = ch.normalize('NFD'), base = parts.codePointAt(0);
+      out += parts.length > 1 && base < 0x250 ? (base < 0x80 ? parts[0] : enc(parts[0])) : '?';
+    }
   }
   return out;
 }
@@ -25,8 +36,8 @@ export function textWidth(str, size, bold = false) {
 }
 function wrap(str, size, bold, width) {
   const lines = [];
-  for (const para of enc(str).split(/\r?\n/)) {
-    let line = '';
+  for (const raw of String(str == null ? '' : str).split(/\r?\n/)) { // the lines first: encoding turns a line break into a space
+    const para = enc(raw); let line = '';
     for (const word of para.split(/\s+/).filter(Boolean)) {
       const probe = line ? line + ' ' + word : word;
       if (textWidth(probe, size, bold) <= width) { line = probe; continue; }
@@ -60,9 +71,10 @@ export function makePdf({ title = '', blocks = [], footer = '' }) {
     else if (b.type === 'text') { y -= 2; para(b.text, b.size || 9.5, !!b.bold, { gray: b.gray || 0 }); }
     else if (b.type === 'space') { y -= b.h || 8; }
     else if (b.type === 'kv') {
-      const lines = wrap(b.v, 9.5, false, innerW - 125); const lh = 13; ensure(lh * lines.length + 2);
-      y -= lh; text(M, y, b.k, 9, false, 0.4); text(M + 125, y, lines[0], 9.5);
-      for (const ln of lines.slice(1)) { ensure(lh); y -= lh; text(M + 125, y, ln, 9.5); }
+      // The label is wrapped into its own column, so a long one ("Paid 21 Nov 2026 · Stripe payment link") is never
+      // drawn under the value beside it.
+      const lines = wrap(b.v, 9.5, false, innerW - 125), label = wrap(b.k, 9, false, 119), n = Math.max(lines.length, label.length); const lh = 13; ensure(lh * n + 2);
+      for (let i = 0; i < n; i++) { if (i) ensure(lh); y -= lh; if (label[i]) text(M, y, label[i], 9, false, 0.4); if (lines[i]) text(M + 125, y, lines[i], 9.5); }
       y -= 1;
     }
     else if (b.type === 'times') {
