@@ -83,7 +83,7 @@ android {
 
         
             // The data for the app to support web share target.
-            resValue "string", "shareTarget", '{\\"action\\":\\"https://vdex.crowmade.app/share\\",\\"method\\":\\"POST\\",\\"enctype\\":\\"multipart/form-data\\",\\"params\\":{\\"title\\":\\"title\\",\\"text\\":\\"text\\",\\"files\\":[{\\"name\\":\\"file\\",\\"accept\\":[\\"text/plain\\",\\"text/markdown\\",\\"text/x-markdown\\",\\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\\"]}]}}'
+            resValue "string", "shareTarget", '{\\"action\\":\\"https://vdex.crowmade.app/share\\",\\"method\\":\\"POST\\",\\"enctype\\":\\"multipart/form-data\\",\\"params\\":{\\"title\\":\\"title\\",\\"text\\":\\"text\\",\\"files\\":[{\\"name\\":\\"file\\",\\"accept\\":[\\"text/plain\\",\\"text/markdown\\",\\"text/x-markdown\\",\\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\\",\\"application/pdf\\"]}]}}'
         
 
         // The hostname is used when building the intent-filter, so the TWA is able to

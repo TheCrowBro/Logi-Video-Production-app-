@@ -61,7 +61,8 @@ export function analyse(script, focus = '', dirs = P.dirs) {
   return paras.map(p => {
     let text = p.text, speaker = '', role = 'say', inline = false;
     if (isCue(p)) { who = cueName(p.text); return { id: p.id, text, speaker: who, role: 'cue', colour: colourOf(who), words: 0 }; }
-    if (p.kind === 'heading' || p.kind === 'character') { who = ''; role = 'head'; }
+    if (p.dir) role = 'dir'; // the video column of a VIDEO | AUDIO script, a Final Draft shot
+    else if (p.kind === 'heading' || p.kind === 'character') { who = ''; role = 'head'; }
     else if (p.kind === 'transition') role = 'dir';
     else if (p.kind === 'paren') { role = 'dir'; speaker = who; }
     else if (play) { if (p.kind === 'dialogue') speaker = who; else role = 'dir'; }
@@ -73,7 +74,10 @@ export function analyse(script, focus = '', dirs = P.dirs) {
     }
     if (role === 'dir' && dirs === 'read') role = 'say';
     if (role === 'say' && focus && speaker !== focus) role = 'other';
-    return { id: p.id, text, speaker, role, inline, colour: colourOf(speaker), words: role === 'say' ? wordCount(text) : 0 };
+    // Emphasis from the file (bold, italic, underline), moved along when a "NAME:" was taken off the front.
+    const cut = p.text.length - text.length;
+    const marks = (p.marks || []).map(([a, b, f]) => [Math.max(0, a - cut), b - cut, f]).filter(([a, b]) => b > a && a < text.length);
+    return { id: p.id, text, speaker, role, inline, marks, colour: colourOf(speaker), words: role === 'say' ? wordCount(text) : 0 };
   });
 }
 export const speakersOf = script => [...new Set(analyse(script, '', 'dim').filter(a => a.role === 'say' && a.speaker).map(a => a.speaker))];
@@ -204,9 +208,19 @@ function run(logId, from) {
   const root = h('div', { class: 'prompter', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Teleprompter', 'data-state': 'paused', tabindex: '-1' }, stage, top, bottom, rateBox, hint);
 
   /* the script on the stage */
-  const parts = t => { const out = []; let i = 0; for (const m of t.matchAll(DIR)) { if (m.index > i) out.push(t.slice(i, m.index)); out.push(h('span', { class: 'pr-dir' }, m[0])); i = m.index + m[0].length; } if (i < t.length) out.push(t.slice(i)); return out; };
+  // A line in runs: [directions] dimmed, and the stress the file gave (em-b bold, em-i italic, em-u underlined).
+  const parts = (t, marks = []) => {
+    const dirs = [...t.matchAll(DIR)].map(m => [m.index, m.index + m[0].length]);
+    const at = [...new Set([0, t.length, ...dirs.flat(), ...marks.flatMap(([a, b]) => [Math.min(a, t.length), Math.min(b, t.length)])])].sort((x, y) => x - y), out = [];
+    for (let i = 0; i < at.length - 1; i++) {
+      const a = at[i], b = at[i + 1], seg = t.slice(a, b); if (!seg) continue;
+      const cls = new Set([...(dirs.some(([x, y]) => x <= a && b <= y) ? ['pr-dir'] : []), ...marks.filter(([x, y]) => x <= a && b <= y).flatMap(([, , f]) => [...f].map(c => 'em-' + c))]);
+      out.push(cls.size ? h('span', { class: [...cls].join(' ') }, seg) : seg);
+    }
+    return out;
+  };
   const lineEl = a => h('div', { class: `pr-line r-${a.role}`, 'data-id': a.id, hidden: (a.role === 'cue' && !P.names) || (a.role === 'dir' && P.dirs === 'hide'), style: a.colour ? `--spk:${a.colour}` : null },
-    a.inline && P.names && a.speaker && h('span', { class: 'pr-who' }, a.speaker), ...parts(a.text));
+    a.inline && P.names && a.speaker && h('span', { class: 'pr-who' }, a.speaker), ...parts(a.text, a.marks));
   const keyOf = l => `${l.script.rev || l.script.imported}|${l.script.paras.length}|${focusOf(l)}|${P.names}|${P.dirs}`;
   const render = () => {
     log = byId('logs', logId);

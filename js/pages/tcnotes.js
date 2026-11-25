@@ -7,7 +7,8 @@ import { qrSvg, scanner } from '../qr.js';
 import { openForm } from '../form.js';
 import { RATES, rate, framesToTc, tcToFrames, tcAt, framesAt, durationText } from '../timecode.js';
 import { haptic } from '../a11y.js';
-import { docxToLines, textToLines, buildScript, SAMPLE_SCRIPT } from '../docx.js';
+import { textToLines, buildScript, SAMPLE_SCRIPT } from '../docx.js';
+import { readScriptFile, SCRIPT_ACCEPT } from '../script-files.js';
 import * as native from '../native.js';
 import { csvText } from '../backup.js';
 
@@ -226,6 +227,7 @@ export const tcnotes = {
       stop(); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null;
       const y = window.scrollY;
       root.replaceChildren();
+      if (S.sharedNew) { const f = S.sharedNew; S.sharedNew = null; setTimeout(() => openImport(null, f), 50); } // shared to the teleprompter: a log of its own
       const log = current();
       if (!log) { root.append(picker()); return; }
       root.append(logView(log, t => { timer = t; }));
@@ -237,8 +239,13 @@ export const tcnotes = {
     WIDE.addEventListener('change', onWide);
     const unlink = link.onChange(() => draw());
     const poll = setInterval(() => { if (!document.hidden && current()) store.sync({ quiet: true }); }, 8000); // other devices' notes via the cloud copy
+    // A script file dropped on the page (a computer): the Add script sheet with it, for the open log or a new one.
+    const isFiles = e => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'));
+    const onOver = e => { if (isFiles(e)) e.preventDefault(); };
+    const onDrop = e => { if (!isFiles(e)) return; e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) openImport(current(), f, { view: S.view === 'prompter' ? 'prompter' : 'script' }); };
+    root.addEventListener('dragover', onOver); root.addEventListener('drop', onDrop);
     draw();
-    return () => { stop(); unsub(); unlink(); clearInterval(poll); WIDE.removeEventListener('change', onWide); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null; };
+    return () => { stop(); unsub(); unlink(); clearInterval(poll); WIDE.removeEventListener('change', onWide); root.removeEventListener('dragover', onOver); root.removeEventListener('drop', onDrop); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null; };
   },
 };
 function picker() {
@@ -477,7 +484,7 @@ function scriptChanged(l, now) { l.script.rev = new Date(now).toISOString(); l.u
 function setLine(logId, paraId, text) {
   update(d => {
     const l = d.logs.find(x => x.id === logId), p = l && l.script && l.script.paras.find(x => x.id === paraId); if (!p || p.text === text) return;
-    const old = p.text, now = Date.now(); p.text = text;
+    const old = p.text, now = Date.now(); p.text = text; delete p.marks; // its emphasis was placed on the old words
     l.notes.forEach(n => {
       if (n.para !== paraId) return;
       const words = n.start != null ? old.slice(n.start, n.end) : '', at = words ? text.indexOf(words) : -1;
@@ -528,7 +535,8 @@ export async function openLog(id, view = 'notes') {
   return true;
 }
 const openGuide = () => import('../tutorials.js').then(m => m.openTcGuide());
-export function receiveSharedFile(file) { S.shared = file; S.view = 'script'; window.logiGo('tcnotes'); S.redraw(); } // redraw covers the case where this tab is already open
+// A file handed to Vdex (js/share-in.js): a script for the open log, or (prompter) one for the teleprompter, in a log of its own.
+export function receiveSharedFile(file, { prompter = false } = {}) { if (prompter) S.sharedNew = file; else { S.shared = file; S.view = 'script'; } window.logiGo('tcnotes'); S.redraw(); } // redraw covers the case where this tab is already open
 // Switches the open log to its notes, its script or its prompter (the walkthroughs use it too).
 export function showView(view) { S.view = VIEWS.includes(view) ? view : 'notes'; S.target = null; S.redraw(); }
 
@@ -588,31 +596,39 @@ export function openImport(log, preset, { view = 'script' } = {}) {
   const fail = e => { pending = null; useBtn.disabled = true; preview.replaceChildren(h('div', { class: 'warn' }, e.message || String(e))); };
   const readFile = async file => {
     try {
-      preview.textContent = 'Reading…';
-      const isDocx = /\.docx$/i.test(file.name) || /wordprocessingml/.test(file.type);
-      const lines = isDocx ? await docxToLines(file) : textToLines(await file.text());
+      preview.textContent = /\.pdf$/i.test(file.name || '') ? 'Reading the PDF…' : 'Reading…';
+      const lines = await readScriptFile(file);
       if (!lines.length) throw new Error('No text found in that file');
-      show(file.name.replace(/\.[^.]+$/, ''), lines);
+      show(String(file.name || 'Script').replace(/\.[^.]+$/, ''), lines);
     } catch (e) { fail(e); }
   };
-  const fileIn = h('input', { type: 'file', accept: '.docx,.txt,.md,.fountain,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document', onchange: e => { const f = e.target.files[0]; if (f) readFile(f); } });
+  const fileIn = h('input', { type: 'file', accept: SCRIPT_ACCEPT, onchange: e => { const f = e.target.files[0]; if (f) readFile(f); } });
   const paste = h('textarea', { rows: 5, placeholder: 'Paste the script text here', 'aria-label': 'Pasted script text' });
+  // The clipboard in one tap, where the browser lets a page read it (it may ask first).
+  const fromClipboard = async () => { try { const t = await navigator.clipboard.readText(); const lines = textToLines(t); if (!lines.length) throw new Error('empty'); paste.value = t; show('Pasted script', lines); } catch { fail(new Error('Nothing to paste, or this browser does not let Vdex read the clipboard. Paste into the box instead.')); } };
   const body = h('div', { class: 'stack' },
     !log && h('p', { class: 'small muted' }, 'Vdex makes a log for the script, so every take you roll on the prompter is logged. Sync the log to the camera later and the takes carry its timecode.'),
     recent.length > 0 && h('div', { class: 'card imp-recent' }, h('strong', null, 'A script you have used'),
       h('p', { class: 'small muted' }, 'A copy from another log, with any changes made to it there.'),
       h('div', { class: 'imp-recent-list' }, recent.map(l => h('button', { class: 'btn ghost small', type: 'button', onclick: () => showScript(l.script) }, `${l.script.name} · ${l.title}`)))),
-    h('div', { class: 'card imp-word' }, h('strong', null, 'Word document'),
-      h('p', { class: 'small muted' }, 'A .docx from Word or Pages, or a Google Doc downloaded as Word (File → Download → Microsoft Word). Plain .txt and Fountain files work too.'),
+    h('div', { class: 'card imp-word' }, h('strong', null, 'A script file'),
+      h('p', { class: 'small muted' }, 'Word (.docx, from Word, Pages or a Google Doc downloaded as Word), PDF, Final Draft (.fdx), Fountain or plain text. A script set out in VIDEO and AUDIO columns is read that way: the audio column is what is read. On a computer you can also drop the file here.'),
       h('label', { class: 'btn ghost file-btn' }, '📄 Choose file…', fileIn)),
     h('div', { class: 'card imp-gdocs' }, h('strong', null, 'Google Docs'),
       h('p', { class: 'small muted' }, 'Google doesn’t let an app read a Doc directly, so either download it as Word (above), share it to Vdex from the Docs app on your phone (⋮ → Share & export → Send a copy → Word), or select all, copy, and paste it here:'),
-      paste, h('button', { class: 'btn ghost small', onclick: () => { const lines = textToLines(paste.value); lines.length ? show('Pasted script', lines) : fail(new Error('Nothing pasted yet')); } }, 'Use pasted text')),
+      paste, h('div', { class: 'actions' },
+        h('button', { class: 'btn ghost small', onclick: () => { const lines = textToLines(paste.value); lines.length ? show('Pasted script', lines) : fail(new Error('Nothing pasted yet')); } }, 'Use pasted text'),
+        navigator.clipboard && navigator.clipboard.readText && h('button', { class: 'btn ghost small imp-clip', type: 'button', onclick: fromClipboard }, '📋 Paste from the clipboard'))),
     h('button', { class: 'btn ghost small tc-sample', onclick: () => show('Sample script', textToLines(SAMPLE_SCRIPT)) }, 'Try a sample script'),
     preview,
     log && log.script && h('p', { class: 'small muted' }, 'Replacing the script keeps your notes and their quoted lines, but they are no longer pinned to a line.'),
     useBtn);
   const { close } = sheet(log && log.script ? 'Replace script' : 'Add script', body, { dismissOnBackdrop: false });
+  // A file dropped anywhere on the sheet is read as if chosen.
+  const files = e => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'));
+  body.addEventListener('dragover', e => { if (!files(e)) return; e.preventDefault(); body.classList.add('drop-on'); });
+  body.addEventListener('dragleave', e => { if (!body.contains(e.relatedTarget)) body.classList.remove('drop-on'); });
+  body.addEventListener('drop', e => { if (!files(e)) return; e.preventDefault(); body.classList.remove('drop-on'); const f = e.dataTransfer.files[0]; if (f) readFile(f); });
   if (preset) readFile(preset);
 }
 
@@ -660,7 +676,7 @@ function offsetIn(root, node, offset) {
 function paraEl(log, p, notes, bar) {
   const selected = S.target && S.target.para === p.id && S.target.start == null;
   const whole = notes.filter(n => n.start == null), ranged = notes.filter(n => n.start != null);
-  const el = h('div', { class: `sc-para kind-${p.kind}` + (selected ? ' sel' : ''), 'data-id': p.id, id: 'sc-' + p.id },
+  const el = h('div', { class: `sc-para kind-${p.kind}` + (p.dir ? ' dir' : '') + (selected ? ' sel' : ''), 'data-id': p.id, id: 'sc-' + p.id },
     whole.length > 0 && h('div', { class: 'sc-gutter' }, whole.map(n => badge(log, n))),
     h('div', { class: 'sc-text' }, segments(log, p, ranged)));
   el.addEventListener('click', e => {

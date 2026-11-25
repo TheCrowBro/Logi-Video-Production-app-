@@ -48,7 +48,8 @@
             "text/plain",
             "text/markdown",
             "text/x-markdown",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/pdf"
           ]
         }
       ]

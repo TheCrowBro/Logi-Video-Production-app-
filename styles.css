@@ -408,6 +408,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .kind-character .sc-text { text-transform: uppercase; font-weight: 700; padding-left: 22%; margin-top: 4px; }
 .kind-paren .sc-text { padding-left: 16%; color: var(--muted); font-style: italic; }
 .kind-dialogue .sc-text { padding-left: 10%; padding-right: 6%; }
+.sc-para.dir .sc-text { color: var(--muted); font-style: italic; } /* the video column of a VIDEO | AUDIO script, a shot */
 .kind-transition .sc-text { text-align: right; text-transform: uppercase; color: var(--muted); }
 .sc-mark { background: color-mix(in srgb, var(--accent) 35%, transparent); color: inherit; border-radius: 3px; padding: 1px 0; box-shadow: 0 2px 0 var(--accent); }
 .sc-badge { all: unset; display: inline-block; cursor: pointer; font-size: .68rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 5px; padding: 1px 5px; margin: 0 3px 0 0; vertical-align: text-top; user-select: none; -webkit-user-select: none; line-height: 1.5; white-space: nowrap; }
@@ -955,6 +956,7 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-line.r-dir { color: #8f8f8f; font-size: .6em; font-style: italic; font-weight: 500; }
 .pr-line.r-other { color: #9a9a9a; font-size: .72em; font-weight: 500; }
 .pr-dir { color: #8f8f8f; font-style: italic; font-weight: 500; font-size: .8em; }
+.em-b { font-weight: 800; } .em-i { font-style: italic; } .em-u { text-decoration: underline; text-decoration-thickness: .07em; text-underline-offset: .14em; } /* the stress the script's file gave a word */
 .pr-who { display: block; color: var(--spk, #ffd166); font-size: .5em; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .pr-marker { position: absolute; left: 0; right: 0; pointer-events: none; background: linear-gradient(90deg, #ffd16638, #ffd16612 45%, transparent 80%); border-top: 1px solid #ffd16650; }
 .pr-marker::before { content: ''; position: absolute; left: 4px; top: 50%; transform: translateY(-50%); border-style: solid; border-width: .45em 0 .45em .7em; border-color: transparent transparent transparent #ffd166; font-size: max(14px, calc(var(--pr-fs) * .55)); }

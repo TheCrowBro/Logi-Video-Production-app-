@@ -113,6 +113,8 @@
 				<string>public.comma-separated-values-text</string>
 				<string>net.daringfireball.markdown</string>
 				<string>app.crowmade.vdex.fountain</string>
+				<string>com.adobe.pdf</string>
+				<string>app.crowmade.vdex.fdx</string>
 			</array>
 		</dict>
 		<dict>
@@ -144,6 +146,23 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>fountain</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>app.crowmade.vdex.fdx</string>
+			<key>UTTypeDescription</key>
+			<string>Final Draft screenplay</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.xml</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>fdx</string>
 				</array>
 			</dict>
 		</dict>
