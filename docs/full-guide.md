@@ -144,6 +144,18 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 
 **iPhone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
 
+### Read a script to the talent: the teleprompter
+
+For scripted pieces to camera. Open a log, tap **Prompter**, and **📜 Open the prompter**: the script fills the screen, white on black, and scrolls at the speed the talent speaks. **📜 Prompter** on the timecode page goes straight there: pick a script you have used, or add a new one and Vdex makes a log for it (its takes are logged; sync the log to the camera later and they carry its timecode).
+
+1. **Set it up for the screen** under *This screen* (or ⚙ inside the prompter): **Mirrored for a rig** when the iPhone sits under the glass of a beam-splitter prompter, **Upside down** for rigs that need it, the text size and line spacing, the speed in words a minute (the read time on the Prompter view follows it), where the reading line sits, how wide the column is and a countdown before each take. These stay on this iPhone, so a phone in the rig and a laptop can be set differently. **Lines to read** dims the other speakers' lines when the script has more than one.
+2. **Tap the text** or **▶ Play** to start and stop. Drag the text to move it; **▲** and **▼** move a line at a time. **Hold a line** to start from it, mark it or edit its words. Names and directions are dimmed, and each speaker has a colour.
+3. **● Roll** starts a take: Vdex logs it, counts down and starts the script. **■ Cut** stops both, logs the take's length and asks **★ Good** or **✕ No good** (change it later on the take in the notes). Start lower down (drag, or hold a line → **Start from here**) and the take is logged as a pickup from that line. **⚑** marks the line being read: a fluffed word, a line to do again. In record run with a sync, Roll and Cut here run the log's clock just as its own buttons do.
+4. **Clickers and foot pedals** work as they are: Space (or a clicker's blank-screen button) plays and pauses, Page Down and Page Up move a line read aloud, ↑ and ↓ change the speed, R rolls and cuts, F marks the line, G and N rate the take just cut, Esc closes.
+5. **Fix a line on set** from the script too: tap it and **✏ Edit line**; its marks stay on it. **📜 Prompt from here** opens the prompter on the line you tapped.
+
+The prompter is free during the 30-day trial, and after that comes with the licence, like the rest of Vdex. Vdex asks the iPhone to keep the screen on while the prompter is open; if it dims anyway, turn off Auto-Lock (Settings → Display & Brightness) for the shoot.
+
 ### Stripboard: plan the shoot scene by scene
 
 Open a booking and tap **🎬 Stripboard & shot list**. Tap **📄 Scenes from a script** and pick the script (a Word .docx, a Fountain or a plain text file, or paste the text): every scene heading (INT. or EXT., the set, then DAY or NIGHT) becomes a strip, with the characters who speak or are named in the action as its cast and an estimated page count in eighths. **＋ Scene** adds one by hand. The page counts are estimates from a standard screenplay layout: check them against your script.
@@ -452,6 +464,18 @@ Then on the Bookings page tap **📐 From template** instead of + New: the booki
 **Walkthroughs:** tap **📖 Guide** on the timecode page for a read-through of the whole job and a **Walk me through it** button that runs *Timecode, start to finish* on a practice log (no camera needed; delete it from ⚙ when done). **Tutorial for this page**, in the menu ☰, gives the short tour, and the **?** inside the Sync, Link device, Add script and Export sheets their own steps. Quotes and invoices have the same: **🎓 New to quoting? Start here** on a booking's Money page (or the **📖 Quotes & invoices guide** under Tutorial for this page → Other pages…) is a read-through of the whole job, with a **Walk me through it** that runs *Quotes & invoices, start to finish* on a practice job Vdex makes: it sets the rates, quotes the job, sends and accepts the quote, invoices it from the quote and records a payment, with its own Q-PRACTICE and INV-PRACTICE numbers so your numbering is untouched. The last card removes the practice job.
 
 **Phone and laptop together:** tap **🔗 Link device** on both. One shows a code, the other scans it with its camera, then they swap. Both then show the same clock and the same notes, live, with no internet needed. They need to be on the same Wi‑Fi or one phone's hotspot. If the laptop has no camera, use **Copy code** and paste it on the other side.
+
+### Read a script to the talent: the teleprompter
+
+For scripted pieces to camera. Open a log, tap **Prompter**, and **📜 Open the prompter**: the script fills the screen, white on black, and scrolls at the speed the talent speaks. **📜 Prompter** on the timecode page goes straight there: pick a script you have used, or add a new one and Vdex makes a log for it (its takes are logged; sync the log to the camera later and they carry its timecode).
+
+1. **Set it up for the screen** under *This screen* (or ⚙ inside the prompter): **Mirrored for a rig** when the device sits under the glass of a beam-splitter prompter, **Upside down** for rigs that need it, the text size and line spacing, the speed in words a minute (the read time on the Prompter view follows it), where the reading line sits, how wide the column is and a countdown before each take. These stay on this device, so a phone in the rig and a laptop can be set differently. **Lines to read** dims the other speakers' lines when the script has more than one.
+2. **Tap the text** or **▶ Play** to start and stop. Drag the text to move it; **▲** and **▼** move a line at a time. **Hold a line** to start from it, mark it or edit its words. Names and directions are dimmed, and each speaker has a colour.
+3. **● Roll** starts a take: Vdex logs it, counts down and starts the script. **■ Cut** stops both, logs the take's length and asks **★ Good** or **✕ No good** (change it later on the take in the notes). Start lower down (drag, or hold a line → **Start from here**) and the take is logged as a pickup from that line. **⚑** marks the line being read: a fluffed word, a line to do again. In record run with a sync, Roll and Cut here run the log's clock just as its own buttons do.
+4. **Clickers and foot pedals** work as they are: Space (or a clicker's blank-screen button) plays and pauses, Page Down and Page Up move a line read aloud, ↑ and ↓ change the speed, R rolls and cuts, F marks the line, G and N rate the take just cut, Esc closes.
+5. **Fix a line on set** from the script too: tap it and **✏ Edit line**; its marks stay on it. **📜 Prompt from here** opens the prompter on the line you tapped.
+
+The prompter is free during the 30-day trial, and after that comes with the licence, like the rest of Vdex. The screen is kept on while it is open, and the page goes full screen, where the browser allows both.
 
 ### Stripboard: plan the shoot scene by scene
 

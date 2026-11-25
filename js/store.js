@@ -332,9 +332,9 @@ export function setPaid(on, prompt, more = {}) {
   if (paid) { if (cloud.adapter) sync(); else emit('licence'); }
   else { clearTimeout(timer); if (cloud.adapter) setStatus('paused'); else emit('licence'); }
 }
-const may = what => paid || (what === 'link' && links) || (what === 'backup' && Date.now() < backupUntil);
+const may = what => paid || ((what === 'link' || what === 'prompter') && links) || (what === 'backup' && Date.now() < backupUntil);
 const NO_CHECK = 'Vdex could not load the part of itself that checks the licence, so it is read-only until it can. Check the internet connection.';
-// True when this device may (licensed, or licences not switched on; for 'link' also the trial, for 'backup' also the
+// True when this device may (licensed, or licences not switched on; for 'link' and 'prompter' also the trial, for 'backup' also the
 // 30 days after a licence ended here); otherwise explains, offering a licence, and false.
 export function requirePaid(what) {
   if (may(what)) return true;

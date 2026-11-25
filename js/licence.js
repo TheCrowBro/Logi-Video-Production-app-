@@ -284,7 +284,7 @@ const longDay = t => new Date(t).toLocaleDateString(undefined, { day: 'numeric',
 function needsLicence(what) {
   const s = S.cur || {};
   const keep = backupUntil(s) > Date.now() ? backupUntil(s) : 0; // a licence stopped covering this device less than 30 days ago
-  const thing = what === 'cloud' ? 'Keeping a copy in your own cloud storage' : what === 'link' ? 'Sending your contact card or equipment as a link or QR code'
+  const thing = what === 'cloud' ? 'Keeping a copy in your own cloud storage' : what === 'link' ? 'Sending your contact card or equipment as a link or QR code' : what === 'prompter' ? 'The teleprompter'
     : keep ? 'Saving spreadsheet files' : 'Saving backups and spreadsheet files';
   // A licence that is still waiting to be added to this device, or a device whose place on the licence was moved: its
   // own line and next step, never an offer to buy again.

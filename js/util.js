@@ -68,13 +68,13 @@ export function announce(msg) {
   setTimeout(() => { r.textContent = msg; }, 50);
 }
 
-// The page (#app) is out of reach while anything is open over it: a sheet, a walkthrough, the menu, the search, or a
-// full screen (the lock, the PIN set-up, the offer of a longer PIN, the terms). Whatever closes one of those calls this,
+// The page (#app) is out of reach while anything is open over it: a sheet, a walkthrough, the menu, the search, the
+// teleprompter, or a full screen (the lock, the PIN set-up, the offer of a longer PIN, the terms). Whatever closes one of those calls this,
 // which looks at what is on the page now. A flag remembered from when the thing opened can be out of date by then:
 // what was underneath may have closed meanwhile, and writing the flag back would leave the page dead with nothing open.
 export function settleApp() {
   const app = document.getElementById('app'); if (!app) return;
-  app.inert = !!document.querySelector('.sheet-back, .tour, body > .lock, body > .terms-gate') || document.body.classList.contains('menu-open') || document.body.classList.contains('search-open');
+  app.inert = !!document.querySelector('.sheet-back, .tour, .prompter, body > .lock, body > .terms-gate') || document.body.classList.contains('menu-open') || document.body.classList.contains('search-open');
 }
 
 // A full screen that covers everything else is up: the lock screen, the PIN set-up or the offer of a longer PIN

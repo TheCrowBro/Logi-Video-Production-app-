@@ -939,3 +939,58 @@ html[data-motion=off] .back-btn::after, html[data-motion=bar] .back-btn::after {
 .undo-bar > span { min-width: 0; overflow-wrap: anywhere; } .undo-bar .btn { min-height: var(--hit); background: var(--bg); color: var(--text); border-color: transparent; font-weight: 700; } .undo-bar .icon-btn { color: inherit; }
 .undo-bar .icon-btn:hover { background: transparent; color: inherit; } .undo-bar :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .undo-bar, body:has(.lock) .undo-bar { display: none; } /* never over a sheet's buttons, the menu, the search or the lock screen; it is back when they close, and Undo stays under Import… */
+
+/* The teleprompter (js/prompter.js): white on black whatever the theme, over the page and under sheets (100) and walkthroughs (150) */
+.prompter { position: fixed; inset: 0; z-index: 98; background: #000; color: #fff; overflow: hidden; overflow: clip; --pr-fs: 32px; }
+.prompter:focus { outline: none; }
+.pr-stage { position: absolute; inset: 0; overflow: hidden; overflow: clip; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pr-stage.mirror { transform: scaleX(-1); } .pr-stage.flip { transform: scaleY(-1); } .pr-stage.mirror.flip { transform: scale(-1, -1); }
+.pr-track { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+.pr-col { position: relative; display: flow-root; margin: 0 auto; font: 600 var(--pr-fs)/1.32 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: .01em; }
+.pr-line { margin: 0 0 .5em; padding-left: .3em; border-left: .12em solid transparent; white-space: pre-wrap; overflow-wrap: anywhere; opacity: .45; transition: opacity .3s; }
+.pr-line.now, .pr-line.now ~ .pr-line { opacity: 1; } /* what has scrolled past the reading line steps back */
+.pr-line.r-say[style], .pr-line.r-other[style] { border-left-color: var(--spk); }
+.pr-line.r-cue { color: var(--spk, #ffd166); font-size: .5em; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin: 1.1em 0 .25em; }
+.pr-line.r-head { color: #9a9a9a; font-size: .5em; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin: 1.6em 0 .6em; }
+.pr-line.r-dir { color: #8f8f8f; font-size: .6em; font-style: italic; font-weight: 500; }
+.pr-line.r-other { color: #9a9a9a; font-size: .72em; font-weight: 500; }
+.pr-dir { color: #8f8f8f; font-style: italic; font-weight: 500; font-size: .8em; }
+.pr-who { display: block; color: var(--spk, #ffd166); font-size: .5em; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.pr-marker { position: absolute; left: 0; right: 0; pointer-events: none; background: linear-gradient(90deg, #ffd16638, #ffd16612 45%, transparent 80%); border-top: 1px solid #ffd16650; }
+.pr-marker::before { content: ''; position: absolute; left: 4px; top: 50%; transform: translateY(-50%); border-style: solid; border-width: .45em 0 .45em .7em; border-color: transparent transparent transparent #ffd166; font-size: max(14px, calc(var(--pr-fs) * .55)); }
+.pr-count { position: absolute; inset: 0; display: grid; place-items: center; font: 800 min(42vw, 42vh)/1 system-ui, sans-serif; color: #fff; background: #000b; pointer-events: none; }
+.pr-count[hidden], .pr-rec[hidden], .pr-ratebox[hidden] { display: none; }
+.pr-left { position: absolute; right: 14px; bottom: 10px; font: 600 15px/1.2 ui-monospace, Menlo, Consolas, monospace; color: #8a8a8a; pointer-events: none; }
+.prompter:not(.hud-off) .pr-left, .prompter:not(.hud-off) .pr-rec { visibility: hidden; } /* under the buttons: the buttons say it then */
+.pr-rec { position: absolute; right: 14px; top: 12px; font: 800 15px/1 system-ui, sans-serif; color: #ff5a4e; letter-spacing: .08em; pointer-events: none; }
+.pr-hud { position: absolute; left: 0; right: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left)); background: #000000e0; color: #fff; transition: opacity .25s; }
+.pr-top { top: 0; padding-top: max(8px, env(safe-area-inset-top)); border-bottom: 1px solid #2c2c2e; }
+.pr-bottom { bottom: 0; padding-bottom: max(8px, env(safe-area-inset-bottom)); border-top: 1px solid #2c2c2e; justify-content: center; }
+.prompter.hud-off .pr-hud { opacity: 0; pointer-events: none; } .prompter.hud-off { cursor: none; }
+.pr-title { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
+.pr-tc { color: #ffd166; font-weight: 700; font-size: 1rem; }
+.prompter .icon-btn { color: #ddd; } .prompter .icon-btn:hover { background: #1d1d1f; color: #fff; }
+.pr-hud .btn, .pr-ratebox .btn { background: #1c1c1e; color: #fff; border-color: #3a3a3c; }
+.pr-hud .btn.primary { background: #fff; color: #000; border-color: #fff; min-width: 7.5rem; }
+.pr-hud .btn.pr-roll { background: #c62828; border-color: #c62828; color: #fff; font-weight: 800; min-width: 6.5rem; }
+.pr-hud .btn.pr-roll.cut { background: #fff; border-color: #fff; color: #000; }
+.pr-speed, .pr-size { display: inline-flex; align-items: center; gap: 4px; } .pr-wpm { min-width: 4.6rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+.pr-ratebox { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 3; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; background: #111; border: 1px solid #48484a; border-radius: 14px; padding: 10px 12px; width: max-content; max-width: calc(100% - 24px); }
+.pr-rate-title { font-weight: 700; margin-right: 4px; }
+.pr-ratebox .btn.pr-good { background: #1f6f3a; border-color: #1f6f3a; } .pr-ratebox .btn.pr-ng { background: #8e2424; border-color: #8e2424; }
+.pr-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; background: #000d; border: 1px solid #333; color: #ddd; padding: 10px 14px; border-radius: 12px; font-size: .95rem; width: max-content; max-width: min(90%, 30rem); text-align: center; pointer-events: none; opacity: 0; transition: opacity .4s; }
+.pr-hint.shown { opacity: 1; }
+body:has(.prompter) .update-bar, body:has(.prompter) .licence-bar, body:has(.prompter) .undo-bar { display: none; } /* nothing of the page over the prompter */
+/* The Prompter view of a log */
+.pr-launch { display: grid; gap: 10px; } .pr-open { font-size: 1.05rem; }
+.pr-setup h3, .pr-takes h3 { margin: 0 0 8px; }
+.pr-stepper { display: flex; align-items: center; gap: 10px; } .pr-stepper > .btn { flex: 0 0 auto; min-width: 3.2rem; } .pr-stepper .pr-val { flex: 1 1 0; min-width: 0; text-align: center; font-weight: 700; }
+.pr-take-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.pr-take { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); } .pr-take:last-child { border-bottom: 0; }
+.pr-take-tc { color: var(--accent); font-weight: 700; } .pr-take .grow { flex: 1 1 10rem; min-width: 0; }
+.pr-rates { display: inline-flex; gap: 6px; } .pr-rates .btn.on.good { background: var(--ok); color: #fff; } .pr-rates .btn.on.ng { background: var(--danger); color: #fff; }
+.tc-take-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 2px 4px 4px; } .tc-take-row .tc-dur { padding: 0; }
+.tc-rate { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 2rem; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: .8rem; font-weight: 700; }
+.tc-rate.good { background: var(--ok); border-color: var(--ok); color: #fff; } .tc-rate.ng { background: var(--danger); border-color: var(--danger); color: #fff; } .tc-rate:focus-visible { outline: 3px solid var(--focus); }
+.imp-recent-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tc-modes { margin: 10px 0; }
