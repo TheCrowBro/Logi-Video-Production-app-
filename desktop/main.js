@@ -204,8 +204,16 @@ const external = url => { try { const u = new URL(url); if (['http:', 'https:', 
 const isOurs = url => url === origin || url.startsWith(origin + '/');
 
 // Pop-ups: the print window stays inside the app; everything else, sign-in pages included, goes to the web browser.
+// The teleprompter's window (prompter.html) goes full screen on a second display when there is one.
+function prompterWindow(contents) {
+  const here = screen.getDisplayMatching(BrowserWindow.fromWebContents(contents)?.getBounds() || screen.getPrimaryDisplay().bounds);
+  const other = screen.getAllDisplays().find(d => d.id !== here.id);
+  const b = (other || here).workArea;
+  return { x: b.x, y: b.y, width: other ? b.width : Math.min(1024, b.width), height: other ? b.height : Math.min(640, b.height), fullscreen: !!other, autoHideMenuBar: true, backgroundColor: '#000000' };
+}
 function policeWindowOpen(contents) {
   contents.setWindowOpenHandler(({ url }) => {
+    if (isOurs(url) && new URL(url).pathname === '/prompter.html') return { action: 'allow', overrideBrowserWindowOptions: prompterWindow(contents) };
     if (!url || url === 'about:blank' || isOurs(url)) return { action: 'allow', overrideBrowserWindowOptions: { width: 560, height: 720, autoHideMenuBar: true, backgroundColor: '#ffffff' } };
     external(url);
     return { action: 'deny' };

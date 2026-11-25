@@ -808,6 +808,10 @@ link.onMessage(m => {
   }
 });
 
+// The teleprompter's messages over the link (js/prompter.js): a linked device asking this one to show the prompter,
+// driving it, or following it as its remote.
+link.onMessage(m => { if (m && typeof m.t === 'string' && m.t.startsWith('pr-')) prompter().then(p => p.fromLink(m)).catch(() => {}); });
+
 function openLink(log) {
   const body = h('div', { class: 'stack' });
   let scan = null, myCode = '', closeSheet = () => {};
