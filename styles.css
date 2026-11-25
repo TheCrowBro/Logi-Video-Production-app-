@@ -976,6 +976,7 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-hud .btn.primary { background: #fff; color: #000; border-color: #fff; min-width: 7.5rem; }
 .pr-hud .btn.pr-roll { background: #c62828; border-color: #c62828; color: #fff; font-weight: 800; min-width: 6.5rem; }
 .pr-hud .btn.pr-roll.cut { background: #fff; border-color: #fff; color: #000; }
+.pr-hud .btn.pr-voice.on, .pr-rpad .btn.pr-voice.on { background: #ffd166; border-color: #ffd166; color: #000; } /* voice-follow is on */
 .pr-speed, .pr-size { display: inline-flex; align-items: center; gap: 4px; } .pr-wpm { min-width: 4.6rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
 .pr-ratebox { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 3; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; background: #111; border: 1px solid #48484a; border-radius: 14px; padding: 10px 12px; width: max-content; max-width: calc(100% - 24px); }
 .pr-rate-title { font-weight: 700; margin-right: 4px; }

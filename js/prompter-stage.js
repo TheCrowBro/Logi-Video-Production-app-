@@ -19,7 +19,7 @@ export const MARKS = [[0.2, 'Near the top'], [0.33, 'A third down'], [0.5, 'The 
 export const SPACINGS = [[1.15, 'Tight'], [1.32, 'Normal'], [1.6, 'Loose']];
 export const COUNTS = [[0, 'Off'], [3, '3 s'], [5, '5 s']];
 export const DIRS = [['dim', 'Dimmed'], ['hide', 'Hidden'], ['read', 'Like the rest']];
-const DEF = { size: 5, wpm: 140, mark: 0.33, col: 'medium', spacing: 1.32, mirror: false, flip: false, count: 3, dirs: 'dim', names: true };
+const DEF = { size: 5, wpm: 140, mark: 0.33, col: 'medium', spacing: 1.32, mirror: false, flip: false, count: 3, dirs: 'dim', names: true, voice: false };
 const WPM_MIN = 60, WPM_MAX = 300;
 const read = () => { try { return { ...DEF, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return { ...DEF }; } };
 export const P = read();
@@ -28,7 +28,7 @@ export const save = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); 
 export const reload = () => Object.assign(P, read());
 export const clampSize = n => Math.max(0, Math.min(SIZES.length - 1, n));
 export const clampWpm = n => Math.max(WPM_MIN, Math.min(WPM_MAX, n));
-const SETTABLE = { size: v => clampSize(Number(v)), wpm: v => clampWpm(Number(v)), mark: v => (MARKS.some(m => m[0] === v) ? v : P.mark), col: v => (COLS.some(c => c[0] === v) ? v : P.col), spacing: v => (SPACINGS.some(s => s[0] === v) ? v : P.spacing), mirror: v => !!v, flip: v => !!v, count: v => (COUNTS.some(c => c[0] === v) ? v : P.count), dirs: v => (DIRS.some(d => d[0] === v) ? v : P.dirs), names: v => !!v };
+const SETTABLE = { size: v => clampSize(Number(v)), wpm: v => clampWpm(Number(v)), mark: v => (MARKS.some(m => m[0] === v) ? v : P.mark), col: v => (COLS.some(c => c[0] === v) ? v : P.col), spacing: v => (SPACINGS.some(s => s[0] === v) ? v : P.spacing), mirror: v => !!v, flip: v => !!v, count: v => (COUNTS.some(c => c[0] === v) ? v : P.count), dirs: v => (DIRS.some(d => d[0] === v) ? v : P.dirs), names: v => !!v, voice: v => !!v };
 export const setSetting = (k, v) => { if (!SETTABLE[k]) return false; P[k] = SETTABLE[k](v); save(); return true; };
 
 /* --------------------------------- script --------------------------------- */
@@ -92,6 +92,7 @@ export const quote = t => { const s = String(t).replace(/\s+/g, ' ').trim(); ret
 export function makeStage({ onState = () => {}, onTap = null, onHold = null } = {}) {
   let A = [], els = [], lines = [], pos = 0, maxPos = 0, markY = 0, pxWord = 10, rowH = 40;
   let playing = false, raf = 0, last = 0, counting = 0, cur = -1, drag = null, key = '', data = null, beat = 0, ro = null;
+  let follow = false, aimPos = null; // voice-follow: run to where the talent is (aim), not at a speed
 
   const col = h('div', { class: 'pr-col' });
   const padTop = h('div', { class: 'pr-pad' }), padBottom = h('div', { class: 'pr-pad' });
@@ -148,16 +149,16 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null } = 
   const pxPerSec = () => (pxWord * P.wpm) / 60;
   const secsLeft = () => (maxPos - pos) / pxPerSec();
   const drawLeft = () => { left.textContent = `${clock(secsLeft())} left · ${P.wpm} wpm`; };
-  const state = () => ({ playing, counting: !!counting, line: A[cur] ? A[cur].id : null, wpm: P.wpm, size: P.size, left: Math.round(secsLeft()), end: pos >= maxPos });
+  const state = () => ({ playing, counting: !!counting, line: A[cur] ? A[cur].id : null, wpm: P.wpm, size: P.size, left: Math.round(secsLeft()), end: pos >= maxPos, follow });
   const emit = () => { try { onState(state()); } catch { /* a listener's trouble is not the stage's */ } };
 
   /* playing */
   const frame = t => {
     if (!playing) return;
     const dt = last ? Math.min(0.1, (t - last) / 1000) : 0; last = t;
-    if (!(drag && drag.moved)) pos = clampPos(pos + pxPerSec() * dt);
+    if (!(drag && drag.moved)) pos = follow ? (aimPos == null ? pos : clampPos(pos + (aimPos - pos) * Math.min(1, dt * 3))) : clampPos(pos + pxPerSec() * dt);
     apply();
-    if (pos >= maxPos) { pause(); return; }
+    if (pos >= maxPos && !follow) { pause(); return; }
     raf = requestAnimationFrame(frame);
   };
   const play = () => {
@@ -228,6 +229,10 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null } = 
       case 'wpm': P.wpm = clampWpm(P.wpm + Number(arg || 0)); save(); drawLeft(); emit(); return;
       case 'size': { const was = P.size; P.size = clampSize(P.size + Number(arg || 0)); if (P.size !== was) { save(); measure(); } emit(); return; }
       case 'set': if (arg && setSetting(arg.key, arg.value)) refresh(); emit(); return;
+      case 'follow': follow = !!arg; aimPos = null; emit(); return; // voice-follow on or off
+      // Where the talent's voice is: a line and how far through it (0 to 1). The row with that word goes to the
+      // reading line, and the stage runs there smoothly while it plays.
+      case 'aim': { const i = arg ? A.findIndex(a => a.id === arg.id) : -1; if (i < 0 || !lines[i]) return; const l = lines[i]; aimPos = clampPos(Math.max(l.top, l.top + Math.max(0, Math.min(1, Number(arg.frac) || 0)) * l.h - rowH)); return; }
       default:
     }
   };

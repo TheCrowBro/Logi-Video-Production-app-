@@ -11,12 +11,36 @@ import * as link from './link.js';
 import { haptic } from './a11y.js';
 import { P, SIZES, COLS, MARKS, SPACINGS, COUNTS, DIRS, analyse, speakersOf, wordsIn, clock, quote, makeStage, setSetting, clampSize, clampWpm, reload } from './prompter-stage.js';
 import { nowTc, fmt, quoteOf, startTake, endTake, rateTake, openTake, markLine, editLine, openImport } from './pages/tcnotes.js';
+import { voiceSupported, voiceAgreed, agreeVoice, VOICE_NOTE, listen, voiceTrouble } from './prompter-voice.js';
 export { analyse } from './prompter-stage.js';
 
 const focusOf = log => (log && log.prompt && log.prompt.focus) || '';
 const paraOf = (logId, id) => { const l = byId('logs', logId); return (l && l.script && l.script.paras.find(p => p.id === id)) || null; };
 const lastLine = new Map(); // log id → the line its prompter was on, to open there again
-const KEYS_HELP = 'Clickers, foot pedals and keyboards: Space plays and pauses, Page Down and Page Up move a line, ↑ and ↓ change the speed, R rolls and cuts, F marks the line, Esc closes.';
+const KEYS_HELP = 'Clickers, foot pedals and keyboards: Space plays and pauses, Page Down and Page Up move a line, ↑ and ↓ change the speed, R rolls and cuts, F marks the line, V turns voice-follow on and off, Esc closes.';
+
+// Voice-follow, turned on with 🎙 (js/prompter-voice.js): the first time on a device, a word about where the sound
+// goes, and on only if the person says so. then() once agreed.
+function askVoice(then) {
+  const { close } = sheet('Voice-follow', h('div', { class: 'stack' },
+    h('p', null, VOICE_NOTE),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn primary', type: 'button', onclick: () => { agreeVoice(); close(); then(); } }, '🎙 Turn on voice-follow'),
+      h('button', { class: 'btn ghost', type: 'button', onclick: () => close() }, 'Not now'))));
+}
+// Listening while the stage runs with voice-follow on; aim(id, frac) moves it; fail(message) when it cannot listen.
+function earFor(getLines, aim, fail) {
+  let ear = null;
+  return {
+    check(s) {
+      const want = !!(P.voice && voiceSupported() && s && s.playing);
+      if (want && !ear) ear = listen({ lines: getLines(), from: s.line, onAim: aim, onStatus: st => { if (st.error) { ear = null; fail(voiceTrouble(st.error)); } } });
+      else if (!want && ear) { ear.stop(); ear = null; }
+    },
+    listening: () => !!ear,
+    stop() { if (ear) { ear.stop(); ear = null; } },
+  };
+}
 
 /* ------------------------------ the log's view ------------------------------ */
 // The Prompter view of a log: what will be read and how long it takes, where to show it, the settings for this
@@ -135,6 +159,7 @@ function promptKey(e, act) {
   else if (k === 'End') act('end');
   else if (k === 'r' || k === 'R') act('roll');
   else if (k === 'f' || k === 'F') act('flag');
+  else if (k === 'v' || k === 'V') act('voice');
   else if (k === 'g' || k === 'G') act('good');
   else if (k === 'n' || k === 'N') act('ng');
   else if (k === 'Escape') act('close');
@@ -146,6 +171,13 @@ function trapTab(e, root) {
   const items = [...root.querySelectorAll('button:not([disabled]):not([hidden])')].filter(el => el.offsetParent !== null); if (!items.length) return;
   const i = items.indexOf(document.activeElement); e.preventDefault();
   items[(i + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
+}
+// A button tapped or clicked hands the focus back to the overlay, so that a clicker's Space or Enter plays and pauses
+// rather than pressing that button again (one reached with Tab keeps it). After a sheet it opened, too.
+function giveBackFocus(root) {
+  const back = () => { if (root.isConnected && !document.querySelector('.sheet-back, .tour')) root.focus({ preventScroll: true }); };
+  root.addEventListener('click', e => { if (e.detail > 0 && e.target.closest && e.target.closest('button')) setTimeout(back, 0); });
+  return back;
 }
 // A key for an overlay, unless something is over it (a sheet, a walkthrough, the lock) or it is a button's own press.
 const keyFor = (e, root) => root.isConnected && !covered() && !document.querySelector('.sheet-back, .tour') && !(e.ctrlKey || e.metaKey || e.altKey) && !((e.key === ' ' || e.key === 'Enter') && e.target && e.target.closest && e.target.closest('button'));
@@ -180,12 +212,14 @@ function run(logId, from) {
   const rollBtn = h('button', { class: 'btn pr-roll', type: 'button', onclick: () => act('roll') });
   const playBtn = h('button', { class: 'btn primary pr-play', type: 'button', onclick: () => act('toggle') });
   const wpm = h('span', { class: 'pr-wpm' });
+  const voiceBtn = voiceSupported() && h('button', { class: 'btn pr-voice', type: 'button', 'aria-label': 'Voice-follow', title: 'Voice-follow: the script follows the talent’s voice', onclick: () => act('voice') }, '🎙');
   const bottom = h('div', { class: 'pr-hud pr-bottom' },
     rollBtn,
     h('button', { class: 'btn pr-prev', type: 'button', 'aria-label': 'Back a line', onclick: () => act('step', -1) }, '▲'),
     playBtn,
     h('button', { class: 'btn pr-next', type: 'button', 'aria-label': 'On a line', onclick: () => act('step', 1) }, '▼'),
     h('button', { class: 'btn pr-flag', type: 'button', 'aria-label': 'Mark the line being read', title: 'Mark this line', onclick: () => act('flag') }, '⚑'),
+    voiceBtn,
     h('div', { class: 'pr-speed', role: 'group', 'aria-label': 'Speed' },
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Slower', onclick: () => act('wpm', -5) }, '−'), wpm,
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Faster', onclick: () => act('wpm', 5) }, '+')),
@@ -194,6 +228,13 @@ function run(logId, from) {
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Bigger text', onclick: () => act('size', 1) }, 'A+')));
   const rateBox = h('div', { class: 'pr-ratebox', hidden: true, role: 'group', 'aria-label': 'Rate the take' });
   const hint = h('div', { class: 'pr-hint', role: 'status' });
+  // 🎙 voice-follow: the script follows the talent's voice while it runs (shown where the browser can do it).
+  const ear = earFor(() => stage.lines(), (id, frac) => stage.cmd('aim', { id, frac }), msg => { setSetting('voice', false); stage.cmd('follow', false); drawHud(); tell(msg); });
+  function setVoice(on) {
+    if (on && !voiceAgreed()) { stage.cmd('pause'); askVoice(() => setVoice(true)); return; }
+    setSetting('voice', on); stage.cmd('follow', on); ear.check(stage.state()); drawHud(); setTimeout(() => refocus(), 0);
+    tell(on ? '🎙 Voice-follow: the script follows the talent as they read' : 'Voice-follow off: the script runs at its speed');
+  }
   const root = h('div', { class: 'prompter', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Teleprompter', 'data-state': 'paused', tabindex: '-1' }, stage.el, top, bottom, rateBox, hint);
 
   // What a button, a key or a remote asks: the stage's own commands go to it; takes and marks are done here.
@@ -201,10 +242,12 @@ function run(logId, from) {
     if (name === 'roll') { const r = rollOrCut(logId, stage.lines(), stage.current(), (c, a) => stage.cmd(c, a)); if (r.cut) rate = ratingBox(rateBox, logId, r.cut); else rateBox.hidden = true; drawHud(); return; }
     if (name === 'flag') { const t = flagLine(logId, stage.lines(), stage.current()); if (t) tell(`Marked: “${quote(t)}”`); return; }
     if (name === 'good' || name === 'ng') { if (rate && !rateBox.hidden) rate(name); return; }
+    if (name === 'voice') { if (voiceSupported()) setVoice(!P.voice); return; }
     if (name === 'close') return close();
     stage.cmd(name, arg);
   }
   function onState(s) {
+    ear.check(s);
     root.dataset.state = s.counting ? 'count' : s.playing ? 'running' : 'paused';
     if (s.playing && !(was && was.playing)) hudSoon();
     if (!s.playing && (!was || was.playing)) showHud();
@@ -220,7 +263,9 @@ function run(logId, from) {
     playBtn.textContent = s.playing || s.counting ? '❚❚ Pause' : '▶ Play';
     state.textContent = t ? ` · take ${t.take} rolling` : l.take ? ` · ${l.take} take${l.take === 1 ? '' : 's'}` : '';
     stage.setRec(!!t);
-    wpm.textContent = `${s.wpm} wpm`;
+    wpm.textContent = s.follow ? '🎙 voice' : `${s.wpm} wpm`;
+    if (voiceBtn) { voiceBtn.setAttribute('aria-pressed', String(!!P.voice)); voiceBtn.classList.toggle('on', !!P.voice); }
+    if (ear.listening()) state.textContent += ' · listening';
     title.textContent = l.script ? l.script.name || l.title : l.title;
   }
   const tick = () => { const l = byId('logs', logId); tc.textContent = l && l.sync ? nowTc(l) : 'no timecode'; };
@@ -230,6 +275,7 @@ function run(logId, from) {
   root.addEventListener('pointermove', e => { if (e.pointerType === 'mouse') showHud(); });
   root.addEventListener('pointerdown', () => showHud());
   root.addEventListener('focusin', e => { if (e.target !== root) showHud(); }); // a button reached with Tab shows them all
+  const refocus = giveBackFocus(root);
   function lineMenu(id) {
     stage.cmd('pause');
     const a = stage.lines().find(x => x.id === id); if (!a) return;
@@ -268,7 +314,7 @@ function run(logId, from) {
     // A take rolled here in free run ends with the prompter. In record run the camera may still be rolling, so a take
     // there stays open for the log's own Cut.
     const l = byId('logs', logId); if (l && l.open && !(l.mode === 'record' && l.sync)) endTake(logId);
-    clearInterval(iv); clearTimeout(hudTimer); clearTimeout(hintTimer); stage.destroy(); unsub();
+    clearInterval(iv); clearTimeout(hudTimer); clearTimeout(hintTimer); ear.stop(); stage.destroy(); unsub();
     window.removeEventListener('keydown', onKey, true); document.removeEventListener('visibilitychange', onVisible);
     try { wake?.release(); } catch { /* gone already */ }
     if (ownFull && document.fullscreenElement === document.documentElement) document.exitFullscreen?.().catch(() => {});
@@ -285,6 +331,7 @@ function run(logId, from) {
   const log = byId('logs', logId);
   stage.load({ script: log.script, focus: focusOf(log), from });
   stage.attach();
+  if (P.voice && voiceSupported() && voiceAgreed()) stage.cmd('follow', true); // left on last time on this device
   drawHud(); tick();
   root.focus({ preventScroll: true }); // the dialog itself: Space then plays, and no button wears a focus ring
   tell('Tap the text or ▶ to start · hold a line to start from it, mark it or edit it');
@@ -308,6 +355,13 @@ function openRemote(logId, port) {
   const playBtn = h('button', { class: 'btn primary pr-play', type: 'button', onclick: () => act('toggle') }, '▶ Play');
   const wpm = h('span', { class: 'pr-wpm' }, `${P.wpm} wpm`);
   const list = h('ol', { class: 'pr-rlist', 'aria-label': 'The script: tap a line to go to it' });
+  // 🎙 on the remote: this device's microphone listens, and the stage at the other end follows.
+  const voiceBtn = voiceSupported() && h('button', { class: 'btn pr-voice', type: 'button', 'aria-label': 'Voice-follow, listening on this device', onclick: () => act('voice') }, '🎙');
+  const ear = earFor(() => hudLines, (id, frac) => port.send('aim', { id, frac }), msg => { setSetting('voice', false); port.send('follow', false); status.textContent = msg; draw(); });
+  function setVoice(on) {
+    if (on && !voiceAgreed()) { askVoice(() => setVoice(true)); return; }
+    setSetting('voice', on); port.send('follow', on); ear.check(s); draw(); setTimeout(() => refocus(), 0);
+  }
   const rateBox = h('div', { class: 'pr-ratebox', hidden: true, role: 'group', 'aria-label': 'Rate the take' });
   const root = h('div', { class: 'prompter pr-remote', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Prompter remote', tabindex: '-1' },
     h('div', { class: 'pr-hud pr-top' },
@@ -322,6 +376,7 @@ function openRemote(logId, port) {
       h('button', { class: 'btn pr-prev', type: 'button', 'aria-label': 'Back a line', onclick: () => act('step', -1) }, '▲'),
       h('button', { class: 'btn pr-next', type: 'button', 'aria-label': 'On a line', onclick: () => act('step', 1) }, '▼'),
       h('button', { class: 'btn pr-flag', type: 'button', 'aria-label': 'Mark the line being read', onclick: () => act('flag') }, '⚑'),
+      voiceBtn,
       h('div', { class: 'pr-speed', role: 'group', 'aria-label': 'Speed' }, h('button', { class: 'btn', type: 'button', 'aria-label': 'Slower', onclick: () => act('wpm', -5) }, '−'), wpm, h('button', { class: 'btn', type: 'button', 'aria-label': 'Faster', onclick: () => act('wpm', 5) }, '+')),
       h('div', { class: 'pr-size', role: 'group', 'aria-label': 'Text size' }, h('button', { class: 'btn', type: 'button', 'aria-label': 'Smaller text', onclick: () => act('size', -1) }, 'A−'), h('button', { class: 'btn', type: 'button', 'aria-label': 'Bigger text', onclick: () => act('size', 1) }, 'A+'))),
     list, rateBox);
@@ -339,13 +394,15 @@ function openRemote(logId, port) {
     const t = openTake(logId);
     rollBtn.textContent = t ? '■ Cut' : '● Roll'; rollBtn.classList.toggle('cut', !!t);
     playBtn.textContent = s && (s.playing || s.counting) ? '❚❚ Pause' : '▶ Play';
-    if (s) { wpm.textContent = `${s.wpm} wpm`; status.textContent = [t ? `● REC take ${t.take}` : '', s.counting ? 'counting down' : s.playing ? 'running' : 'paused', `${clock(s.left)} left`].filter(Boolean).join(' · '); }
+    if (s) { wpm.textContent = s.follow ? '🎙 voice' : `${s.wpm} wpm`; status.textContent = [t ? `● REC take ${t.take}` : '', s.counting ? 'counting down' : s.playing ? 'running' : 'paused', ear.listening() ? '🎙 listening here' : '', `${clock(s.left)} left`].filter(Boolean).join(' · '); }
+    if (voiceBtn) { voiceBtn.setAttribute('aria-pressed', String(!!P.voice)); voiceBtn.classList.toggle('on', !!P.voice); }
     if (keyOf() !== key) { key = keyOf(); drawList(); } else mark();
   }
   function act(name, arg) {
     if (name === 'roll') { const r = rollOrCut(logId, hudLines, at(), (c, a) => port.send(c, a)); if (r.cut) rate = ratingBox(rateBox, logId, r.cut); else rateBox.hidden = true; draw(); return; }
     if (name === 'flag') { flagLine(logId, hudLines, at()); return; }
     if (name === 'good' || name === 'ng') { if (rate && !rateBox.hidden) rate(name); return; }
+    if (name === 'voice') { if (voiceSupported()) setVoice(!P.voice); return; }
     if (name === 'close') return close();
     port.send(name, arg);
   }
@@ -354,12 +411,13 @@ function openRemote(logId, port) {
     if (e.key === 'Tab') { trapTab(e, root); return; }
     if (promptKey(e, act)) { e.preventDefault(); e.stopPropagation(); }
   };
+  const refocus = giveBackFocus(root);
   const unsub = subscribe(() => draw());
   const iv = setInterval(() => { const l = log(); tc.textContent = l && l.sync ? nowTc(l) : 'no timecode'; }, 250);
   // keep: closing because another remote takes over leaves the screen to it.
   function close(keep) {
     if (!root.isConnected) return;
-    clearInterval(iv); unsub(); window.removeEventListener('keydown', onKey, true);
+    clearInterval(iv); unsub(); ear.stop(); window.removeEventListener('keydown', onKey, true);
     if (!keep) port.closeScreen();
     port.done && port.done();
     root.remove(); REMOTE = null; settleApp();
@@ -368,7 +426,7 @@ function openRemote(logId, port) {
   document.body.append(root); settleApp();
   window.addEventListener('keydown', onKey, true);
   draw(); root.focus({ preventScroll: true });
-  REMOTE = { logId, port, close, state: st => { s = st; if (s.line) lastLine.set(logId, s.line); draw(); }, key: k => promptKey({ key: k }, act), lost: msg => { status.textContent = msg; s = null; draw(); } };
+  REMOTE = { logId, port, close, state: st => { s = st; if (s.line) lastLine.set(logId, s.line); if (P.voice && voiceSupported() && voiceAgreed() && !s.follow) port.send('follow', true); ear.check(s); draw(); }, key: k => promptKey({ key: k }, act), lost: msg => { ear.stop(); status.textContent = msg; s = null; draw(); } };
   return REMOTE;
 }
 
