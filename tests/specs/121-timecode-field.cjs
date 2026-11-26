@@ -71,14 +71,17 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await openLog(page, 'L1');
   const far = page.locator('.tc-note[data-id="n-far"] .tc-text');
   let count = (await logOf(page, 'L1')).notes.length;
-  await far.click(); await page.keyboard.press('End'); await page.keyboard.type(' EDITED');
+  // The cursor goes to the end of the note, wherever the tap landed in it and however a font wraps it (End alone is
+  // the end of the line the tap was on: in a wider font the note is two lines, and the words went into the middle).
+  const toEnd = () => far.evaluate(el => { const r = document.createRange(); r.selectNodeContents(el); r.collapse(false); const s = getSelection(); s.removeAllRanges(); s.addRange(r); });
+  await far.click(); await toEnd(); await page.keyboard.type(' EDITED');
   await page.evaluate(() => import('./js/store.js').then(s => s.touch())); await sleep(200);
   const inPlace = await page.evaluate(() => { const el = document.activeElement; return { box: el.classList.contains('tc-text'), id: el.closest('.tc-note')?.dataset.id, text: el.textContent }; });
   ok('a note being edited in place keeps its text and the focus when the page is drawn again', inPlace.box && inPlace.id === 'n-far' && inPlace.text === 'From the other device EDITED', JSON.stringify(inPlace));
   await page.getByRole('button', { name: /Mark now/ }).click(); await sleep(300);
   let log = await logOf(page, 'L1');
   ok('Mark now pressed straight after editing a note marks, and the edit is saved', log.notes.length === count + 1 && log.notes.find(n => n.id === 'n-far').text === 'From the other device EDITED', log.notes.length + ' notes, was ' + count);
-  await far.click(); await page.keyboard.press('End'); await page.keyboard.type(' again');
+  await far.click(); await toEnd(); await page.keyboard.type(' again');
   await page.getByRole('button', { name: 'Export' }).click(); await sleep(300);
   ok('…and so does Export: its sheet opens, with the edit in it', (await page.locator('.sheet .export-preview').count()) === 1 && /again/.test(await page.locator('.sheet .export-preview').innerText()));
   await closeSheet(page);
