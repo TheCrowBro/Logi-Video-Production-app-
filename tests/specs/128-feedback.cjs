@@ -75,6 +75,43 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('at 320 px the button and its sheet fit the screen', pageOver <= 0 && sheetOver <= 0, JSON.stringify({ pageOver, sheetOver }));
   await page.keyboard.press('Escape'); await sleep(250);
 
+  // ---- the button has the focus back when the sheet closes, also after Settings was drawn again under it ----
+  await page.setViewportSize({ width: 420, height: 900 }); await sleep(250);
+  await page.locator('#page .feedback-btn').focus(); await page.keyboard.press('Enter'); await page.waitForSelector('.sheet .feedback');
+  await page.evaluate(() => import('./js/store.js').then(s => s.touch())); await sleep(400); // a sync that brought something draws Settings again
+  await page.keyboard.press('Escape'); await sleep(300);
+  ok('closing the sheet gives the focus back to the button, also when Settings was drawn again meanwhile', await page.evaluate(() => document.activeElement && document.activeElement.classList.contains('feedback-btn')), await page.evaluate(() => document.activeElement && (document.activeElement.className || document.activeElement.tagName)));
+
+  // ---- the storage: its kind, never a file's name or a server's address ----
+  const kinds = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/feedback.js')]).then(([s, f]) => {
+    const was = s.cloud.adapter, out = [];
+    for (const a of [{ id: 'file', label: 'Jane Doe Films - Vdex.json' }, { id: 'webdav', label: 'WebDAV (cloud.janedoe.example:8443)' }, { id: 'webdav', label: 'Nextcloud (home.janedoe.example)' }, { id: 'gdrive', label: 'Google Drive' }]) { s.cloud.adapter = a; out.push(f.details().split('\n').find(l => l.startsWith('Storage:'))); }
+    s.cloud.adapter = was; return out;
+  }));
+  ok('the storage line names the kind of storage only: never a linked file\'s name or a WebDAV or Nextcloud server', /^Storage: a file on this device/.test(kinds[0]) && /^Storage: WebDAV\b/.test(kinds[1]) && /^Storage: Nextcloud\b/.test(kinds[2]) && /^Storage: Google Drive/.test(kinds[3]) && !kinds.some(k => /janedoe|Jane Doe/.test(k)), JSON.stringify(kinds));
+
+  // ---- the Google Play app: sure only while its address shows it ----
+  const play = await page.evaluate(() => import('./js/feedback.js').then(f => { const run = () => f.details().split('\n').find(l => l.startsWith('Running as:')); localStorage.setItem('vdex-licence', JSON.stringify({ play: true })); const marked = run(); history.replaceState(null, '', location.pathname + '?src=play' + location.hash); const shown = run(); history.replaceState(null, '', location.pathname + location.hash); localStorage.removeItem('vdex-licence'); return [marked, shown]; }));
+  ok('a phone marked by the Google Play app says it may be Chrome there; the Play app\'s own address says the Play app', play[0] === 'Running as: the Google Play app, or Chrome on a phone that has it (display mode browser)' && play[1] === 'Running as: the Google Play app (display mode browser)', JSON.stringify(play));
+
+  // ---- a page that started before the update keeps no log: it says so, rather than "none" ----
+  const unrecorded = await page.evaluate(() => import('./js/feedback.js').then(f => { const was = window.__vdexErrors; delete window.__vdexErrors; const line = f.details().split('\n').find(l => l.startsWith('Errors since')); window.__vdexErrors = was; return line; }));
+  ok('with no error log (a page opened before the update), it says the errors were not recorded', /^Errors since Vdex opened: not recorded/.test(unrecorded), unrecorded);
+
+  // ---- an older style sheet (a page still running one, which fetches this sheet after an update) keeps it on screen ----
+  await page.setViewportSize({ width: 390, height: 844 }); await sleep(250);
+  await page.evaluate(() => { for (const sh of document.styleSheets) { let rules; try { rules = sh.cssRules; } catch { continue; } for (let n = rules.length - 1; n >= 0; n--) if (/feedback/.test(rules[n].cssText)) sh.deleteRule(n); } });
+  await page.locator('#page .feedback-btn').click(); await page.waitForSelector('.sheet .feedback'); await sleep(300);
+  const old = await page.evaluate(() => { const sh = document.querySelector('.sheet'), right = Math.max(...[...sh.querySelectorAll('.feedback *')].map(e => e.getBoundingClientRect().right)), scrolls = [sh, ...sh.querySelectorAll('*')].some(e => e.scrollWidth - e.clientWidth > 1 && getComputedStyle(e).overflowX !== 'visible' && !e.matches('pre')); return { page: document.documentElement.scrollWidth - innerWidth, right: Math.round(right), edge: Math.round(sh.getBoundingClientRect().right), scrolls }; });
+  ok('without this version\'s styles the sheet still fits a 390 px phone: nothing in it runs past its edge or scrolls sideways', old.page <= 0 && old.right <= old.edge && !old.scrolls, JSON.stringify(old));
+  await page.keyboard.press('Escape'); await sleep(250);
+  await page.reload(); await page.waitForSelector('#rolodex .drum-btn'); await page.evaluate(() => window.logiGo('settings')); await sleep(450);
+
+  // ---- on a wide screen the card is as wide as the fold-downs under it ----
+  await page.setViewportSize({ width: 1400, height: 900 }); await sleep(300);
+  const widths = await page.evaluate(() => [document.querySelector('#page .feedback-card').getBoundingClientRect().width, document.querySelector('#page details.settings-group').getBoundingClientRect().width].map(Math.round));
+  ok('on a wide screen the card is no wider than the fold-downs', widths[0] <= widths[1] + 1 && widths[0] > 300, JSON.stringify(widths));
+
   // ---- the desktop app says so ----
   const ctx2 = await browser.newContext({ viewport: { width: 1100, height: 800 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Vdex/1.5.0 Chrome/140.0.0.0 Electron/38.0.0 Safari/537.36' });
   await ctx2.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); });

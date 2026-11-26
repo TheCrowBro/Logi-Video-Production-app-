@@ -539,7 +539,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .sg-body .ss-body .provider, .sg-body .ss-body .card, .sg-body .ss-body .twirl { background: var(--card); }
 .ss-sub { margin-top: 18px; }
 .profile-kv > div > span:first-child { min-width: 6.5rem; } .profile-kv > div > span:last-child { min-width: 0; overflow-wrap: anywhere; text-align: right; }
-@media (min-width: 1000px) { .settings-section, .settings-group { max-width: 760px; } }
+@media (min-width: 1000px) { .settings-section, .settings-group, .feedback-card { max-width: 760px; } }
 
 /* twirl-downs (settings lists) */
 .twirl { border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); margin-bottom: 8px; }

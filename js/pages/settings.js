@@ -102,8 +102,8 @@ export const settings = {
     root.append(
       h('div', { class: 'page-head' }, h('h1', null, 'Settings')),
       // Its own button above the fold-downs, so that nobody has to look for it (js/feedback.js, fetched on the first tap).
-      h('div', { class: 'feedback-card' },
-        h('button', { class: 'btn primary feedback-btn', type: 'button', onclick: () => import('../feedback.js').then(m => m.openFeedback(), e => { console.error(e); toast('Could not open it. Check the connection and try again, or write to support@crowmade.app'); }) }, '💬 Report a problem or send feedback'),
+      h('div', { class: 'card feedback-card' },
+        h('button', { class: 'btn primary feedback-btn', type: 'button', 'data-fk': 'feedback', onclick: () => import('../feedback.js').then(m => m.openFeedback(), e => { console.error(e); toast('Could not open it. Check the connection and try again, or write to support@crowmade.app'); }) }, '💬 Report a problem or send feedback'),
         h('p', { class: 'small muted' }, 'Something not working, or an idea? It opens an email to us with your Vdex version and device already in it.')),
       group(GENERAL, db.profile.name || 'profile not set', [
         section('Display & accessibility', prefsSummary(), display.el),
