@@ -499,6 +499,20 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       ok('…and an equipment import that updates an item stamped ahead and adds another is taken back whole by its Undo', undo === '2,1,1,0,Drone:+Lens:', undo);
       await A.ctx.close(); await C.ctx.close(); await D.ctx.close(); await X.ctx.close();
     }
+    // …and two copies of a booking with the same time that say different things (two starts that drew the same seat, or
+    // two changes in the same millisecond) are settled alike on both devices. Each kept its own for good, and both
+    // uploaded the whole copy at every sync.
+    {
+      const T = Date.now() - 60000, copy = title => JSON.stringify({ version: 1, updatedAt: T, bookings: [{ id: 'tie', title, date: '2026-12-01', status: 'Confirmed', crew: [], gear: [], updatedAt: T }], deleted: {} });
+      const cl = newCloud(), P = await device(cl, 'P', { seed: { 'logi-db-v1': copy('Renamed on P') } }), Q = await device(cl, 'Q', { seed: { 'logi-db-v1': copy('Renamed on Q') } });
+      await start(P.page); await synced(P.page); await start(Q.page); await synced(Q.page);
+      for (let i = 0; i < 2; i++) { await syncNow(P.page); await syncNow(Q.page); }
+      cl.log.length = 0;
+      for (let i = 0; i < 3; i++) { await syncNow(P.page); await syncNow(Q.page); }
+      const both = [(await held(P.page)).join(), (await held(Q.page)).join()], more = cl.log.filter(l => / PUT /.test(l) && l.endsWith(MAIN)).length, stored = cloudDb(cl).bookings.find(b => b.id === 'tie').title;
+      ok('two copies of a booking with the same time and different words end the same on both devices and in the storage, and nothing more is uploaded', both[0] === both[1] && /^tie:Renamed on [PQ]$/.test(both[0]) && both[0] === 'tie:' + stored && more === 0, JSON.stringify([both, stored, more]));
+      await P.ctx.close(); await Q.ctx.close();
+    }
     {
       const cl = newCloud(), P = await device(cl, 'P'), Q = await device(cl, 'Q');
       const writes = name => cl.log.filter(l => l === `${name} PUT ${MAIN}`).length, rounds = async n => { cl.log.length = 0; for (let i = 0; i < n; i++) { await front(P.page); await sleep(150); await front(Q.page); await sleep(150); } return writes('P') + writes('Q'); };

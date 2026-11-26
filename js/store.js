@@ -173,9 +173,10 @@ const newestOf = d => { const top = new Map(); for (const [, o, f, g] of stamps(
 // "Past" t is not the same number on every device: two devices that both hold that copy and each change the same
 // thing before reading the other would then stamp it alike. So each running Vdex counts in a seat of its own, one of
 // 256: the next time after t that is its seat's turn. Two such changes then differ, the later number wins on both
-// devices, and they agree. (A change made after reading the other's is later whatever the seats.) Each change so
-// stamped moves the time on by up to a quarter of a second, so this is kept for a time that far ahead of the clock or
-// more: another device's clock, never the millisecond a burst of changes shares, where it is plainly one past.
+// devices, and they agree. (A change made after reading the other's is later whatever the seats, and two that tie all
+// the same are settled alike on every device: later() in the merge.) Each change so stamped moves the time on by up to
+// a quarter of a second, so this is kept for a time that far ahead of the clock or more: another device's clock, never
+// the millisecond a burst of changes shares, where it is plainly one past.
 const SEAT = Math.floor(Math.random() * 256), SEATS = 256;
 const onePast = t => { const n = t + 1; return n + ((SEAT - n) % SEATS + SEATS) % SEATS; };
 export const stampSeat = () => SEAT; // (for the specs: two devices of a case must not sit in the same seat by chance)
@@ -636,7 +637,20 @@ function mergeList(a, b, dead, mergeOne) {
   b.forEach(y => { const x = m.get(y.id); m.set(y.id, x ? mergeOne(x, y) : y); });
   return [...m.values()].filter(x => !(dead[x.id] > (mergeOne === mergeNote ? nts(x) : ts(x))));
 }
-const newer = (x, y) => (ts(y) > ts(x) ? y : x);
+// Of two copies of a thing, the one with the later time. Two with the same time are settled alike on every device: the
+// one whose text (its keys in order) sorts later. A tie kept as each device's own copy would leave two devices that
+// stamped different changes alike (two starts that drew the same seat, two changes in the same millisecond) each with
+// its own for good, both uploading the whole copy at every sync. (Copies that differ only in the order of their keys
+// hold the same; a device still on 1.4.0 keeps its own on a tie until it is updated.) view: the part of each copy that
+// the choice is about.
+const canon = v => JSON.stringify(v, (k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.keys(x).sort().map(key => [key, x[key]])) : x));
+function later(x, y, tx, ty, view = v => v) {
+  if (tx !== ty) return ty > tx;
+  if (x === y) return false;
+  const a = view(x), b = view(y);
+  return JSON.stringify(a) !== JSON.stringify(b) && canon(b) > canon(a);
+}
+const newer = (x, y) => (later(x, y, ts(x), ts(y)) ? y : x);
 // A booking follows its newer copy, except its budget, which follows the newer budget: one device can plan costs while
 // another ticks the checklist, and neither loses the other's work.
 const budgetAt = b => Number(b && b.budget && b.budget.updatedAt) || 0, boardAt = b => Number(b && b.board && b.board.updatedAt) || 0;
@@ -669,10 +683,10 @@ const mergeBooking = (x, y) => {
   if (rows && more.length) out = { ...out, shared: { ...out.shared, rows: { ...rows, strips: [...had, ...more] } } };
   return out;
 };
-const mergeNote = (x, y) => (nts(y) > nts(x) ? y : x);
+const mergeNote = (x, y) => (later(x, y, nts(x), nts(y)) ? y : x);
 // A log's settings (sync point, mode, script…) follow the newer copy; its notes are the union of both.
 export function mergeLog(a, b, globalDead = db.deleted) {
-  const base = newer(a, b), other = base === a ? b : a;
+  const base = later(a, b, ts(a), ts(b), ({ notes, script, dead, ...own }) => own) ? b : a, other = base === a ? b : a; // (the notes, the script and the marks are settled below, each by its own times)
   const dead = { ...globalDead }; // a log carries its own note tombstones so they travel with it
   for (const src of [a.dead, b.dead]) for (const [id, t] of Object.entries(src || {})) dead[id] = Math.max(dead[id] || 0, t);
   const notes = mergeList(base.notes || [], other.notes || [], dead, mergeNote);
@@ -699,17 +713,17 @@ export function mergeDb(local, remote) {
     out.bookings = out.bookings.map(b => lessKey(lessQty(less(less(less(b, 'gear', noGear), 'crew', noCrew), 'kits', noKit)), 'venueId', noVenue));
     out.kits = out.kits.map(k => lessQty(less(k, 'gear', noGear)));
     out.logs = out.logs.map(l => lessKey(l, 'bookingId', noBooking)); }
-  out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
+  out.profile = newer(local.profile, remote.profile);
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking
-    const a = local.calSync || {}, b = remote.calSync || {}, base = ts(b) > ts(a) ? b : a;
+    const a = local.calSync || {}, b = remote.calSync || {}, base = later(a, b, ts(a), ts(b), ({ events, ...own }) => own) ? b : a;
     const events = { ...(a.events || {}) };
     // (two entries of the same time: the one that looked at the calendar later, so that both devices choose the same)
     for (const [k, v] of Object.entries(b.events || {})) { const cur = events[k]; if (!cur || (v.at || 0) > (cur.at || 0) || ((v.at || 0) === (cur.at || 0) && (Number(v.seen) || 0) > (Number(cur.seen) || 0))) events[k] = v; }
     out.calSync = { ...base, events };
   }
-  out.templates = ts(remote.templates) > ts(local.templates) ? remote.templates : local.templates;
-  out.billing = ts(remote.billing) > ts(local.billing) ? remote.billing : local.billing;
-  out.priceList = ts(remote.priceList) > ts(local.priceList) ? remote.priceList : local.priceList; // its own record: a change to the other billing settings never undoes it
+  out.templates = newer(local.templates, remote.templates);
+  out.billing = newer(local.billing, remote.billing);
+  out.priceList = newer(local.priceList, remote.priceList); // its own record: a change to the other billing settings never undoes it
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
 }
