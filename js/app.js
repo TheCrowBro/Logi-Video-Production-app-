@@ -109,13 +109,13 @@ let redrawQueued = false, asStored = false;
 // control, and a page drawn again between that press and its release takes the pressed control away, so the click
 // never comes (a tick box not ticked, a box not entered, an Add that adds nothing). The page is drawn once the press
 // has ended, a moment after the click it brought; a press that is held (a drag, a long press) waits 0.7 s at most.
-let downAt = 0, heldBack = false;
-const drawHeldBack = () => { downAt = 0; if (!heldBack) return; heldBack = false; setTimeout(() => { if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); } }, 0); };
+let downAt = 0, heldBack = false, heldTimer = 0; // (the timer belongs to its press: one left over would draw the page under the next press)
+const drawHeldBack = () => { downAt = 0; clearTimeout(heldTimer); if (!heldBack) return; heldBack = false; setTimeout(() => { if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); } }, 0); };
 document.addEventListener('pointerdown', () => { downAt = Date.now(); }, true);
 for (const t of ['pointerup', 'pointercancel']) document.addEventListener(t, drawHeldBack, true);
 function redraw() {
   redrawQueued = false;
-  if (downAt && Date.now() - downAt < 700) { if (!heldBack) { heldBack = true; setTimeout(() => { if (heldBack) drawHeldBack(); }, 700); } return; }
+  if (downAt && Date.now() - downAt < 700) { if (!heldBack) { heldBack = true; clearTimeout(heldTimer); heldTimer = setTimeout(drawHeldBack, 700 - (Date.now() - downAt)); } return; }
   const typed = !asStored; asStored = false;
   const p = current >= 0 && tabs[current] && tabs[current].page;
   if (!p || p.static) return; // a section still loading draws itself fresh when it arrives

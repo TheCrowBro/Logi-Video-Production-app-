@@ -177,7 +177,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   // The crew table on a phone: a phone number and an email address wrap inside their cells, so the table ends at the
   // paper's edge and the Email column is not cut off (names and roles keep whole words)
   await page.evaluate(() => import('./js/store.js').then(s => { const crew = [['cw-1', 'Sam Rivera', 'Sound Recordist', '+1 555 0101', 'sam.rivera@example.com'], ['cw-2', 'Jo Chen', '1st AC', '+1 555 0102', 'jo@example.com'], ['cw-3', 'Priya Nair', 'Editor', '+1 555 0104', 'priya.nair@example.com']];
-    s.update(d => { for (const [id, name, role, phone, email] of crew) d.crew.push({ id, name, role, phone, email, updatedAt: Date.now() }); d.bookings.push({ id: 'cf-phone', title: 'Crew table', date: '2026-12-08', start: '08:00', status: 'Confirmed', stakeholders: [], crew: crew.map(c => c[0]), gear: [], updatedAt: Date.now() }); }); }));
+    s.update(d => { for (const [id, name, role, phone, email] of crew) d.crew.push({ id, name, role, phone, email, updatedAt: Date.now() }); d.bookings.push({ id: 'cf-phone', title: 'Crew table', date: '2026-12-08', start: '08:00', status: 'Confirmed', stakeholders: [], crew: crew.map(c => c[0]), crewCall: { 'cw-1': '07:30', 'cw-2': '07:00' }, hires: [{ id: 'cw-h', name: 'Ada Lovell', role: 'Gaffer', phone: '+1 555 0105', email: 'ada@example.com' }], gear: [], updatedAt: Date.now() }); }); }));
   await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-phone', { view: 'callsheet' }))); await page.waitForSelector('.cs-paper table');
   const fits = [];
   for (const width of [320, 360, 390]) { await page.setViewportSize({ width, height: 800 }); await sleep(250);

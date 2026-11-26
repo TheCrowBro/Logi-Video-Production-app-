@@ -706,6 +706,7 @@ body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
 .cs-paper .money-totals { margin: 8px 0 0 auto; max-width: 320px; } .cs-paper .money-totals .cs-kv { grid-template-columns: 1fr auto; text-align: right; } .cs-paper .money-totals .total b { font-size: 1rem; }
 .cs-paper th.num, .cs-paper td.num { text-align: right; white-space: nowrap; }
 .cs-paper td.free { overflow-wrap: anywhere; } /* a phone number or an email address is one long word: it wraps inside its cell, so the crew table stays on the paper on a phone */
+@media (max-width: 340px) { .cs-paper th, .cs-paper td { padding-left: 3px; padding-right: 3px; } } /* …and on the narrowest phones its five columns stand a little closer */
 .money-pills { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
 /* The money overview on a phone: the four totals two by two, and a booking's quote and invoice under its name when they do not fit beside it. */
 .money-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
