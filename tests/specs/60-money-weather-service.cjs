@@ -137,7 +137,27 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     const again = m.mergeSuggested(quoted.lines, m.suggestLines({ id: 'x', date: '2026-12-01', quote: { lines: [{ id: 'q1', desc: 'Editing', qty: 2, unit: 'day', price: 400 }, { id: 'q2', desc: 'Travel', qty: 1, unit: 'each', price: 80 }] } }, 'invoice', 'quote'), 'quote');
     return { grown: show(grown), price: grown.lines[0].price, old: show(old), quoted: show(quoted), again: show(again), leak: JSON.stringify(m.snapshot(s.byId('bookings', 'mn-h'), 'invoice')).includes('"src"') }; }));
   ok('a quote made for one day, asked again once the job is three days, has three shoot days and three crew days, each once', !!merged && /^Shoot days 3 day \| Crew: [^|]+ 3 day \(\+0 ~2\)$/.test(merged.grown) && merged.price === 600, JSON.stringify(merged && merged.grown));
-  ok('lines saved before this repair are known by what they say, and a line typed by hand is left as it is', !!merged && merged.old === 'Shoot days 2 day | Editing 8 hour | Travel 1 each (+0 ~2)', JSON.stringify(merged && merged.old));
+  ok('lines saved before this repair are known by what they say, so none comes twice, and are left as they are, as is a line typed by hand', !!merged && merged.old === 'Shoot day 1 day | Editing 3 hour | Travel 1 each (+0 ~0)', JSON.stringify(merged && merged.old));
+  // found by the last check: “Lines from the booking” on an invoice whose lines were changed by hand (a crew day taken
+  // off on an invoice already sent and part paid, a line for each unit) put back the suggested quantity and wrote over
+  // the person's description. A line changes only while it is as a suggestion left it.
+  const byHand = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => {
+    const c = s.db.crew[0], show = r => r.lines.map(l => `${l.desc} ${l.qty}`).join(' | ') + ` (+${r.added} ~${r.updated})`;
+    const job = (days, more = {}) => ({ id: 'mn-hand', title: 'Wedding', date: '2026-12-01', endDate: days > 1 ? `2026-12-0${days}` : '', crew: [c.id], gear: [], stakeholders: [], ...more });
+    const rental = { rentals: [{ id: 'r1', item: 'Prism lens', from: 'Camera Co', cost: 50 }] };
+    const made = m.suggestLines(job(3), 'invoice', 'booking'), crewAt = made.findIndex(l => l.src === 'crew:' + c.id);
+    const lowered = lines => lines.map((l, i) => (i === crewAt ? { ...l, qty: Number(l.qty) - 1 } : l));
+    const bare = lines => lines.map(({ src, sq, ...l }) => l); // as 1.4.0 kept a line
+    return {
+      old: show(m.mergeSuggested(lowered(bare(made)), m.suggestLines(job(3, rental), 'invoice', 'booking'), 'booking')),
+      now: show(m.mergeSuggested(lowered(made), m.suggestLines(job(3, rental), 'invoice', 'booking'), 'booking')),
+      untouched: show(m.mergeSuggested(made, m.suggestLines(job(4, rental), 'invoice', 'booking'), 'booking')),
+      units: show(m.mergeSuggested([{ id: 'u1', desc: 'Shoot day — main unit', qty: 3, unit: 'day', price: 600 }, { id: 'u2', desc: 'Shoot day — second unit', qty: 1, unit: 'day', price: 400 }], m.suggestLines(job(3), 'invoice', 'booking'), 'booking')),
+      crew: made[crewAt].qty }; }));
+  const crewLine = `Crew: ${await page.evaluate(() => import('./js/store.js').then(s => { const c = s.db.crew[0]; return c.name + (c.role ? ' (' + c.role + ')' : ''); }))}`;
+  ok('“Lines from the booking” leaves a quantity set by hand as it is, on a line from before the update and on one it suggested, and adds the rental alone', !!byHand && byHand.old === `Shoot days — Wedding 3 | ${crewLine} ${byHand.crew - 1} | Hire: Prism lens (Camera Co) 1 (+1 ~0)` && byHand.now === byHand.old, JSON.stringify(byHand));
+  ok('…brings a line it suggested that nobody changed up to date, its “Shoot days” included', !!byHand && byHand.untouched === `Shoot days — Wedding 4 | ${crewLine} ${byHand.crew / 3 * 4} | Hire: Prism lens (Camera Co) 1 (+1 ~2)`, JSON.stringify(byHand && byHand.untouched));
+  ok('…and never writes over a description the person wrote, a shoot line for each unit included', !!byHand && byHand.units === `Shoot day — main unit 3 | Shoot day — second unit 1 | ${crewLine} ${byHand.crew} (+1 ~0)`, JSON.stringify(byHand && byHand.units));
   ok('“Lines from the quote” adds the quote’s Editing by the day beside the editing hours, once, and never changes a line', !!merged && merged.quoted === 'Shoot days 2 day | Editing 8 hour | Editing 1 day | Travel 1 each (+2 ~0)' && merged.again === 'Shoot days 2 day | Editing 8 hour | Editing 1 day | Travel 1 each (+0 ~0)' && !merged.leak, JSON.stringify(merged && [merged.quoted, merged.again, merged.leak]));
   // Documents made before lines carried their source (1.4.0): a quote made "From the booking", its invoice made "From
   // the quote", there or after the update. Asking for the lines again adds only what is missing.
