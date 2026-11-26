@@ -436,6 +436,29 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       ok(`a call sheet marked sent after its stripboard was arranged reads Sent, and Changed once the scenes are arranged again (the other clock ${word})`, sentThen === 'sent' && /Sent/.test(line) && !/Changed/.test(line) && (await sheet()) === 'changed', JSON.stringify([sentThen, line, await sheet()]));
       await P.ctx.close(); await Q.ctx.close();
     }
+    // …and two such devices that each change the same booking before either has read the other: both count their
+    // change as one past the same time. Stamped alike, each kept its own for ever (a tie goes to the copy here) and
+    // uploaded the whole copy at every sync. Each running Vdex now counts in a seat of its own, so the two times
+    // differ, one wins on both devices, and nothing more is uploaded.
+    {
+      const cl = newCloud(), P = await device(cl, 'P', { clock: 20 * 60e3 }), Q = await device(cl, 'Q'), R = await device(cl, 'R');
+      await start(P.page); await add(P.page, 'x', 'Made where the clock is ahead'); await saved(P.page);
+      await start(Q.page); await synced(Q.page); await start(R.page); await synced(R.page);
+      // (a seat is drawn at each start, one of 256: should R have drawn Q's, it starts again)
+      const seat = page => st(page, s => (typeof s.stampSeat === 'function' ? s.stampSeat() : -1)), seatQ = await seat(Q.page);
+      for (let i = 0; i < 20 && seatQ >= 0 && (await seat(R.page)) === seatQ; i++) { await R.page.reload(); await R.page.waitForSelector('#rolodex .drum-btn'); await synced(R.page); }
+      cl.offline = true; // neither reads the other's change before it has made its own
+      await st(Q.page, s => s.upsert('bookings', { ...s.byId('bookings', 'x'), title: 'Changed on Q' }));
+      await st(R.page, s => s.upsert('bookings', { ...s.byId('bookings', 'x'), title: 'Changed on R' }));
+      const aheadOfClock = await st(Q.page, s => s.db.updatedAt > Date.now());
+      cl.offline = false;
+      for (let i = 0; i < 2; i++) { await syncNow(Q.page); await syncNow(R.page); }
+      cl.log.length = 0;
+      for (let i = 0; i < 3; i++) { await syncNow(Q.page); await syncNow(R.page); }
+      const both = [(await held(Q.page)).join(), (await held(R.page)).join()], more = cl.log.filter(l => / PUT /.test(l) && l.endsWith(MAIN)).length;
+      ok('two devices whose copy is ahead of their clocks each change the same booking before reading the other: they end with the same one and upload nothing more', aheadOfClock && both[0] === both[1] && /^x:Changed on [QR]$/.test(both[0]) && more === 0, JSON.stringify([aheadOfClock, both, more]));
+      await P.ctx.close(); await Q.ctx.close(); await R.ctx.close();
+    }
     {
       const cl = newCloud(), P = await device(cl, 'P'), Q = await device(cl, 'Q');
       const writes = name => cl.log.filter(l => l === `${name} PUT ${MAIN}`).length, rounds = async n => { cl.log.length = 0; for (let i = 0; i < n; i++) { await front(P.page); await sleep(150); await front(Q.page); await sleep(150); } return writes('P') + writes('Q'); };
