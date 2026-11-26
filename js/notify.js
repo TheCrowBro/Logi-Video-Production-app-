@@ -73,20 +73,20 @@ const background = () => document.hidden || !document.hasFocus();
 
 export const notifyAllowanceUsed = () => show('Approved break used up', 'Today’s approved break time for this production is gone.', { tag: 'logi-allowance' });
 
-// The buttons on a notification: cb('break-end' | 'break-extend'). The service worker's come through js/clock.js; the
-// phone's come through here.
-// A button pressed before the clock listens (the app opened by it, still at the lock screen) is kept and handed over
-// when it does.
+// The buttons on a notification: cb('break-end' | 'break-extend'), from the phone (the iPhone app) or from the service
+// worker (everywhere else). A button pressed before the clock listens is kept and handed over when it does: pressed
+// after Vdex's page was closed, it opens Vdex and its message arrives the moment the page exists, with the lock
+// screen still up. So both are listened for from the moment this file runs, which is before the lock.
 const actionSubs = new Set();
 let heldActions = [];
 export const onAction = cb => { actionSubs.add(cb); const held = heldActions; heldActions = []; held.forEach(t => { try { cb(t); } catch { /* ignore */ } }); return () => actionSubs.delete(cb); };
+const pressed = type => { if (!actionSubs.size) { heldActions.push(type); return; } actionSubs.forEach(f => { try { f(type); } catch { /* ignore */ } }); };
 if (phoneApp) native.notifications.onAction((id, extra) => {
   if (extra && extra.tag && extra.tag !== 'logi-break') return;
   const type = id === 'back' ? 'break-end' : id === 'later' ? 'break-extend' : null;
-  if (!type) return;
-  if (!actionSubs.size) { heldActions.push(type); return; }
-  actionSubs.forEach(f => { try { f(type); } catch { /* ignore */ } });
+  if (type) pressed(type);
 });
+else if ('serviceWorker' in navigator) navigator.serviceWorker.addEventListener('message', e => { const type = (e.data || {}).type; if (type === 'break-end' || type === 'break-extend') pressed(type); });
 
 // Keep the screen on while a timed break runs (phones suspend background pages; a lit screen keeps the timer alive).
 let lock = null;

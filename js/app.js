@@ -1,4 +1,4 @@
-import { h, sheet, toast } from './util.js';
+import { h, sheet, toast, redrawKeeping } from './util.js';
 import { createRolodex } from './rolodex.js';
 import * as store from './store.js';
 import { storagePanel, backupPanel } from './storage-ui.js';
@@ -102,27 +102,38 @@ function show(i, dir = 0) {
 
 // Re-render the active page when data changes (field tools keep their own live state).
 // Redraws are coalesced: a burst of changes in one go (an import, a template applied, a merge) draws the page once.
-let redrawQueued = false;
-// What identifies a control across a redraw: its kind, its id or label, and the text around it (a checklist box is
-// known by its line). The same control in the new page gets the focus back, so ticking by keyboard stays in place.
-const focusKey = el => (el && el !== document.body && page.contains(el) ? [el.tagName, el.type || '', el.id || el.getAttribute('aria-label') || el.name || '', ((el.closest('label') || el).textContent || '').trim().slice(0, 80)].join('|') : null);
+let redrawQueued = false, asStored = false;
+// The control that had the focus has it again afterwards, with what was being typed in it (redrawKeeping in js/util.js);
+// not after a change that was refused (store.redraw()): the box then shows what is stored, not what was typed.
+// Not under a press: a box that saves as it is left (a call time, a rate in Settings) is left by the press on the next
+// control, and a page drawn again between that press and its release takes the pressed control away, so the click
+// never comes (a tick box not ticked, a box not entered, an Add that adds nothing). The page is drawn once the press
+// has ended, a moment after the click it brought; a press that is held (a drag, a long press) waits 0.7 s at most.
+let downAt = 0, heldBack = false, heldTimer = 0; // (the timer belongs to its press: one left over would draw the page under the next press)
+const drawHeldBack = () => { downAt = 0; clearTimeout(heldTimer); if (!heldBack) return; heldBack = false; setTimeout(() => { if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); } }, 0); };
+document.addEventListener('pointerdown', () => { downAt = Date.now(); }, true);
+for (const t of ['pointerup', 'pointercancel']) document.addEventListener(t, drawHeldBack, true);
 function redraw() {
   redrawQueued = false;
+  if (downAt && Date.now() - downAt < 700) { if (!heldBack) { heldBack = true; clearTimeout(heldTimer); heldTimer = setTimeout(drawHeldBack, 700 - (Date.now() - downAt)); } return; }
+  const typed = !asStored; asStored = false;
   const p = current >= 0 && tabs[current] && tabs[current].page;
   if (!p || p.static) return; // a section still loading draws itself fresh when it arrives
-  const y = window.scrollY, key = focusKey(document.activeElement);
+  const y = window.scrollY;
   const holder = page.firstElementChild;
   if (!holder) return;
-  cleanup && cleanup();
-  holder.replaceChildren();
-  cleanup = p.render(holder) || null;
-  window.scrollTo(0, y);
-  if (key) { const again = [...holder.querySelectorAll('button, input, select, textarea, a[href], summary, [tabindex]')].find(el => focusKey(el) === key); if (again) again.focus({ preventScroll: true }); }
+  redrawKeeping(holder, () => {
+    cleanup && cleanup();
+    holder.replaceChildren();
+    cleanup = p.render(holder) || null;
+    window.scrollTo(0, y);
+  }, { typed });
 }
 store.subscribe(reason => {
   paintCloud();
   if (reason === 'licence') return; // the licence changed what may be linked or saved: the panels concerned redraw themselves
   if (reason === 'status' && tabs[current] && tabs[current].id !== 'settings') return; // sync status alone is not worth redrawing a page for
+  if (reason === 'stored') asStored = true;
   if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); }
 });
 
@@ -137,6 +148,10 @@ const rolodex = createRolodex(nav, tabs, { start, onSelect: (i, dir) => { showNa
 let navHeld = 0;
 function showNav(hold) { nav.classList.remove('tucked'); if (hold === true) navHeld = performance.now() + 600; }
 window.logiShowNav = showNav;
+// Whatever the browser scrolls into view lands below the Rolodex bar, not under it: a control reached with Shift+Tab
+// (the upward scroll is what brings the bar back), a section a line of the checklist jumps to, a search result. The
+// bar's height changes with the window's width and the text size, so it is measured whenever it changes.
+{ const clear = () => { document.documentElement.style.scrollPaddingTop = `${nav.offsetHeight + 12}px`; }; clear(); if (window.ResizeObserver) new ResizeObserver(clear).observe(nav); else window.addEventListener('resize', clear); }
 // The top bar scrolls away with the page and the Rolodex bar does not, so once the top bar's search control is out of
 // sight the Rolodex bar carries a magnifier of its own: the search (and the results just left) stay one tap away from
 // deep in a long list. It comes and goes with the bar it sits on.
@@ -174,15 +189,22 @@ if (native.isApp) native.files.onShared(file => import('./share-in.js').then(m =
 // The parked file is looked for at every start, which is always an unlocked one (this runs after the PIN), and not
 // only at the start the share itself made: a file shared while Vdex was locked, and never unlocked on that page, would
 // otherwise stay parked in plain form for good. caches.has() comes first, so no empty cache is made at every start.
+// A share of several files parks each under a key of its own ('shared-file', 'shared-file-1', …: sw.js): each is asked
+// about on a sheet of its own, the first one on top.
 if ('caches' in window) {
   if (new URLSearchParams(location.search).get('share') === '1') history.replaceState(null, '', location.pathname);
   caches.has('logi-share').then(has => has && caches.open('logi-share')).then(async c => {
     if (!c) return;
-    const r = await c.match('shared-file'); if (!r) return;
-    const name = decodeURIComponent(r.headers.get('X-Name') || 'shared.docx');
-    const file = new File([await r.blob()], name, { type: r.headers.get('Content-Type') || '' });
-    await c.delete('shared-file');
-    import('./share-in.js').then(m => m.arrived(file));
+    const nth = k => Number((/-(\d+)$/.exec(k) || [0, 0])[1]);
+    const keys = (await c.keys()).map(q => new URL(q.url).pathname.split('/').pop()).filter(k => /^shared-file(-\d+)?$/.test(k)).sort((a, b) => nth(a) - nth(b)), files = [];
+    for (const k of keys) {
+      const r = await c.match(k); if (!r) continue;
+      files.push(new File([await r.blob()], decodeURIComponent(r.headers.get('X-Name') || 'shared.docx'), { type: r.headers.get('Content-Type') || '' }));
+      await c.delete(k);
+    }
+    if (!files.length) return;
+    const m = await import('./share-in.js');
+    for (const file of files.reverse()) await m.arrived(file);
   }).catch(() => {});
 }
 
@@ -202,9 +224,11 @@ const SYNC = {
   paused: ['Paused', 'amber', n => `Sync with ${n} is paused`, () => 'Nothing is copied until this device has a licence. Your changes are safe on this device.'],
   'needs-permission': ['Sign in', 'amber', n => `${n} needs you to sign in again`, () => 'Tap here to open Storage, sync & backups, then tap Sign in again. Your changes are safe on this device.'],
   error: ['Sync error', 'red', n => `Could not sync with ${n}`, c => [c.error, 'Your changes are safe on this device.'].filter(Boolean).join(' · ')],
+  // A file in a synced folder has no sign-in: after a restart the browser wants the person to allow Vdex the file again.
+  'file-permission': ['Allow access', 'amber', n => `Vdex needs your permission to use ${n} again`, () => 'Tap here to open Storage, sync & backups, then tap Allow access again. Your changes are safe on this device.'],
 };
 function paintCloud() {
-  const c = store.cloud, s = c.status, [word, dot, title, text] = SYNC[s] || SYNC.off;
+  const c = store.cloud, s = c.status, [word, dot, title, text] = SYNC[s === 'needs-permission' && c.adapter && c.adapter.id === 'file' ? 'file-permission' : s] || SYNC.off;
   const where = c.adapter ? c.adapter.label : 'your storage', headline = title(where);
   cloudLabel.textContent = word;
   cloudBtn.dataset.state = s;

@@ -329,6 +329,11 @@ function joinName(name, make, model) {
 }
 
 // A line that adds the rows up is not an item: "Total" where the name would be, or beside an empty name.
+// TOTAL_WIDE: a total by another name or with a tail ("Summe", "Gesamtbetrag netto", "Total inc VAT", "Subtotal ex. tax"),
+// and the tax line that goes with one ("VAT @ 20%"). It is the whole name, never the start of one ("Total station" is an
+// item), and counts only on a row with no serial number and no quantity (buildItems).
+const TAX_WORD = '(?:vat|gst|tax|mwst\\.?|ust\\.?|btw|iva|tva)';
+const TOTAL_WIDE = new RegExp('^(?:(?:(?:grand|sub|zwischen|end|gesamt)[\\s-]*)?(?:totals?|summe|gesamt(?:summe|betrag|wert)?|totaal|totale|somme|suma)(?:\\s+(?:value|cost|price|due|amount|replacement\\s+value|sum\\s+insured))?(?:\\s+\\(?(?:inc(?:l(?:\\.|uding|usive)?)?|ex(?:c(?:l(?:\\.|uding|usive)?)?)?|net|gross|netto|brutto|before|after|plus|with|without|zzgl\\.?|inkl\\.?|exkl\\.?)\\.?(?:\\s+(?:of\\s+)?' + TAX_WORD + ')?\\)?)?|(?:sales\\s+)?' + TAX_WORD + '(?:\\s*(?:@|at|of)?\\s*\\d+(?:[.,]\\d+)?\\s*%)?)\\s*:?$', 'i');
 const TOTAL_NAME = /^(?:grand\s+|sub\s*-?\s*)?totals?(?:\s+(?:value|cost|price|replacement\s+value|sum\s+insured))?\s*:?$/i, TOTAL_CELL = /^(?:(?:grand\s+|sub\s*-?\s*|sum\s+)?totals?|summe|gesamt|gesamtsumme|totaal|totale)\b/i;
 
 // Vdex's own asset register (js/backup.js writes it), known by its row of headings. What comes back from it is kept as
@@ -402,7 +407,10 @@ export function buildItems({ head, body, width, list, titles = 0, above = [] }, 
     // A line that adds the rows up. In Vdex's own register only its own total line is one (no name, or nothing an item
     // has beside the name): an item called "Total" there has a quantity and stays an item.
     const bare = register && [...C.category, ...C.serial, ...C.qty, ...C.location].every(i => isNothing(cells[i]));
-    if ((register ? bare : true) && TOTAL_NAME.test(name) || !name && cells.some(c => TOTAL_CELL.test(c.slice(0, 40)))) { left.totals++; continue; }
+    // In any other list the label may sit in the name column and say more than "Total" ("Summe", "Total inc VAT", the
+    // tax line above it): such a row is a sum, not an item worth the whole list, when it has no serial number and no quantity.
+    const sums = !register && name.length <= 60 && TOTAL_WIDE.test(name) && [...C.serial, ...C.qty].every(i => isNothing(cells[i]));
+    if ((register ? bare : true) && TOTAL_NAME.test(name) || sums || !name && cells.some(c => TOTAL_CELL.test(c.slice(0, 40)))) { left.totals++; continue; }
     // A word on a line of its own in a table of several columns may head the rows under it: "LENSES" gives them their
     // category when they have none. Outside the name column such a line is a heading whatever it says; in the name
     // column it is one only by the rule above (lone), since it may just as well be an item with nothing else filled in.

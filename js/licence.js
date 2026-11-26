@@ -237,13 +237,18 @@ function paintBar() {
     : d.buy ? [small(ios() ? `Buy${price() ? ' · ' + price() : ' a licence'}` : `Buy · ${tag()}`, e => (ios() ? buyInApp(e.target) : L().buy()), true), small(web() ? 'Sign in' : 'Enter code', enter)]
     : d.enter ? [small('Sign in', enter, true)]
     : [small('Details', () => detailsSheet(), true)];
-  const bar = h('div', { class: 'update-bar licence-bar' + (urgent ? ' urgent' : ''), role: 'status' },
-    h('span', null, text), ...buttons,
-    h('button', { class: 'icon-btn', 'aria-label': 'Hide until Vdex is next opened', onclick: () => { S.hide = key; paintBar(); } }, '✕'));
+  const cls = 'update-bar licence-bar' + (urgent ? ' urgent' : '');
+  const parts = [h('span', null, text), ...buttons,
+    h('button', { class: 'icon-btn', 'aria-label': 'Hide until Vdex is next opened', onclick: () => { S.hide = key; paintBar(); } }, '✕')];
   if (!S.bar || S.bar.firstChild.textContent !== text) announce(text);
-  if (S.bar) S.bar.replaceWith(bar);
-  S.bar = bar;
-  if (!bar.isConnected) document.body.append(bar);
+  // The same element every time, with its contents renewed: what the lock screen set on it when it came up (out of
+  // reach while locked) stays, where a new element would sit behind that screen in the Tab order with a Buy button
+  // that works. A bar first added while that screen is up starts out of reach too, marked data-covered, and the
+  // screen's way out gives it back (coverAll in js/lock.js). That is underCover() in js/util.js, written out here:
+  // this file is fetched after the start, and must not ask a start-up file for a name that a page still running
+  // the build before does not have in it (such a page would then not load this file at all, and stay read-only).
+  if (S.bar && S.bar.isConnected) { S.bar.className = cls; S.bar.replaceChildren(...parts); }
+  else { S.bar = h('div', { class: cls, role: 'status' }, ...parts); if (document.querySelector('body > .lock')) { S.bar.inert = true; S.bar.dataset.covered = ''; } document.body.append(S.bar); }
   document.body.classList.add('has-licence-bar');
 }
 
@@ -293,7 +298,7 @@ function needsLicence(what) {
     h('p', null, `${thing} comes with a Vdex licence.`),
     d ? h('p', { class: 'small' }, d.line) : '',
     keep && s.mode !== 'offline' ? h('p', { class: 'small' }, `Export backup still saves a backup file of everything here until ${longDay(keep)}.`) : '',
-    h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
+    h('p', { class: 'small muted' }, `${s.mode === 'trial' ? 'Cloud storage, backup files and spreadsheets need the licence; everything else works during your free trial. ' : ''}PDFs, printing and links for clients and crew always work, and your data is kept on this device.`),
     h('div', { class: 'actions' }, ...actions(s, d ? { retry: d.retry, again: d.again } : { buy: !play(), enter: true, restore: ios() }, () => sh.close())), buyNote({ buy: !d })));
   sh.el.classList.add('licence-needed');
   S.needClose = sh.close;
@@ -340,6 +345,9 @@ export function enterCode(prefill = '') {
   }
 }
 
+// The 6-digit code from the email, as typed or pasted (spaces and anything else around the digits are dropped). One that
+// is not 6 digits is never sent: the box gets the focus back and the line under it says what is wanted.
+const sixDigits = (box, msg) => { const code = box.value.replace(/\D/g, ''); if (code.length === 6) return code; msg.textContent = 'Type the 6 digits from the email.'; msg.className = 'small licence-warn'; box.focus(); return ''; };
 // Website: sign in with the licence's email. Step 1 sends a 6-digit code there; step 2 checks it.
 export function signIn() {
   const l = L(); if (!l || !web()) return;
@@ -353,6 +361,7 @@ export function signIn() {
     e.preventDefault(); msg.textContent = ''; msg.className = 'small';
     const addr = email.value.trim();
     if (!useCode && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr)) { msg.textContent = 'Type the email address your licence belongs to.'; msg.className = 'small licence-warn'; return; }
+    if (useCode && !codeBox.value.trim()) { msg.textContent = 'Paste your licence code.'; msg.className = 'small licence-warn'; codeBox.focus(); return; }
     send.disabled = true; send.textContent = 'Sending…';
     const r = await l.start(useCode ? { code: codeBox.value } : { email: addr });
     send.disabled = false; send.textContent = 'Email me a code';
@@ -366,14 +375,14 @@ export function signIn() {
     : 'Sign in with the email address you bought your licence with. We email you a 6-digit code to type in here.'),
   email, codeBox, !ios() && h('div', null, toggle), h('div', { class: 'actions' }, send)); // the iPhone app never takes a code (Apple's rule): email, or the App Store
   const whereTo = h('p', { class: 'small muted', role: 'status' });
-  const digits = h('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 7, pattern: '[0-9 ]*', 'aria-label': '6-digit code', placeholder: '123456', class: 'licence-digits' });
+  const digits = h('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 40, pattern: '[0-9 ]*', 'aria-label': '6-digit code', placeholder: '123456', class: 'licence-digits' }); // room for a code pasted with spaces around it: sixDigits() takes the digits
   const verify = h('button', { type: 'submit', class: 'btn primary' }, 'Sign in');
   const again = h('button', { type: 'button', class: 'btn ghost', onclick: () => { step2.hidden = true; step1.hidden = false; msg.textContent = ''; digits.value = ''; send.focus(); } }, 'Send a new code');
   const step2 = h('form', { class: 'stack', hidden: true, onsubmit: async e => {
     e.preventDefault(); msg.textContent = ''; msg.className = 'small';
-    const addr = to;
+    const addr = to, code = sixDigits(digits, msg); if (!code) return;
     verify.disabled = true; verify.textContent = 'Signing in…';
-    const r = await l.verify(addr, digits.value);
+    const r = await l.verify(addr, code);
     verify.disabled = false; verify.textContent = 'Sign in';
     if (r && r.full) {
       set(r); step2.hidden = true;
@@ -416,13 +425,14 @@ function addEmailSheet(after = () => {}) {
   h('p', { class: 'small muted' }, 'Your licence works on up to 3 of your devices. With an email address on it, you can sign in with that address on the website and on your other devices, and the code for the desktop app carries it too. We email you a 6-digit code to type in here.'),
   email, h('div', { class: 'actions' }, send));
   const whereTo = h('p', { class: 'small muted', role: 'status' });
-  const digits = h('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 7, pattern: '[0-9 ]*', 'aria-label': '6-digit code', placeholder: '123456', class: 'licence-digits' });
+  const digits = h('input', { type: 'text', inputMode: 'numeric', autocomplete: 'one-time-code', maxLength: 40, pattern: '[0-9 ]*', 'aria-label': '6-digit code', placeholder: '123456', class: 'licence-digits' }); // room for a code pasted with spaces around it: sixDigits() takes the digits
   const link = h('button', { type: 'submit', class: 'btn primary' }, 'Add the address');
   const again = h('button', { type: 'button', class: 'btn ghost', onclick: () => { step2.hidden = true; step1.hidden = false; msg.textContent = ''; digits.value = ''; send.focus(); } }, 'Send a new code');
   const step2 = h('form', { class: 'stack', hidden: true, onsubmit: async e => {
     e.preventDefault(); msg.textContent = ''; msg.className = 'small';
+    const code = sixDigits(digits, msg); if (!code) return;
     link.disabled = true; link.textContent = 'Adding…';
-    const r = await l.verifyEmail(to, digits.value);
+    const r = await l.verifyEmail(to, code);
     link.disabled = false; link.textContent = 'Add the address';
     if (!r || r.error) { msg.textContent = (r && r.error) || 'Something went wrong. Try again.'; msg.className = 'small licence-warn'; return; }
     set(r); sh.close(); after();

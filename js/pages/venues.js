@@ -1,5 +1,5 @@
-import { h, empty, fmtShort, safeUrl, telUrl, parseISO, daysUntil } from '../util.js';
-import { db, byId, upsert, remove, activeBookings, endOf } from '../store.js';
+import { h, empty, fmtShort, safeUrl, telUrl, parseISO, daysUntil, todayISO } from '../util.js';
+import { db, byId, upsert, update, remove, activeBookings, endOf } from '../store.js';
 import { openForm } from '../form.js';
 import { miniMap, mapButtons, hasGeo } from '../map.js';
 
@@ -13,14 +13,16 @@ const PERM_ICON = { allowed: '✓', ask: '?', no: '✕' };
 const S = { view: 'list', id: null, q: '' };
 
 // Which of your equipment categories each venue permission governs.
-const CATEGORY_PERM = { Drone: 'drones', Lighting: 'lighting', Support: 'tripods', Power: 'generators' };
+// A category is typed freely, so it is read without its capitals or a plural s: "drones" and "Drone" are one.
+const CATEGORY_PERM = { drone: 'drones', lighting: 'lighting', support: 'tripods', power: 'generators' };
+const permFor = category => CATEGORY_PERM[String(category || '').trim().toLowerCase().replace(/s$/, '')];
 
 // Warnings for a booking: gear categories the venue restricts.
 export function venueWarnings(venue, gearItems) {
   const out = [];
   const seen = new Set();
   for (const g of gearItems) {
-    const key = CATEGORY_PERM[g.category];
+    const key = permFor(g.category);
     const level = key && venue.perms && venue.perms[key];
     if (!level || level === 'allowed' || seen.has(key)) continue;
     seen.add(key);
@@ -56,7 +58,10 @@ export function editVenue(v = {}, afterSave) {
       { key: 'checked', label: 'Rules last confirmed', type: 'date', hint: 'Set the date you last checked these rules with the venue.' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
-    onSave: val => { const item = { ...val, id: val.id || undefined }; upsert('venues', item); afterSave && afterSave(); },
+    // A corrected address goes to the bookings at this venue that still hold the old one (one typed by hand is left).
+    onSave: val => { const item = { ...val, id: val.id || undefined }, old = v.id ? (v.address || '').trim() : '', now = (item.address || '').trim(); upsert('venues', item);
+      if (old && old !== now && db.bookings.some(b => b.venueId === v.id && (b.address || '').trim() === old)) update(d => { for (const b of d.bookings) if (b.venueId === v.id && (b.address || '').trim() === old) { b.address = item.address || ''; b.updatedAt = Date.now(); } });
+      afterSave && afterSave(); },
     onDelete: v.id ? () => { remove('venues', v.id); S.view = 'list'; afterSave && afterSave(); } : null,
   });
 }
@@ -79,6 +84,7 @@ export const venues = {
 };
 
 function list(go, draw) {
+  if (db.venues.length <= 4) S.q = ''; // too few venues for the search box: a search left in it could not be cleared
   const q = S.q.toLowerCase();
   const items = db.venues.filter(v => !q || `${v.name} ${v.address} ${v.type}`.toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
   return h('div', null,
@@ -103,7 +109,7 @@ function staleNote(v) {
 
 function detail(go, draw) {
   const v = byId('venues', S.id);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayISO(); // the day here, not in Greenwich
   const mine = activeBookings().filter(b => b.venueId === v.id && endOf(b) >= today).sort((a, b) => a.date.localeCompare(b.date));
   const row = (k, val) => val ? h('div', null, h('span', { class: 'muted' }, k), h('span', { class: 'v' }, val)) : null;
   return h('div', null,
@@ -119,7 +125,7 @@ function detail(go, draw) {
       ? block('Permits & insurance', h('div', { class: 'kv card' }, row('Permit', v.permit && v.permit !== 'Unknown' ? v.permit : ''), v.permitNotes && h('p', { class: 'prewrap' }, v.permitNotes)))
       : null,
     block('Access & logistics', h('div', { class: 'kv card' }, row('Access', v.access), row('Parking', v.parking), row('Power', v.power), row('Hospital', v.hospital),
-      !v.access && !v.parking && !v.power && h('span', { class: 'muted' }, 'Nothing recorded yet.'))),
+      !v.access && !v.parking && !v.power && !v.hospital && h('span', { class: 'muted' }, 'Nothing recorded yet.'))),
     (v.contact || v.phone || v.email) && block('Contact', h('div', { class: 'card' },
       v.contact && h('strong', null, v.contact),
       h('div', { class: 'actions' }, v.phone && h('a', { class: 'btn ghost small', href: telUrl(v.phone) }, '📞 ' + v.phone), v.email && h('a', { class: 'btn ghost small', href: 'mailto:' + v.email }, '✉ ' + v.email)))),

@@ -31,6 +31,7 @@ const SAY = {
   damaged: 'This link is incomplete or damaged: part of it may have been cut off when it was copied. Ask for a fresh one.',
   kind: 'This link carries something this version of Vdex does not know. It may come from a newer version: update Vdex and try again.',
   doc: 'This is a quote or invoice link. It opens as a page to read; there is nothing in it to add to Vdex.',
+  old: 'This browser is too old to open Vdex links. Update it, or open the link in another browser or on another device.',
 };
 const fail = code => Object.assign(new Error(SAY[code]), { code });
 
@@ -170,6 +171,6 @@ export function elsewhere(where) {
 }
 export async function readShared(link, opts) {
   const packed = packedOf(link, opts);
-  let data; try { data = await unpack(packed, { max: JSON_MAX }); } catch (e) { throw fail(e && e.code === 'big' ? 'big' : 'damaged'); }
+  let data; try { data = await unpack(packed, { max: JSON_MAX }); } catch (e) { throw fail(e && (e.code === 'big' || e.code === 'old') ? e.code : 'damaged'); }
   return cleanShared(data);
 }

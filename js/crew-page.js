@@ -2,12 +2,13 @@
 // copy of Vdex, drawn here read-only. No store, no account, nothing fetched but this page. Only the fields below are
 // ever shown, and the link never carries money: no prices, rates, budgets, quotes or invoices. Someone who uses Vdex
 // can add the shoot to their own Bookings: "Add to my Vdex" hands the same packed link to the app (js/share-add.js).
-import { h, fmtLong, fmtShort, mapsUrl, telUrl } from './util.js';
+import { h, fmtLong, fmtShort, mapsUrl, telUrl, icsText, icsFold as fold } from './util.js';
 import { readShared, addHref, elsewhere, isDate } from './share-data.js';
 
 const bar = document.getElementById('bar'), box = document.getElementById('doc');
 addEventListener('hashchange', () => location.reload()); // another crew link opened in this same tab
-const fail = msg => { box.replaceChildren(h('div', { class: 'msg' }, h('h1', null, 'This link does not open shoot info'), h('p', null, msg), h('p', null, 'Ask the producer who sent it for a fresh link.'))); };
+// fresh: false when a fresh link would not help (a browser too old to unpack any link).
+const fail = (msg, fresh = true) => { box.replaceChildren(h('div', { class: 'msg' }, h('h1', null, 'This link does not open shoot info'), h('p', null, msg), fresh && h('p', null, 'Ask the producer who sent it for a fresh link.'))); };
 const kv = rows => { const r = rows.filter(([, v]) => v); return r.length ? h('dl', { class: 'kv' }, r.flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)])) : null; };
 const section = (title, ...kids) => { const body = kids.flat().filter(Boolean); return body.length ? [h('h2', null, title), ...body] : []; };
 const link = (href, text) => h('a', { href }, text);
@@ -15,16 +16,14 @@ const slug = s => String(s || 'shoot').toLowerCase().replace(/[^a-z0-9]+/g, '-')
 
 // A calendar file for the shoot, made here from what the link carries. Every value is cleaned first (a link can be
 // made by anyone), each line is folded at 75 bytes, and the event keeps one id per shoot so a newer link updates it.
-const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
-const fold = line => { const out = []; let cur = '', bytes = 0; for (const ch of line) { const n = new TextEncoder().encode(ch).length; if (bytes + n > 74) { out.push(cur); cur = ' '; bytes = 1; } cur += ch; bytes += n; } out.push(cur); return out.join('\r\n'); };
 const TIME = /^(\d{1,2}):(\d{2})$/;
-const at = (d, t) => { const [y, m, dd] = d.split('-').map(Number), x = TIME.exec(t || ''); return x ? new Date(y, m - 1, dd, Number(x[1]), Number(x[2])) : null; };
+const at = (d, t, add = 0) => { const [y, m, dd] = d.split('-').map(Number), x = TIME.exec(t || ''); return x ? new Date(y, m - 1, dd + add, Number(x[1]), Number(x[2])) : null; };
 const stamp = x => `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}T${String(x.getHours()).padStart(2, '0')}${String(x.getMinutes()).padStart(2, '0')}00`;
 const dayStamp = (d, add = 0) => { const [y, m, dd] = d.split('-').map(Number), x = new Date(y, m - 1, dd + add); return `${x.getFullYear()}${String(x.getMonth() + 1).padStart(2, '0')}${String(x.getDate()).padStart(2, '0')}`; };
 function ics(snap) {
   const last = snap.endDate || snap.date, start = at(snap.date, snap.call.general || snap.start);
   let end = at(last, snap.call.wrap || snap.end);
-  if (start && end && end <= start) end = new Date(end.getTime() + 864e5); // an overnight shoot wraps the next morning
+  if (start && end && end <= start) end = at(last, snap.call.wrap || snap.end, 1); // an overnight shoot wraps the next morning: the next day at that time, also on the night the clocks change
   if (start && !end) end = new Date(start.getTime() + 36e5);              // no wrap time: an hour, rather than no length
   const made = snap.made || Date.now();
   const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Vdex//Crew//EN', 'BEGIN:VEVENT',
@@ -46,6 +45,7 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
   try { snap = await readShared(location.hash); } catch (e) {
     if (e.code === 'none') return fail('It has no shoot info in it: part of the link may be missing.');
     if (e.code === 'doc') return location.replace('invoice.html' + location.hash); // a quote or an invoice has its own page
+    if (e.code === 'old') return fail(e.message, false);
     return fail(e.code === 'damaged' ? 'It is incomplete or damaged: part of it may have been cut off when it was copied.' : e.message);
   }
   if (snap.kind !== 'crew') return location.replace('shared.html' + location.hash); // a contact card or an equipment list has its own page
@@ -61,7 +61,7 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
   const days = [...new Set((snap.schedule || []).map(r => r.date || snap.date))].sort();
   const dayHeads = snap.endDate || days.some(d => d !== snap.date);
   const schedule = (snap.schedule || []).length ? days.map(d => [dayHeads && isDate(d) && h('div', { class: 'day' }, fmtLong(d)),
-    h('table', null, h('tbody', null, snap.schedule.filter(r => (r.date || snap.date) === d).map(r => h('tr', null, h('td', { style: 'width:5.5em;white-space:nowrap' }, r.time || ''), h('td', null, r.item || '')))))]) : null;
+    h('table', null, h('tbody', null, snap.schedule.filter(r => (r.date || snap.date) === d).map(r => h('tr', null, h('td', { style: 'width:5.5em;white-space:nowrap' }, r.time || ''), h('td', { class: 'free' }, r.item || '')))))]) : null;
   const people = (list, withCall) => list.length ? h('table', null,
     h('thead', null, h('tr', null, h('th', null, 'Name'), h('th', null, 'Role'), withCall && h('th', { class: 'nw' }, 'Call'), h('th', null, 'Contact'))),
     h('tbody', null, list.map(p => h('tr', null, h('td', null, p.name || '—'), h('td', null, p.role || ''), withCall && h('td', { class: 'nw' }, p.call || ''),
@@ -81,11 +81,11 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
     ...section('Crew', people(snap.crew || [], true)),
     ...section('Client and on set', people(snap.contacts || [], false), snap.onSet && h('p', { class: 'pre' }, snap.onSet)),
     ...section('Scenes', (snap.scenes || []).length ? snap.scenes.map(d => [h('div', { class: 'day' }, `Day ${d.n}${d.date ? ' · ' + fmtLong(d.date) : ''}${d.pages ? ' · ' + d.pages + ' pages' : ''}`),
-      h('table', { class: 'scenes' }, h('tbody', null, d.items.map(x => (x.banner != null ? h('tr', { class: 'banner' }, h('td', { colspan: 4 }, x.banner)) : h('tr', { class: x.kind }, h('td', { class: 'nw' }, x.scene || '—'), h('td', null, h('b', null, [x.ie, x.set].filter(Boolean).join(' ')), x.tod && ` — ${x.tod}`, x.desc && h('div', null, x.desc), x.cast.length > 0 && h('div', { class: 'cast' }, x.cast.join(', '))), h('td', { class: 'nw' }, x.pages ? x.pages + ' pg' : ''))))))]) : null,
+      h('table', { class: 'scenes' }, h('tbody', null, d.items.map(x => (x.banner != null ? h('tr', { class: 'banner' }, h('td', { colspan: 4 }, x.banner)) : h('tr', { class: x.kind }, h('td', { class: 'nw' }, x.scene || '—'), h('td', { class: 'free' }, h('b', null, [x.ie, x.set].filter(Boolean).join(' ')), x.tod && ` — ${x.tod}`, x.desc && h('div', null, x.desc), x.cast.length > 0 && h('div', { class: 'cast' }, x.cast.join(', '))), h('td', { class: 'nw' }, x.pages ? x.pages + ' pg' : ''))))))]) : null,
       snap.cut > 0 && h('p', { class: 'note' }, `This link holds more scenes than one shoot may bring: ${snap.cut.toLocaleString()} more ${snap.cut === 1 ? 'is' : 'are'} not shown.`)),
     ...section('Shot list', (snap.shots || []).length ? h('ul', { class: 'plain' }, snap.shots.map(s => h('li', { class: s.done ? 'done' : '' }, (s.done ? '✓ ' : '○ ') + s.text))) : null),
     ...section('Equipment', kitGroups.size ? [...kitGroups].map(([cat, items]) => [h('div', { class: 'day' }, cat), h('ul', { class: 'plain' }, items.map(k => h('li', null, k.name + (k.qty > 1 ? ` × ${k.qty}` : ''))))]) : null),
-    ...section('Deliverables', (snap.deliverables || []).length ? h('table', null, h('tbody', null, snap.deliverables.map(x => h('tr', null, h('td', null, x.name), h('td', { class: 'nw' }, x.duration || ''), h('td', { class: 'nw' }, isDate(x.due) ? 'due ' + fmtShort(x.due) : ''), h('td', null, x.status || ''))))) : null),
+    ...section('Deliverables', (snap.deliverables || []).length ? h('table', null, h('tbody', null, snap.deliverables.map(x => h('tr', null, h('td', { class: 'free' }, x.name), h('td', { class: 'nw' }, x.duration || ''), h('td', null, isDate(x.due) ? 'due ' + fmtShort(x.due) : ''), h('td', null, x.status || ''))))) : null),
     ...section('Instructions', snap.notes && h('p', { class: 'pre' }, snap.notes)),
     h('p', { class: 'note' }, `Sent ${snap.made ? new Date(snap.made).toLocaleString() : ''}. This is a copy from that moment: if plans change, the producer sends a new link.`),
     // Inside the paper, so it is printed too: the page's footer is not (crew.html hides .foot on paper).

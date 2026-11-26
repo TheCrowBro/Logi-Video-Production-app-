@@ -54,7 +54,7 @@ function card(p, sym) {
   return h('div', { class: 'card policy-card', 'data-id': p.id },
     h('div', { class: 'card-row' },
       h('div', { class: 'grow' }, h('strong', null, p.type), h('div', { class: 'muted' }, [p.provider, p.policy && '#' + p.policy].filter(Boolean).join(' · '))),
-      d != null && h('span', { class: 'pill ' + tone }, d < 0 ? `Expired ${-d}d ago` : d === 0 ? 'Expires today' : `${d} days left`),
+      d != null && h('span', { class: 'pill ' + tone }, d < 0 ? `Expired ${-d}d ago` : d === 0 ? 'Expires today' : `${d} day${d === 1 ? '' : 's'} left`),
       h('button', { class: 'icon-btn', 'aria-label': 'Edit policy', onclick: () => edit(p) }, '✎')),
     h('div', { class: 'kv' },
       p.cover !== '' && p.cover != null && kv('Cover', money(p.cover, sym)),

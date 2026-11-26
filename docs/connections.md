@@ -59,10 +59,12 @@ For another WebDAV server, pick **Other WebDAV** and give the full address of a 
 2. Save it inside a folder your sync app keeps copied (iCloud Drive on a Mac, OneDrive, Google Drive for desktop, Dropbox, Box, Proton Drive, Synology Drive…).
 3. On another computer choose **Open existing file…** and pick the same file.
 
+After the browser or the computer has been restarted, Vdex needs your permission to use the file again: the menu says so, and **Allow access again** under *Storage* gives it. There is no sign-in for a file.
+
 ## Live calendar feed
 
 1. Connect a cloud storage first, then Bookings → **📆 Calendar & email** → tick *Publish the feed*.
-2. Tap **Get the subscription link** (Google Drive, Dropbox or OneDrive). With Nextcloud or another WebDAV server, Vdex keeps `vdex-bookings.ics` up to date in its folder there: share that file from your server (Nextcloud: *Share → Share link*) and use that link. With a synced folder on a computer, pick where the file goes and share it from your sync app as a direct-download link. iCloud keeps Vdex's copy private, so it gives no link to follow.
+2. Tap **Get the subscription link** (Google Drive, Dropbox or OneDrive). With Nextcloud or another WebDAV server, Vdex keeps `vdex-bookings.ics` up to date in its folder there: share that file from your server (Nextcloud: *Share → Share link*) and use that link. With a synced folder on a computer, pick where the file goes and share it from your sync app as a direct-download link. iCloud keeps Vdex's copy private, so it gives no link to follow. With Google Drive, each device that changes bookings has to be allowed to update the feed file once: a device that has not been says so on this card, with a button that puts it right.
 3. Subscribe once: Google Calendar on the web *Other calendars → + → From URL*; Apple Calendar *File → New Calendar Subscription*; iPhone *Settings → Calendar → Accounts → Add Account → Other → Add Subscribed Calendar*; Outlook *Add calendar → Subscribe from web*. How often it refreshes is up to the calendar app.
 
 Two-way sync with Google Calendar or Outlook is in the same panel: tap **Connect** and sign in, as above. Google asks again about once an hour and Microsoft about once a day; when it does, Vdex says so, and **Sync now** in that panel carries on.

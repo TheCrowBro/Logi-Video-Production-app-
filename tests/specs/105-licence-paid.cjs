@@ -66,7 +66,7 @@ const DAY = 86400e3;
     ok('Storage, sync & backups says backups come with a licence, rather than warning there is no copy', /Backup files and cloud storage come with a Vdex licence/.test(await page.evaluate(() => [...document.querySelectorAll('details.settings-section')].find(x => x.querySelector('.ss-title').textContent === 'Storage, sync & backups').innerText)));
     await page.getByRole('button', { name: 'Export backup' }).click(); await sleep(400);
     const sheetText = await page.locator('.licence-needed').innerText().catch(() => '');
-    ok('saving a backup during the trial explains it comes with a licence, offers Buy and Sign in, and saves nothing', /Saving backups and spreadsheet files comes with a Vdex licence/.test(sheetText) && /Everything else works during your free trial/.test(sheetText) && /Buy a licence/.test(sheetText) && /Sign in/.test(sheetText) && !downloads.length);
+    ok('saving a backup during the trial explains it comes with a licence, offers Buy and Sign in, and saves nothing', /Saving backups and spreadsheet files comes with a Vdex licence/.test(sheetText) && /Cloud storage, backup files and spreadsheets need the licence; everything else works during your free trial\./.test(sheetText) && /Buy a licence/.test(sheetText) && /Sign in/.test(sheetText) && !downloads.length);
     ok('the explanation takes the focus itself, not its Buy button', await page.evaluate(() => document.activeElement?.classList.contains('licence-needed')));
     await closeSheets(page);
     await page.getByRole('button', { name: /Encrypted backup/ }).click(); await sleep(300);

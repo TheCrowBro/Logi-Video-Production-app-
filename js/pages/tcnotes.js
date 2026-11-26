@@ -15,7 +15,10 @@ import * as native from '../native.js';
 import { csvText } from '../backup.js';
 
 // pending = frames captured when the user started typing the next note; target = the script line/selection about to be marked
-const S = { id: null, pending: null, view: 'notes', target: null, shared: null, redraw: () => {}, cleanupScript: null };
+// draft = what is typed in New note and not added yet, kept here so that it outlives a redraw of the page, together
+// with its stamp (pending) and the log it was typed in (draftFor): another log starts with an empty box and no stamp.
+// quiet: a change the page already shows is being saved (a note's text edited in place), so it is not drawn again.
+const S = { id: null, pending: null, draft: '', draftFor: null, quiet: false, view: 'notes', target: null, shared: null, redraw: () => {}, cleanupScript: null };
 const WIDE = matchMedia('(min-width: 1000px)'); // laptop: script and notes side by side
 try { S.id = localStorage.getItem('logi-tclog') || null; } catch { /* ignore */ }
 
@@ -52,6 +55,14 @@ function newLog() {
   });
 }
 
+// A timecode as it reads at one rate, at another: hours, minutes and seconds as they are, the frame number scaled to
+// the new rate's frames a second; a number that drop-frame skips becomes the first one after it.
+export function carryTc(frames, old, nu) {
+  const [hh, mm, ss, ff] = framesToTc(frames, old).split(/[:;]/).map(Number);
+  const at = n => tcToFrames(`${hh}:${mm}:${ss}:${n}`, nu);
+  return at(Math.min(nu.nominal - 1, Math.round((ff * nu.nominal) / old.nominal))) ?? at(nu.nominal / 15) ?? frames;
+}
+
 function editLog(log) {
   openForm({
     title: 'Log settings',
@@ -65,10 +76,13 @@ function editLog(log) {
       ...(db.bookings.length ? [{ key: 'bookingId', label: 'Booking', type: 'select', options: [['', 'None'], ...[...db.bookings].sort((a, b) => b.date.localeCompare(a.date)).map(b => [b.id, `${fmtShort(b.date)} — ${b.title}`])] }] : []),
     ],
     onSave: v => {
-      if (v.rate !== log.rate && log.sync) { // keep the timecode value shown at sync, in the new rate
-        const old = rate(log.rate), nu = rate(v.rate);
-        const f = tcToFrames(framesToTc(log.sync.frames, old).replace(';', ':'), nu);
-        v.sync = f == null ? null : { ...log.sync, frames: f };
+      if (v.rate !== log.rate) {
+        // The sync keeps its moment and the timecode shown then, in the new rate (carryTc). Each note keeps the moment it
+        // was taken: as long after the sync point as before, counted in the new rate's frames. Without a sync a note
+        // keeps the timecode it shows.
+        const old = rate(log.rate), nu = rate(v.rate), now = Date.now(), fps = r => r.nominal * r.scale;
+        if (log.sync) v.sync = { ...log.sync, frames: carryTc(log.sync.frames, old, nu) };
+        v.notes = log.notes.map(n => (n.frames == null ? n : { ...n, frames: log.sync ? v.sync.frames + Math.round(((n.frames - log.sync.frames) / fps(old)) * fps(nu)) : carryTc(n.frames, old, nu), upd: now }));
       }
       v.autoTakes = v.autoTakes !== 'no';
       if (v.mode !== (log.mode || 'free') && v.sync) { // carry the value shown right now into the new mode
@@ -90,7 +104,8 @@ function openSync(log) {
   const body = h('div', { class: 'stack' });
   let stream = null, raf = null, ocr = null, busy = false, closeSheet = () => {};
   const live = h('div', { class: 'tc-live muted' });
-  const tick = () => { const t = nowTc(log); live.textContent = t ? `Running: ${t}` : 'Not synced yet'; };
+  let gone = false; // the sheet was closed
+  const tick = () => { const t = nowTc(byId('logs', log.id) || log); live.textContent = t ? `Running: ${t}` : 'Not synced yet'; }; // the log as it is now: Clear sync below changes it
   tick(); const iv = setInterval(tick, 100);
 
   // Manual: type what the camera shows, tap Sync at the moment it shows it.
@@ -101,13 +116,26 @@ function openSync(log) {
   });
   const applySync = (frames, ms, how) => {
     const rolling = record ? rollingBox.checked : true;
-    upsert('logs', { ...byId('logs', log.id), sync: { frames, ms, how, rolling, dev: link.me.id, at: new Date().toISOString() }, rate: log.rate });
+    // A take the prompter rolled before the log was synced is timed by the clock on the wall (startTake(): open,
+    // openAt). In record run the log's own clock times its takes from the sync on: synced with the camera stopped, that
+    // take ends here, with its length; synced while it records, it is the take that is rolling, and the clock carries it
+    // on (its Cut gives it its length), as on a log that was already rolling.
+    const wall = l => !!(l && l.open) && !runsClock(l);
+    if (record && !rolling && wall(byId('logs', log.id))) endTake(log.id);
+    const cur = byId('logs', log.id) || log, held = record && wall(cur);
+    // Record run, synced while the camera is recording: that is a take the log has not seen start, so it starts here,
+    // as Roll would have started it (a log that was already rolling goes on with its take).
+    const starts = record && rolling && !held && !(cur.sync && cur.sync.rolling !== false), take = (cur.take || 0) + (starts ? 1 : 0);
+    const takeNote = starts && cur.autoTakes !== false ? [{ id: uid(), frames, text: `▶ Take ${take}`, at: new Date().toISOString(), kind: 'roll', take }] : [];
+    const { open, openAt, ...clocked } = cur; // (record run: from here on the clock, not the wall, times the log's takes)
+    upsert('logs', { ...(record ? clocked : cur), sync: { frames, ms, how, rolling, dev: link.me.id, at: new Date().toISOString() }, rate: log.rate, take, notes: [...(cur.notes || []), ...takeNote] });
     haptic(30); toast('Synced to ' + framesToTc(frames, r)); announce('Timecode synced'); closeSheet();
   };
   const syncNow = () => {
     const ms = Date.now();
     const f = tcToFrames(manual.value, r);
-    if (f == null) return toast(r.df && manual.value ? 'That frame number is skipped in drop-frame. Check the camera.' : 'Enter the timecode as hours, minutes, seconds, frames.');
+    // Skipped in drop-frame: a whole timecode that the same rate without drop-frame would take. Anything else is not a timecode yet.
+    if (f == null) return toast(r.df && tcToFrames(manual.value, { ...r, df: false }) != null ? 'That frame number is skipped in drop-frame. Check the camera.' : 'Enter the timecode as hours, minutes, seconds, frames.');
     applySync(f, ms, 'typed');
   };
 
@@ -118,13 +146,15 @@ function openSync(log) {
   const scanBtn = h('button', { class: 'btn primary', disabled: true, onclick: () => scan() }, 'Scan');
   const startCam = async () => {
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } }, audio: false });
-      video.srcObject = stream; camBtn.hidden = true; scanBtn.disabled = false;
+      camBtn.disabled = true; // one camera: a second tap while the browser is still asking starts none
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1920 } }, audio: false });
+      if (gone) { s.getTracks().forEach(t => t.stop()); return; } // allowed after the sheet was closed: switched off again
+      stream = s; video.srcObject = stream; camBtn.hidden = true; scanBtn.disabled = false;
       const track = stream.getVideoTracks()[0];
       try { const c = track.getCapabilities?.(); if (c?.focusMode?.includes('continuous')) await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch { /* fine */ }
       result.textContent = 'Loading the text reader…';
       loadOcr().then(() => { result.textContent = 'Fill the box with the camera’s timecode display, then tap Scan.'; }).catch(e => { result.textContent = 'Text reader unavailable (' + (e.message || 'needs a connection the first time') + '). Type the timecode instead.'; });
-    } catch (e) { result.textContent = 'Camera unavailable: ' + (e.message || e.name) + '. Type the timecode instead.'; }
+    } catch (e) { camBtn.disabled = false; result.textContent = 'Camera unavailable: ' + (e.message || e.name) + '. Type the timecode instead.'; }
   };
   const camBtn = h('button', { class: 'btn ghost tc-cam-btn', onclick: startCam }, '📷 Use camera');
 
@@ -185,9 +215,9 @@ function openSync(log) {
       h('p', { class: 'small muted' }, 'Point the phone at the camera’s timecode display. The reading is taken the moment you tap Scan, so a slow read doesn’t put you out.'),
       h('div', { class: 'cam-wrap tc-cam' }, video, h('div', { class: 'tc-reticle', 'aria-hidden': 'true' })),
       h('div', { class: 'actions' }, camBtn, scanBtn), result),
-    log.sync && h('button', { class: 'btn ghost tc-clear', onclick: () => { upsert('logs', { ...byId('logs', log.id), sync: null }); toast('Sync cleared'); } }, 'Clear sync')));
+    log.sync && h('button', { class: 'btn ghost tc-clear', onclick: e => { if (upsert('logs', { ...byId('logs', log.id), sync: null })) { toast('Sync cleared'); e.currentTarget.remove(); tick(); } } }, 'Clear sync')));
 
-  const { close } = sheet('Sync timecode', body, { onClose: () => { clearInterval(iv); cancelAnimationFrame(raf); stream && stream.getTracks().forEach(t => t.stop()); ocr && ocr.terminate().catch(() => {}); } });
+  const { close } = sheet('Sync timecode', body, { onClose: () => { gone = true; clearInterval(iv); cancelAnimationFrame(raf); stream && stream.getTracks().forEach(t => t.stop()); ocr && ocr.terminate().catch(() => {}); } });
   closeSheet = close;
   return close;
 }
@@ -201,7 +231,8 @@ const asText = log => `${log.title}\n${rate(log.rate).label}${log.camera ? ' · 
 // it, as in every other spreadsheet Vdex writes (csvText in js/backup.js). The time a note was captured is written as
 // the plain time it is; a note from a linked device that carries anything else there has it written as text too.
 const captured = at => (/^\d{4}-\d\d-\d\dT[\d:.]+Z$/.test(at) ? at : csvText(at));
-const asCsv = log => 'Timecode,Note,Script line,Captured\n' + log.notes.map(n => `${n.frames == null ? 'unsynced' : fmt(n.frames, log)},${csvText((n.text || '') + (n.dur ? ' [' + n.dur + ']' : '') + rated(n))},${csvText(n.quote || '')},${captured(n.at)}`).join('\n') + '\n';
+// A note taken before the sync has no timecode: its Timecode cell is empty (a marker at 00:00:00:00 would be a lie).
+const asCsv = log => 'Timecode,Note,Script line,Captured\n' + log.notes.map(n => `${n.frames == null ? '' : fmt(n.frames, log)},${csvText((n.text || '') + (n.dur ? ' [' + n.dur + ']' : '') + rated(n))},${csvText(n.quote || '')},${captured(n.at)}`).join('\n') + '\n';
 
 async function shareFile(name, type, text) {
   const file = new File([text], name, { type });
@@ -237,16 +268,38 @@ export const tcnotes = {
   render(root) {
     let timer = null, draw;
     const stop = () => { clearInterval(timer); timer = null; };
-    const unsub = subscribe(() => draw());
+    // Nothing on the page shows the sync status, so a change of it alone draws nothing; nor does a change the page
+    // already shows (S.quiet). Every other change draws the page again, and what was being typed stays: the new note
+    // (its text is S.draft) and a note's text being edited in place keep their text, the cursor and the focus.
+    const unsub = subscribe(reason => { if (reason !== 'status' && !S.quiet) draw(); });
+    const typing = () => {
+      const el = document.activeElement;
+      if (!el || !root.contains(el)) return null;
+      if (el.classList.contains('tc-compose')) return { compose: true, start: el.selectionStart, end: el.selectionEnd };
+      if (!el.classList.contains('tc-text')) return null;
+      const sel = document.getSelection(), r = document.createRange(); r.selectNodeContents(el);
+      if (sel && sel.rangeCount && el.contains(sel.focusNode)) r.setEnd(sel.focusNode, sel.focusOffset);
+      return { id: el.closest('.tc-note')?.dataset.id, text: el.textContent, at: r.toString().length };
+    };
+    const typeOn = was => {
+      if (!was) return;
+      if (was.compose) { const c = root.querySelector('.tc-compose'); if (c) { c.focus({ preventScroll: true }); try { c.setSelectionRange(was.start, was.end); } catch { /* no cursor to place */ } } return; }
+      const t = was.id && root.querySelector(`.tc-note[data-id="${CSS.escape(was.id)}"] .tc-text`); if (!t) return;
+      t.focus({ preventScroll: true }); t.textContent = was.text; t.classList.toggle('muted', false);
+      const sel = document.getSelection(); if (sel && t.firstChild) sel.collapse(t.firstChild, Math.min(was.at, t.firstChild.length)); else if (sel) sel.collapse(t, 0);
+    };
     draw = () => {
       stop(); S.cleanupScript && S.cleanupScript(); S.cleanupScript = null;
-      const y = window.scrollY;
-      root.replaceChildren();
+      const y = window.scrollY, was = typing();
+      S.quiet = true; // a box that loses the focus to this redraw saves itself: that is not a reason to draw again
+      try { root.replaceChildren(); } finally { S.quiet = false; }
       if (S.sharedNew) { const f = S.sharedNew; S.sharedNew = null; setTimeout(() => openImport(null, f), 50); } // shared to the teleprompter: a log of its own
       const log = current();
       if (!log) { root.append(picker()); return; }
       root.append(logView(log, t => { timer = t; }));
       window.scrollTo(0, y);
+      typeOn(was);
+      if (S.focusPara) { const line = document.getElementById('sc-' + S.focusPara); S.focusPara = null; if (line) line.focus({ preventScroll: !!S.focusQuiet }); } // (quiet: Mark was tapped or clicked, and the page stays where it was scrolled to)
       if (S.shared) { const f = S.shared; S.shared = null; setTimeout(() => openImport(log, f), 50); }
     };
     S.redraw = draw;
@@ -302,17 +355,21 @@ function logView(log, setTimer) {
   setTimer(setInterval(() => { if (sync && !document.hidden) clock.textContent = nowTc(log); }, 1000 / Math.min(r.nominal, 30)));
 
   // Composer: the stamp is taken when you start typing (that is the moment you saw it), and shown live.
+  if (S.draftFor !== log.id) { S.draftFor = log.id; S.draft = ''; S.pending = null; } // another log: its own empty box, and no stamp from the last one
+  // The note being written is kept while another section is in front. The page says so on the body, where "Reload for
+  // the new version" looks before it reloads (js/update.js), so it asks first also when this section is not shown.
+  const held = () => document.body.toggleAttribute('data-draft-held', !!String(S.draft || '').trim()); held();
   const stamp = h('span', { class: 'tc-mono tc-stamp' }, sync ? '—' : 'not synced');
-  const input = h('textarea', { rows: 2, placeholder: sync ? 'Type a note — timecode is captured when you start typing' : 'Sync first, or notes are stamped as “unsynced”', 'aria-label': 'New note', class: 'tc-compose' });
+  const input = h('textarea', { rows: 2, placeholder: sync ? 'Type a note — timecode is captured when you start typing' : 'Sync first, or notes are stamped as “unsynced”', 'aria-label': 'New note', class: 'tc-compose', 'data-draft': '', value: S.draft }); // data-draft: its text is saved only by + Add note (js/update.js asks before a reload loses it)
   const refreshStamp = () => { stamp.textContent = S.pending != null ? fmt(S.pending, log) : (sync ? 'stamps when you type' : 'not synced'); };
   refreshStamp();
-  input.addEventListener('input', () => { if (S.pending == null && input.value.trim()) { S.pending = nowFrames(log); refreshStamp(); } if (!input.value.trim()) { S.pending = null; refreshStamp(); } });
+  input.addEventListener('input', () => { S.draft = input.value; held(); if (S.pending == null && input.value.trim()) { S.pending = nowFrames(log); refreshStamp(); } if (!input.value.trim()) { S.pending = null; refreshStamp(); } });
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } });
   const add = () => {
     const text = input.value.trim();
     if (!text && S.pending == null) return;
     const frames = S.pending ?? nowFrames(log);
-    S.pending = null; input.value = '';
+    S.pending = null; S.draft = input.value = ''; held();
     pushNote(log, { id: uid(), frames, text, at: new Date().toISOString() }); // re-renders the page
     document.querySelector('.tc-compose')?.focus(); haptic();
   };
@@ -446,7 +503,15 @@ function deleteNote(log, n) { update(d => { const l = d.logs.find(x => x.id === 
 function noteRow(log, n) {
   const text = h('div', { class: 'tc-text' + (n.text ? '' : ' muted'), contentEditable: 'plaintext-only', spellcheck: true, 'aria-label': 'Note text', role: 'textbox' }, n.text || 'Tap to add text…');
   text.addEventListener('focus', () => { if (!n.text) text.textContent = ''; });
-  text.addEventListener('blur', () => { const v = text.textContent.trim(); if (v !== (n.text || '')) update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) { m.text = v; m.upd = Date.now(); } }); });
+  // Leaving the box saves it. The row already shows what was typed, so the page is not drawn again for it (S.quiet):
+  // the focus is usually lost to a press on a button, and a button replaced between the press and its release would
+  // never be clicked (Mark now, Export, ✕ would do nothing but save the note).
+  text.addEventListener('blur', () => {
+    const v = text.textContent.trim();
+    if (v !== (n.text || '')) { const was = S.quiet; S.quiet = true; try { update(d => { const l = d.logs.find(x => x.id === log.id); const m = l && l.notes.find(x => x.id === n.id); if (m) { m.text = v; m.upd = Date.now(); } }); } finally { S.quiet = was; } }
+    const now = (byId('logs', log.id)?.notes.find(x => x.id === n.id) || n).text || '';
+    text.textContent = now || 'Tap to add text…'; text.classList.toggle('muted', !now);
+  });
   text.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); text.blur(); } });
   const tc = h('button', { class: 'tc-mono tc-badge', type: 'button', title: 'Edit timecode', onclick: () => editStamp(log, n) }, n.frames == null ? 'unsynced' : fmt(n.frames, log));
   const quote = n.quote && h('button', { class: 'tc-quote', type: 'button', onclick: () => jumpTo(log, n), 'aria-label': 'Show this line in the script' }, n.start != null ? `“${n.quote}”` : `¶ ${n.quote}`, n.para && ' ↗');
@@ -693,17 +758,24 @@ function offsetIn(root, node, offset) {
 function paraEl(log, p, notes, bar) {
   const selected = S.target && S.target.para === p.id && S.target.start == null;
   const whole = notes.filter(n => n.start == null), ranged = notes.filter(n => n.start != null);
-  const el = h('div', { class: `sc-para kind-${p.kind}` + (p.dir ? ' dir' : '') + (selected ? ' sel' : ''), 'data-id': p.id, id: 'sc-' + p.id },
+  const el = h('div', { class: `sc-para kind-${p.kind}` + (p.dir ? ' dir' : '') + (selected ? ' sel' : ''), 'data-id': p.id, id: 'sc-' + p.id, role: 'button', tabindex: '0', 'aria-pressed': String(!!selected), 'aria-label': quoteOf(p) },
     whole.length > 0 && h('div', { class: 'sc-gutter' }, whole.map(n => badge(log, n))),
     h('div', { class: 'sc-text' }, segments(log, p, ranged)));
+  // Chosen or not is asked at the tap (S.target as it is now), not remembered from when the line was drawn.
+  const pick = () => {
+    const was = !!S.target && S.target.para === p.id && S.target.start == null;
+    S.target = was ? null : { para: p.id, quote: quoteOf(p) };
+    el.parentNode.querySelectorAll('.sc-para').forEach(x => { x.classList.toggle('sel', x === el && !was); x.setAttribute('aria-pressed', String(x === el && !was)); });
+    bar.set(S.target);
+  };
   el.addEventListener('click', e => {
     if (e.target.closest('.sc-badge')) return;
     const s = document.getSelection(); if (s && !s.isCollapsed) return; // the user is selecting words
-    S.target = selected ? null : { para: p.id, quote: quoteOf(p) };
-    el.parentNode.querySelectorAll('.sc-para.sel').forEach(x => x.classList.remove('sel'));
-    if (S.target) el.classList.add('sel');
-    bar.set(S.target);
+    pick();
   });
+  // From the keyboard, as a tap; and the focus goes to Mark, which by Tab is as many presses away as there are lines
+  // left in the script. Mark gives it back to the line (commit, and draw above), so the next line is one Tab on.
+  el.addEventListener('keydown', e => { if (e.target === el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pick(); if (S.target) bar.el.querySelector('.actions .btn:not([disabled])')?.focus(); } });
   return el;
 }
 
@@ -741,7 +813,10 @@ function actionBar(log) {
     markBtn.disabled = noteBtn.disabled = fromBtn.disabled = editBtn.disabled = !t;
   };
   const commit = (t, frames, text) => {
-    S.target = null; document.getSelection()?.removeAllRanges();
+    // Marked from the bar: the line has the focus again once the page is drawn, so from the keyboard the next line is
+    // one Tab on. After a tap or a click on Mark the page is not scrolled for it: someone reading ahead in the script
+    // while the take runs stays where they are, not back at the line they marked.
+    S.target = null; document.getSelection()?.removeAllRanges(); S.focusPara = el.contains(document.activeElement) ? t.para : null; S.focusQuiet = byPointer;
     pushNote(log, { id: uid(), frames, text, at: new Date().toISOString(), para: t.para, start: t.start, end: t.end, quote: t.quote });
     haptic(20); announce(`Marked ${frames == null ? 'unsynced' : fmt(frames, log)}`);
   };
@@ -759,7 +834,15 @@ function actionBar(log) {
   };
   tick(); const iv = setInterval(tick, 250);
   const el = h('div', { class: 'sc-bar' }, h('div', { class: 'card-row' }, info, live), h('div', { class: 'actions' }, markBtn, noteBtn, fromBtn, editBtn));
-  return { el, set, stop: () => clearInterval(iv) };
+  // A line reached by Tab is scrolled clear of the bar (.sc-para's scroll-margin-bottom in styles.css) by the bar's own
+  // height, which grows when its four buttons wrap: a third row on a phone 360 px wide, more at a larger text size.
+  const fit = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { const box = el.parentElement; if (box && el.offsetHeight) box.style.setProperty('--sc-bar-h', el.offsetHeight + 'px'); }) : null;
+  if (fit) fit.observe(el);
+  // Escape on the bar lets the chosen line go and gives it the focus back: from the keyboard, the way back to a line that Enter chose
+  let byPointer = false; // whether the bar was last pressed with a finger or the mouse, or with a key
+  el.addEventListener('pointerdown', () => { byPointer = true; });
+  el.addEventListener('keydown', e => { byPointer = false; if (e.key !== 'Escape' || !S.target || S.target.start != null) return; const line = document.getElementById('sc-' + S.target.para); if (!line) return; e.preventDefault(); line.click(); line.focus(); });
+  return { el, set, stop: () => { clearInterval(iv); if (fit) fit.disconnect(); } };
 }
 
 function jumpTo(log, n) {
@@ -809,14 +892,15 @@ link.onMessage(m => {
       if (scriptRev == null) merged.script = null;
       else if (!merged.script || revOf(merged.script) !== scriptRev) link.send({ t: 'script?', id: inc.id });
     }
+    // (put in with the times it carries: store.js update(), keepTimes)
     if (!mine) {
-      update(d => { d.logs.push(merged); });
+      update(d => { d.logs.push(merged); }, { keepTimes: true });
       const cur = current(), fresh = !cur || (!cur.notes.length && !cur.sync);
       if (fresh) { S.id = merged.id; S.view = 'notes'; S.peerLog = null; try { localStorage.setItem('logi-tclog', merged.id); } catch { /* ignore */ } S.redraw(); toast(`Following “${merged.title}” from ${link.link.peer?.name || 'the linked device'}`); }
       else { S.peerLog = merged.id; S.redraw(); }
       return;
     }
-    if (JSON.stringify(merged) !== JSON.stringify(mine)) update(d => { const i = d.logs.findIndex(x => x.id === inc.id); if (i >= 0) d.logs[i] = merged; });
+    if (JSON.stringify(merged) !== JSON.stringify(mine)) update(d => { const i = d.logs.findIndex(x => x.id === inc.id); if (i >= 0) d.logs[i] = merged; }, { keepTimes: true });
     if (current() && current().id !== inc.id && S.peerLog !== inc.id) { S.peerLog = inc.id; S.redraw(); }
   } else if (m.t === 'script?') {
     const l = byId('logs', m.id); if (l) link.send({ t: 'script', id: m.id, script: l.script || null });
@@ -831,7 +915,7 @@ link.onMessage(m => { if (m && typeof m.t === 'string' && m.t.startsWith('pr-'))
 
 function openLink(log) {
   const body = h('div', { class: 'stack' });
-  let scan = null, myCode = '', closeSheet = () => {};
+  let scan = null, myCode = '', closeSheet = () => {}, began = false; // began: this sheet started the link that is under way
   const cleanup = () => { scan && scan.stop(); scan = null; };
   const state = h('div', { class: 'link-state' });
   const codeBox = h('div', { class: 'stack' });
@@ -855,11 +939,12 @@ function openLink(log) {
 
   // Flows: A shows a code → B scans it and shows a reply → A scans the reply.
   const flowShow = async () => {
-    try { state.textContent = 'Preparing code…'; await showCode(await link.createOffer()); state.textContent = 'Step 1 of 2: on the other device tap Link device → Scan a code, and scan this.'; 
+    try { began = true; cleanup(); draw(); state.textContent = 'Preparing code…'; await showCode(await link.createOffer()); state.textContent = 'Step 1 of 2: on the other device tap Link device → Scan a code, and scan this.'; 
       codeBox.append(h('button', { class: 'btn primary', onclick: () => { state.textContent = 'Step 2 of 2: scan the reply code the other device is showing.'; startScan('A', async c => { await link.acceptAnswer(c); state.textContent = 'Connecting…'; }, 'Scan the reply code'); } }, 'Next: scan the reply'));
     } catch (e) { fail(e); }
   };
   const flowScan = () => {
+    began = true; draw();
     state.textContent = 'Scan the code shown on the first device.';
     startScan('O', async c => { state.textContent = 'Preparing reply…'; await showCode(await link.acceptOffer(c)); state.textContent = 'Now scan this reply code with the first device (Next: scan the reply).'; }, 'Scan the first device’s code');
   };
@@ -879,14 +964,18 @@ function openLink(log) {
       l.error && h('div', { class: 'warn' }, l.error),
       h('p', { class: 'small muted' }, 'Links this device directly to another one running Vdex on the same Wi‑Fi or hotspot, with no account and no internet needed. One device shows a code, the other scans it, then they swap.'),
       state, codeBox,
-      l.status === 'idle' && h('div', { class: 'actions center' },
+      // A link begun in a sheet that was since closed has lost its code with that sheet: it can only be started again.
+      !began && l.status !== 'idle' && h('p', { class: 'small muted link-again' }, 'The link started earlier was not finished. Start again:'),
+      (l.status === 'idle' || !began) && h('div', { class: 'actions center' },
         h('button', { class: 'btn primary', onclick: flowShow }, 'Show a code'),
         h('button', { class: 'btn ghost', onclick: flowScan }, 'Scan a code')),
-      l.status === 'offering' && !scan && h('p', { class: 'small muted' }, 'Code shown. Scan it with the other device, then tap “Next: scan the reply”.'),
-      l.status === 'answering' && h('p', { class: 'small muted' }, 'Waiting for the first device to scan the reply…')));
+      began && l.status === 'offering' && !scan && h('p', { class: 'small muted' }, 'Code shown. Scan it with the other device, then tap “Next: scan the reply”.'),
+      began && l.status === 'answering' && h('p', { class: 'small muted' }, 'Waiting for the first device to scan the reply…')));
   };
   draw();
-  const unsub = link.onChange(l => { if (l.status === 'connected') { cleanup(); draw(); toast('Devices linked'); } else if (l.status === 'idle' && l.error) draw(); });
+  // The sheet follows the link: linked, and unlinked again (by Unlink here, by the other device, or a lost connection),
+  // when the step and the code of the attempt before go too.
+  const unsub = link.onChange(l => { if (l.status === 'connected') { cleanup(); draw(); toast('Devices linked'); } else if (l.status === 'idle') { cleanup(); began = false; state.textContent = ''; codeBox.replaceChildren(); draw(); } });
   const sh = sheet('Link another device', body, { dismissOnBackdrop: false, onClose: () => { cleanup(); unsub(); } });
   closeSheet = sh.close;
 }

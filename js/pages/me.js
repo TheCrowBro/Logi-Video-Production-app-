@@ -67,7 +67,7 @@ export const me = {
       } catch { qrBox.textContent = 'Too much data for a QR code — shorten your details.'; }
     }
 
-    const vcfFile = () => new File([vcard(p)], `${(p.name || 'contact').replace(/\W+/g, '_')}.vcf`, { type: 'text/vcard' });
+    const vcfFile = () => new File([vcard(p)], `${(p.name || 'contact').replace(/[^\p{L}\p{N}]+/gu, '_').slice(0, 40) || 'contact'}.vcf`, { type: 'text/vcard' });
     const share = async () => {
       const f = vcfFile();
       if (native.canShareFiles()) { try { await native.files.share(f.name, f, f.type, { title: p.name }); } catch (e) { toast('Could not share: ' + (e.message || e)); } return; }

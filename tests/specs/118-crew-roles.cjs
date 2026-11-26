@@ -65,7 +65,8 @@ const setup = async ctx => {
 
   // ---- the menu, from the crew form ----
   await page.evaluate(() => window.logiGo('crew')); await sleep(400);
-  const before = await store(() => import('./js/store.js').then(s => JSON.stringify(s.db.crew)));
+  // (without the time each record was last changed: the backup brought back further down stamps every record as changed then, so a restore outranks deletions made before it; spec 97)
+  const before = await store(() => import('./js/store.js').then(s => JSON.stringify(s.db.crew.map(({ updatedAt, ...c }) => c))));
   await addCrew('Ana Grip');
   ok('the form\'s Role box is a button with its label, saying nothing is chosen yet (no free-text box, no datalist)', (await roleBtn.count()) === 1 && (await roleBtn.getAttribute('aria-label')) === 'Role: none chosen' && (await roleBtn.getAttribute('aria-haspopup')) === 'dialog' && (await roleBtn.getAttribute('type')) === 'button'
     && (await page.locator('.sheet form label', { hasText: 'Role' }).getAttribute('for')) === (await roleBtn.getAttribute('id')) && (await roleBtn.innerText()).includes('Choose a role') && (await page.locator('.sheet form input[data-key="role"], .sheet form datalist').count()) === 0);
@@ -182,7 +183,7 @@ const setup = async ctx => {
 
   // ---- a backup, the cloud and another device ----
   const backup = await store(() => import('./js/store.js').then(s => s.exportJSON()));
-  await store(() => import('./js/store.js').then(s => s.replaceAll({ bookings: [], crew: [] }))); await sleep(200);
+  await store(() => import('./js/store.js').then(s => s.replaceAll({ bookings: [], crew: [], myRoles: [] }))); await sleep(200); // (a file replaces the lists it carries; one it does not carry stays as it is)
   const wiped = await mine();
   await page.evaluate(text => import('./js/backup.js').then(b => b.importData(new File([text], 'vdex-backup.json', { type: 'application/json' }))), backup); await sleep(400);
   ok('a backup carries My roles: gone with the data, back when the backup is imported', JSON.parse(backup).myRoles.length === 2 && wiped.length === 0 && JSON.stringify(await mine()) === JSON.stringify(['Clapper trainee', 'Jib assistant']) && (await store(() => import('./js/store.js').then(s => s.db.crew.some(c => c.name === 'Zed Own' && c.role === 'Jib assistant')))));
@@ -219,7 +220,7 @@ const setup = async ctx => {
   ok('while Vdex is read-only nothing is kept or forgotten', refused.kept === false && refused.gone === false && refused.names === 'Crane swinger,Jib assistant', JSON.stringify(refused));
 
   // ---- existing crew keep the roles they have ----
-  const sample = () => store(() => import('./js/store.js').then(s => JSON.stringify(s.db.crew.filter(c => ['Sam Rivera', 'Jo Chen', 'Mika Dahl', 'Priya Nair'].includes(c.name)))));
+  const sample = () => store(() => import('./js/store.js').then(s => JSON.stringify(s.db.crew.filter(c => ['Sam Rivera', 'Jo Chen', 'Mika Dahl', 'Priya Nair'].includes(c.name)).map(({ updatedAt, ...c }) => c))));
   ok('the crew that were there before are exactly as they were', (await sample()) === before && JSON.parse(before).map(c => c.role).join() === 'Sound Recordist,1st AC,Gaffer,Editor');
   await store(() => import('./js/store.js').then(s => { s.upsert('crew', { id: 'old-odd', name: 'Odd Role', role: 'Sound recordist / fixer', phone: '', email: '', link: '', rate: 300, rateUnit: 'day', notes: '' }); s.upsert('crew', { id: 'old-none', name: 'No Role Yet', role: '', phone: '', email: '', link: '', rate: '', notes: '' }); })); await sleep(400);
   await card('Odd Role').locator('button[aria-label="Edit Odd Role"]').click(); await page.waitForSelector('.sheet form');
@@ -334,6 +335,29 @@ const setup = async ctx => {
     await p.screenshot({ path: `${OUT}/roles-${w}-search.png` });
     ok(`${w} px: no page errors`, errs.length === 0, errs.join(' | '));
     await c2.close();
+  }
+  // ---- the Crew page: repairs after 1.4.0 ----
+  {
+    const c3 = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    await c3.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await c3.addInitScript(acceptTerms());
+    const cp = await c3.newPage(); const errs3 = []; cp.on('pageerror', e => errs3.push(e.message)); cp.on('dialog', d => d.accept());
+    await cp.goto(URL); await cp.waitForSelector('#rolodex .drum-btn');
+    await cp.evaluate(() => import('./js/store.js').then(s => s.update(d => { for (const [id, name, role] of [['c1', 'Sam Rivera', 'Sound Recordist'], ['c2', 'Jo Chen', '1st AC'], ['c3', 'Mika Dahl', 'Gaffer'], ['c4', 'Priya Nair', 'Editor']]) d.crew.push({ id, name, role, notes: '' }); })));
+    await cp.evaluate(() => window.logiGo('crew')); await sleep(350);
+    const people = () => cp.locator('.crew-card strong').allInnerTexts();
+    await cp.locator('.search').fill('priya'); await sleep(250);
+    const found = await people();
+    await cp.locator('.crew-card button[aria-label="Edit Priya Nair"]').click(); await cp.waitForSelector('.sheet form');
+    await cp.locator('.sheet form .btn.danger').click(); await sleep(400);
+    ok('deleting the one person a search found, in a list then too short for the search box, shows the people who are left', found.join() === 'Priya Nair' && (await people()).length === 3 && (await cp.locator('.empty', { hasText: 'No matches.' }).count()) === 0 && (await cp.locator('.search').count()) === 0, (await people()).join());
+    await cp.locator('.page-head button.primary').click(); await cp.waitForSelector('.sheet form');
+    await cp.locator('.sheet form input[data-key="name"]').fill('   '); await cp.locator('.sheet form button[type=submit]').click(); await sleep(300);
+    ok('a name made of spaces is refused: the form stays, and nobody without a name is added', (await cp.locator('.sheet form').count()) === 1 && (await cp.evaluate(() => import('./js/store.js').then(s => s.db.crew.length))) === 3);
+    await cp.locator('.sheet form input[data-key="name"]').fill('😀 Sam'); await cp.locator('.sheet form button[type=submit]').click(); await sleep(350);
+    const initials = await cp.locator('.crew-card', { hasText: '😀 Sam' }).locator('.avatar').innerText();
+    ok('the initials of a name that starts with an emoji are whole characters', initials === '😀S', JSON.stringify(initials));
+    ok('the Crew page repairs: no page errors', errs3.length === 0, errs3.join(' | '));
+    await c3.close();
   }
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

@@ -50,7 +50,7 @@ export function displayPanel({ onTour } = {}) {
     h('div', { class: 'pref-label' }, label),
     h('div', { class: 'seg wide' }, opts.map(([v, l]) => h('button', {
       type: 'button', class: prefs[key] === v ? 'on' : '', 'aria-pressed': prefs[key] === v,
-      onclick: () => { prefs[key] = v; save(); haptic(); draw(); },
+      onclick: () => { prefs[key] = v; save(); haptic(); draw(); groups.querySelector(`.pref[aria-label="${label}"] button.on`)?.focus(); }, // the buttons are drawn again: the choice made keeps the focus
     }, l))))));
   draw();
   // Colour theme twirl-down: palette swatches plus light / dark / follow-device.
@@ -60,10 +60,10 @@ export function displayPanel({ onTour } = {}) {
     themeSum.textContent = themeSummary();
     themeBody.replaceChildren(
       h('div', { class: 'pref' }, h('div', { class: 'pref-label' }, 'Appearance'),
-        h('div', { class: 'seg wide' }, [['system', 'Follow device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('button', { type: 'button', class: prefs.scheme === v ? 'on' : '', 'aria-pressed': prefs.scheme === v, onclick: () => { prefs.scheme = v; save(); haptic(); drawTheme(); } }, l)))),
+        h('div', { class: 'seg wide' }, [['system', 'Follow device'], ['light', 'Light'], ['dark', 'Dark']].map(([v, l]) => h('button', { type: 'button', class: prefs.scheme === v ? 'on' : '', 'aria-pressed': prefs.scheme === v, onclick: () => { prefs.scheme = v; save(); haptic(); drawTheme(); themeBody.querySelector('.seg button.on')?.focus(); } }, l)))),
       h('div', { class: 'theme-list', role: 'radiogroup', 'aria-label': 'Colour theme' }, PALETTES.flatMap((p, i) => [i === 0 && h('div', { class: 'theme-group' }, 'Classic'), p.group === 'brand' && PALETTES[i - 1].group !== 'brand' && h('div', { class: 'theme-group' }, 'Camera brands', h('span', { class: 'twirl-sub' }, 'colours inspired by the brands; not affiliated')), (() => {
         const c = p[resolvedScheme()], on = prefs.palette === p.id;
-        return h('button', { type: 'button', class: 'theme-row', role: 'radio', 'aria-checked': on, onclick: () => { prefs.palette = p.id; save(); haptic(); drawTheme(); } },
+        return h('button', { type: 'button', class: 'theme-row', role: 'radio', 'aria-checked': on, onclick: () => { prefs.palette = p.id; save(); haptic(); drawTheme(); themeBody.querySelector('[role=radio][aria-checked=true]')?.focus(); } },
           h('span', { class: 'swatches', 'aria-hidden': 'true' }, ['bg', 'card', 'accent', 'text'].map(k => h('i', { style: `background:${c[k]}` }))),
           h('span', null, p.name, h('span', { class: 'twirl-sub' }, p.blurb ? p.blurb : p.id === 'brass' ? 'the original: warm dark with amber' : p.id === 'noir' ? 'black, white and record-light red' : p.id === 'forest' ? 'deep greens with a gold accent' : p.id === 'ocean' ? 'navy and teal' : p.id === 'plum' ? 'aubergine and rose' : 'greyscale, no colour at all')),
           h('span', { class: 'check' }, on ? '✓' : ''));

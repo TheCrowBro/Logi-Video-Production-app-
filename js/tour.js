@@ -47,20 +47,31 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
   // tutorial chosen a moment before the app was put away): it starts as everything else under that screen is, out of
   // reach, so it takes no focus and answers no keys there. The screen's way out (coverAll in js/lock.js) gives it back.
   if (covered()) { layer.inert = true; layer.dataset.covered = ''; }
-  document.body.append(layer); if (app) app.inert = true;
+  const opener = document.activeElement; // what had the keyboard focus gets it back when the walkthrough ends
+  document.body.append(layer); settleApp();
   let i = from, target = null, dir = 1;
   const seen = new Set(); // steps already shown: they keep their place in the count when going back
   // On the way out the page is given back only if nothing else is over it by now: a step may have closed the form the
   // walkthrough was started from, or opened a sheet of its own (settleApp looks at what is there).
-  const stop = () => { if (active !== me) return; active = null; layer.remove(); window.logiMenu?.close(); window.logiSearch?.close(); settleApp(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done(); };
+  const stop = () => {
+    if (active !== me) return; active = null; layer.remove(); window.logiMenu?.close(); window.logiSearch?.close(); settleApp(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); document.removeEventListener('keydown', keys, true); if (remember) done();
+    // The card had the focus and is gone: it goes back to where it was before the walkthrough, or to the page, never nowhere.
+    if (!covered() && (!document.activeElement || document.activeElement === document.body)) { const to = opener && opener !== document.body && opener.isConnected && !opener.closest('[inert]') ? opener : document.getElementById('page'); to && to.focus({ preventScroll: true }); }
+  };
   // again: only a step that shows the menu or the search is shown again. One with a form in its card would lose what was
   // typed: there, and on any other card, the focus is put back into the card when it is nowhere (after the lock screen).
   const me = active = { stop, again: () => { const s = STEPS[i]; if (s && (s.menu || s.search)) show(i); else if (!layer.inert && (!document.activeElement || document.activeElement === document.body)) (card.querySelector('.tour-form input, .tour-form textarea, .tour-form select') || card.querySelector('.tour-actions .btn.primary'))?.focus(); } };
   // Arrow keys move between steps, except while typing in a field of the card; Escape always leaves. Under the lock
   // screen or the offer of a longer PIN the walkthrough is out of reach, and so are its keys.
-  const keys = e => { if (layer.inert) return; const t = e.target; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && e.key !== 'Escape') return; if (e.key === 'Escape') { e.stopPropagation(); stop(); } else if (e.key === 'ArrowRight') { e.stopPropagation(); next(); } else if (e.key === 'ArrowLeft') { e.stopPropagation(); dir = -1; show(i - 1); } };
+  let goOn = () => next(); // the shown step's own way forward (its form's save first, Done on the last card): → does what Next does
+  // Tab stays inside the card: from its last control to its first, and back, and into it from anywhere else. The key
+  // goes no further: a sheet the walkthrough runs over keeps Tab inside itself the same way, and would take it.
+  const trap = e => { e.stopPropagation(); const items = [...card.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select, textarea')].filter(el => el.offsetParent !== null); if (!items.length) return; const first = items[0], last = items[items.length - 1], at = document.activeElement; if (!card.contains(at)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); } else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); } };
+  const keys = e => { if (layer.inert) return; if (e.key === 'Tab') return trap(e); const t = e.target; if (t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && e.key !== 'Escape') return; if (e.key === 'Escape') { e.stopPropagation(); stop(); } else if (e.key === 'ArrowRight') { e.stopPropagation(); goOn(); } else if (e.key === 'ArrowLeft') { e.stopPropagation(); dir = -1; show(i - 1); } };
   const place = () => {
-    if (!target) { spot.classList.add('center'); card.classList.add('center'); return; }
+    // Nothing to point at: the card in the middle and no spotlight. What the step before set by hand (the card's top,
+    // the spotlight's box) goes, or it would outrank the class: the card pushed off the top, the old box still lit.
+    if (!target) { spot.classList.add('center'); card.classList.add('center'); card.style.top = ''; spot.style.top = spot.style.left = spot.style.width = spot.style.height = ''; return; }
     spot.classList.remove('center'); card.classList.remove('center');
     const r = target.getBoundingClientRect(), pad = 8;
     Object.assign(spot.style, { top: r.top - pad + 'px', left: r.left - pad + 'px', width: r.width + pad * 2 + 'px', height: r.height + pad * 2 + 'px' });
@@ -98,6 +109,7 @@ export function runTour(steps, { remember = false, from = 0, footer = null, root
     // Leaving the step forwards runs its onNext first (a form's save); Back never saves.
     const advance = async fn => { if (s.onNext) { try { if ((await s.onNext()) === false) return; } catch { /* carry on */ } } fn(); };
     const forward = () => advance(isLast ? stop : next);
+    goOn = forward;
     const body = s.body ? s.body({ refresh: () => show(n), next: forward, stop, index: n }) : null;
     card.replaceChildren(...nodes(
       h('div', { class: 'tour-step muted small' }, `${pos + 1} / ${shown.length}`),

@@ -11,8 +11,8 @@ import { setCheck, itemId, hiredPeople, rentalsOf } from './workflow.js';
 import { stats, workedMs, standardDay } from './hours.js';
 import { saveOrShare, csvCell, csvText } from './backup.js';
 import { printElement, htmlDocument } from './callsheet.js';
-import { KINDS, calc, renderDoc, docText, pdfBlocks, docTitle, payButtons } from './money-doc.js';
-import { CURRENCIES, codeFor, amountStr, PAY_TYPES, typeOf, summaryOf, methodsOf } from './pay.js';
+import { KINDS, calc, renderDoc, docText, pdfBlocks, docTitle, payButtons, fmtDate } from './money-doc.js';
+import { CURRENCIES, knownCode, amountStr, PAY_TYPES, typeOf, summaryOf, methodsOf } from './pay.js';
 // The QR library and the link packer load only when a document with a bank QR is drawn or a link is made.
 const qrSvg = (text, opts) => import('./qr.js').then(m => m.qrSvg(text, opts));
 const pack = obj => import('./link-pack.js').then(m => m.pack(obj));
@@ -26,7 +26,9 @@ export const payMethods = () => methodsOf(billing());
 export const billing = () => ({ ...DEF, ...(db.billing || {}) });
 export const setBilling = patch => update(d => { d.billing = { ...DEF, ...(d.billing || {}), ...patch, updatedAt: Date.now() }; });
 const sym = () => db.profile.currency || '$';
-const code = () => billing().currencyCode || codeFor(sym());
+// The currency a payment link asks in: the one chosen under Getting paid, else the one the profile's symbol plainly
+// means, else none ('': the link then leaves the currency to the payment service), never a guess.
+const code = () => billing().currencyCode || knownCode(sym());
 export const fmtMoney = n => { const v = Number(n) || 0; return (v < 0 ? '-' : '') + sym() + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
 export const docOf = (b, kind) => (b && b[kind] ? { lines: [], ...b[kind] } : null);
 // Lines, tax, total, what has been paid (deposit plus recorded payments) and the balance due.
@@ -43,6 +45,9 @@ const num = v => (v === '' || v == null ? '' : Number(v));
 // The amount in a typed cost ("$120", "1.200,50 €"); the parser lives in util.js. A person's hourly rate is quoted for a
 // standard day's hours (Settings → Work & billing → Hours & breaks) per shoot day.
 export const rateOf = r => parseRate(r).amount;
+// A cost kept as a number (the Cost box of a rental or a licence) is that number: read as typed text, 85.125 would be
+// taken for eighty-five thousand, the dot for a thousands mark.
+const costOf = c => (typeof c === 'number' ? c : rateOf(c));
 
 // The people hired for a job who belong in its money. A booking added from someone's shared link (js/share-import.js)
 // carries that producer's whole crew as its hires, to read and to call: they are not one's own costs or charges, so
@@ -55,38 +60,91 @@ const linkMade = (b, x, rows = 'hires') => x.shared === true || !!(b.shared && b
 const paidHires = b => hiredPeople(b).filter(hr => !(linkMade(b, hr) && (hr.rate === '' || hr.rate == null)));
 const ownDeliverables = b => (b.deliverables || []).filter(x => x && !linkMade(b, x, 'deliverables'));
 
-// Suggested lines: from the booking, from the quote, or from the hours logged.
+// Suggested lines: from the booking, from the quote, or from the hours logged. Each carries where it comes from (src:
+// the shoot days, a crew member, the kit, a deliverable, a rental, the editing hours…) and the quantity it suggested
+// (sq), neither of which leaves the app, so that asking again after the booking or the hours changed brings the line
+// it made up to date, while nobody has changed its quantity, instead of adding a second one beside it.
 export function suggestLines(b, kind, source = 'booking') {
   const bl = billing(), days = shootDays(b), lines = [];
-  const line = (desc, qty, unit, price) => lines.push({ id: uid(), desc, qty, unit, price: num(price) });
-  if (source === 'quote') return ((b.quote && b.quote.lines) || []).map(l => ({ ...l, id: uid() }));
+  const line = (src, desc, qty, unit, price) => lines.push({ id: uid(), desc, qty, unit, price: num(price), src, sq: qty });
+  if (source === 'quote') return ((b.quote && b.quote.lines) || []).map(l => ({ ...l, id: uid(), src: srcOf(l) || 'q:' + l.id }));
   if (source === 'hours') {
     const shifts = db.shifts.filter(s => s.bookingId === b.id && s.end);
     const shoot = shifts.filter(s => (s.kind || 'shoot') === 'shoot'), edit = shifts.filter(s => s.kind === 'edit');
     const sd = new Set(shoot.map(s => s.date)).size;
-    if (sd) line(`Shoot day${sd === 1 ? '' : 's'} — ${b.title}`, sd, 'day', bl.dayRate);
+    if (sd) line('shoot', `Shoot day${sd === 1 ? '' : 's'} — ${b.title}`, sd, 'day', bl.dayRate);
     const editH = Math.round(edit.reduce((t, s) => t + workedMs(s), 0) / 36e5 * 4) / 4;
-    if (editH) line('Editing', editH, 'hour', bl.hourRate);
+    if (editH) line('hours:edit', 'Editing', editH, 'hour', bl.hourRate);
     const ot = Math.round(stats(shoot).overtime / 36e5 * 4) / 4;
-    if (ot) line('Overtime on shoot days', ot, 'hour', bl.overtimeRate || bl.hourRate);
+    if (ot) line('hours:ot', 'Overtime on shoot days', ot, 'hour', bl.overtimeRate || bl.hourRate);
     return lines;
   }
-  line(`Shoot day${days === 1 ? '' : 's'} — ${b.title}`, days, 'day', bl.dayRate);
-  for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const r = personRate(c); line(`Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, r.hourly ? days * standardDay() : days, r.hourly ? 'hour' : 'day', r.amount); } }
-  for (const hr of paidHires(b)) { const r = personRate(hr), n = Number(hr.days) || days; line(`Crew: ${hr.name}${hr.role ? ' (' + hr.role + ')' : ''}`, r.hourly ? n * standardDay() : n, r.hourly ? 'hour' : 'day', r.amount); }
-  if ((b.gear || []).length || (b.kits || []).length) line('Equipment package', days, 'day', bl.kitRate);
-  for (const dl of ownDeliverables(b)) line(`${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
-  if (kind === 'invoice') for (const hr of rentalsOf(b)) line(`Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
+  line('shoot', `Shoot day${days === 1 ? '' : 's'} — ${b.title}`, days, 'day', bl.dayRate);
+  for (const id of b.crew || []) { const c = byId('crew', id); if (c) { const r = personRate(c); line('crew:' + id, `Crew: ${c.name}${c.role ? ' (' + c.role + ')' : ''}`, r.hourly ? days * standardDay() : days, r.hourly ? 'hour' : 'day', r.amount); } }
+  for (const hr of paidHires(b)) { const r = personRate(hr), n = Number(hr.days) || days; line('person:' + hr.id, `Crew: ${hr.name}${hr.role ? ' (' + hr.role + ')' : ''}`, r.hourly ? n * standardDay() : n, r.hourly ? 'hour' : 'day', r.amount); }
+  if ((b.gear || []).length || (b.kits || []).length) line('kit', 'Equipment package', days, 'day', bl.kitRate);
+  for (const dl of ownDeliverables(b)) line('deliv:' + dl.id, `${dl.name}${dl.duration ? ' (' + dl.duration + ')' : ''}`, 1, 'each', '');
+  if (kind === 'invoice') for (const hr of rentalsOf(b)) line('hire:' + hr.id, `Hire: ${hr.item}${hr.from ? ' (' + hr.from + ')' : ''}`, 1, 'each', hr.cost);
   return lines;
 }
+// Suggested lines put onto a document that already has lines. A suggestion and a line are the same thing when they
+// carry the same src; a line from before lines carried one is known by what it says (the shoot days, the editing
+// hours, the overtime and the kit by their wording, anything else by the same description). A line that only says
+// which line of the quote it was (q:…) has no source of its own either: the quote was written before lines carried
+// one, or by hand, so there the same description in the same unit is the same line (the quote's "Editing" by the day
+// is not the editing hours). From the quote, only what is missing is added. From the booking or the hours, a line
+// already there takes the new quantity only while it is as a suggestion left it: it carries its source and the
+// quantity suggested then (sq), and its quantity is still that. A line from 1.4.0 or typed by hand, and one whose
+// quantity was set by hand (a crew day taken off on an invoice already sent, say), stay as they are; and no
+// description is written over, but for the shoot days' own "Shoot day" and "Shoot days" on the line they made.
+const SHOOT_LINE = /^Shoot days? — /;
+function srcOf(l) { return l.src || (SHOOT_LINE.test(l.desc || '') ? 'shoot' : l.desc === 'Editing' && l.unit === 'hour' ? 'hours:edit' : l.desc === 'Overtime on shoot days' ? 'hours:ot' : l.desc === 'Equipment package' ? 'kit' : ''); }
+export function mergeSuggested(lines, suggested, source) {
+  const out = (lines || []).map(l => ({ ...l })), low = l => (l.desc || '').trim().toLowerCase(), own = src => !!src && !src.startsWith('q:'); let added = 0, updated = 0;
+  // A line answers for one suggestion only, and a suggestion just added for none: a quote may hold two lines that read
+  // alike (travel there and travel back, a second "Shoot day — …" for another unit), and each of them is a line.
+  const taken = new Set(), find = test => out.findIndex((l, j) => !taken.has(j) && test(l));
+  for (const sg of suggested) {
+    let i = find(l => srcOf(l) === sg.src);
+    if (i < 0) i = find(l => { const src = srcOf(l); return (!src || (!(own(src) && own(sg.src)) && (l.unit || '') === (sg.unit || ''))) && low(l) === low(sg); });
+    if (i < 0) { taken.add(out.push(sg) - 1); added++; continue; }
+    taken.add(i);
+    if (source === 'quote') continue;
+    const l = out[i];
+    if (!l.src || l.sq == null || Number(l.qty) !== Number(l.sq)) continue;
+    const bare = d => String(d || '').replace(SHOOT_LINE, ''), desc = sg.src === 'shoot' && SHOOT_LINE.test(l.desc || '') && bare(l.desc) === bare(sg.desc) ? sg.desc : l.desc;
+    const next = { ...l, src: sg.src, qty: sg.qty, sq: sg.qty, unit: sg.unit, desc };
+    if (Number(l.qty) !== Number(sg.qty) || (l.unit || '') !== (sg.unit || '') || l.desc !== next.desc) updated++;
+    out[i] = next;
+  }
+  return { lines: out, added, updated };
+}
 
+const figures = d => JSON.stringify([(d.lines || []).map(l => [Number(l.qty) || 0, Number(l.price) || 0]), Number(d.taxRate) || 0, Number(d.deposit) || 0]);
 function saveDoc(id, kind, doc) {
-  const prev = docOf(byId('bookings', id), kind) || {}, now = Date.now();
-  const next = { ...doc, taxLabel: doc.taxLabel || billing().taxLabel, updatedAt: now };
+  const had = docOf(byId('bookings', id), kind), prev = had || {}, now = Date.now();
+  const next = { ...doc, taxLabel: String(doc.taxLabel || '').trim() || billing().taxLabel, updatedAt: now };
+  // Its figures are rounded to cents one by one (calc in js/money-doc.js) from the day it is made, and from the day its
+  // figures (a line's quantity or price, the tax rate, the deposit) are changed while it is a Draft. A document made
+  // under 1.4.0 keeps that build's arithmetic until then: what went out does not change by a cent because Vdex was
+  // updated, and that build sent a Draft (by email, or as a link) without marking it sent.
+  if (!had || (next.status === 'Draft' && figures(next) !== figures(prev))) next.calc = 2;
+  // The dates follow the status: an invoice taken back from Paid has no paid date, and a document taken back to Draft
+  // was not sent.
+  if (next.status === 'Draft') next.sentAt = null;
   if (next.status === 'Sent' && prev.status !== 'Sent' && !next.sentAt) next.sentAt = now;
   if (kind === 'quote' && next.status === 'Accepted' && !next.acceptedAt) next.acceptedAt = now;
+  if (kind === 'invoice' && next.status !== 'Paid') next.paidAt = null;
   if (kind === 'invoice' && next.status === 'Paid' && !next.paidAt) next.paidAt = now;
-  upsert('bookings', { ...byId('bookings', id), [kind]: next });
+  const cur = { ...byId('bookings', id), [kind]: next }; delete cur[kind + 'GoneAt']; // the mark a deleted document left (see the form's Delete)
+  upsert('bookings', cur);
+  // A number that has gone out is never proposed again, also after its booking or the document is deleted: the
+  // "next number" in the settings moves past it. (A draft's number is still free.)
+  if (next.status !== 'Draft') {
+    const bl = billing(), prefix = kind === 'quote' ? bl.quotePrefix : bl.invoicePrefix, key = kind === 'quote' ? 'nextQuote' : 'nextInvoice';
+    const n = String(next.number || '').startsWith(prefix) && /^\d+$/.test(String(next.number).slice(prefix.length)) ? parseInt(String(next.number).slice(prefix.length), 10) : NaN;
+    if (Number.isFinite(n) && n + 1 > (Number(bl[key]) || 1)) setBilling({ [key]: n + 1 });
+  }
   const b = byId('bookings', id);
   if (kind === 'quote' && ['Sent', 'Accepted'].includes(next.status)) setCheck(b, itemId('Quoted', 'Quote / estimate sent'), true);
   if (kind === 'invoice' && ['Sent', 'Paid'].includes(next.status)) setCheck(b, itemId('Delivered', 'Final invoice sent'), true);
@@ -96,7 +154,10 @@ export const setDocStatus = (id, kind, status) => { const doc = docOf(byId('book
 
 export function editMoney(b, kind, onDone, preset) {
   const K = KINDS[kind], bl = billing(), cur = docOf(b, kind);
-  const base = cur || { number: nextNumber(kind), date: todayISO(), [K.dateKey]: addDays(todayISO(), Number(kind === 'quote' ? bl.validDays : bl.dueDays) || (kind === 'quote' ? 30 : 14)), lines: [], taxRate: bl.taxRate, taxLabel: bl.taxLabel, notes: kind === 'invoice' ? bl.terms : '', status: 'Draft', deposit: '' };
+  // Invoices due in 0 days are due on receipt: only an empty box falls back to 14 (a quote is valid for a day at least).
+  const set = kind === 'quote' ? bl.validDays : bl.dueDays, given = set !== '' && set != null && Number.isFinite(Number(set));
+  const days = kind === 'quote' ? (given && Number(set) > 0 ? Number(set) : 30) : (given && Number(set) >= 0 ? Number(set) : 14);
+  const base = cur || { number: nextNumber(kind), date: todayISO(), [K.dateKey]: addDays(todayISO(), days), lines: [], taxRate: bl.taxRate, taxLabel: bl.taxLabel, notes: kind === 'invoice' ? bl.terms : '', status: 'Draft', deposit: '' };
   const values = { ...base, ...(preset || {}) };
   openForm({
     title: cur ? `Edit ${K.label.toLowerCase()}` : `New ${K.label.toLowerCase()}`,
@@ -106,16 +167,18 @@ export function editMoney(b, kind, onDone, preset) {
       { key: 'date', label: 'Date', type: 'date', required: true },
       { key: K.dateKey, label: K.dateLabel, type: 'date' },
       { key: 'lines', label: 'Lines', type: 'rows', columns: [{ key: 'desc', label: 'Description' }, { key: 'qty', label: 'Qty', type: 'number' }, { key: 'unit', label: 'Unit' }, { key: 'price', label: `Price (${sym()})`, type: 'number' }], hint: 'Quantity × price per line. Units are free text: day, hour, each…' },
-      { key: 'taxRate', label: `${bl.taxLabel || 'Tax'} rate (%)`, type: 'number', min: 0, step: 'any', hint: '0 if you don’t charge it.' },
+      { key: 'taxLabel', label: 'Tax name', placeholder: bl.taxLabel || 'VAT, GST, Sales tax…', hint: `Printed on this ${K.label.toLowerCase()} beside the rate.` },
+      { key: 'taxRate', label: 'Tax rate (%)', type: 'number', min: 0, step: 'any', hint: '0 if you don’t charge it.' },
       ...(kind === 'invoice' ? [{ key: 'deposit', label: 'Already paid / deposit', type: 'number', min: 0, step: 'any' }] : []),
       { key: 'status', label: 'Status', type: 'select', options: K.statuses },
       { key: 'notes', label: kind === 'quote' ? 'What is included / notes' : 'Payment terms / notes', type: 'textarea', rows: 3 },
     ],
     onSave: v => { saveDoc(b.id, kind, { ...values, ...v, lines: (v.lines || []).map(l => ({ ...l, id: l.id || uid() })) }); toast(`${K.label} saved`); onDone && onDone(); },
-    onDelete: cur ? () => { update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { delete x[kind]; x.updatedAt = Date.now(); } }); toast(`${K.label} removed`); onDone && onDone(); } : null,
+    onDelete: cur ? () => { update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { delete x[kind]; x[kind + 'GoneAt'] = x.updatedAt = Date.now(); } }); toast(`${K.label} removed`); onDone && onDone(); } : null,
   });
 }
 
+const CAT_OPEN = new Set(); // the budget categories unfolded on a booking's page: a line saved there draws the page again, and its category is open still
 /* --------------------------------- documents --------------------------------- */
 const dateLabel = b => (endOf(b) > b.date ? `${fmtLong(b.date)} → ${fmtLong(endOf(b))}` : fmtLong(b.date));
 const partyLines = () => { const p = db.profile; return [p.business || p.name, p.business && p.name ? p.name : null, p.phone, p.email, p.website, p.location].filter(Boolean); };
@@ -152,7 +215,7 @@ export const billedName = b => { if (!(b.shared && b.shared.ref)) return b.clien
 export function snapshot(b, kind) {
   const doc = docOf(b, kind), bl = billing(), p = db.profile, to = billTo(b), contacts = to.contacts.filter(s => s.name);
   return {
-    v: 1, kind, number: doc.number, date: doc.date, due: doc.due, until: doc.until, status: doc.status, title: b.title, when: dateLabel(b),
+    v: 2, ...(doc.calc ? { calc: doc.calc } : {}), kind, number: doc.number, date: doc.date, due: doc.due, until: doc.until, status: doc.status, title: b.title, when: dateLabel(b),
     from: partyLines(), to: [to.head, ...contacts.slice(0, 3).map(s => [s.name, s.role, s.email || s.phone].filter(Boolean).join(' · '))],
     lines: (doc.lines || []).map(({ desc, qty, unit, price }) => ({ desc, qty, unit, price })), taxLabel: doc.taxLabel || bl.taxLabel, taxRate: doc.taxRate, deposit: doc.deposit,
     payments: (doc.payments || []).map(({ date, amount, method }) => ({ date, amount, method: methodLabel(method) })), notes: doc.notes,
@@ -160,7 +223,9 @@ export function snapshot(b, kind) {
     pay: kind === 'invoice' ? { methods: payMethods(), payment: bl.payment } : {},
   };
 }
-export const renderMoneyDoc = (b, kind) => renderDoc(snapshot(b, kind), { qr: qrSvg });
+export const renderMoneyDoc = (b, kind, pending) => renderDoc(snapshot(b, kind), { qr: qrSvg, pending });
+// The same, once its QR codes are in it (they are drawn a moment after the document): for a file or a print made at once.
+const finishedDoc = async (b, kind) => { const pending = [], el = renderMoneyDoc(b, kind, pending); await Promise.all(pending); return el; };
 export const moneyText = (b, kind) => docText(snapshot(b, kind));
 export async function moneyPdf(b, kind) {
   const { makePdf } = await import('./pdf.js');
@@ -177,10 +242,10 @@ export function mailtoFor(b, kind, url, mode = 'send') {
   b = current(b);
   const K = KINDS[kind], doc = docOf(b, kind), snap = snapshot(b, kind), t = calc(snap), payee = snap.payee || 'Vdex';
   const emails = billTo(b).contacts.map(s => (s.email || '').trim()).filter(Boolean);
-  const subject = mode === 'remind' ? `Reminder: invoice ${doc.number} — ${fmtMoney(t.balance)} due${doc.due ? ' ' + fmtShort(doc.due) : ''}` : `${K.label} ${doc.number} — ${b.title}`;
+  const subject = mode === 'remind' ? `Reminder: invoice ${doc.number} — ${fmtMoney(t.balance)} due${doc.due ? ' ' + fmtDate(doc.due) : ''}` : `${K.label} ${doc.number} — ${b.title}`;
   const body = mode === 'remind'
-    ? `Hi,\n\nA quick reminder that invoice ${doc.number} for ${b.title} (${fmtMoney(t.total)}) ${doc.due ? (doc.due < todayISO() ? 'was due on ' : 'is due on ') + fmtShort(doc.due) : 'is due'}. The balance of ${fmtMoney(t.balance)} is still open.\n\nView it and pay here:\n${url}\n\nThank you,\n${payee}`
-    : `Hi,\n\nHere is ${K.label.toLowerCase()} ${doc.number} for ${b.title}: ${fmtMoney(t.total)}${kind === 'invoice' && t.paid > 0 ? ` (balance due ${fmtMoney(t.balance)})` : ''}${doc[K.dateKey] ? `, ${K.dateLabel.toLowerCase()} ${fmtShort(doc[K.dateKey])}` : ''}.\n\nView it${kind === 'invoice' && t.balance > 0 ? ' and pay' : ''} here:\n${url}\n\n${docText(snap)}\n\nThanks,\n${payee}`;
+    ? `Hi,\n\nA quick reminder that invoice ${doc.number} for ${b.title} (${fmtMoney(t.total)}) ${doc.due ? (doc.due < todayISO() ? 'was due on ' : 'is due on ') + fmtDate(doc.due) : 'is due'}. The balance of ${fmtMoney(t.balance)} is still open.\n\nView it and pay here:\n${url}\n\nThank you,\n${payee}`
+    : `Hi,\n\nHere is ${K.label.toLowerCase()} ${doc.number} for ${b.title}: ${fmtMoney(t.total)}${kind === 'invoice' && t.paid > 0 ? ` (balance due ${fmtMoney(t.balance)})` : ''}${doc[K.dateKey] ? `, ${K.dateLabel.toLowerCase()} ${fmtDate(doc[K.dateKey])}` : ''}.\n\nView it${kind === 'invoice' && t.balance > 0 ? ' and pay' : ''} here:\n${url}\n\n${docText(snap)}\n\nThanks,\n${payee}`;
   return `mailto:${emails.join(',')}?` + new URLSearchParams({ subject, body }).toString().replace(/\+/g, '%20');
 }
 export async function openShareSheet(b, kind) {
@@ -209,7 +274,7 @@ export function recordPayment(b, onDone) {
   openForm({
     title: `Payment on ${doc.number}`, saveLabel: 'Record',
     values: { date: todayISO(), amount: t.balance > 0 ? amountStr(t.balance) : '', method: names[0], note: '' },
-    fields: [{ key: 'date', label: 'Date received', type: 'date', required: true }, { key: 'amount', label: `Amount (${sym()})`, type: 'number', min: 0, required: true, hint: t.balance > 0 ? `Balance due ${fmtMoney(t.balance)}` : 'Nothing outstanding' }, { key: 'method', label: 'How it arrived', type: 'select', options }, { key: 'note', label: 'Reference / note' }],
+    fields: [{ key: 'date', label: 'Date received', type: 'date', required: true }, { key: 'amount', label: `Amount (${sym()})`, type: 'number', min: 0.01, step: 'any', required: true, hint: t.balance > 0 ? `Balance due ${fmtMoney(t.balance)}` : 'Nothing outstanding' }, { key: 'method', label: 'How it arrived', type: 'select', options }, { key: 'note', label: 'Reference / note' }],
     onSave: v => {
       const amount = Math.round((Number(v.amount) || 0) * 100) / 100; if (!(amount > 0)) return toast('Enter the amount received');
       const payments = [...(doc.payments || []), { id: uid(), date: v.date, amount, method: v.method, note: v.note }];
@@ -248,11 +313,14 @@ export function moneyPage(b, kind, go) {
   const share = async () => { if (navigator.share) { try { await navigator.share({ title: `${K.label} ${doc.number}`, text: text() }); return; } catch (e) { if (e.name === 'AbortError') return; } } copy(); };
   const copy = async () => { try { await navigator.clipboard.writeText(text()); toast('Copied'); } catch { toast('Select the text and copy it'); } };
   const pdf = async () => { try { if (await saveOrShare(await moneyPdf(byId('bookings', b.id), kind), `${kind}-${slug(doc.number)}-${slug(b.title)}.pdf`, 'application/pdf')) toast('PDF saved'); } catch (e) { toast('Could not make the PDF: ' + (e.message || e)); } };
-  const web = () => saveOrShare(htmlDocument(`${K.label} ${doc.number} — ${b.title}`, renderMoneyDoc(byId('bookings', b.id), kind)), `${kind}-${slug(doc.number)}.html`, 'text/html');
-  const addLines = (source, label) => { const have = new Set((doc.lines || []).map(l => (l.desc || '').toLowerCase())); const add = suggestLines(b, kind, source).filter(l => !have.has((l.desc || '').toLowerCase())); if (!add.length) return toast('Nothing new to add'); saveDoc(b.id, kind, { ...doc, lines: [...(doc.lines || []), ...add] }); toast(`${add.length} line${add.length === 1 ? '' : 's'} added from ${label}`); };
+  const web = async () => saveOrShare(htmlDocument(`${K.label} ${doc.number} — ${b.title}`, await finishedDoc(byId('bookings', b.id), kind)), `${kind}-${slug(doc.number)}.html`, 'text/html');
+  const addLines = (source, label) => { const now = byId('bookings', b.id) || b, m = mergeSuggested(doc.lines, suggestLines(now, kind, source), source), n = x => `${x} line${x === 1 ? '' : 's'}`; if (!m.added && !m.updated) return toast('Nothing new to add'); saveDoc(b.id, kind, { ...doc, lines: m.lines }); toast(`${[m.added && n(m.added) + ' added', m.updated && n(m.updated) + ' updated'].filter(Boolean).join(' and ')} from ${label}`); };
   // Lines picked from the price list go onto the document; with no document yet they start a new one in the editor.
   const fromList = () => import('./price-list.js').then(m => m.pickFromPriceList(b, lines => { const now = byId('bookings', b.id); if (!now) return toast('That booking has been removed'); const d = docOf(now, kind); if (!d) return editMoney(now, kind, refresh, { lines }); saveDoc(b.id, kind, { ...d, lines: [...(d.lines || []), ...lines] }); toast(`${lines.length} line${lines.length === 1 ? '' : 's'} added from the price list`); })).catch(e => toast('Could not open the price list: ' + (e.message || e)));
   const t = doc && totals(doc);
+  // A status button is gone from the page once it is pressed (the page is drawn again without it): the focus goes to the
+  // status line, which now says what the button did, instead of being dropped to the top of the page.
+  const mark = status => { setDocStatus(b.id, kind, status); queueMicrotask(() => { const line = document.querySelector('.money-page [data-fk="m-status"]'); if (line && (!document.activeElement || document.activeElement === document.body)) line.focus({ preventScroll: true }); }); };
   const stateCls = doc && (doc.status === 'Paid' || doc.status === 'Accepted' ? 'synced' : isOverdue(b) || doc.status === 'Declined' ? 'error' : '');
   // The email carries the client's link once it is made (it is packed asynchronously); the plain text goes first.
   const mailA = doc && h('a', { class: 'btn ghost', href: `mailto:${emails.join(',')}?` + new URLSearchParams({ subject: `${K.label} ${doc.number} — ${b.title}`, body: text() }).toString().replace(/\+/g, '%20'), title: emails.length ? `To: ${emails.join(', ')}` : leftOut ? 'On a booking added from a shared link this goes to the person who shared it and to contacts you add yourself: give one of them an email address on the booking' : 'Add contact emails on the booking' }, emails.length ? `✉ Email client (${emails.length})` : '✉ Email');
@@ -265,18 +333,18 @@ export function moneyPage(b, kind, go) {
       h('div', { class: 'seg', role: 'tablist' }, ...Object.entries(KINDS).map(([k, v]) => h('button', { role: 'tab', class: k === kind ? 'on' : '', 'aria-selected': k === kind, onclick: () => go({ kind: k }) }, v.label + (b[k] ? ' ✓' : ''))))),
     h('h1', null, K.label), h('div', { class: 'muted' }, [b.title, billedName(b)].filter(Boolean).join(' · ')),
     doc ? [
-      h('div', { class: 'card-row' }, h('p', { class: 'status-line', 'data-state': stateCls }, `${doc.status}${isOverdue(b) ? ' · overdue' : ''}${partPaid ? ' · part paid' : ''} · ${fmtMoney(t.total)}${kind === 'invoice' && t.paid > 0 && t.balance > 0 ? ' · balance ' + fmtMoney(t.balance) : ''}${doc.sentAt ? ' · sent ' + fmtShort(ymd(new Date(doc.sentAt))) : ''}${doc.paidAt ? ' · paid ' + fmtShort(ymd(new Date(doc.paidAt))) : ''}`)),
+      h('div', { class: 'card-row' }, h('p', { class: 'status-line', 'data-state': stateCls, 'data-fk': 'm-status', tabindex: '-1' }, `${doc.status}${isOverdue(b) ? ' · overdue' : ''}${partPaid ? ' · part paid' : ''} · ${fmtMoney(t.total)}${kind === 'invoice' && t.paid > 0 && t.balance > 0 ? ' · balance ' + fmtMoney(t.balance) : ''}${doc.sentAt ? ' · sent ' + fmtShort(ymd(new Date(doc.sentAt))) : ''}${doc.paidAt ? ' · paid ' + fmtShort(ymd(new Date(doc.paidAt))) : ''}`)),
       h('div', { class: 'actions' },
         h('button', { class: 'btn primary', onclick: () => editMoney(b, kind, refresh) }, '✏️ Edit'),
-        doc.status === 'Draft' && h('button', { class: 'btn ghost', onclick: () => setDocStatus(b.id, kind, 'Sent') }, 'Mark as sent'),
-        kind === 'quote' && doc.status === 'Sent' && h('button', { class: 'btn ghost', onclick: () => setDocStatus(b.id, kind, 'Accepted') }, '✅ Accepted'),
-        kind === 'invoice' && doc.status === 'Sent' && h('button', { class: 'btn ghost', onclick: () => setDocStatus(b.id, kind, 'Paid') }, '✅ Paid in full'),
+        doc.status === 'Draft' && h('button', { class: 'btn ghost', onclick: () => mark('Sent') }, 'Mark as sent'),
+        kind === 'quote' && doc.status === 'Sent' && h('button', { class: 'btn ghost', onclick: () => mark('Accepted') }, '✅ Accepted'),
+        kind === 'invoice' && doc.status === 'Sent' && h('button', { class: 'btn ghost', onclick: () => mark('Paid') }, '✅ Paid in full'),
         h('button', { class: 'btn ghost small', onclick: () => addLines('booking', 'the booking') }, '＋ Lines from the booking'),
         h('button', { class: 'btn ghost small', onclick: fromList }, '＋ From the price list'),
         kind === 'invoice' && b.quote && h('button', { class: 'btn ghost small', onclick: () => addLines('quote', 'the quote') }, '＋ Lines from the quote'),
         kind === 'invoice' && h('button', { class: 'btn ghost small', onclick: () => addLines('hours', 'the hours logged') }, '＋ Lines from hours logged')),
       h('div', { class: 'actions' },
-        h('button', { class: 'btn ghost', onclick: () => printElement(renderMoneyDoc(byId('bookings', b.id), kind)) }, '🖨 Print'),
+        h('button', { class: 'btn ghost', onclick: () => finishedDoc(byId('bookings', b.id), kind).then(printElement) }, '🖨 Print'),
         h('button', { class: 'btn ghost', onclick: pdf }, '📄 Save PDF'),
         mailA,
         h('button', { class: 'btn ghost small', onclick: share }, '📤 Share'), h('button', { class: 'btn ghost small', onclick: web }, '💾 Web page'), h('button', { class: 'btn ghost small', onclick: copy }, 'Copy text')),
@@ -348,8 +416,8 @@ export function fillBudget(b) {
   const have = new Set([...((b.budget && b.budget.lines) || []).map(l => l.src).filter(Boolean), ...((b.budget && b.budget.skip) || [])]), add = [], days = shootDays(b);
   for (const id of b.crew || []) { const c = byId('crew', id); if (c && !have.has('crew:' + id)) { const r = personRate(c), hourly = r.hourly; add.push({ cat: 'Crew', desc: c.name + (c.role ? ` (${c.role})` : '') + (hourly ? ' — check the hours' : ''), qty: hourly ? days * standardDay() : days, unit: hourly ? 'hour' : 'day', rate: r.amount, src: 'crew:' + id }); } }
   for (const hr of paidHires(b)) if (!have.has('person:' + hr.id)) { const r = personRate(hr), hourly = r.hourly, n = Number(hr.days) || days; add.push({ cat: 'Crew', desc: hr.name + (hr.role ? ` (${hr.role})` : '') + ' — hired' + (hourly ? ', check the hours' : ''), qty: hourly ? n * standardDay() : n, unit: hourly ? 'hour' : 'day', rate: r.amount, src: 'person:' + hr.id }); }
-  for (const hr of rentalsOf(b)) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: rateOf(hr.cost), src: 'hire:' + hr.id });
-  for (const lc of b.licences || []) if (!have.has('lic:' + lc.id)) add.push({ cat: 'Music & licences', desc: [lc.kind, lc.title].filter(Boolean).join(': '), qty: 1, unit: 'item', rate: rateOf(lc.cost), src: 'lic:' + lc.id });
+  for (const hr of rentalsOf(b)) if (!have.has('hire:' + hr.id)) add.push({ cat: 'Equipment hire', desc: [hr.item, hr.from].filter(Boolean).join(' — '), qty: 1, unit: 'item', rate: costOf(hr.cost), src: 'hire:' + hr.id });
+  for (const lc of b.licences || []) if (!have.has('lic:' + lc.id)) add.push({ cat: 'Music & licences', desc: [lc.kind, lc.title].filter(Boolean).join(': '), qty: 1, unit: 'item', rate: costOf(lc.cost), src: 'lic:' + lc.id });
   if (add.length) patchBooking(b, bd => { bd.lines.push(...add.map(l => ({ ...l, id: uid(), actual: '', supplier: '' }))); });
   return add.length;
 }
@@ -372,7 +440,7 @@ export function budgetBlock(b) {
         ? [h('div', { class: 'stats' }, stat(fmtMoney(t.est), 'Estimate'), stat(fmtMoney(t.spent), 'Spent so far'), stat(fmtMoney(t.toPay), 'Still to pay')),
           Math.abs(t.forecast - t.est) > 0.005 && h('p', { class: 'small' + (t.forecast > t.est ? ' overdue' : '') }, `Expected total cost, with the actual costs so far: ${fmtMoney(t.forecast)} (${t.forecast > t.est ? fmtMoney(t.forecast - t.est) + ' over' : fmtMoney(t.est - t.forecast) + ' under'} the estimate).`),
           t.quoted != null && h('p', { class: 'small' + (t.margin < 0 ? ' overdue' : '') }, `Quoted to the client: ${fmtMoney(t.quoted)} before tax. Left for you after costs: ${fmtMoney(t.margin)}${t.quoted > 0 ? ` (${Math.round(t.margin / t.quoted * 100)}%)` : ''}.`),
-          ...t.byCat.map(c => h('details', { class: 'twirl budget-cat' }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, c.cat), h('span', { class: 'twirl-sub' }, `${c.lines.length} line${c.lines.length === 1 ? '' : 's'} · ${fmtMoney(c.est)}${c.spent ? ' · spent ' + fmtMoney(c.spent) : ''}`))),
+          ...t.byCat.map(c => h('details', { class: 'twirl budget-cat', open: CAT_OPEN.has(b.id + '|' + c.cat), ontoggle: e => { if (!e.target.isConnected) return; const k = b.id + '|' + c.cat; if (e.target.open) CAT_OPEN.add(k); else CAT_OPEN.delete(k); } }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, c.cat), h('span', { class: 'twirl-sub' }, `${c.lines.length} line${c.lines.length === 1 ? '' : 's'} · ${fmtMoney(c.est)}${c.spent ? ' · spent ' + fmtMoney(c.spent) : ''}`))),
             h('div', { class: 'twirl-body stack' }, c.lines.map(line))))]
         : h('p', { class: 'muted small' }, 'Plan what this job will cost you: crew, hires, travel, locations and more. Only you see it: it never goes into a quote, an invoice or a crew link.'),
       h('div', { class: 'actions' },
@@ -385,7 +453,8 @@ export function budgetBlock(b) {
 export function openMoney(onOpen) {
   const today = todayISO(), year = today.slice(0, 4);
   const list = db.bookings.filter(b => b.quote || b.invoice).sort((x, y) => y.date.localeCompare(x.date));
-  const sum = (f) => list.reduce((s, b) => s + f(b), 0);
+  const real = list.filter(b => !b.practice); // the walkthrough's practice job is listed, and left out of the sums and the accountant's file
+  const sum = (f) => real.reduce((s, b) => s + f(b), 0);
   const invOpen = b => (b.invoice && b.invoice.status === 'Sent' ? totals(b.invoice).balance : 0);
   const outstanding = sum(invOpen), overdue = sum(b => (isOverdue(b) ? invOpen(b) : 0));
   // Money received in the year: recorded payments by their date, the deposit with the invoice, and the rest of an
@@ -405,18 +474,18 @@ export function openMoney(onOpen) {
     // invoice is headed to (billedName above): on a booking added from a link, the person who shared it.
     const q = csvCell, tx = csvText;
     const rows = [['Number', 'Date', 'Due', 'Client', 'Project', 'Subtotal', 'Tax', 'Total', 'Paid', 'Balance', 'Status', 'Paid on'].map(q).join(',')];
-    for (const b of list.filter(x => x.invoice).sort((x, y) => String(x.invoice.number).localeCompare(String(y.invoice.number)))) { const t = totals(b.invoice); rows.push([tx(b.invoice.number), q(b.invoice.date), q(b.invoice.due), tx(billedName(b)), tx(b.title), q(t.subtotal.toFixed(2)), q(t.tax.toFixed(2)), q(t.total.toFixed(2)), q(t.paid.toFixed(2)), q(t.balance.toFixed(2)), tx(b.invoice.status), q(b.invoice.paidAt ? ymd(new Date(b.invoice.paidAt)) : '')].join(',')); }
+    for (const b of real.filter(x => x.invoice).sort((x, y) => String(x.invoice.number).localeCompare(String(y.invoice.number)))) { const t = totals(b.invoice); rows.push([tx(b.invoice.number), q(b.invoice.date), q(b.invoice.due), tx(billedName(b)), tx(b.title), q(t.subtotal.toFixed(2)), q(t.tax.toFixed(2)), q(t.total.toFixed(2)), q(t.paid.toFixed(2)), q(t.balance.toFixed(2)), tx(b.invoice.status), q(b.invoice.paidAt ? ymd(new Date(b.invoice.paidAt)) : '')].join(',')); }
     if (!requirePaid('export')) return; // spreadsheets come with a licence
     saveOrShare('﻿' + rows.join('\r\n'), `vdex-invoices-${today}.csv`, 'text/csv').then(ok => ok && toast('Invoices exported'));
   };
   const body = h('div', { class: 'stack' },
     h('div', { class: 'stats money-stats' }, stat(fmtMoney(outstanding), 'invoiced, unpaid'), stat(fmtMoney(overdue), 'overdue', overdue ? 'bad' : ''), stat(fmtMoney(quotedOpen), 'quoted, awaiting'), stat(fmtMoney(paidYear), `paid in ${year}`)),
     list.length ? h('div', { class: 'list' }, ...list.map(b => h('button', { class: 'card tap', type: 'button', onclick: () => { close(); onOpen(b); } },
-      h('div', { class: 'card-row money-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [billedName(b), fmtShort(b.date)].filter(Boolean).join(' · '))),
+      h('div', { class: 'card-row money-row' }, h('div', null, h('strong', null, b.title), h('div', { class: 'muted small' }, [billedName(b), fmtShort(b.date), b.practice && 'practice, not counted'].filter(Boolean).join(' · '))),
         h('div', { class: 'money-pills' }, b.quote && h('span', { class: 'pill ' + (b.quote.status === 'Accepted' ? 'st-confirmed' : b.quote.status === 'Declined' ? 'st-cancelled' : 'st-enquiry') }, `Q ${b.quote.status} ${fmtMoney(totals(b.quote).total)}`),
           b.invoice && h('span', { class: 'pill ' + (b.invoice.status === 'Paid' ? 'st-confirmed' : isOverdue(b) ? 'st-cancelled' : 'st-enquiry') }, `Inv ${isOverdue(b) ? 'Overdue' : b.invoice.status}${b.invoice.status !== 'Paid' && totals(b.invoice).received > 0 ? ' (part paid)' : ''} ${fmtMoney(totals(b.invoice).total)}`))))))
       : h('p', { class: 'muted' }, 'No quotes or invoices yet. Open a booking and create one under Money.'),
-    h('div', { class: 'actions' }, list.some(b => b.invoice) && h('button', { class: 'btn ghost small', onclick: csv }, '⬇ Invoices (CSV) for the accountant')));
+    h('div', { class: 'actions' }, real.some(b => b.invoice) && h('button', { class: 'btn ghost small', onclick: csv }, '⬇ Invoices (CSV) for the accountant')));
   ({ close } = sheet('Money', body));
 }
 
@@ -446,9 +515,13 @@ function payMethodsList() {
 export function billingPanel() {
   const wrap = h('div', { class: 'stack' });
   const bl = billing();
+  // A box saves as it is left, a moment later: the focus has then arrived in the next box (by Tab or by a click), and
+  // the page drawn again by the save keeps it there. Saved at once, the page was drawn while the focus was nowhere, and
+  // the next box had to be entered twice (every second rate typed went missing).
+  const later = patch => setTimeout(() => setBilling(patch), 0);
   const field = (label, key, type = 'text', extra = {}) => h('div', { class: 'field' }, h('label', null, label), type === 'textarea'
-    ? h('textarea', { rows: 2, value: bl[key] ?? '', 'aria-label': label, onchange: e => setBilling({ [key]: e.target.value }) })
-    : h('input', { type, value: bl[key] ?? '', 'aria-label': label, inputMode: type === 'number' ? 'decimal' : null, ...extra, onchange: e => setBilling({ [key]: type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value }) }));
+    ? h('textarea', { rows: 2, value: bl[key] ?? '', 'aria-label': label, onchange: e => later({ [key]: e.target.value }) })
+    : h('input', { type, value: bl[key] ?? '', 'aria-label': label, inputMode: type === 'number' ? 'decimal' : null, ...extra, onchange: e => later({ [key]: type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value }) }));
   wrap.append(
     h('p', { class: 'small muted' }, 'Rates feed the suggested lines on quotes and invoices; each crew member’s day or hourly rate is on their own card (an hourly rate is quoted for a standard day’s hours per shoot day). Your name, business, phone and email come from your profile (Settings → General → Profile).'),
     h('div', { class: 'grid2' }, field(`Day rate (${sym()})`, 'dayRate', 'number', { min: 0 }), field(`Hour rate for editing (${sym()})`, 'hourRate', 'number', { min: 0 }), field(`Overtime hour rate (${sym()})`, 'overtimeRate', 'number', { min: 0 }), field(`Equipment package per day (${sym()})`, 'kitRate', 'number', { min: 0 })),
@@ -458,8 +531,9 @@ export function billingPanel() {
     h('p', { class: 'small muted' }, 'The lines you charge for again and again, with your prices, to pick into a quote or an invoice with ＋ From the price list. It starts from typical freelance rates where you work: change any price to yours.'),
     h('div', { class: 'actions' }, h('button', { class: 'btn ghost price-list-btn', onclick: () => import('./price-list.js').then(m => m.openPriceList()).catch(e => toast('Could not open the price list: ' + (e.message || e))) }, '🏷 Edit the price list')),
     h('h4', { class: 'pay-head' }, 'Getting paid'),
-    h('p', { class: 'small muted' }, 'Add the ways you like to be paid, as many as you want. Every invoice then carries a Pay button for each one that has a link, with the balance filled in, plain instructions for the ones that do not, bank details with a QR code banking apps can scan, and the invoice number as the reference. The link you send a client opens the invoice with the same buttons.'),
-    h('div', { class: 'field' }, h('label', null, 'Currency for payment links'), h('select', { 'aria-label': 'Currency for payment links', onchange: e => setBilling({ currencyCode: e.target.value }) }, ...CURRENCIES.map(([c, sy]) => h('option', { value: c, selected: c === code() ? 'selected' : null }, `${c} ${sy.trim()}`)))),
+    h('p', { class: 'small muted' }, 'Add the ways you like to be paid, as many as you want. Every invoice then carries a Pay button for each one that has a link, with the balance filled in, plain instructions for the ones that do not, bank details (with a QR code banking apps can scan, when the account is an IBAN), and the invoice number as the reference. The link you send a client opens the invoice with the same buttons.'),
+    h('div', { class: 'field' }, h('label', null, 'Currency for payment links'), h('select', { 'aria-label': 'Currency for payment links', onchange: e => setBilling({ currencyCode: e.target.value }) }, h('option', { value: '', selected: code() === '' ? 'selected' : null }, 'Not listed: leave the currency out'), ...CURRENCIES.map(([c, sy]) => h('option', { value: c, selected: c === code() ? 'selected' : null }, `${c} ${sy.trim()}`))),
+      h('small', { class: 'muted' }, 'PayPal links carry this currency. With none chosen, PayPal asks in your account’s own.')),
     payMethodsList(),
     field('How to pay, in your own words (printed on every invoice)', 'payment', 'textarea'));
   return wrap;

@@ -109,6 +109,94 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     return { doc: m.renderDoc(b).querySelector('.cs-foot').textContent, html: m.callSheetHtml(b), edit: m.renderDoc(b, { edit: { touch() {}, redraw() {} } }).querySelector('.cs-foot').textContent, pdf: words };
   }));
   ok('a printed call sheet, its web page and its PDF carry the notice that the producer chose the details and nobody checked them', notice.doc.includes(NOTICE) && notice.html.includes(NOTICE) && notice.pdf.replace(/\s+/g, ' ').includes(NOTICE) && !notice.edit.includes('Vdex has not checked'), notice.doc);
+
+  // ---- repairs after 1.4.0: the call sheet ----
+  await page.evaluate(() => window.logiGo('bookings')); await sleep(300);
+  const csFix = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js'), import('./js/crew-link.js')]).then(async ([s, m, link]) => {
+    const [c1, c2] = s.db.crew, off = -new Date(2026, 11, 8, 12).getTimezoneOffset() / 60, lonAt = h => ((((off + h) * 15 + 180) % 360) + 360) % 360 - 180; // a place h hours of sun away from this device's clock
+    s.update(d => {
+      d.venues.push({ id: 'cf-far', name: 'Far studio', address: '5 Far Street', geo: { lat: 40.7, lon: lonAt(6) } }, { id: 'cf-near', name: 'Near studio', address: '5 Near Street', geo: { lat: 40.7, lon: lonAt(0) } });
+      d.bookings.push(
+        { id: 'cf-bare', title: 'Bare shoot', date: '2026-12-08', start: '08:00', end: '17:00', address: '1 Test Road', status: 'Confirmed', stakeholders: [], crew: [], gear: [], callSheet: { lunch: '12:30' } },
+        { id: 'cf-far', title: 'Far shoot', date: '2026-12-08', start: '08:00', venueId: 'cf-far', status: 'Confirmed', stakeholders: [], crew: [], gear: [] }, { id: 'cf-near', title: 'Near shoot', date: '2026-12-08', start: '08:00', venueId: 'cf-near', status: 'Confirmed', stakeholders: [], crew: [], gear: [] },
+        { id: 'cf-days', title: 'Moved shoot', date: '2026-12-08', endDate: '2026-12-10', status: 'Confirmed', stakeholders: [], crew: [c1.id, c2.id], crewStatus: { [c2.id]: 'declined' }, gear: [], callSheet: { schedule: [{ id: 'a', date: '2026-12-01', time: '08:00', item: 'Day one' }, { id: 'b', date: '2026-12-02', time: '09:00', item: 'Day two' }, { id: 'c', date: '2026-12-09', time: '10:00', item: 'Middle day' }, { id: 'd', time: '11:00', item: 'No date' }] } },
+        { id: 'cf-shift', title: 'Shifting shoot', date: '2026-12-01', endDate: '2026-12-03', status: 'Confirmed', stakeholders: [], crew: [], gear: [], callSheet: { schedule: ['01', '02', '03'].map((d, i) => ({ id: 's' + i, date: '2026-12-' + d, time: '08:00', item: 'Line ' + (i + 1) })) } }); });
+    const zeros = el => { const out = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); for (let n; (n = w.nextNode());) if (/^0+$/.test(n.data.trim())) out.push(n.parentNode.tagName); return out; };
+    const get = id => s.byId('bookings', id), bare = get('cf-bare'), days = get('cf-days');
+    const multi = m.renderDoc(days), sched = [...multi.querySelectorAll('.cs-sec')].find(x => x.querySelector('h4').textContent === 'Schedule'), text = m.callSheetText(bare), data = m.callSheetData(days), snap = link.crewSnapshot(days);
+    return { zeros: [...zeros(m.renderDoc(bare)), ...zeros(m.renderDoc(bare, { edit: { touch() {}, redraw() {} } })), ...zeros(multi)], kit: /<h4>Kit<\/h4>/.test(m.callSheetHtml(bare)),
+      gaps: (text.match(/\n{3,}/g) || []).length, endsClean: /\n\nProduced by /.test(text) && /Address: 1 Test Road\n\nCREW/.test(text),
+      lines: data.schedule.map(r => r.date + ' ' + r.item).join(), heads: sched.querySelectorAll('.cs-day').length, rows: sched.querySelectorAll('tbody tr').length, link: snap.schedule.map(r => r.date).join(), asText: (m.callSheetText(days).match(/Day one|Day two|Middle day/g) || []).length,
+      crew: data.crew.map(c => c.name).join(), linkCrew: snap.crew.map(c => c.name).join(), first: c1.name,
+      far: m.callSheetText(get('cf-far')).split('\n').find(l => /^Sunrise/.test(l)) || '', near: m.callSheetText(get('cf-near')).split('\n').find(l => /^Sunrise/.test(l)) || '', farBox: m.renderDoc(get('cf-far')).querySelector('.cs-times').textContent,
+      zone: (new Intl.DateTimeFormat([], { timeZoneName: 'short' }).formatToParts(new Date(2026, 11, 8, 12)).find(p => p.type === 'timeZoneName') || {}).value };
+  }));
+  ok('a call sheet with no contacts, no kit and no crew prints no stray “0”, also in the editor and on a multi-day sheet, and no empty Kit heading', csFix.zeros.length === 0 && !csFix.kit, JSON.stringify({ zeros: csFix.zeros, kit: csFix.kit }));
+  ok('the sheet’s text has one blank line between sections, never a run of them', csFix.gaps === 0 && csFix.endsClean, JSON.stringify(csFix.text || csFix.gaps));
+  ok('a schedule line dated outside the shoot is printed under the date its editor shows, and a line with no date under the first day: on the sheet, in its text and on the crew link', csFix.lines === '2026-12-01 Day one,2026-12-02 Day two,2026-12-08 No date,2026-12-09 Middle day' && csFix.heads === 4 && csFix.rows === 4 && csFix.link === '2026-12-01,2026-12-02,2026-12-08,2026-12-09' && csFix.asText === 3, JSON.stringify({ lines: csFix.lines, heads: csFix.heads, rows: csFix.rows, link: csFix.link }));
+  ok('a crew member who declined is not on the call sheet or the crew link', csFix.crew === csFix.first && csFix.linkCrew === csFix.first, csFix.crew + ' / ' + csFix.linkCrew);
+  ok('sun times for a venue on another clock name their zone and say they are not the venue’s local time; a venue on this clock reads as before', csFix.far.includes(' ' + csFix.zone + ' ·') && /not the venue’s local time/.test(csFix.far) && csFix.farBox.includes(csFix.zone) && !csFix.near.includes(csFix.zone) && !/local time/.test(csFix.near), JSON.stringify({ far: csFix.far, near: csFix.near, zone: csFix.zone }));
+  // Moving the shoot in its form moves the schedule lines with it; one day clears their dates
+  const cform = page.locator('.sheet form'), lineDates = () => page.evaluate(() => import('./js/store.js').then(s => s.byId('bookings', 'cf-shift').callSheet.schedule.map(r => r.date).join()));
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-shift'))); await sleep(300);
+  await page.locator('.bk-detail .page-head').getByRole('button', { name: 'Edit', exact: true }).click(); await cform.waitFor();
+  await cform.locator('input[data-key="date"]').fill('2026-12-08'); await cform.locator('input[data-key="endDate"]').fill('2026-12-10'); await cform.locator('button[type=submit]').click(); await sleep(400);
+  const movedLines = await lineDates();
+  await page.locator('.bk-detail .page-head').getByRole('button', { name: 'Edit', exact: true }).click(); await cform.waitFor();
+  await cform.locator('input[data-key="endDate"]').fill(''); await cform.locator('button[type=submit]').click(); await sleep(400);
+  const oneDay = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js')]).then(([s, m]) => { const b = s.byId('bookings', 'cf-shift'); return { dates: b.callSheet.schedule.map(r => r.date).join(), rows: m.renderDoc(b).querySelectorAll('.cs-sec table tbody tr').length }; }));
+  ok('a shoot moved a week in its form takes its schedule lines with it, and cut to one day its lines lose their dates and are all printed', movedLines === '2026-12-08,2026-12-09,2026-12-10' && oneDay.dates === ',,' && oneDay.rows === 3, movedLines + ' / ' + JSON.stringify(oneDay));
+  // A restore stamps the stripboard as changed now (for the merge); the scenes themselves were not changed
+  const restored = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js')]).then(([s, m]) => { const t = Date.now() - 864e5, get = () => s.byId('bookings', 'cf-sent');
+    s.update(d => { d.bookings.push({ id: 'cf-sent', title: 'Sent sheet', date: '2026-12-08', endDate: '2026-12-10', status: 'Confirmed', stakeholders: [], crew: [], gear: [], board: { list: [{ id: 'day-1', type: 'break' }, { id: 'sc1', type: 'scene', scene: '1', set: 'Hall' }], cast: [], updatedAt: t - 1000 }, callSheet: { generalCall: '08:00', version: 2, editedAt: t - 500, sentAt: t } }); });
+    const out = { before: m.sheetState(get()) };
+    s.replaceAll(JSON.parse(s.exportJSON())); out.after = m.sheetState(get()); s.replaceAll(JSON.parse(s.exportJSON())); out.twice = m.sheetState(get());
+    s.update(d => { const x = d.bookings.find(b => b.id === 'cf-sent'); x.board = { list: [...x.board.list, { id: 'sc2', type: 'scene', scene: '2', set: 'Yard' }], cast: [], updatedAt: Date.now() }; x.updatedAt = Date.now(); }); out.edited = m.sheetState(get());
+    s.remove('bookings', 'cf-sent'); return out; }));
+  ok('a call sheet that was sent still reads Sent after a backup is restored, twice over, and Changed once its stripboard is edited', restored.before === 'sent' && restored.after === 'sent' && restored.twice === 'sent' && restored.edited === 'changed', JSON.stringify(restored));
+  // A sheet written on a device whose clock runs 20 minutes ahead and marked sent here at once reads Sent (it read
+  // "Changed since it was sent" until this clock reached the other's), and Changed once it is edited here after that
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const t = Date.now() + 20 * 60e3; d.bookings.push({ id: 'cf-ahead', title: 'Written ahead', date: '2026-12-08', status: 'Confirmed', stakeholders: [], crew: [], gear: [], callSheet: { generalCall: '08:00', lunch: '13:00', version: 1, editedAt: t }, updatedAt: t }); })));
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-ahead', { view: 'callsheet' }))); await page.waitForSelector('.cs-page .cs-doc');
+  const aheadState = () => page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js')]).then(([s, m]) => m.sheetState(s.byId('bookings', 'cf-ahead'))));
+  await page.getByRole('button', { name: 'Mark as sent' }).click(); await sleep(300);
+  const aheadSent = [await aheadState(), (await page.locator('.cs-page .status-line').innerText()).replace(/\s+/g, ' ')];
+  await page.getByRole('button', { name: 'Edit sheet' }).click(); await page.waitForSelector('.cs-paper.editing');
+  await page.locator('.cs-doc .cs-time input[aria-label="Lunch"]').fill('13:30'); await page.locator('.cs-doc .cs-time input[aria-label="Lunch"]').blur(); await sleep(100);
+  await page.getByRole('button', { name: '✓ Done' }).click(); await sleep(300);
+  ok('a sheet written where the clock runs ahead reads Sent once it is marked sent here, and Changed once it is edited here afterwards', aheadSent[0] === 'sent' && /Sent/.test(aheadSent[1]) && !/Changed/.test(aheadSent[1]) && (await aheadState()) === 'changed', JSON.stringify([aheadSent, await aheadState()]));
+  await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 'cf-ahead'))); await sleep(200);
+  // Sent, then the booking changes: the sheet says it changed; and a sheet sent as built is no "Draft"
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-bare', { view: 'callsheet' }))); await page.waitForSelector('.cs-page .cs-doc');
+  await page.getByRole('button', { name: 'Mark as sent' }).click(); await sleep(300);
+  const sent = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js')]).then(async ([s, m]) => { const get = () => s.byId('bookings', 'cf-bare'), out = { first: m.sheetState(get()), head: m.renderDoc(get()).querySelector('.cs-when').textContent };
+    const words = [...new TextDecoder('latin1').decode(await m.callSheetPdf(get())).matchAll(/\((.*?)\) Tj/g)].map(x => x[1]).join(' '); out.pdfDraft = /Draft/.test(words);
+    s.upsert('bookings', { ...get(), status: 'Prepped' }); out.stage = m.sheetState(get());
+    s.upsert('bookings', { ...get(), start: '05:30', address: '9 Other Road' }); out.moved = m.sheetState(get()); return out; }));
+  await sleep(300);
+  ok('a sheet sent as it was built is not headed “Draft”, on the page or in the PDF', sent.first === 'sent' && !/Draft/.test(sent.head) && !sent.pdfDraft, JSON.stringify(sent));
+  ok('a sent sheet stays Sent when only the stage moves, and reads “Changed since it was sent” once the call time and address change', sent.stage === 'sent' && sent.moved === 'changed' && /Changed since it was sent/.test(await page.locator('.cs-page .status-line').innerText()), JSON.stringify(sent));
+  // What is typed in Edit sheet is saved when Vdex goes to the background (a phone may end it there); Cancel still undoes it
+  await page.getByRole('button', { name: 'Edit sheet' }).click(); await page.waitForSelector('.cs-paper.editing');
+  await page.locator('.cs-doc .cs-time input[aria-label="Lunch"]').fill('13:15'); await page.locator('.cs-doc .cs-time input[aria-label="Lunch"]').blur();
+  await page.evaluate(() => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => true }); document.dispatchEvent(new Event('visibilitychange')); });
+  const hiddenSave = await page.evaluate(() => import('./js/store.js').then(s => s.byId('bookings', 'cf-bare').callSheet.lunch));
+  await page.evaluate(() => { delete document.hidden; document.dispatchEvent(new Event('visibilitychange')); }); await sleep(200);
+  const stillEditing = await page.locator('.cs-paper.editing').count();
+  await page.getByRole('button', { name: 'Cancel' }).click(); await page.waitForFunction(() => !document.querySelector('.cs-paper.editing'));
+  const afterCancel = await page.evaluate(() => import('./js/store.js').then(s => s.byId('bookings', 'cf-bare').callSheet.lunch));
+  ok('a call sheet being edited is saved when Vdex goes to the background, the editing carries on, and Cancel still takes the edit back', hiddenSave === '13:15' && stillEditing === 1 && afterCancel === '12:30', JSON.stringify({ hiddenSave, stillEditing, afterCancel }));
+  // The crew table on a phone: a phone number and an email address wrap inside their cells, so the table ends at the
+  // paper's edge and the Email column is not cut off (names and roles keep whole words)
+  await page.evaluate(() => import('./js/store.js').then(s => { const crew = [['cw-1', 'Sam Rivera', 'Sound Recordist', '+1 555 0101', 'sam.rivera@example.com'], ['cw-2', 'Jo Chen', '1st AC', '+1 555 0102', 'jo@example.com'], ['cw-3', 'Priya Nair', 'Editor', '+1 555 0104', 'priya.nair@example.com']];
+    s.update(d => { for (const [id, name, role, phone, email] of crew) d.crew.push({ id, name, role, phone, email, updatedAt: Date.now() }); d.bookings.push({ id: 'cf-phone', title: 'Crew table', date: '2026-12-08', start: '08:00', status: 'Confirmed', stakeholders: [], crew: crew.map(c => c[0]), crewCall: { 'cw-1': '07:30', 'cw-2': '07:00' }, hires: [{ id: 'cw-h', name: 'Ada Lovell', role: 'Gaffer', phone: '+1 555 0105', email: 'ada@example.com' }], gear: [], updatedAt: Date.now() }); }); }));
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-phone', { view: 'callsheet' }))); await page.waitForSelector('.cs-paper table');
+  const fits = [];
+  for (const width of [320, 360, 390]) { await page.setViewportSize({ width, height: 800 }); await sleep(250);
+    fits.push(await page.evaluate(() => { const paper = document.querySelector('.cs-paper'), t = [...paper.querySelectorAll('table')].find(x => /Email/.test(x.textContent)), words = [...t.querySelectorAll('td')].filter(td => /^(Sam Rivera|Sound Recordist|1st AC)$/.test(td.textContent)).every(td => getComputedStyle(td).overflowWrap !== 'anywhere');
+      return { inside: paper.scrollWidth <= paper.clientWidth + 1 && t.getBoundingClientRect().right <= paper.getBoundingClientRect().right + 1, words, page: document.documentElement.scrollWidth <= innerWidth }; })); }
+  ok('at 320, 360 and 390 px the call sheet’s crew table ends at the paper’s edge: the email address wraps in its cell, names and roles keep whole words', fits.every(f => f.inside && f.words && f.page), JSON.stringify(fits));
+  await page.setViewportSize({ width: 420, height: 900 }); await sleep(200);
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.error('TEST CRASHED', e); process.exit(1); });

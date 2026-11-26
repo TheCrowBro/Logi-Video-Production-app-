@@ -102,9 +102,28 @@ try {
 const browserOk = !inBrowser.first.bridge && inBrowser.first.mode === 'trial' && inBrowser.first.trialLeft === 30 && inBrowser.first.paid === false && inBrowser.first.changed === true
   && inBrowser.later.mode === 'ended' && inBrowser.later.canEdit === false && inBrowser.later.changed === false && inBrowser.later.paid === false;
 console.log((browserOk ? 'PASS' : 'FAIL') + ' the app\'s local address in an ordinary web browser gets the website\'s trial and then read-only, not a free Vdex —', JSON.stringify(inBrowser));
+// Any page in the person's web browser can ask the app's server for any address. One with a zero byte in it is answered
+// 400, and nothing is thrown in the main process (Electron would show its error box, and the request would hang).
+await app.evaluate(() => { global.__thrown = []; process.on('uncaughtException', e => global.__thrown.push(String(e && e.message))); });
+const net = await import('node:net');
+const raw = path => new Promise(res => { const s = net.connect(Number(new URL(base).port), '127.0.0.1', () => s.write(`GET ${path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n`)); let d = ''; s.on('data', c => { d += c; }); s.on('close', () => res(d.split('\r\n')[0] || 'no answer')); s.on('error', e => res('error ' + e.message)); setTimeout(() => { s.destroy(); res(d.split('\r\n')[0] || 'no answer'); }, 4000); });
+const odd = [await raw('/js/%00.js'), await raw('/%00'), await raw('/index.html')], thrown = await app.evaluate(() => global.__thrown);
+const oddOk = odd[0] === 'HTTP/1.1 400 Bad Request' && odd[1] === 'HTTP/1.1 400 Bad Request' && odd[2] === 'HTTP/1.1 200 OK' && thrown.length === 0;
+console.log((oddOk ? 'PASS' : 'FAIL') + ' an address with a zero byte in it is answered 400 and throws nothing in the main process —', JSON.stringify([odd, thrown]));
+// A page of Vdex's own in a second window (the privacy policy) has no address bar and no Back: a link on it to another
+// website opens in the web browser, and the window stays on Vdex's page.
+await app.evaluate(({ shell }) => { global.__opened = []; shell.openExternal = u => { global.__opened.push(u); return Promise.resolve(); }; });
+const [child] = await Promise.all([app.waitForEvent('window'), win.evaluate(() => { window.open('privacy.html'); })]);
+await child.waitForLoadState('domcontentloaded');
+await child.locator('a[href="https://policies.google.com/privacy"]').first().click({ timeout: 5000 }).catch(() => {});
+await new Promise(r => setTimeout(r, 1500));
+const second = { url: child.url(), opened: await app.evaluate(() => global.__opened) };
+const childOk = /^http:\/\/localhost:4783\d\/privacy\.html$/.test(second.url) && JSON.stringify(second.opened) === '["https://policies.google.com/privacy"]';
+console.log((childOk ? 'PASS' : 'FAIL') + ' a link to another website on Vdex\'s privacy policy, in its own window, opens in the web browser and the window stays —', JSON.stringify(second));
+await child.close().catch(() => {});
 const signinOk = Object.values(signin).every(Boolean);
 console.log((signinOk ? 'PASS' : 'FAIL') + ' desktop sign-ins open in the web browser and come back only for sign-ins the app started —', JSON.stringify(signin));
 await app.close();
-const ok = licenceOk && signinOk && priceOk && deletionOk && browserOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
+const ok = licenceOk && signinOk && priceOk && deletionOk && browserOk && oddOk && childOk && /^http:\/\/localhost:4783\d\/$/.test(info.url) && info.bridge && info.state === 'dev' && info.serviceWorkers === 0 && bad.length === 0;
 console.log((ok ? 'PASS' : 'FAIL') + ' desktop app launches, serves locally, exposes the update bridge, keeps no service worker, no errors —', JSON.stringify(info), bad.join(' | '));
 process.exit(ok ? 0 : 1);

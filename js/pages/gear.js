@@ -5,6 +5,13 @@ import { openForm } from '../form.js';
 
 export const CATEGORIES = ['Camera', 'Lens', 'Lighting', 'Audio', 'Support', 'Grip', 'Drone', 'Monitoring', 'Power', 'Media', 'Accessories', 'Other'];
 const S = { q: '', cat: '', loc: '', view: 'items' };
+// A category typed as one of the list's own, but for its capitals or a plural s ("drones", "LENS"), is that one: the
+// page files items by it, and a venue's rules go by it (js/pages/venues.js).
+const fold = c => String(c || '').trim().toLowerCase();
+export const tidyCategory = c => { const t = String(c || '').trim(), f = fold(t); return CATEGORIES.find(x => [fold(x), fold(x) + 's', fold(x) + 'es'].includes(f)) || t; };
+const catOf = g => tidyCategory(g.category) || 'Other'; // where the page files an item, however an older list spelt it
+// How many of an item a kit holds: never more than are owned now.
+const kitQty = (k, g) => Math.min(usedQty(k, g.id), qtyOf(g));
 // Every place an item has been put: offered as you type, and as filter chips.
 const locations = () => [...new Set(db.gear.map(g => (g.location || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
 const PLACE_HINT = 'e.g. Studio shelf B, Van, Flight case 2, With Jo, At the repair shop';
@@ -26,7 +33,7 @@ function edit(g = {}) {
       { key: 'firmware', label: 'Firmware version' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
-    onSave: v => upsert('gear', { ...v, qty: Math.max(1, Math.floor(Number(v.qty)) || 1) }),
+    onSave: v => upsert('gear', { ...v, category: tidyCategory(v.category), qty: Math.max(1, Math.floor(Number(v.qty)) || 1) }),
     onDelete: g.id ? () => remove('gear', g.id) : null,
   });
 }
@@ -39,7 +46,7 @@ export function editKit(k = {}) {
     fields: [
       { key: 'name', label: 'Kit name', required: true, placeholder: 'e.g. Interview set, Car shoot' },
       { key: 'description', label: 'Type of shoot' },
-      { key: 'gear', qtyKey: 'gearQty', label: 'Equipment in this kit', type: 'checks', options: db.gear.map(g => ({ value: g.id, label: g.name, group: g.category || 'Other', qtyMax: qtyOf(g) })).sort((a, b) => a.group.localeCompare(b.group)), empty: 'Add equipment first, then build kits from it.' },
+      { key: 'gear', qtyKey: 'gearQty', label: 'Equipment in this kit', type: 'checks', options: db.gear.map(g => ({ value: g.id, label: g.name, group: catOf(g), qtyMax: qtyOf(g) })).sort((a, b) => a.group.localeCompare(b.group)), empty: 'Add equipment first, then build kits from it.' },
       { key: 'notes', label: 'Notes / reminders', type: 'textarea', hint: 'Consumables, permits or things to buy or hire that are not in your inventory.' },
     ],
     onSave: v => upsert('kits', v),
@@ -56,15 +63,15 @@ function kitsView(sym) {
     db.kits.length
       ? h('div', { class: 'list' }, db.kits.map(k => {
         const items = (k.gear || []).map(id => db.gear.find(g => g.id === id)).filter(Boolean);
-        const value = items.reduce((s, g) => s + (Number(g.value) || 0) * usedQty(k, g.id), 0);
-        const units = items.reduce((s, g) => s + usedQty(k, g.id), 0);
-        const groups = groupBy(items, g => g.category || 'Other');
+        const value = items.reduce((s, g) => s + (Number(g.value) || 0) * kitQty(k, g), 0);
+        const units = items.reduce((s, g) => s + kitQty(k, g), 0);
+        const groups = groupBy(items, catOf);
         return h('div', { class: 'card kit-card', 'data-id': k.id },
           h('div', { class: 'card-row' },
             h('div', { class: 'grow' }, h('strong', null, k.name), h('div', { class: 'muted small' }, [k.description, `${units} item${units === 1 ? '' : 's'}`, money(value, sym)].filter(Boolean).join(' · '))),
             h('button', { class: 'icon-btn', 'aria-label': 'Duplicate ' + k.name, onclick: () => dupe(k) }, '⧉'),
             h('button', { class: 'icon-btn', 'aria-label': 'Edit ' + k.name, onclick: () => editKit(k) }, '✎')),
-          [...groups].map(([cat, list]) => h('div', { class: 'kit-line' }, h('b', null, cat + ': '), list.map(g => g.name + (usedQty(k, g.id) > 1 ? ` ×${usedQty(k, g.id)}` : '')).join(', '))),
+          [...groups].map(([cat, list]) => h('div', { class: 'kit-line' }, h('b', null, cat + ': '), list.map(g => g.name + (kitQty(k, g) > 1 ? ` ×${kitQty(k, g)}` : '')).join(', '))),
           k.notes && h('div', { class: 'muted small prewrap' }, k.notes));
       }))
       : empty('No kits yet. Build one for each kind of job you take on.', h('button', { class: 'btn primary', onclick: () => editKit() }, 'Create a kit')));
@@ -91,10 +98,15 @@ export const gear = {
     const sym = db.profile.currency || '$';
     const draw = () => {
       const today = todayISO();
-      const cats = [...new Set(db.gear.map(g => g.category || 'Other'))].sort();
+      const cats = [...new Set(db.gear.map(catOf))].sort();
+      // A filter whose control is no longer drawn (its category or place has gone, the list is too short for the search
+      // box) is let go, or the list would say "No matches." with nothing on the page to clear it.
+      if (S.cat && !(cats.length > 1 && cats.includes(S.cat))) S.cat = '';
+      if (S.loc && !locations().includes(S.loc)) S.loc = '';
+      if (db.gear.length <= 5) S.q = '';
       const q = S.q.toLowerCase();
-      const list = db.gear.filter(g => (!S.cat || (g.category || 'Other') === S.cat) && (!S.loc || (g.location || '').trim() === S.loc) && (!q || `${g.name} ${g.serial} ${g.notes} ${g.location || ''}`.toLowerCase().includes(q)));
-      const groups = [...groupBy(list, g => g.category || 'Other')].sort((a, b) => a[0].localeCompare(b[0]));
+      const list = db.gear.filter(g => (!S.cat || catOf(g) === S.cat) && (!S.loc || (g.location || '').trim() === S.loc) && (!q || `${g.name} ${g.serial} ${g.notes} ${g.location || ''}`.toLowerCase().includes(q)));
+      const groups = [...groupBy(list, catOf)].sort((a, b) => a[0].localeCompare(b[0]));
       const total = db.gear.reduce((s, g) => s + totalValue(g), 0);
       const units = db.gear.reduce((s, g) => s + qtyOf(g), 0);
       const out = db.gear.filter(g => gearBookings(g.id).some(b => endOf(b) >= today)).length;
@@ -137,7 +149,8 @@ const stat = (v, l) => h('div', { class: 'stat' }, h('b', null, v), h('span', nu
 // warranty date, so the Equipment page can say what is due before a shoot does.
 export const LOG_KINDS = [['service', '🔧 Service'], ['clean', '🧽 Sensor / lens clean'], ['calibration', '🎯 Calibration'], ['check', '✅ Check / test'], ['repair', '🛠 Repair'], ['firmware', '⬆️ Firmware update'], ['other', '📝 Other']];
 const kindLabel = k => (LOG_KINDS.find(x => x[0] === k) || LOG_KINDS[6])[1];
-const monthsLater = (iso, n) => { const d = parseISO(iso); return ymd(new Date(d.getFullYear(), d.getMonth() + n, d.getDate())); };
+// The same day n months on; where that month is shorter (31 January + 1 month), its last day.
+export const monthsLater = (iso, n) => { const d = parseISO(iso), first = new Date(d.getFullYear(), d.getMonth() + Number(n), 1), last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate(); return ymd(new Date(first.getFullYear(), first.getMonth(), Math.min(d.getDate(), last))); };
 export const lastService = g => (g.log || []).filter(e => ['service', 'clean', 'calibration', 'check'].includes(e.kind) && e.date).map(e => e.date).sort().pop() || '';
 export const serviceDue = g => { const every = Number(g.serviceEvery) || 0; if (!every) return ''; const from = lastService(g) || g.purchased; return from ? monthsLater(from, every) : ''; };
 export function serviceState(g) {
@@ -150,7 +163,7 @@ export function serviceState(g) {
 export const serviceAlerts = () => db.gear.map(g => ({ g, states: serviceState(g) })).filter(x => x.states.length);
 function addLogEntry(g, onDone) {
   openForm({ title: 'Log entry: ' + g.name, values: { date: todayISO(), kind: 'service', note: '', cost: '', firmware: '' },
-    fields: [{ key: 'date', label: 'Date', type: 'date', required: true }, { key: 'kind', label: 'What', type: 'select', options: LOG_KINDS }, { key: 'note', label: 'Notes', type: 'textarea', rows: 2, placeholder: 'Where, what was done, who did it…' }, { key: 'cost', label: 'Cost', type: 'number', min: 0 }, { key: 'firmware', label: 'Firmware now (optional)', placeholder: 'Updates the item’s firmware version' }],
+    fields: [{ key: 'date', label: 'Date', type: 'date', required: true }, { key: 'kind', label: 'What', type: 'select', options: LOG_KINDS }, { key: 'note', label: 'Notes', type: 'textarea', rows: 2, placeholder: 'Where, what was done, who did it…' }, { key: 'cost', label: 'Cost', type: 'number', min: 0, step: 'any' }, { key: 'firmware', label: 'Firmware now (optional)', placeholder: 'Updates the item’s firmware version' }],
     onSave: v => { const cur = byId('gear', g.id); upsert('gear', { ...cur, log: [...(cur.log || []), { id: uid(), date: v.date, kind: v.kind, note: v.note, cost: v.cost }], ...(v.firmware ? { firmware: v.firmware } : {}) }); toast('Logged'); onDone && onDone(); } });
 }
 export function serviceSheet(g0) {

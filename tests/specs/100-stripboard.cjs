@@ -187,6 +187,7 @@ The taproom is full. Ana pours. Tom carries crates. Maya watches from the corner
 
   // ---- dragging ----
   const last = pl.days[1].scenes[pl.days[1].scenes.length - 1];
+  await handle(last).scrollIntoViewIfNeeded(); await sleep(200); // a drag starts on a handle that is on screen (the page keeps the Rolodex bar's height clear at the top of a scroll, so the last strip may be below the fold)
   const from = await handle(last).boundingBox(), to = await page.locator('.sb-strip').first().boundingBox();
   await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2); await page.mouse.down();
   for (let i = 1; i <= 12; i++) { await page.mouse.move(from.x + from.width / 2, from.y + (to.y + 4 - from.y) * i / 12); await sleep(30); }

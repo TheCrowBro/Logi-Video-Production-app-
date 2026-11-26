@@ -53,8 +53,11 @@ self.addEventListener('message', e => {
 self.addEventListener('notificationclick', e => {
   e.notification.close();
   const action = e.action === 'back' ? 'break-end' : e.action === 'later' ? 'break-extend' : null;
+  // The app's own page, not whichever page of the site was looked at last (the terms, a crew page, an invoice): those
+  // are windows of this worker too, and know nothing of a break.
+  const home = new URL(self.registration.scope).pathname, isApp = c => { const p = new URL(c.url).pathname; return p === home || p === home + 'index.html'; };
   e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(async list => {
-    const client = list[0] || (await self.clients.openWindow('./index.html'));
+    const client = list.find(isApp) || (await self.clients.openWindow('./index.html'));
     if (client) { if (client.focus) client.focus(); if (action) client.postMessage({ type: action }); }
   }));
 });
@@ -63,12 +66,19 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (new URL(req.url).pathname.includes('/__vdex/')) return; // the desktop app's sign-in pages are never the app
   if (workerRoute(new URL(req.url))) return; // the shop's pages (Buy, the code after paying) always come from the server
-  // Web Share Target: a file shared to the app arrives as a POST; park it and send the app to pick it up.
+  // Web Share Target: what is shared to the app arrives as a POST; it is parked and the app sent to pick it up. Every
+  // file of the share is kept (the first as 'shared-file', the rest as 'shared-file-1', '-2', …; ten at most). Text
+  // shared with no file (a note with a shot list, a link) is parked as a text file, so it is offered like one.
   if (req.method === 'POST' && new URL(req.url).pathname.endsWith('/share')) {
     e.respondWith((async () => {
       try {
-        const fd = await req.formData(); const file = fd.get('file');
-        if (file) await (await caches.open('logi-share')).put('shared-file', new Response(file, { headers: { 'X-Name': encodeURIComponent(file.name || 'shared'), 'Content-Type': file.type || 'application/octet-stream' } }));
+        const fd = await req.formData(), files = fd.getAll('file').filter(f => f && typeof f !== 'string').slice(0, 10);
+        if (!files.length) { const words = ['title', 'text', 'url'].map(k => fd.get(k)).filter(v => typeof v === 'string' && v.trim()).join('\n'); if (words) files.push(new File([words], 'Shared text.txt', { type: 'text/plain' })); }
+        if (files.length) {
+          const c = await caches.open('logi-share');
+          await Promise.all((await c.keys()).map(k => c.delete(k))); // what an earlier share left, never picked up
+          await Promise.all(files.map((file, i) => c.put(i ? `shared-file-${i}` : 'shared-file', new Response(file, { headers: { 'X-Name': encodeURIComponent(file.name || 'shared'), 'Content-Type': file.type || 'application/octet-stream' } }))));
+        }
       } catch { /* nothing usable was shared */ }
       return Response.redirect('./index.html?share=1', 303);
     })());
@@ -104,6 +114,9 @@ self.addEventListener('fetch', e => {
           else if (r.ok && e.resultingClientId) { passed.add(e.resultingClientId); self.registration.update().catch(() => {}); }
           if (r.ok || r.type === 'opaqueredirect') return r;
         } catch { /* offline */ }
+        // The app's page only works at its own address: its files are asked for beside it. An address in a folder the
+        // site has no page for (/help/, /docs/…) goes to the app's address, instead of a bare page whose buttons do nothing.
+        { const scope = new URL(self.registration.scope); if (new URL(req.url).pathname.replace(/[^/]*$/, '') !== scope.pathname) return Response.redirect(scope.href, 302); }
         return await c.match('./') || await c.match('index.html') || fetch(req);
       }
       const r = await fetch(req); if (r.ok) c.put(key, r.clone()); return r;

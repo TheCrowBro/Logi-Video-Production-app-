@@ -665,11 +665,12 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const synced = await M.page.evaluate(async ([one, two]) => {
     const s = await import('./js/store.js'), sd = await import('./js/share-data.js'), si = await import('./js/share-import.js');
     const read = l => sd.readShared('#' + l), mine = d => d.bookings.find(b => b.shared && b.shared.ref === 'REF-M1'), wait = () => new Promise(r => setTimeout(r, 25));
+    const put = copy => s.update(d => { for (const k of Object.keys(d)) delete d[k]; Object.assign(d, JSON.parse(JSON.stringify(copy))); }); // this device's data set to another device's, as it is (a restore would stamp it and mark what is missing as deleted)
     si.applyBooking(await read(one));
     const before = s.serialize(); // both devices hold the booking with scenes 1 and 2
     await wait(); si.applyBooking(await read(two)); // device A takes the producer's new link: scene 3 comes in
     const a = JSON.parse(s.serialize());
-    s.replaceAll(JSON.parse(before)); // device B, still open and not synced, ticks a checklist line a moment later
+    put(JSON.parse(before)); // device B, still open and not synced, ticks a checklist line a moment later
     s.update(d => { const x = mine(d); x.checks = { 'x:t': 1 }; x.updatedAt = Date.now() + 5000; });
     const b = JSON.parse(s.serialize()), out = {};
     for (const [k, m] of [['ba', s.mergeDb(b, a)], ['ab', s.mergeDb(a, b)]]) { const x = mine(m), sc = x.board.list.filter(y => y.type === 'scene'); out[k] = { scenes: sc.map(y => y.scene).join(), strips: x.shared.rows.strips.length, ticked: !!(x.checks && x.checks['x:t']), listed: sc.every(y => x.shared.rows.strips.includes(y.id)) }; }
@@ -683,12 +684,12 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
       const old = JSON.parse(JSON.stringify(b)), x = mine(old); x.board = JSON.parse(JSON.stringify(mine(a).board));
       if (edited) { x.board.list.unshift(x.board.list.splice(1, 1)[0]); x.board.updatedAt = Date.now() + 6000; x.updatedAt = Date.now() + 6000; }
       const handed = { listed: x.shared.rows.strips.length, scenes: scenes(old) };
-      s.replaceAll(s.mergeDb(a, old));
+      put(s.mergeDb(a, old));
       const listed = mine(s.db).shared.rows.strips.length, own = si.planBooking(await read(two)).ownStrips;
       await wait(); si.applyBooking(await read(two));
       out.old.push({ handed, listed, own, after: scenes(s.db).split(',').sort().join(), strips: mine(s.db).shared.rows.strips.length, ticked: !!(mine(s.db).checks && mine(s.db).checks['x:t']) });
     }
-    s.replaceAll(s.mergeDb(b, a));
+    put(s.mergeDb(b, a));
     out.own = si.planBooking(await read(two)).ownStrips;
     return out;
   }, [linkOne, linkTwo]);
@@ -712,6 +713,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const twice = await M.page.evaluate(async ([bk, gear, odd]) => {
     const s = await import('./js/store.js'), sd = await import('./js/share-data.js'), si = await import('./js/share-import.js'), gi = await import('./js/gear-import.js');
     const read = l => sd.readShared('#' + l), g = await read(gear), wait = () => new Promise(r => setTimeout(r, 25));
+    const put = copy => s.update(d => { for (const k of Object.keys(d)) delete d[k]; Object.assign(d, JSON.parse(JSON.stringify(copy))); }); // this device's data set to another device's, as it is (a restore would stamp it and mark what is missing as deleted)
     const addBoth = async () => { si.applyBooking(await read(bk)); return gi.applyGearImport(gi.planGearImport(g.items), { kits: g.kits, from: 'Pat Producer' }); };
     const from = x => !!x.shared && /^(REF-X1|gx\d|kx\d)$/.test(x.shared.ref || '');
     const count = d => ({ bookings: d.bookings.filter(from).length, venues: d.venues.filter(from).length, gear: d.gear.filter(from).length, kits: d.kits.filter(from).length });
@@ -723,7 +725,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
     // the phone's work, still whole in a copy of the database
     const kept = d => { const b = d.bookings.find(x => mine.has(x.id)); return !!b && !!b.invoice && b.invoice.number === 'INV-0007' && b.gear.length === 2 && b.gear.every(id => d.gear.some(x => x.id === id)) && d.venues.some(x => x.id === b.venueId) && d.gear.some(x => mine.has(x.id) && x.location === 'Flight case 1') && d.kits.some(x => mine.has(x.id) && x.name === 'My interview set' && x.gear.length === 2); };
     // the computer, from the same start and with no way to read the cloud copy, adds them too, a moment later
-    s.replaceAll(JSON.parse(start)); await wait();
+    put(JSON.parse(start)); await wait();
     const doneB = await addBoth(), b1 = JSON.parse(s.serialize());
     out.each = [count(a), count(b1)];
     out.apart = [...b1.bookings, ...b1.venues, ...b1.gear, ...b1.kits].filter(from).every(x => !mine.has(x.id));
@@ -733,7 +735,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
     const b2 = JSON.parse(s.serialize());
     out.undone = [s.mergeDb(b2, a), s.mergeDb(a, b2)].map(d => ({ ...count(d), kept: kept(d) }));
     // the list that borrows the booking's and the venue's references, added on the phone and undone
-    s.replaceAll(JSON.parse(JSON.stringify(a))); await wait();
+    put(a); await wait();
     const o = await read(odd), doneO = gi.applyGearImport(gi.planGearImport(o.items), { kits: o.kits, from: 'Sam Sender' });
     out.oddAdded = doneO.added.length; await wait(); gi.undoGearImport(doneO);
     const after = s.mergeDb(JSON.parse(s.serialize()), a);
@@ -775,6 +777,13 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
       return main && cloud.file != null ? r.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: cloud.garbled[who] ? '{"version":' : cloud.file }) : r.fulfill({ status: 404, headers: CORS });
     });
     await D.page.goto(BASE); await D.page.waitForSelector('#rolodex .drum-btn');
+    // A device has started once it has kept the licence server's answer. The page asks once whether licences are on
+    // (the tests' server says off, in a signed note), keeps the time before it asks, and checks the note's signature
+    // before it keeps the note. A page left in between keeps the time and no note, and the next page of that browser,
+    // which may not ask again for six hours, takes licences for on and its storage for paused: nothing is copied. A
+    // person does not leave a page a few milliseconds after it started; this spec does (the phone's first page is
+    // left for a link at once), and so it failed now and then, with the phone's work never reaching the storage.
+    await D.page.waitForFunction(() => { try { return !!JSON.parse(localStorage.getItem('vdex-licence')).note; } catch (e) { return false; } }, null, { timeout: 20000 });
     return D;
   };
   const hold = who => { cloud.held[who] = new Promise(res => { cloud.letGo[who] = () => { cloud.held[who] = null; res(); }; }); };
@@ -1254,6 +1263,78 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('the same for a contact when the Crew page cannot be fetched: the person is added and said to be, and nothing says otherwise', o2.crew === 'Otto Offline' && o2.toasts.join('|') === 'Added to your Crew' && o2.sheets === 0 && O2.broke.length === 0, JSON.stringify([o2, O2.broke]));
   await O2.ctx.close();
   const origin = new URL(BASE).origin;
+  /* ============================== what a hunt after 1.4.0 found ============================== */
+  { // The Me page's Phone contacts code and its .vcf file keep a name that is not plain ASCII.
+    const R = await open({ width: 1100, height: 900 });
+    await R.page.goto(BASE); await R.page.waitForSelector('#rolodex .drum-btn');
+    await R.page.evaluate(() => window.logiGo('me')); await R.page.waitForSelector('.me-modes');
+    // The name the page gives the file it hands to the browser (the browser's own record of a download keeps only plain letters here).
+    await R.page.evaluate(() => { window.__files = []; const make = URL.createObjectURL; URL.createObjectURL = f => { if (f && f.name) window.__files.push(f.name); return make.call(URL, f); }; });
+    const read = {}, files = {};
+    for (const name of ['Łucja Przykładowa', 'Олена Приклад', 'Zoë O’Sample']) {
+      await R.page.evaluate(n => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: n, phone: '555 0100', updatedAt: Date.now() }; })), name); await sleep(300);
+      await R.page.locator('.me-modes button', { hasText: 'Phone contacts' }).click(); await R.page.waitForSelector('#page .qr svg', { timeout: 8000 }); await sleep(400);
+      read[name] = (await readQr(R.page)).includes(name);
+      await Promise.all([R.page.waitForEvent('download', { timeout: 8000 }), R.page.getByRole('button', { name: 'Share contact (.vcf)' }).click()]);
+      files[name] = await R.page.evaluate(() => window.__files[window.__files.length - 1]);
+    }
+    ok('the Phone contacts code, read back with Vdex’s own scanner, holds each name exactly as typed: Polish, Cyrillic, and one with ë and a curly apostrophe', Object.values(read).every(Boolean), JSON.stringify(read));
+    ok('…and the .vcf file is named after the person in their own letters, not “_.vcf”', files['Łucja Przykładowa'] === 'Łucja_Przykładowa.vcf' && files['Олена Приклад'] === 'Олена_Приклад.vcf' && files['Zoë O’Sample'] === 'Zoë_O_Sample.vcf', JSON.stringify(files));
+    await R.ctx.close(); }
+  { // The crew page on a phone: a web address in a schedule line, a scene or a deliverable wraps on the paper.
+    const R = await open({ width: 360, height: 800 }), URLY = 'https://maps.app.goo.gl/AbCdEfGhIjKlMnOpQ?g_st=ic';
+    const packed = await pack({ v: 1, kind: 'crew', ref: 'REF-WRAP', made: Date.now(), title: 'Harbour film', date: day(9), start: '09:00', end: '17:00', by: { name: 'Pat Producer' },
+      schedule: [{ time: '09:00', item: 'Parking: ' + URLY }], crew: [{ name: 'Sam Rivera', role: '1st AC', phone: '555 0101', email: 'sam@example.com', call: '08:30' }],
+      scenes: [{ n: 1, date: day(9), items: [{ scene: '1', ie: 'INT.', set: 'KITCHEN', tod: 'DAY', desc: 'Reference ' + URLY, cast: [], kind: 'sb-int-day' }] }], deliverables: [{ name: 'Master_file_https://example.com/a/very/long/address/without/any/spaces/in/it', duration: '90 s', due: day(30), status: 'Planned' }] });
+    await R.page.goto(BASE + 'crew.html#' + packed); await R.page.waitForSelector('.paper table'); await sleep(300);
+    const paper = await R.page.evaluate(() => ({ wide: document.documentElement.scrollWidth, shown: /maps\.app\.goo\.gl/.test(document.querySelector('.paper').textContent), role: getComputedStyle([...document.querySelectorAll('.paper td')].find(td => td.textContent === '1st AC')).overflowWrap }));
+    ok('on the crew page a web address in a schedule line, a scene and a deliverable wraps inside the paper at 360 px, while a role still never breaks mid-word', paper.shown && paper.wide <= 360 && paper.role === 'normal', JSON.stringify(paper));
+    // …and on the narrowest phone a deliverable's short name is not broken inside a word to leave its due date whole
+    const N = await open({ width: 320, height: 800 });
+    await N.page.goto(BASE + 'crew.html#' + await pack({ v: 1, kind: 'crew', ref: 'REF-NARROW', made: Date.now(), title: 'Harbour film', date: day(9), endDate: day(10), by: { name: 'Pat Producer' }, deliverables: [{ name: 'Main film', duration: '90s', due: day(29), status: 'Planned' }] })); await N.page.waitForSelector('.paper table'); await sleep(300);
+    const narrow = await N.page.evaluate(() => { const td = [...document.querySelectorAll('.paper td')].find(x => x.textContent === 'Main film'), paper = document.querySelector('.paper'), r = document.createRange(); r.selectNodeContents(td);
+      const lines = new Set([...r.getClientRects()].map(q => Math.round(q.top))).size, lh = parseFloat(getComputedStyle(td).lineHeight) || 20;
+      return { lines: Math.max(lines, Math.round(r.getBoundingClientRect().height / lh)), table: Math.round(td.closest('table').getBoundingClientRect().right), paper: Math.round(paper.getBoundingClientRect().right), wide: document.documentElement.scrollWidth }; });
+    ok('at 320 px a deliverable named “Main film” keeps its two words whole (two lines at most) and its table stays on the paper', narrow.lines <= 2 && narrow.table <= narrow.paper && narrow.wide <= 320, JSON.stringify(narrow));
+    await N.ctx.close(); await R.ctx.close(); }
+  { // A browser too old to unpack a link says so, instead of calling the link damaged and asking for a fresh one.
+    const R = await open({ width: 420, init: () => { delete window.DecompressionStream; } });
+    const packed = await pack({ v: 1, kind: 'crew', ref: 'REF-OLD', made: Date.now(), title: 'Harbour film', date: day(9), by: { name: 'Pat Producer' } });
+    await R.page.goto(BASE + 'crew.html#' + packed); await R.page.waitForSelector('.msg'); const crewSays = await R.page.locator('.msg').innerText();
+    await R.page.goto(cardLink); await R.page.waitForSelector('.msg'); const cardSays = await R.page.locator('.msg').innerText();
+    ok('with no DecompressionStream (Safari before 16.4) a good link is answered “this browser is too old”, on the crew page and the card’s page, with no word of damage or of a fresh link', [crewSays, cardSays].every(t => /This browser is too old to open/.test(t) && !/damaged|fresh/.test(t)), JSON.stringify([crewSays, cardSays]).slice(0, 400));
+    await R.ctx.close(); }
+  { // Add from a link: when the part that draws the preview cannot be fetched, the sheet stays, says so and keeps the link.
+    const R = await open(), had = errors.length;
+    await R.ctx.route('**/js/share-import.js*', r => r.abort());
+    await R.page.goto(BASE); await R.page.waitForSelector('#rolodex .drum-btn');
+    await R.page.locator('#page button', { hasText: 'Add from a link' }).click(); await R.page.waitForSelector('.sheet textarea');
+    await R.page.locator('.sheet textarea').fill(cardLink); await R.page.locator('.sheet button', { hasText: 'Show what it holds' }).click(); await sleep(1500);
+    const stuck = await R.page.evaluate(() => ({ sheet: document.querySelector('.sheet')?.getAttribute('aria-label') || '', said: document.querySelector('.sheet [role=alert]')?.textContent || '', kept: (document.querySelector('.sheet textarea') || {}).value || '' }));
+    errors.splice(had); // the browser's own line about the file that could not be fetched
+    ok('when the preview’s own file cannot be fetched, Add from a link stays open, says the link could not be opened, and still holds the link', stuck.sheet === 'Add from a link' && /could not be opened\. Check the connection and try again\./.test(stuck.said) && stuck.kept === cardLink, JSON.stringify(stuck).slice(0, 300));
+    await R.ctx.unroute('**/js/share-import.js*');
+    if (stuck.sheet) await R.page.locator('.sheet button', { hasText: 'Show what it holds' }).click();
+    ok('…and the same tap works once the connection is back', stuck.sheet === 'Add from a link' && await R.page.waitForSelector('.sheet .add-preview', { timeout: 10000 }).then(() => true, () => false));
+    await R.ctx.close(); }
+  // Scan a QR code while the scanner's file is still on its way (a first use on a slow connection): closing the sheet,
+  // or a second tap on Scan, must not leave a camera switched on with nothing on screen.
+  for (const twice of [false, true]) {
+    const R = await open({ width: 390 });
+    await R.ctx.route('**/js/qr.js*', async r => { await sleep(1200); r.continue().catch(() => {}); });
+    await R.page.goto(BASE); await R.page.waitForSelector('#rolodex .drum-btn');
+    await R.page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').fillRect(0, 0, 64, 64); window.__streams = []; navigator.mediaDevices.getUserMedia = async () => { const s = c.captureStream(5); window.__streams.push(s); return s; }; });
+    await R.page.locator('#page button', { hasText: 'Add from a link' }).click(); await R.page.waitForSelector('.sheet textarea');
+    const scanBtn = R.page.locator('.sheet button', { hasText: 'Scan a QR code' });
+    await scanBtn.click(); await sleep(250);
+    if (twice) { await scanBtn.click(); await sleep(2600); }
+    const whileOpen = await R.page.evaluate(() => window.__streams.filter(s => s.getTracks().some(t => t.readyState === 'live')).length);
+    await R.page.locator('.sheet .icon-btn[aria-label="Close"]').click(); await sleep(twice ? 600 : 2600);
+    const cams = await R.page.evaluate(() => ({ asked: window.__streams.length, live: window.__streams.filter(s => s.getTracks().some(t => t.readyState === 'live')).length, sheets: document.querySelectorAll('.sheet').length }));
+    ok(twice ? 'Scan a QR code tapped twice while the scanner is still loading opens one camera, and closing the sheet switches it off' : 'Add from a link closed while the scanner is still loading opens no camera afterwards', cams.sheets === 0 && cams.live === 0 && (twice ? whileOpen === 1 && cams.asked === 1 : cams.asked === 0), JSON.stringify({ whileOpen, ...cams }));
+    await R.ctx.close();
+  }
+
   const outside = requests.filter(u => !u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:') && !/^https:\/\/api\.open-meteo\.com\//.test(u) && !u.startsWith('https://dav.test/') && !/^https:\/\/(api|content)\.dropboxapi\.com\//.test(u)); // dav.test and Dropbox's addresses: the stand-ins for one's own cloud storage in the two-device cases
   const leaked = requests.filter(u => u.includes(hashOf(cardLink).slice(0, 40)) || u.includes(hashOf(kitLink).slice(0, 40)) || /[?&]add=/.test(u));
   ok('nothing was sent anywhere in all of this: every request was for the app’s own files, and no link’s contents were in any of them', outside.length === 0 && leaked.length === 0, [...outside, ...leaked].slice(0, 3).join(' | '));

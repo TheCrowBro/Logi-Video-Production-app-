@@ -46,6 +46,6 @@ export function termsGate() {
       resolve();
     });
     document.body.append(gate);
-    box.focus();
+    box.focus({ preventScroll: true }); // the gate opens at its heading: on a phone the tick box is below the first screen, and scrolling to it would hide what is agreed to
   });
 }

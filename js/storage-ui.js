@@ -11,7 +11,9 @@ export const SWITCH_ON = REPO + '/blob/main/docs/turn-on-sign-in.md';
 export function preloadSignIn() {
   if (providers.signIn.available('google')) providers.loadGIS().catch(() => {});
 }
-const STATUS = { synced: 'Up to date', saving: 'Saving…', 'needs-permission': 'Needs you to sign in again', error: 'Could not reach it', off: 'Not copied yet', paused: 'Paused: cloud storage comes with a licence' };
+const STATUS = { synced: 'Up to date', saving: 'Saving…', 'needs-permission': 'Needs you to sign in again', error: 'Could not sync', off: 'Not copied yet', paused: 'Paused: cloud storage comes with a licence' };
+// A file in a synced folder has no sign-in: after a restart the browser wants the person to allow Vdex the file again.
+const isFile = a => !!a && a.id === 'file';
 const ICLOUD_SUB = 'Sign in with your Apple ID and tick “Keep me signed in”: Apple then asks again about every two weeks. Uses a little of your iCloud storage.';
 export const BROWSER = 'Carry on in your web browser: sign in there, then come back to Vdex.';
 
@@ -25,7 +27,7 @@ export function storagePanel() {
       if (r === 'browser') return toast(BROWSER);
       const c = store.cloud; if (done === false || !c.adapter) return;
       if (c.status === 'synced') toast(done || `Connected to ${c.adapter.label}. Up to date.`);
-      else if (c.status === 'needs-permission') toast(`${c.adapter.label} wants you to sign in again.`);
+      else if (c.status === 'needs-permission') toast(isFile(c.adapter) ? `Vdex needs your permission to use ${c.adapter.label} again.` : `${c.adapter.label} wants you to sign in again.`);
       else if (c.error) toast(`Not copied yet: ${c.error}. Your changes are safe on this device.`);
     } catch (e) { if (e.name !== 'AbortError') toast(e.message); draw(); }
   };
@@ -39,14 +41,17 @@ export function storagePanel() {
     return h('div', { class: 'stack cloud-linked' },
       h('div', { class: 'card stack' },
         h('div', { class: 'cloud-head' }, h('span', { class: 'cloud-ico', 'aria-hidden': 'true' }, ICON[a.id] || '☁'), h('div', null, h('strong', null, `Connected to ${a.label}`), who && h('div', { class: 'small muted' }, 'Signed in as ' + who))),
-        h('p', { class: 'status-line', 'data-state': c.status }, [STATUS[c.status] || c.status, c.error && c.status !== 'synced' ? c.error : ''].filter(Boolean).join(' · ')),
+        h('p', { class: 'status-line', 'data-state': c.status }, [c.status === 'needs-permission' && isFile(a) ? 'Needs your permission again' : STATUS[c.status] || c.status, c.error && c.status !== 'synced' ? c.error : ''].filter(Boolean).join(' · ')),
+        // A copy that could not be read (cut short while saving): this device holds a whole one, and can put it in its place.
+        !c.paused && c.status === 'error' && c.damaged != null && h('p', { class: 'small damaged-note' }, `This device still holds everything. Replace the copy in ${a.label} with this device’s, and syncing carries on${a.writeExtra ? '; the damaged copy is kept beside it as vdex-damaged-copy.json' : ''}.`),
         ownApp(a) ? h('p', { class: 'small muted' }, 'This sign-in uses your own developer app (set under For developers), so the copy is in that app’s folder. Every device has to use the same app to share it.')
           : a.where && h('p', { class: 'small muted' }, `Vdex keeps its copy in ${a.where}, and nothing else of yours is touched. Your phone and computer share it when both are connected the same way.`),
         c.paused && h('p', { class: 'small' }, 'Nothing is copied to or from it until this device has a licence: your data stays here, and the copy there stays as it is. Syncing starts again by itself once you have one.'),
         h('div', { class: 'actions' },
           c.paused && h('button', { class: 'btn primary', onclick: () => store.requirePaid('cloud') }, 'Get a licence'),
-          !c.paused && c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: paidRun(() => (a.id === 'dropbox' ? store.connectDropbox() : store.reconnect()), 'Signed in again. Up to date.') }, 'Sign in again'),
-          !c.paused && h('button', { class: 'btn ' + (c.status === 'needs-permission' ? 'ghost' : 'primary'), onclick: paidRun(() => store.reconnect(), 'Up to date. Your copy is saved.') }, 'Sync now'),
+          !c.paused && c.status === 'needs-permission' && h('button', { class: 'btn primary', onclick: paidRun(() => (a.id === 'dropbox' ? store.connectDropbox() : store.reconnect()), isFile(a) ? 'Access allowed. Up to date.' : 'Signed in again. Up to date.') }, isFile(a) ? 'Allow access again' : 'Sign in again'),
+          !c.paused && c.status === 'error' && c.damaged != null && h('button', { class: 'btn primary', onclick: paidRun(() => store.replaceDamagedCopy(), 'Replaced. Up to date.') }, 'Replace it with this device’s copy'),
+          !c.paused && h('button', { class: 'btn ' + (c.status === 'needs-permission' || c.damaged != null ? 'ghost' : 'primary'), onclick: paidRun(() => store.reconnect(), 'Up to date. Your copy is saved.') }, 'Sync now'),
           h('button', { class: 'btn ghost', onclick: run(store.unlinkCloud, false) }, 'Disconnect'))),
       h('p', { class: 'small muted' }, 'Disconnecting stops the copying. Everything stays on this device, and the copy in your storage stays where it is.'),
       a.erase && h('button', { class: 'btn ghost small', onclick: () => { if (confirm(`Delete Vdex’s copy and its backups from ${a.label}? Everything stays on this device, and Vdex disconnects.`)) run(async () => { await store.eraseCloudCopy(); toast(`Vdex’s copy was deleted from ${a.label}. Everything is still on this device.`); }, false)(); } }, `Delete Vdex’s copy from ${a.label}…`));
@@ -126,7 +131,12 @@ export function backupPanel() {
     h('div', { class: 'actions' }, h('button', { class: 'btn danger', onclick: async () => { await store.eraseAll(); toast('Everything erased'); draw(); } }, 'Yes, erase everything'), h('button', { class: 'btn ghost', onclick: draw }, 'Keep my data')));
   const draw = () => erase.replaceChildren(h('button', { class: 'btn ghost', onclick: armErase }, 'Erase all data on this device…'));
   draw();
-  const a = store.cloud.adapter;
+  // The Restore button is there while a storage that keeps dated backups is linked, also one linked or unlinked while
+  // this panel is on screen (the listener goes once the panel has left the page, as the health line's does).
+  const restore = h('div', { class: 'stack restore-slot' }); let shown;
+  const drawRestore = () => { const a = store.cloud.adapter; if (a === shown) return; shown = a; restore.hidden = !(a && a.readExtra); restore.replaceChildren(...(a && a.readExtra ? [h('button', { class: 'btn ghost', onclick: () => backup.restoreFromCloud() }, '☁ Restore an automatic cloud backup…')] : [])); };
+  drawRestore();
+  const un = store.subscribe(() => { if (!restore.isConnected && restore.dataset.drawn) return un(); restore.dataset.drawn = '1'; drawRestore(); });
   return h('div', { class: 'stack' },
     backup.healthLine(),
     h('div', { class: 'actions' },
@@ -134,9 +144,9 @@ export function backupPanel() {
       h('button', { class: 'btn ghost', onclick: () => backup.exportFile({ encrypted: true }) }, '🔐 Encrypted backup…'),
       phoneApp ? h('button', { class: 'btn ghost', onclick: () => backup.importFromPicker() }, 'Import backup…')
         : h('label', { class: 'btn ghost file-btn' }, 'Import backup…', h('input', { type: 'file', accept: 'application/json,.json', onchange: backup.importFile }))),
-    a && a.readExtra && h('button', { class: 'btn ghost', onclick: () => backup.restoreFromCloud() }, '☁ Restore an automatic cloud backup…'),
+    restore,
     h('p', { class: 'small muted' }, 'With a cloud storage linked (Google Drive, iCloud, Dropbox, OneDrive or WebDAV), Vdex also writes a dated backup next to its database once a day after a change: one per weekday and one per month. Backup files are plain unless you choose the encrypted one, so keep them somewhere private.'),
-    h('button', { class: 'btn ghost', onclick: () => { if (store.canChange() && confirm('Replace your current data with example data?')) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),
+    h('button', { class: 'btn ghost', onclick: () => { if (store.canChange() && confirm(`Replace your current data with example data?${store.cloud.adapter && !store.cloud.paused ? ' Your other devices follow at their next sync.' : ''}`)) { store.loadSample(); toast('Sample data loaded'); } } }, 'Load sample data'),
     erase);
 }
 
