@@ -215,7 +215,9 @@ export function replaceAll(data) {
     for (const k of ['quote', 'invoice']) { if (o[k] && typeof o[k] === 'object') { o[k] = { ...o[k], updatedAt: now }; delete o[k + 'GoneAt']; } else o[k + 'GoneAt'] = now; }
     return o;
   });
-  db.logs = db.logs.map(l => ({ ...l, updatedAt: now, notes: l.notes.map(n => (n && typeof n === 'object' ? { ...n, upd: now } : n)) }));
+  // A timecode log's notes and its script each follow their own time in a merge (mergeLog): the notes are stamped, the
+  // script counts as put in now (also "no script"), and markGone leaves a mark for each note made since the backup.
+  db.logs = db.logs.map(l => ({ ...l, updatedAt: now, ...('script' in l ? { scriptAt: now } : {}), notes: l.notes.map(n => (n && typeof n === 'object' ? { ...n, upd: now } : n)) }));
   markGone(was, db, now);
   db.updatedAt = now;
   persistLocal();
@@ -223,9 +225,15 @@ export function replaceAll(data) {
   schedulePush();
 }
 
-// Marks as deleted, in `now`, every record `was` held that `now` does not (a restore, the example data).
+// Marks as deleted, in `now`, every record `was` held that `now` does not (a restore, the example data), and in a
+// log that both hold every note `was` had that `now` does not (a log carries the marks of its own notes: mergeLog).
 function markGone(was, now, at) {
   for (const list of [...LISTS, 'logs']) { const kept = new Set((now[list] || []).map(x => x.id)); for (const x of was[list] || []) if (x && x.id && !kept.has(x.id)) now.deleted[x.id] = at; }
+  const before = new Map((was.logs || []).map(l => [l.id, l]));
+  now.logs = (now.logs || []).map(l => {
+    const kept = new Set((l.notes || []).map(n => n.id)), gone = ((before.get(l.id) || {}).notes || []).filter(n => n && n.id && !kept.has(n.id));
+    return gone.length ? { ...l, dead: { ...(l.dead || {}), ...Object.fromEntries(gone.map(n => [n.id, at])) } } : l;
+  });
 }
 
 export function exportJSON() { return JSON.stringify(db, null, 2); }
@@ -234,6 +242,10 @@ export function exportJSON() { return JSON.stringify(db, null, 2); }
 export async function eraseAll() {
   clearTimeout(timer);
   await unlinkCloud(); // a sync that is reading at this moment finds its storage unlinked when the answer comes, and merges nothing (runSync)
+  // Vdex open in another window of this device is told first (the storage listener below): the empty copy written
+  // next is an erase, not a save for that window to merge its own copy into and write back. The plain copy goes
+  // before the word does, so that a full storage has room for it.
+  lsSet(KEY, null); lsSet(ERASING, String(Date.now()));
   db = blank(); db.updatedAt = Date.now();
   sealed = false; dirty = false;
   persistLocal(); emit();
@@ -487,9 +499,22 @@ export async function initCloud() {
 // the cloud is, so the next save here does not write this window's older copy over what the other one just made.
 // What this window has that the other lacks is saved in turn. A sealed window (hidden or locked) reads the disk when
 // it is opened again.
+// Erase all data in another window is no save: this window lets go of its copy as well (the lock of its key, as in the
+// window that erased), writes nothing back, and starts again as that window does.
+const ERASING = 'logi-erasing';
+let erased = false;
+function erasedElsewhere() {
+  if (erased) return; erased = true;
+  clearTimeout(timer); cloud.adapter = null;
+  db = blank(); dirty = false; rev++;
+  try { dispatchEvent(new Event('vdex-erased')); } catch { /* ignore */ }
+  try { sessionStorage.setItem('logi-wiped', 'Everything on this device was erased.'); } catch { /* ignore */ }
+  setTimeout(() => location.reload(), 700);
+}
 try {
   window.addEventListener('storage', e => {
-    if (e.key !== KEY || !e.newValue || sealed) return;
+    if (e.key === ERASING && e.newValue) return erasedElsewhere();
+    if (e.key !== KEY || !e.newValue || sealed || erased) return;
     let theirs; try { theirs = normalise(JSON.parse(e.newValue)); } catch { return; }
     const merged = mergeDb(db, theirs);
     if (JSON.stringify(merged) === JSON.stringify(db)) return;

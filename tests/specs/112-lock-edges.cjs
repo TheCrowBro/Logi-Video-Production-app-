@@ -188,6 +188,18 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     ok('…and the other tab started again too', (await a.locator('.terms-gate').count()) === 1);
     await ctx.close(); }
 
+  // --- Erase all data in one window, with Vdex open and in view in a second one: that one does not write its copy back ---
+  { const { ctx, page: a } = await existing();
+    const b = await ctx.newPage(); watch(b);
+    await b.goto(BASE); await b.waitForSelector('.lock'); await b.keyboard.type('246810'); await b.waitForSelector('#rolodex .drum-btn', { timeout: 60000 }); await sleep(600);
+    const held = await b.evaluate(() => import('./js/store.js').then(s => s.db.bookings.length));
+    await a.evaluate(() => import('./js/store.js').then(s => { s.eraseAll(); }));
+    await a.waitForSelector('.lock-setup', { timeout: 15000 }); await b.waitForSelector('.lock-setup', { timeout: 15000 }); await sleep(1200);
+    const disk = await a.evaluate(() => { let n = -1; try { n = JSON.parse(localStorage.getItem('logi-db-v1') || '{"bookings":[]}').bookings.length; } catch { /* not a database */ } return { n, vault: localStorage.getItem('logi-vault'), cfg: localStorage.getItem('logi-lock'), word: localStorage.getItem('logi-erasing') }; });
+    ok('Erase all data in one window, with Vdex open in a second: nothing is on the device afterwards (the second window did not write its copy back)', held > 0 && disk.n === 0 && disk.vault === null && disk.cfg === null && disk.word === null, JSON.stringify({ held, ...disk }));
+    ok('…and the second window started again too, at a PIN set-up that says the device was erased', /Everything on this device was erased/.test(await b.locator('.lock-setup').innerText()) && (await b.evaluate(() => import('./js/store.js').then(s => s.db.bookings.length + s.db.crew.length + s.db.gear.length))) === 0);
+    await ctx.close(); }
+
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

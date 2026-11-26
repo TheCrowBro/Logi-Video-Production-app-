@@ -290,7 +290,9 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     // ---- a change is merged into the cloud copy, never written over it ----
     const cloud = newCloud();
     const A = await device(cloud, 'A'), B = await device(cloud, 'B');
-    await start(A.page); await add(A.page, 'keep', 'Keep me'); await add(A.page, 'edit', 'Right title'); await saved(A.page);
+    await start(A.page); await add(A.page, 'keep', 'Keep me'); await add(A.page, 'edit', 'Right title');
+    await st(A.page, s => { s.upsert('logs', { id: 'tl', title: 'Day one', rate: '25', mode: 'free', created: '2026-11-01', sync: null, take: 0, autoTakes: true, script: { name: 'First draft', imported: '2026-11-01T09:00:00.000Z', lines: [] }, scriptAt: 1, notes: [{ id: 'n1', text: 'In the backup', at: '2026-11-01T10:00:00.000Z' }] }); });
+    await saved(A.page);
     cloud.files.set(OLD_BACKUP, cloud.files.get(MAIN)); // the dated backup a restore goes back to, further down
     await start(B.page); await synced(B.page);
     await add(B.page, 'x', 'B made this'); await saved(B.page);
@@ -330,6 +332,10 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     // ---- a restored backup stays restored, on every device ----
     await st(A.page, s => { s.remove('bookings', 'keep'); s.update(d => { const b = d.bookings.find(x => x.id === 'edit'); b.title = 'WRONG title'; b.updatedAt = Date.now(); }); }); await saved(A.page); await syncNow(B.page);
     const wrong = await held(B.page);
+    // …a timecode log too: a note made since the backup, and a script put in its place since
+    const logOf = page => st(page, s => { const l = s.byId('logs', 'tl'); return l ? `${l.notes.map(n => n.id).sort().join('+')} / ${l.script ? l.script.name : 'no script'}` : 'no log'; });
+    await st(A.page, s => { s.update(d => { const l = d.logs.find(x => x.id === 'tl'); l.notes.push({ id: 'n2', text: 'Made since the backup', at: new Date().toISOString() }); l.script = { name: 'Second draft', imported: new Date().toISOString(), lines: [] }; l.scriptAt = Date.now(); l.updatedAt = Date.now(); }); }); await saved(A.page); await syncNow(B.page);
+    const logBefore = await logOf(B.page);
     await menuClick(A.page, '#cloudBtn'); await A.page.waitForSelector('.sheet .storage'); await sleep(200);
     await A.page.getByRole('button', { name: /Restore an automatic cloud backup/ }).click(); await A.page.locator('.sheet .card.tap', { hasText: OLD_BACKUP }).click(); await sleep(400);
     const asked = A.page.said.splice(0).join('|'), now = await held(A.page);
@@ -338,6 +344,7 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     const want = 'edit:Right title,keep:Keep me';
     ok('a restore says the other devices follow', /Replace the data on this device with vdex-backup-.+\? Your other devices follow at their next sync\./.test(asked), asked);
     ok('after a restore of a dated backup both devices end with what the backup holds: the deleted booking back, the old title, and nothing made since', wrong.join() === 'edit:WRONG title,x:B made this,y:A made this' && now.join() === want && (await held(A.page)).join() === want && (await held(B.page)).join() === want, JSON.stringify([wrong, now, await held(A.page), await held(B.page)]));
+    ok('…and so with a timecode log: the note made since the backup and the script put in since are gone again on both devices', logBefore === 'n1+n2 / Second draft' && (await logOf(A.page)) === 'n1 / First draft' && (await logOf(B.page)) === 'n1 / First draft', JSON.stringify([logBefore, await logOf(A.page), await logOf(B.page)]));
 
     // ---- a damaged or foreign file given to Import backup… ----
     const importFile = async (page, name, text) => { page.said.length = 0; await toasts(page); await page.locator('.sheet .file-btn input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(text) }); await sleep(500); return { toast: (await toasts(page)).join('|'), asked: page.said.splice(0).join('|') }; };
@@ -355,9 +362,15 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     ok('…and the other device follows it without a script error', (await held(B.page)).join() === 'ok:Fine' && (await state(B.page)).status === 'synced', JSON.stringify(await state(B.page)));
 
     // ---- the example data replaces what was there, on every device ----
-    await st(A.page, s => { s.loadSample(); }); await saved(A.page); await syncNow(B.page); await syncNow(A.page);
+    A.page.said.length = 0;
+    await menuClick(A.page, '#cloudBtn'); await A.page.waitForSelector('.sheet .storage'); await sleep(200);
+    await A.page.getByRole('button', { name: 'Load sample data' }).click(); await sleep(300);
+    const sampleAsked = A.page.said.splice(0).join('|');
+    await A.page.keyboard.press('Escape'); await sleep(200);
+    await saved(A.page); await syncNow(B.page); await syncNow(A.page);
     const afterSample = [await st(A.page, s => [s.db.bookings.length, s.db.gear.length, !!s.byId('bookings', 'ok')].join()), await st(B.page, s => [s.db.bookings.length, s.db.gear.length, !!s.byId('bookings', 'ok')].join())];
     ok('Load sample data replaces the data on a linked device too: both end with the examples only', afterSample[0] === '8,10,false' && afterSample[1] === '8,10,false', afterSample.join(' | '));
+    ok('…and its question says so before anything is replaced', sampleAsked === 'Replace your current data with example data? Your other devices follow at their next sync.', sampleAsked);
 
     // ---- a device left unopened for most of a year does not bring back what was deleted meanwhile ----
     const DAY = 864e5, db0 = cloudDb(cloud);
