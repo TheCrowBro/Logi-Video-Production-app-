@@ -177,11 +177,38 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     m.setDocStatus('mn-old1', 'invoice', 'Paid'); m.setDocStatus('mn-old1', 'invoice', 'Sent'); out.resent = total('mn-old1') + ' ' + mark('mn-old1');
     m.setDocStatus('mn-old1', 'invoice', 'Draft'); out.redrafted = total('mn-old1') + ' ' + mark('mn-old1');
     out.draft = total('mn-old2') + ' ' + mark('mn-old2'); m.setDocStatus('mn-old2', 'invoice', 'Sent'); out.draftSent = total('mn-old2') + ' ' + mark('mn-old2');
-    out.fresh = (m.snapshot(s.byId('bookings', 'mn-p'), 'invoice').v) + ' ' + mark('mn-p');
     s.remove('bookings', 'mn-old1'); s.remove('bookings', 'mn-old2'); return out; }));
   await sleep(300);
   ok('an invoice sent before the update keeps its total, in the app, in its link and in the Pay button, and what it asked for pays it in full', kept.sent === '190.20' && kept.link === '190.20' && kept.pay === '190.20' && kept.left === 0 && kept.resent === '190.20 0', JSON.stringify(kept));
-  ok('…until it is taken back to Draft; a draft from before the update is sent as it stood; a document made now is rounded line by line', kept.redrafted === '190.21 2' && kept.draft === '190.20 0' && kept.draftSent === '190.20 0' && kept.fresh === '2 2', JSON.stringify(kept));
+  ok('…also when it is taken back to Draft; and a draft from before the update is sent as it stood', kept.redrafted === '190.20 0' && kept.draft === '190.20 0' && kept.draftSent === '190.20 0', JSON.stringify(kept));
+  // A Draft made by 1.4.0 whose link already went out (that build emailed a Draft, or gave its link, without marking it
+  // sent): saved again as a Draft with only its notes changed, it keeps the figures its link shows, and a payment of
+  // what the link asks pays it in full. Once its figures are changed as a Draft, it is rounded line by line.
+  await page.evaluate(() => import('./js/store.js').then(s => s.upsert('bookings', { id: 'mn-dl', title: 'Draft whose link went out', date: '2026-12-01', status: 'Shot', crew: [], gear: [], stakeholders: [], invoice: { number: 'INV-DL', date: '2026-12-04', due: '2026-12-18', status: 'Draft', taxRate: 0, deposit: '', notes: 'Thanks', payments: [], lines: [{ id: 'a', desc: 'Editing', qty: 0.25, unit: 'hour', price: 10.02 }, { id: 'b', desc: 'Colour', qty: 0.25, unit: 'hour', price: 10.02 }], updatedAt: Date.now() } })));
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('mn-dl', { view: 'money', kind: 'invoice' }))); await page.waitForSelector('.money-page .status-line');
+  const dlNow = () => page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => { const i = s.byId('bookings', 'mn-dl').invoice, t = m.totals(i); return [i.status, i.calc || 0, t.total, t.balance].join(' '); }));
+  const linkAsks = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js'), import('./js/money-doc.js')]).then(([s, m, md]) => md.calc(m.snapshot(s.byId('bookings', 'mn-dl'), 'invoice')).balance));
+  await page.locator('.money-page').getByRole('button', { name: 'Edit' }).click(); await pform.waitFor();
+  await pform.locator('[data-key="notes"]').fill('Thanks, see you soon'); await pform.locator('button[type=submit]').click(); await sleep(400);
+  const savedDraft = await dlNow();
+  await page.locator('.money-page button:has-text("Record a payment")').click(); await pform.waitFor();
+  await pform.locator('input[data-key="amount"]').fill(String(linkAsks)); await pform.locator('button[type=submit]').click(); await sleep(500);
+  if (await pform.count()) await page.keyboard.press('Escape');
+  const paidLink = await dlNow();
+  ok('a Draft from before the update saved again with only its notes changed keeps its figures, and the payment its link asked for pays it in full', linkAsks === 5.01 && savedDraft === 'Draft 0 5.01 5.01' && paidLink === 'Paid 0 5.01 0', JSON.stringify([linkAsks, savedDraft, paidLink]));
+  await page.evaluate(() => import('./js/money.js').then(m => m.setDocStatus('mn-dl', 'invoice', 'Draft'))); await sleep(300);
+  await page.locator('.money-page').getByRole('button', { name: 'Edit' }).click(); await pform.waitFor();
+  await pform.locator('input[aria-label="Qty"]').first().fill('0.5'); await pform.locator('button[type=submit]').click(); await sleep(400);
+  const refigured = await dlNow();
+  ok('…and once a line of it is changed as a Draft it is rounded line by line', /^Draft 2 /.test(refigured), refigured);
+  // A document made now is rounded line by line, and its link says so
+  await page.evaluate(() => import('./js/store.js').then(s => s.upsert('bookings', { id: 'mn-new', title: 'Made now', date: '2026-12-01', status: 'Shot', crew: [], gear: [], stakeholders: [] })));
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('mn-new', { view: 'money', kind: 'invoice' }))); await page.getByRole('button', { name: '＋ From the booking' }).click(); await pform.waitFor();
+  await pform.locator('button[type=submit]').click(); await sleep(400);
+  const fresh = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => `${m.snapshot(s.byId('bookings', 'mn-new'), 'invoice').v} ${s.byId('bookings', 'mn-new').invoice.calc}`));
+  ok('a document made now is rounded line by line, and its link says so', fresh === '2 2', fresh);
+  await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 'mn-new'))); await sleep(200);
+  await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 'mn-dl'))); await sleep(200);
   // A link made by 1.4.0 for a currency Vdex does not know carries that build's guess: the page does not ask for US dollars
   const oldLink = await page.evaluate(() => import('./js/money-doc.js').then(md => { const snap = (v, currency, code) => ({ v, kind: 'invoice', status: 'Sent', number: 'X', currency, code, lines: [{ qty: 1, price: 3500 }], pay: { methods: [{ type: 'paypal', value: 'probefilms' }] } });
     return [snap(1, '₪', 'USD'), snap(1, '$', 'USD'), snap(1, '₪', 'EUR'), snap(2, '₪', 'USD'), snap(2, '₪', ''), snap(1, 'CA$', 'USD'), snap(1, 'AU$', 'USD'), snap(1, 'EUR', 'USD'), snap(1, 'GBP', 'USD'), snap(1, 'US$', 'USD')].map(sn => md.payButtons(sn)[0].href.split('/').pop()); }));

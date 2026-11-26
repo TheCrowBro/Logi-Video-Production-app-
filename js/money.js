@@ -114,13 +114,15 @@ export function mergeSuggested(lines, suggested, source) {
   return { lines: out, added, updated };
 }
 
+const figures = d => JSON.stringify([(d.lines || []).map(l => [Number(l.qty) || 0, Number(l.price) || 0]), Number(d.taxRate) || 0, Number(d.deposit) || 0]);
 function saveDoc(id, kind, doc) {
   const had = docOf(byId('bookings', id), kind), prev = had || {}, now = Date.now();
   const next = { ...doc, taxLabel: String(doc.taxLabel || '').trim() || billing().taxLabel, updatedAt: now };
-  // Its figures are rounded to cents one by one (calc in js/money-doc.js) from the day it is made, and from any day it
-  // is saved as a Draft. A document sent under 1.4.0 keeps that build's arithmetic until it is taken back to Draft:
-  // what went out does not change by a cent because Vdex was updated.
-  if (!had || next.status === 'Draft') next.calc = 2;
+  // Its figures are rounded to cents one by one (calc in js/money-doc.js) from the day it is made, and from the day its
+  // figures (a line's quantity or price, the tax rate, the deposit) are changed while it is a Draft. A document made
+  // under 1.4.0 keeps that build's arithmetic until then: what went out does not change by a cent because Vdex was
+  // updated, and that build sent a Draft (by email, or as a link) without marking it sent.
+  if (!had || (next.status === 'Draft' && figures(next) !== figures(prev))) next.calc = 2;
   // The dates follow the status: an invoice taken back from Paid has no paid date, and a document taken back to Draft
   // was not sent.
   if (next.status === 'Draft') next.sentAt = null;
