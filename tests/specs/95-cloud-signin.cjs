@@ -292,6 +292,7 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     const A = await device(cloud, 'A'), B = await device(cloud, 'B');
     await start(A.page); await add(A.page, 'keep', 'Keep me'); await add(A.page, 'edit', 'Right title');
     await st(A.page, s => { s.upsert('logs', { id: 'tl', title: 'Day one', rate: '25', mode: 'free', created: '2026-11-01', sync: null, take: 0, autoTakes: true, script: { name: 'First draft', imported: '2026-11-01T09:00:00.000Z', lines: [] }, scriptAt: 1, notes: [{ id: 'n1', text: 'In the backup', at: '2026-11-01T10:00:00.000Z' }] }); });
+    await st(A.page, s => { s.update(d => { d.profile = { ...d.profile, name: 'Name in the backup', updatedAt: Date.now() }; d.billing = { ...d.billing, dayRate: 500, updatedAt: Date.now() }; d.priceList = { list: [{ id: 'pl1', name: 'Shoot day', price: 500 }], region: '', updatedAt: Date.now() }; d.templates = { corporate: { Enquiry: [{ t: 'Line in the backup' }] }, updatedAt: Date.now() }; }); });
     await saved(A.page);
     cloud.files.set(OLD_BACKUP, cloud.files.get(MAIN)); // the dated backup a restore goes back to, further down
     await start(B.page); await synced(B.page);
@@ -336,6 +337,10 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     const logOf = page => st(page, s => { const l = s.byId('logs', 'tl'); return l ? `${l.notes.map(n => n.id).sort().join('+')} / ${l.script ? l.script.name : 'no script'}` : 'no log'; });
     await st(A.page, s => { s.update(d => { const l = d.logs.find(x => x.id === 'tl'); l.notes.push({ id: 'n2', text: 'Made since the backup', at: new Date().toISOString() }); l.script = { name: 'Second draft', imported: new Date().toISOString(), lines: [] }; l.scriptAt = Date.now(); l.updatedAt = Date.now(); }); }); await saved(A.page); await syncNow(B.page);
     const logBefore = await logOf(B.page);
+    // …and the settings: the profile, the billing settings, the price list and the checklists, each changed since the backup
+    const setOf = page => st(page, s => [s.db.profile.name, s.db.billing.dayRate, (s.db.priceList.list || []).map(x => x.name).join('+') || 'no list', Object.keys(s.db.templates).filter(k => k !== 'updatedAt').join('+') || 'no checklists'].join(' / '));
+    await st(A.page, s => { s.update(d => { d.profile = { ...d.profile, name: 'Name typed since', updatedAt: Date.now() }; d.billing = { ...d.billing, dayRate: 900, updatedAt: Date.now() }; d.priceList = { list: null, region: '', updatedAt: Date.now() }; d.templates = { updatedAt: Date.now() }; }); }); await saved(A.page); await syncNow(B.page);
+    const setBefore = await setOf(B.page);
     await menuClick(A.page, '#cloudBtn'); await A.page.waitForSelector('.sheet .storage'); await sleep(200);
     await A.page.getByRole('button', { name: /Restore an automatic cloud backup/ }).click(); await A.page.locator('.sheet .card.tap', { hasText: OLD_BACKUP }).click(); await sleep(400);
     const asked = A.page.said.splice(0).join('|'), now = await held(A.page);
@@ -345,6 +350,8 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     ok('a restore says the other devices follow', /Replace the data on this device with vdex-backup-.+\? Your other devices follow at their next sync\./.test(asked), asked);
     ok('after a restore of a dated backup both devices end with what the backup holds: the deleted booking back, the old title, and nothing made since', wrong.join() === 'edit:WRONG title,x:B made this,y:A made this' && now.join() === want && (await held(A.page)).join() === want && (await held(B.page)).join() === want, JSON.stringify([wrong, now, await held(A.page), await held(B.page)]));
     ok('…and so with a timecode log: the note made since the backup and the script put in since are gone again on both devices', logBefore === 'n1+n2 / Second draft' && (await logOf(A.page)) === 'n1 / First draft' && (await logOf(B.page)) === 'n1 / First draft', JSON.stringify([logBefore, await logOf(A.page), await logOf(B.page)]));
+    const SET = 'Name in the backup / 500 / Shoot day / corporate';
+    ok('…and with the profile, the billing settings, the price list and the checklists: what was changed or emptied since the backup is as the backup has it, on both devices', setBefore === 'Name typed since / 900 / no list / no checklists' && (await setOf(A.page)) === SET && (await setOf(B.page)) === SET, JSON.stringify([setBefore, await setOf(A.page), await setOf(B.page)]));
 
     // ---- a damaged or foreign file given to Import backup… ----
     const importFile = async (page, name, text) => { page.said.length = 0; await toasts(page); await page.locator('.sheet .file-btn input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(text) }); await sleep(500); return { toast: (await toasts(page)).join('|'), asked: page.said.splice(0).join('|') }; };
