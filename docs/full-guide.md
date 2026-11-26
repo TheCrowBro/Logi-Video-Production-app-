@@ -339,6 +339,9 @@ Import your last backup. If a cloud storage is linked, the deletion has already 
 **Does it update by itself?**
 Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *General* → *About & Licence* shows the version and has **Check for updates**. The App Store app shows the same website, so it is updated the same way; the App Store only updates the app around it now and then.
 
+**A quote or invoice I deleted has come back.**
+It was deleted on a device still running Vdex 1.4.0 or older while another of your devices was already on 1.5.0. The old version leaves no mark when it deletes a quote or invoice, so the new one cannot tell that deletion from an ordinary change made on a device that never had the document, and it keeps the document rather than risk deleting one made on another device. Delete it again on an updated device: it then stays deleted on all of them.
+
 **Can I start over?**
 Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN (Vdex asks for a new one at the next start), and leaves the cloud copy alone.
 
@@ -665,6 +668,9 @@ Import your last backup. If a cloud storage is linked, the deletion has already 
 
 **Does it update by itself?**
 Yes. Whenever a new version is published, Vdex fetches it in the background the next time you open it and a bar at the bottom offers to reload; the next launch uses it anyway. Settings → *General* → *About & Licence* shows the version and has **Check for updates**.
+
+**A quote or invoice I deleted has come back.**
+It was deleted on a device still running Vdex 1.4.0 or older while another of your devices was already on 1.5.0. The old version leaves no mark when it deletes a quote or invoice, so the new one cannot tell that deletion from an ordinary change made on a device that never had the document, and it keeps the document rather than risk deleting one made on another device. Delete it again on an updated device: it then stays deleted on all of them.
 
 **Can I start over?**
 Settings → *Storage, sync & backups* → **Erase all data on this device**. It asks twice, unlinks any storage, removes the PIN (Vdex asks for a new one at the next start), and leaves the cloud copy alone.
