@@ -218,7 +218,49 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const aSheet = await page.locator('.sheet').innerText(), bSheet = await B.page.locator('.sheet').innerText();
   ok('Unlink shows in the sheet at once: no longer “Linked to”, and the two buttons to link again', !/Linked to/.test(aSheet) && /Show a code/.test(aSheet), aSheet.replace(/\s+/g, ' ').slice(-160));
   ok('…and the other device’s sheet says the connection closed, without the used step and code', /Connection closed/.test(bSheet) && !/Now scan this reply/.test(bSheet) && (await B.page.locator('.sheet .link-text').count()) === 0 && /Show a code/.test(bSheet), bSheet.replace(/\s+/g, ' ').slice(0, 200));
-  await B.ctx.close(); await A.ctx.close(); await browser.close();
+  await B.ctx.close(); await A.ctx.close();
+
+  // ---- a log merged over the link keeps the times it carries ----
+  // Two linked devices, each holding a copy (seeded) and a clock (moved) of its own; the codes are swapped as the Link
+  // sheet swaps them. The log that comes over the link is put in place as the other device stamped it: moved on as a
+  // change made here, while the copy was ahead of the clock (a third device's clock runs ahead), it went back and forth
+  // for ever, each device moving the other's on. And it counts as seen: a change made afterwards on the device that
+  // took it in is the later one, on both.
+  {
+    const seeded = (db, off = 0) => `(() => { const R = Date, real = R.now.bind(R), off = ${off}; if (off) { class D extends R { constructor(...a) { if (a.length) super(...a); else super(real() + off); } static now() { return real() + off; } } window.Date = D; }
+      if (localStorage.getItem('case-link')) return; localStorage.setItem('case-link', '1'); localStorage.setItem('logi-db-v1', ${JSON.stringify(JSON.stringify(db))}); localStorage.setItem('logi-tclog', 'LK'); })();`;
+    const pair = async (db, offQ = 0) => {
+      const P = await open(browser, { init: seeded(db) }), Q = await open(browser, { init: seeded(db, offQ) });
+      for (const d of [P, Q]) { await d.page.evaluate(() => window.logiGo('tcnotes')); await d.page.evaluate(() => import('./js/link.js').then(l => { window.__got = 0; l.onMessage(m => { if (m.t === 'log') window.__got++; }); })); }
+      const offer = await P.page.evaluate(() => import('./js/link.js').then(l => l.createOffer()));
+      const answer = await Q.page.evaluate(code => import('./js/link.js').then(l => l.acceptOffer(code)), offer);
+      await P.page.evaluate(code => import('./js/link.js').then(l => l.acceptAnswer(code)), answer);
+      const up = await Promise.all([P, Q].map(d => d.page.waitForFunction(() => import('./js/link.js').then(l => l.link.status === 'connected' && !!l.link.peer), null, { timeout: 20000 }).then(() => true, () => false)));
+      await sleep(1500);
+      return { P, Q, up: up.every(Boolean) };
+    };
+    const look = page => page.evaluate(() => import('./js/store.js').then(s => { const l = s.byId('logs', 'LK'); return { got: window.__got, take: l.take, title: l.title, words: (l.notes.find(n => n.id === 'n1') || {}).text, lead: s.db.updatedAt - Date.now() }; }));
+    const T = Date.now(), log = { id: 'LK', title: 'Linked log', rate: '25', mode: 'free', created: '2026-11-26', notes: [{ id: 'n1', text: 'first words', at: new Date(T).toISOString(), frames: 0, upd: T }], sync: null, take: 0, autoTakes: true, updatedAt: T };
+    // both copies 20 minutes ahead of both clocks; each device changes the log as Roll does (its take, and its time from the clock)
+    const ahead = await pair({ version: 1, updatedAt: T + 20 * 60e3, bookings: [{ id: 'xa', title: 'From a device whose clock runs ahead', date: '2026-12-01', status: 'Confirmed', crew: [], gear: [], updatedAt: T + 20 * 60e3 }], logs: [log], deleted: {} });
+    const lead0 = (await look(ahead.P.page)).lead;
+    for (const d of [ahead.P, ahead.Q]) { await d.page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const x = d.logs.find(y => y.id === 'LK'); x.take = (x.take || 0) + 1; x.updatedAt = Date.now(); }))); await sleep(1200); }
+    const settled = [await look(ahead.P.page), await look(ahead.Q.page)];
+    await sleep(2000);
+    const later = [await look(ahead.P.page), await look(ahead.Q.page)];
+    ok('two linked devices whose copies are ahead of their clocks each change the log: both hold both changes, the messages stop, and the copy keeps its lead', ahead.up && later.every(x => x.take === 2) && later.every((x, i) => x.got === settled[i].got && x.got < 12) && later.every(x => x.lead < lead0 + 2000), JSON.stringify([ahead.up, lead0, settled, later]));
+    await ahead.P.ctx.close(); await ahead.Q.ctx.close();
+    // the other device's clock 5 minutes ahead: its change comes over the link, and one made here afterwards is the later one
+    const fast = await pair({ version: 1, updatedAt: T, bookings: [], logs: [log], deleted: {} }, 5 * 60e3);
+    const edit = (page, who) => page.evaluate(who => import('./js/store.js').then(s => s.update(d => { const l = d.logs.find(x => x.id === 'LK'), n = l.notes.find(x => x.id === 'n1'); l.title = 'Title from ' + who; l.updatedAt = Date.now(); n.text = 'words from ' + who; n.upd = Date.now(); })), who);
+    await edit(fast.Q.page, 'Q'); await sleep(1200);
+    const tookQ = await look(fast.P.page);
+    await edit(fast.P.page, 'P, later'); await sleep(1500);
+    const ends = [await look(fast.P.page), await look(fast.Q.page)];
+    ok('a change made on a linked device after it took in the other’s, whose clock runs 5 minutes ahead, stands on both', fast.up && tookQ.title === 'Title from Q' && ends.every(x => x.title === 'Title from P, later' && x.words === 'words from P, later'), JSON.stringify([fast.up, tookQ, ends]));
+    await fast.P.ctx.close(); await fast.Q.ctx.close();
+  }
+  await browser.close();
 
   /* -------------------------------- Field tools -------------------------------- */
   // A browser with a stand-in camera and microphone. Every stream the page is given is kept, and the answer can be

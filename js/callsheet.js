@@ -23,10 +23,13 @@ const hasContent = cs => !!(cs.generalCall || cs.lunch || cs.wrap || cs.schedule
 // (When the stripboard's scenes were last changed: a restore stamps the board as changed now for the merge and keeps
 // the time of the scenes beside it as editedAt; an edit on the stripboard writes the board anew, without one.)
 // (And the two times are not set against each other when they need not be: a sheet marked sent keeps the stripboard's
-// time of that moment as sentBoard. The board's time is the store's, which runs ahead of this device's clock while
-// another device's clock does, and a sheet sent a minute after its scenes were arranged would read "changed".)
+// time of that moment as sentBoard, and the sheet's own (editedAt) as sentEdited. Either may come from another
+// device's clock, which runs ahead of this one's: a sheet sent a minute after its scenes were arranged, or after it was
+// written there, would read "changed". An edit counts on from the sheet's time before it (editedNow), so one made
+// after the sending is past sentEdited on whatever clock.)
 const boardTime = b => Number(b.board && (b.board.editedAt || b.board.updatedAt)) || 0;
-export const sheetState = b => { const cs = sheetOf(b), boardAt = boardTime(b); return cs.sentAt ? (cs.editedAt > cs.sentAt || (cs.include.scenes !== false && boardAt > Math.max(cs.sentAt, Number(cs.sentBoard) || 0)) || (!!cs.sentHash && cs.sentHash !== sentPrint(b)) ? 'changed' : 'sent') : hasContent(cs) ? 'draft' : 'none'; };
+const editedNow = cs => Math.max(Date.now(), (Number(cs && cs.editedAt) || 0) + 1);
+export const sheetState = b => { const cs = sheetOf(b), boardAt = boardTime(b); return cs.sentAt ? (cs.editedAt > Math.max(cs.sentAt, Number(cs.sentEdited) || 0) || (cs.include.scenes !== false && boardAt > Math.max(cs.sentAt, Number(cs.sentBoard) || 0)) || (!!cs.sentHash && cs.sentHash !== sentPrint(b)) ? 'changed' : 'sent') : hasContent(cs) ? 'draft' : 'none'; };
 const STATE_LABEL = { none: 'Not started', draft: 'Draft', sent: 'Sent', changed: 'Changed since it was sent' };
 const dateLabel = (b, f = fmtLong) => (endOf(b) > b.date ? `${f(b.date)} → ${f(endOf(b))}` : f(b.date));
 const multiDay = b => endOf(b) > b.date;
@@ -256,7 +259,7 @@ export function commitDraft() {
   if (!E.id) return false;
   const b = byId('bookings', E.id), changed = E.changed;
   if (b && changed) {
-    const cs = { ...E.draft, schedule: E.draft.schedule.filter(r => r.time || r.item), version: (E.draft.version || 0) + 1, editedAt: Date.now() };
+    const cs = { ...E.draft, schedule: E.draft.schedule.filter(r => r.time || r.item), version: (E.draft.version || 0) + 1, editedAt: editedNow(sheetOf(b)) };
     upsert('bookings', { ...b, callSheet: cs, crewCall: E.crewCall });
     toast(`Call sheet saved (v${cs.version})`);
   }
@@ -271,7 +274,7 @@ window.addEventListener('pagehide', () => commitDraft());
 // Registered as the module loads, ahead of the lock's own listener, which seals the store when the page is hidden.
 function saveDraftNow() {
   const b = E.id && E.changed ? byId('bookings', E.id) : null; if (!b || !canChangeQuietly()) return;
-  const cs = { ...E.draft, schedule: E.draft.schedule.filter(r => r.time || r.item).map(r => ({ ...r })), version: (E.draft.version || 0) + 1, editedAt: Date.now() };
+  const cs = { ...E.draft, schedule: E.draft.schedule.filter(r => r.time || r.item).map(r => ({ ...r })), version: (E.draft.version || 0) + 1, editedAt: editedNow(sheetOf(b)) };
   const before = E.before || { callSheet: b.callSheet, crewCall: b.crewCall }; // what Cancel goes back to
   if (upsert('bookings', { ...b, callSheet: cs, crewCall: { ...E.crewCall } }) === false) return;
   E.before = before; E.draft.version = cs.version; E.changed = false; // Done after this adds a version only if something more was changed
@@ -285,7 +288,7 @@ function markSent(id, quiet = true) {
   if (!(quiet ? canChangeQuietly() : canChange())) return;
   const cur = byId('bookings', id); if (!cur) return;
   setCheck(cur, itemId('Prepped', 'Call sheet sent'), true);
-  upsert('bookings', { ...byId('bookings', id), callSheet: { ...sheetOf(cur), sentAt: Date.now(), sentBoard: boardTime(byId('bookings', id)), sentHash: sentPrint(byId('bookings', id)) } });
+  upsert('bookings', { ...byId('bookings', id), callSheet: { ...sheetOf(cur), sentAt: Date.now(), sentBoard: boardTime(byId('bookings', id)), sentEdited: Number(sheetOf(cur).editedAt) || 0, sentHash: sentPrint(byId('bookings', id)) } });
   toast('Marked: call sheet sent');
 }
 export function callSheetPage(b, go) {
@@ -316,7 +319,7 @@ export function callSheetPage(b, go) {
     h('div', { class: 'card-row' },
       h('p', { class: 'status-line', 'data-state': state === 'sent' ? 'synced' : state === 'changed' ? 'error' : '' }, `${state === 'sent' ? '✅' : state === 'changed' ? '⚠' : '📝'} ${STATE_LABEL[state]}${cs.sentAt ? ' · sent ' + new Date(cs.sentAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : ''}${cs.version ? ' · v' + cs.version : ''}`),
       !editing && state !== 'sent' && hasContent(cs) && h('button', { class: 'btn ghost small', onclick: () => markSent(b.id, false) }, 'Mark as sent')),
-    !editing && forecastLine(callSheetData(b).loc, b.date, { onUse: txt => { const cur = byId('bookings', b.id); upsert('bookings', { ...cur, callSheet: { ...sheetOf(cur), weather: txt, editedAt: Date.now() } }); toast('Forecast added to the sheet'); } }),
+    !editing && forecastLine(callSheetData(b).loc, b.date, { onUse: txt => { const cur = byId('bookings', b.id); upsert('bookings', { ...cur, callSheet: { ...sheetOf(cur), weather: txt, editedAt: editedNow(sheetOf(cur)) } }); toast('Forecast added to the sheet'); } }),
     editing
       ? h('p', { class: 'small muted' }, 'Change anything directly on the sheet: times, the schedule, who is on set, weather, the emergency contact, instructions, and each person’s call time. Done saves a new version.')
       : h('div', { class: 'actions' },

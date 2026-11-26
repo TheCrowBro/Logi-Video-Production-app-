@@ -35,9 +35,11 @@ export function calc(snap) {
   return { lines, subtotal, rate, tax, total, deposit, received, paid, balance: Math.max(0, r2(total - paid)) };
 }
 // No code: the currency is not one Vdex knows, and none is put in a link. A link made by 1.4.0 or before (v 1) carries
-// that build's guess, "USD", for every symbol it did not know: beside such a symbol it is not believed, so an invoice
-// in ₪ that a client already holds does not ask for US dollars.
-const codeOf = snap => (snap.code === 'USD' && !(Number(snap.v) >= 2) && !knownCode(snap.currency) ? '' : snap.code || '');
+// that build's guess, "USD", for every symbol its short list did not have: CA$, AU$, a code typed as the symbol (EUR,
+// GBP) and any symbol Vdex does not know. Beside a v 1 "USD" the currency is taken from the symbol (knownCode: $ and
+// US$ are dollars, CA$ is CAD, EUR is EUR), and a symbol Vdex does not know gives none: an invoice in CA$ or ₪ that a
+// client already holds does not ask for US dollars.
+const codeOf = snap => (snap.code === 'USD' && !(Number(snap.v) >= 2) ? knownCode(snap.currency) : snap.code || '');
 export const payContext = snap => ({ amount: calc(snap).balance, code: codeOf(snap), reference: snap.number, payee: snap.payee });
 export const payButtons = snap => (snap.kind === 'invoice' && snap.status !== 'Void' && calc(snap).balance > 0 ? payLinks(snap.pay || {}, payContext(snap)) : []);
 // Paid: marked so (also at a total of nothing), or nothing left of a total that was something. Owing: something is

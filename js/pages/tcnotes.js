@@ -880,14 +880,15 @@ link.onMessage(m => {
       if (scriptRev == null) merged.script = null;
       else if (!merged.script || revOf(merged.script) !== scriptRev) link.send({ t: 'script?', id: inc.id });
     }
+    // (put in with the times it carries: store.js update(), keepTimes)
     if (!mine) {
-      update(d => { d.logs.push(merged); });
+      update(d => { d.logs.push(merged); }, { keepTimes: true });
       const cur = current(), fresh = !cur || (!cur.notes.length && !cur.sync);
       if (fresh) { S.id = merged.id; S.view = 'notes'; S.peerLog = null; try { localStorage.setItem('logi-tclog', merged.id); } catch { /* ignore */ } S.redraw(); toast(`Following “${merged.title}” from ${link.link.peer?.name || 'the linked device'}`); }
       else { S.peerLog = merged.id; S.redraw(); }
       return;
     }
-    if (JSON.stringify(merged) !== JSON.stringify(mine)) update(d => { const i = d.logs.findIndex(x => x.id === inc.id); if (i >= 0) d.logs[i] = merged; });
+    if (JSON.stringify(merged) !== JSON.stringify(mine)) update(d => { const i = d.logs.findIndex(x => x.id === inc.id); if (i >= 0) d.logs[i] = merged; }, { keepTimes: true });
     if (current() && current().id !== inc.id && S.peerLog !== inc.id) { S.peerLog = inc.id; S.redraw(); }
   } else if (m.t === 'script?') {
     const l = byId('logs', m.id); if (l) link.send({ t: 'script', id: m.id, script: l.script || null });

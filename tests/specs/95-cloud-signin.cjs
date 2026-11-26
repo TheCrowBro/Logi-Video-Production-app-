@@ -459,6 +459,60 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       ok('two devices whose copy is ahead of their clocks each change the same booking before reading the other: they end with the same one and upload nothing more', aheadOfClock && both[0] === both[1] && /^x:Changed on [QR]$/.test(both[0]) && more === 0, JSON.stringify([aheadOfClock, both, more]));
       await P.ctx.close(); await Q.ctx.close(); await R.ctx.close();
     }
+    // …but only what was itself stamped ahead counts as ahead. Counted past the newest time in the whole copy, a change
+    // to a booking nobody stamped ahead carried the fast clock's time, and so did a deletion's mark on the bookings it
+    // was taken off and every record a restore brought back: a later change made on a device that had not read the
+    // fast clock (out of reach, or still on 1.4.0) was undone everywhere without a word, for as long as that clock led.
+    {
+      const cl = newCloud(), A = await device(cl, 'A'), C = await device(cl, 'C'), D = await device(cl, 'D'), X = await device(cl, 'X', { clock: 6 * 36e5 });
+      const view = page => st(page, s => { const b = s.byId('bookings', 'b'); return `${b.title} / ${b.notes || 'no notes'} / ${b.gear.join('+')}`; });
+      await start(A.page);
+      await st(A.page, s => { s.upsert('gear', { id: 'g1', name: 'Camera' }); s.upsert('gear', { id: 'g2', name: 'Lens' }); });
+      await add(A.page, 'b', 'Booked on A', { gear: ['g1', 'g2'], notes: '' }); await saved(A.page);
+      await start(C.page); await synced(C.page); await start(D.page); await synced(D.page); // C and D go out of reach before anything is stamped ahead
+      await start(X.page); await synced(X.page); await add(X.page, 'x', 'Made where the clock is 6 hours ahead'); await st(X.page, s => s.upsert('gear', { id: 'gx', name: 'Drone', serial: 'DX-1' })); await saved(X.page);
+      await front(A.page);
+      await st(A.page, s => s.upsert('bookings', { ...s.byId('bookings', 'b'), title: 'Renamed on A first' }));
+      const stampA = await st(A.page, s => s.byId('bookings', 'b').updatedAt - Date.now()), copyA = await st(A.page, s => s.db.updatedAt - Date.now());
+      await saved(A.page);
+      cl.offline = true; await sleep(1500);
+      await st(C.page, s => s.upsert('bookings', { ...s.byId('bookings', 'b'), title: 'Renamed on C later, out of reach', notes: 'Notes typed on C' })); await sleep(300);
+      await st(A.page, s => s.remove('gear', 'g1')); // taken off booking b, which counts as changed one moment after A's own copy of it
+      cl.offline = false; await sleep(1200);
+      for (let i = 0; i < 3; i++) { await syncNow(A.page); await syncNow(C.page); }
+      const ends = [await view(A.page), await view(C.page)], stored = cloudDb(cl).bookings.find(b => b.id === 'b'), WANT = 'Renamed on C later, out of reach / Notes typed on C / g2';
+      ok('with another device’s clock 6 hours ahead, a booking changed here keeps this clock’s time, and a later change on a device out of reach stands everywhere, a deletion’s mark on it included', copyA > 5 * 36e5 && stampA < 2000 && ends.every(v => v === WANT) && `${stored.title} / ${stored.notes} / ${stored.gear.join('+')}` === WANT, JSON.stringify([copyA, stampA, ends]));
+      // …and a restore made on a copy that holds the fast clock's time gives it to nothing restored: a change made after
+      // it on a device still out of reach stands
+      const file = await st(A.page, s => s.exportJSON());
+      await A.page.evaluate(text => import('./js/backup.js').then(m => m.importData(new File([text], 'file.json'))), file);
+      const restoredAt = await st(A.page, s => s.byId('bookings', 'b').updatedAt - Date.now());
+      await saved(A.page);
+      cl.offline = true; await sleep(1100);
+      await st(D.page, s => s.upsert('bookings', { ...s.byId('bookings', 'b'), title: 'Renamed on D after the restore, out of reach' }));
+      cl.offline = false; await sleep(1200);
+      for (let i = 0; i < 2; i++) { await syncNow(D.page); await syncNow(A.page); await syncNow(C.page); }
+      const after = [await view(A.page), await view(C.page), await view(D.page)];
+      ok('…and a restore on that copy stamps the booking with this clock, so a change made after it on a device out of reach stands on every device', restoredAt < 2000 && after.every(v => v.startsWith('Renamed on D after the restore, out of reach / ')), JSON.stringify([restoredAt, after]));
+      // …and an equipment import that updates the item stamped ahead and adds one beside it (the two then carry different times) is taken back by its Undo
+      const undo = await A.page.evaluate(async () => { const g = await import('./js/gear-import.js'), s = await import('./js/store.js'); const done = g.applyGearImport(g.planGearImport([{ name: 'Drone', serial: 'DX-1', notes: 'from a list' }, { name: 'Light from a list' }], { onSerial: 'update' }), {}); const ats = new Set(s.db.gear.filter(x => ['Drone', 'Light from a list'].includes(x.name)).map(x => x.updatedAt)).size, r = g.undoGearImport(done); return [ats, r.removed, r.restored, r.kept, s.db.gear.map(x => `${x.name}:${x.notes || ''}`).sort().join('+')].join(); });
+      ok('…and an equipment import that updates an item stamped ahead and adds another is taken back whole by its Undo', undo === '2,1,1,0,Drone:+Lens:', undo);
+      await A.ctx.close(); await C.ctx.close(); await D.ctx.close(); await X.ctx.close();
+    }
+    // …and two copies of a booking with the same time that say different things (two starts that drew the same seat, or
+    // two changes in the same millisecond) are settled alike on both devices. Each kept its own for good, and both
+    // uploaded the whole copy at every sync.
+    {
+      const T = Date.now() - 60000, copy = title => JSON.stringify({ version: 1, updatedAt: T, bookings: [{ id: 'tie', title, date: '2026-12-01', status: 'Confirmed', crew: [], gear: [], updatedAt: T }], deleted: {} });
+      const cl = newCloud(), P = await device(cl, 'P', { seed: { 'logi-db-v1': copy('Renamed on P') } }), Q = await device(cl, 'Q', { seed: { 'logi-db-v1': copy('Renamed on Q') } });
+      await start(P.page); await synced(P.page); await start(Q.page); await synced(Q.page);
+      for (let i = 0; i < 2; i++) { await syncNow(P.page); await syncNow(Q.page); }
+      cl.log.length = 0;
+      for (let i = 0; i < 3; i++) { await syncNow(P.page); await syncNow(Q.page); }
+      const both = [(await held(P.page)).join(), (await held(Q.page)).join()], more = cl.log.filter(l => / PUT /.test(l) && l.endsWith(MAIN)).length, stored = cloudDb(cl).bookings.find(b => b.id === 'tie').title;
+      ok('two copies of a booking with the same time and different words end the same on both devices and in the storage, and nothing more is uploaded', both[0] === both[1] && /^tie:Renamed on [PQ]$/.test(both[0]) && both[0] === 'tie:' + stored && more === 0, JSON.stringify([both, stored, more]));
+      await P.ctx.close(); await Q.ctx.close();
+    }
     {
       const cl = newCloud(), P = await device(cl, 'P'), Q = await device(cl, 'Q');
       const writes = name => cl.log.filter(l => l === `${name} PUT ${MAIN}`).length, rounds = async n => { cl.log.length = 0; for (let i = 0; i < n; i++) { await front(P.page); await sleep(150); await front(Q.page); await sleep(150); } return writes('P') + writes('Q'); };
@@ -563,6 +617,28 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       const whole = await M.page.evaluate(() => JSON.parse(localStorage.getItem('logi-webdav') || '{}'));
       ok('…and with Vdex put away while it is tried again, nothing is written in place of the link’s settings: the link is whole afterwards and syncs', away && left === null && then === 'synced' && whole.url === 'https://dav.example/vdex' && whole.pass === 'pässwörd-é1' && whole.latin1 === true && (await state(M.page)).status === 'synced', JSON.stringify([left, then, whole, await state(M.page)]));
       await M.ctx.close();
+      // …and with that password wrong (changed on the server), each sync asks the server once, as 1.4.0 did, not once in
+      // each form: a server that blocks after a number of failed sign-ins is not asked twice as often. Once the password
+      // is right again, the form that server takes is found and kept.
+      let right = false; const auths = [];
+      const N = await device(null, 'N', { seed: { 'logi-webdav': link } });
+      await N.ctx.route('https://dav.example/**', async route => {
+        const r = route.request(), m = r.method(), file = decodeURIComponent(new URL(r.url()).pathname.split('/').pop());
+        if (m === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+        auths.push(r.headers().authorization || '');
+        if (!right || (r.headers().authorization || '') !== want) return route.fulfill({ status: 401, headers: CORS, body: '' });
+        if (m === 'GET') return files.has(file) ? route.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: files.get(file) }) : route.fulfill({ status: 404, headers: CORS, body: '' });
+        if (m === 'PUT') { files.set(file, r.postData() || ''); return route.fulfill({ status: 201, headers: CORS }); }
+        return route.fulfill({ status: 201, headers: CORS }); });
+      await start(N.page); await sleep(1200);
+      const atStart = auths.length;
+      for (let i = 0; i < 4; i++) await syncNow(N.page);
+      const wrong = [atStart, auths.length - atStart, new Set(auths).size, (await state(N.page)).status];
+      right = true;
+      for (let i = 0; i < 2; i++) await syncNow(N.page);
+      const mended = [(await state(N.page)).status, await N.page.evaluate(() => JSON.parse(localStorage.getItem('logi-webdav') || '{}').latin1)];
+      ok('with a WebDAV password that is wrong, each sync asks the server once (the two forms are each tried once only), and once it is right again the form the server takes is found and kept', wrong.join() === '2,4,2,error' && mended.join() === 'synced,true', JSON.stringify([wrong, mended]));
+      await N.ctx.close();
     }
 
     // ---- two windows of Vdex on one device ----

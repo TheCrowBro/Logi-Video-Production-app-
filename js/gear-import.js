@@ -112,10 +112,14 @@ function carry(d, plan, { kits = [], from = '' } = {}, out) {
 export function applyGearImport(plan, { kits = [], from = '' } = {}) {
   const out = outcome();
   if (update(d => { carry(d, plan, { kits, from }, out); }) === false) return false;
-  // "When it happened" is the time the records now carry, which is what Undo knows them by: the store counts a change
-  // as later than everything its copy has seen, and moves the time when another device's clock runs ahead (update()).
-  const one = db.gear.find(g => g.id === (out.added[0] || out.updated[0])) || db.kits.find(k => k.id === out.kits[0]);
-  if (one && Number(one.updatedAt)) out.at = one.updatedAt;
+  // "When it happened" is the time each record now carries, which is what Undo knows it by: the store counts a change
+  // to a record as later than that record's time before, and moves it where another device's clock ran ahead
+  // (update()), so the records of one import need not all carry the same time.
+  const gear = new Map(db.gear.map(g => [g.id, g])), kitsNow = new Map(db.kits.map(k => [k.id, k]));
+  out.times = {};
+  for (const id of [...out.added, ...out.updated]) { const g = gear.get(id); if (g && Number(g.updatedAt)) out.times[id] = g.updatedAt; }
+  for (const id of out.kits) { const k = kitsNow.get(id); if (k && Number(k.updatedAt)) out.times[id] = k.updatedAt; }
+  out.at = Object.values(out.times).reduce((t, v) => Math.max(t, v), out.at);
   return out;
 }
 
@@ -159,7 +163,7 @@ export const roomForGear = (plan, { kits = [], from = '' } = {}) => roomFor(d =>
 export function undoGearImport(done) {
   const out = { removed: 0, restored: 0, kept: 0 };
   const ok = update(d => {
-    const now = Math.max(Date.now(), done.at + 1), fresh = x => x && x.updatedAt === done.at; // later than the import, so a merge with an older copy cannot bring the items back
+    const now = Math.max(Date.now(), done.at + 1), fresh = x => !!x && x.updatedAt === (done.times && x.id in done.times ? done.times[x.id] : done.at); // later than the import, so a merge with an older copy cannot bring the items back
     const goneKits = new Set((done.kitsAdded || []).filter(id => fresh(d.kits.find(k => k.id === id)) && !d.bookings.some(b => (b.kits || []).includes(id))));
     if (goneKits.size) { d.kits = d.kits.filter(k => !goneKits.has(k.id)); goneKits.forEach(id => { d.deleted[id] = now; }); }
     for (const was of done.kitsBefore || []) { const i = d.kits.findIndex(k => k.id === was.id); if (i >= 0 && fresh(d.kits[i])) d.kits[i] = { ...was, updatedAt: now }; }

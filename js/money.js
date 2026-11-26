@@ -61,12 +61,12 @@ const paidHires = b => hiredPeople(b).filter(hr => !(linkMade(b, hr) && (hr.rate
 const ownDeliverables = b => (b.deliverables || []).filter(x => x && !linkMade(b, x, 'deliverables'));
 
 // Suggested lines: from the booking, from the quote, or from the hours logged. Each carries where it comes from (src:
-// the shoot days, a crew member, the kit, a deliverable, a rental, the editing hours…), which never leaves the app, so
-// that asking again after the booking or the hours changed brings the line it made up to date instead of adding a
-// second one beside it.
+// the shoot days, a crew member, the kit, a deliverable, a rental, the editing hours…) and the quantity it suggested
+// (sq), neither of which leaves the app, so that asking again after the booking or the hours changed brings the line
+// it made up to date, while nobody has changed its quantity, instead of adding a second one beside it.
 export function suggestLines(b, kind, source = 'booking') {
   const bl = billing(), days = shootDays(b), lines = [];
-  const line = (src, desc, qty, unit, price) => lines.push({ id: uid(), desc, qty, unit, price: num(price), src });
+  const line = (src, desc, qty, unit, price) => lines.push({ id: uid(), desc, qty, unit, price: num(price), src, sq: qty });
   if (source === 'quote') return ((b.quote && b.quote.lines) || []).map(l => ({ ...l, id: uid(), src: srcOf(l) || 'q:' + l.id }));
   if (source === 'hours') {
     const shifts = db.shifts.filter(s => s.bookingId === b.id && s.end);
@@ -92,8 +92,11 @@ export function suggestLines(b, kind, source = 'booking') {
 // hours, the overtime and the kit by their wording, anything else by the same description). A line that only says
 // which line of the quote it was (q:…) has no source of its own either: the quote was written before lines carried
 // one, or by hand, so there the same description in the same unit is the same line (the quote's "Editing" by the day
-// is not the editing hours). From the booking or the hours, the line already there takes the new quantity; from the
-// quote, only what is missing is added.
+// is not the editing hours). From the quote, only what is missing is added. From the booking or the hours, a line
+// already there takes the new quantity only while it is as a suggestion left it: it carries its source and the
+// quantity suggested then (sq), and its quantity is still that. A line from 1.4.0 or typed by hand, and one whose
+// quantity was set by hand (a crew day taken off on an invoice already sent, say), stay as they are; and no
+// description is written over, but for the shoot days' own "Shoot day" and "Shoot days" on the line they made.
 const SHOOT_LINE = /^Shoot days? — /;
 function srcOf(l) { return l.src || (SHOOT_LINE.test(l.desc || '') ? 'shoot' : l.desc === 'Editing' && l.unit === 'hour' ? 'hours:edit' : l.desc === 'Overtime on shoot days' ? 'hours:ot' : l.desc === 'Equipment package' ? 'kit' : ''); }
 export function mergeSuggested(lines, suggested, source) {
@@ -107,20 +110,25 @@ export function mergeSuggested(lines, suggested, source) {
     if (i < 0) { taken.add(out.push(sg) - 1); added++; continue; }
     taken.add(i);
     if (source === 'quote') continue;
-    const l = out[i], next = { ...l, src: sg.src, qty: sg.qty, unit: sg.unit, desc: sg.src === 'shoot' && SHOOT_LINE.test(l.desc || '') ? sg.desc : l.desc };
+    const l = out[i];
+    if (!l.src || l.sq == null || Number(l.qty) !== Number(l.sq)) continue;
+    const bare = d => String(d || '').replace(SHOOT_LINE, ''), desc = sg.src === 'shoot' && SHOOT_LINE.test(l.desc || '') && bare(l.desc) === bare(sg.desc) ? sg.desc : l.desc;
+    const next = { ...l, src: sg.src, qty: sg.qty, sq: sg.qty, unit: sg.unit, desc };
     if (Number(l.qty) !== Number(sg.qty) || (l.unit || '') !== (sg.unit || '') || l.desc !== next.desc) updated++;
     out[i] = next;
   }
   return { lines: out, added, updated };
 }
 
+const figures = d => JSON.stringify([(d.lines || []).map(l => [Number(l.qty) || 0, Number(l.price) || 0]), Number(d.taxRate) || 0, Number(d.deposit) || 0]);
 function saveDoc(id, kind, doc) {
   const had = docOf(byId('bookings', id), kind), prev = had || {}, now = Date.now();
   const next = { ...doc, taxLabel: String(doc.taxLabel || '').trim() || billing().taxLabel, updatedAt: now };
-  // Its figures are rounded to cents one by one (calc in js/money-doc.js) from the day it is made, and from any day it
-  // is saved as a Draft. A document sent under 1.4.0 keeps that build's arithmetic until it is taken back to Draft:
-  // what went out does not change by a cent because Vdex was updated.
-  if (!had || next.status === 'Draft') next.calc = 2;
+  // Its figures are rounded to cents one by one (calc in js/money-doc.js) from the day it is made, and from the day its
+  // figures (a line's quantity or price, the tax rate, the deposit) are changed while it is a Draft. A document made
+  // under 1.4.0 keeps that build's arithmetic until then: what went out does not change by a cent because Vdex was
+  // updated, and that build sent a Draft (by email, or as a link) without marking it sent.
+  if (!had || (next.status === 'Draft' && figures(next) !== figures(prev))) next.calc = 2;
   // The dates follow the status: an invoice taken back from Paid has no paid date, and a document taken back to Draft
   // was not sent.
   if (next.status === 'Draft') next.sentAt = null;

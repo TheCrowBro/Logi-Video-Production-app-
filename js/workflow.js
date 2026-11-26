@@ -60,7 +60,7 @@ export function applyTemplateExtras(bookingId, t) {
     if (csChanged) cs.schedule = sched;
     for (const k of ['generalCall', 'lunch', 'wrap', 'dress', 'emergency']) if (t['cs_' + k] && !cs[k]) { cs[k] = t['cs_' + k]; csChanged = true; }
     if (t.instructions && !cs.notes) { cs.notes = t.instructions; csChanged = true; }
-    if (csChanged) { cs.editedAt = Date.now(); b.callSheet = cs; }
+    if (csChanged) { cs.editedAt = Math.max(Date.now(), (Number(cs.editedAt) || 0) + 1); b.callSheet = cs; } // (on from the sheet's time before: js/callsheet.js editedNow)
     b.updatedAt = Date.now();
   });
   return added;
