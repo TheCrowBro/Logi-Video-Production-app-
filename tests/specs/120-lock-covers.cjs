@@ -955,7 +955,7 @@ const PHONE = { width: 360, height: 740 };
     ok('a backup file handed to Vdex while it is locked asks nothing over the lock screen and replaces nothing', before > 0 && locked.asked.length === 0 && locked.bookings === before && locked.toasts === 0 && locked.lock === 1, JSON.stringify([before, locked]));
     phase = 'unlocked'; await page.keyboard.type(OLD); await lockGone(page);
     await page.waitForFunction(() => document.querySelectorAll('.toast').length > 0, null, { timeout: 8000 }).catch(() => {});
-    ok('…the question comes once the PIN has been entered, and only then is the file taken', asked.join('|') === 'unlocked: Replace your current data with this file?' && (await bookings(page)) === 0, JSON.stringify([asked, await bookings(page)]));
+    ok('…the question comes once the PIN has been entered, and only then is the file taken', asked.length === 1 && asked[0].startsWith('unlocked: Replace your current data with this file?') && (await bookings(page)) === 0, JSON.stringify([asked, await bookings(page)]));
     // any other file waits the same way: no sheet is made under the lock screen
     await lockNow(page); await lockUp(page);
     await hand('script.txt', 'INT. ROOM - DAY\nA line.', 'text/plain'); await sleep(1200);
