@@ -510,6 +510,12 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .settings-group > summary::before { content: '▾'; content: '▾' / ''; color: var(--accent-text); font-size: .9rem; transition: transform .15s ease; } /* a mark only for the eye: the open state is already spoken */
 .settings-group:not([open]) > summary::before { transform: rotate(-90deg); }
 .ss-status { font-weight: 500; }
+/* A narrow phone at a larger text size: a title and the state beside it that no longer fit on one row take a row each
+   (the arrow ends the last), and a word wider than the row breaks, instead of the page scrolling sideways. */
+@media (max-width: 400px) {
+  html[data-text=large] .settings-section > summary, html[data-text=large] .settings-group > summary, html[data-text=xlarge] .settings-section > summary, html[data-text=xlarge] .settings-group > summary { flex-wrap: wrap; gap: 2px 10px; }
+  html[data-text=large] .ss-title, html[data-text=large] .ss-status, html[data-text=xlarge] .ss-title, html[data-text=xlarge] .ss-status { min-width: 0; overflow-wrap: anywhere; }
+}
 .ss-body { padding: 0 14px 14px; border-top: 1px solid var(--line); padding-top: 12px; }
 .ss-body .provider, .ss-body .card { background: var(--bg2); }
 .sg-body { padding: 10px 10px; border-top: 1px solid var(--line); }
@@ -533,7 +539,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .twirl .tag { display: inline-block; font-size: .7rem; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 .twirl .tag.ok { color: var(--ok); border-color: var(--ok); } .twirl .tag.no { color: var(--danger); border-color: var(--danger); }
 .swatches { display: inline-flex; gap: 3px; } .swatches i { width: 14px; height: 14px; border-radius: 50%; border: 1px solid #0003; display: inline-block; }
-.theme-row { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; cursor: pointer; min-height: var(--hit); text-align: left; }
+.theme-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; overflow-wrap: anywhere; /* a theme's name is one word: at the largest text on the narrowest phone it breaks, rather than push the list out of its card */ gap: 12px; align-items: center; width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); font: inherit; cursor: pointer; min-height: var(--hit); text-align: left; }
 .theme-row[aria-checked=true] { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
 .theme-row .check { font-weight: 800; color: var(--accent-text); }
 .theme-list { display: grid; gap: 6px; }

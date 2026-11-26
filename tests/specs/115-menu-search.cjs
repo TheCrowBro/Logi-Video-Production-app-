@@ -1111,6 +1111,20 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
       const me = await p.evaluate(w => { const seg = document.querySelector('.me-modes').getBoundingClientRect(); return { poke: Math.max(...[...document.querySelectorAll('.me-modes button')].map(b => Math.round(b.getBoundingClientRect().right - seg.right))), rows: Math.max(...[...document.querySelectorAll('#page .kv > div > :last-child')].map(x => Math.round(x.getBoundingClientRect().right))), wide: document.documentElement.scrollWidth - w, has: /harbour-films/.test(document.getElementById('page').textContent) }; }, w);
       ok(`Me at ${w} px, Extra large text: Contact card / Phone contacts / Website stay inside their control, and a long website and email wrap inside the card`, me.has && me.poke <= 0 && me.rows <= w && me.wide <= 0, JSON.stringify(me));
       await c.close();
+      // …and Settings with every section open, as a window that narrow draws it: a section's title and the state beside
+      // it share one row, which a long word of either must not push wider than the screen.
+      const c2 = await wideFont.newContext({ viewport: { width: w, height: 640 } });
+      await c2.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-prefs', JSON.stringify({ text: 'xlarge' })); }); await c2.addInitScript(acceptTerms());
+      const p2 = await c2.newPage(); p2.on('pageerror', e => errors.push(e.message));
+      await p2.goto(URL); await p2.waitForSelector('#rolodex .drum-btn');
+      await p2.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); s.update(d => { d.profile = { ...d.profile, name: 'Northlightproductions', updatedAt: Date.now() }; }); })); // a name of one long word is the state beside "Profile"
+      await p2.evaluate(() => window.logiGo('settings')); await p2.waitForSelector('#page details.settings-section', { state: 'attached' }); await sleep(500);
+      await p2.evaluate(() => document.querySelectorAll('#page details').forEach(d => { d.open = true; })); await sleep(400);
+      const set = await p2.evaluate(() => ({ text: document.documentElement.dataset.text, wide: document.documentElement.scrollWidth - document.documentElement.clientWidth, rows: [...document.querySelectorAll('#page details.settings-section > summary, #page details.settings-group > summary')].filter(x => x.scrollWidth > x.clientWidth + 1).map(x => x.textContent.trim().slice(0, 40)),
+        // what reaches past the right edge of the section it is in (a list of themes, a row of choices), unless something in between scrolls or clips it
+        poke: [...document.querySelectorAll('#page details.settings-section')].flatMap(sec => { const edge = sec.getBoundingClientRect().right; return [...sec.querySelectorAll('*')].filter(el => { const r = el.getBoundingClientRect(); if (!r.width || r.right <= edge + 1.5) return false; for (let p = el.parentElement; p && p !== sec; p = p.parentElement) if (/auto|scroll|hidden|clip/.test(getComputedStyle(p).overflowX)) return false; return true; }).slice(0, 1).map(el => `${sec.dataset.s}: ${el.tagName}.${el.className} +${Math.round(el.getBoundingClientRect().right - edge)}`); }) }));
+      ok(`Settings at ${w} px, Extra large text, every section open: no title and its state are wider than their row, nothing reaches out of its section (the list of colour themes), and the page does not scroll sideways`, set.text === 'xlarge' && set.wide <= 0 && set.rows.length === 0 && set.poke.length === 0, JSON.stringify(set));
+      await c2.close();
     }
     await wideFont.close(); }
 
