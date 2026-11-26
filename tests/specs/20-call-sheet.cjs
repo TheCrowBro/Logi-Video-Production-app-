@@ -154,6 +154,18 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     s.update(d => { const x = d.bookings.find(b => b.id === 'cf-sent'); x.board = { list: [...x.board.list, { id: 'sc2', type: 'scene', scene: '2', set: 'Yard' }], cast: [], updatedAt: Date.now() }; x.updatedAt = Date.now(); }); out.edited = m.sheetState(get());
     s.remove('bookings', 'cf-sent'); return out; }));
   ok('a call sheet that was sent still reads Sent after a backup is restored, twice over, and Changed once its stripboard is edited', restored.before === 'sent' && restored.after === 'sent' && restored.twice === 'sent' && restored.edited === 'changed', JSON.stringify(restored));
+  // A sheet written on a device whose clock runs 20 minutes ahead and marked sent here at once reads Sent (it read
+  // "Changed since it was sent" until this clock reached the other's), and Changed once it is edited here after that
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { const t = Date.now() + 20 * 60e3; d.bookings.push({ id: 'cf-ahead', title: 'Written ahead', date: '2026-12-08', status: 'Confirmed', stakeholders: [], crew: [], gear: [], callSheet: { generalCall: '08:00', lunch: '13:00', version: 1, editedAt: t }, updatedAt: t }); })));
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-ahead', { view: 'callsheet' }))); await page.waitForSelector('.cs-page .cs-doc');
+  const aheadState = () => page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js')]).then(([s, m]) => m.sheetState(s.byId('bookings', 'cf-ahead'))));
+  await page.getByRole('button', { name: 'Mark as sent' }).click(); await sleep(300);
+  const aheadSent = [await aheadState(), (await page.locator('.cs-page .status-line').innerText()).replace(/\s+/g, ' ')];
+  await page.getByRole('button', { name: 'Edit sheet' }).click(); await page.waitForSelector('.cs-paper.editing');
+  await page.locator('.cs-doc .cs-time input[aria-label="Lunch"]').fill('13:30'); await page.locator('.cs-doc .cs-time input[aria-label="Lunch"]').blur(); await sleep(100);
+  await page.getByRole('button', { name: '✓ Done' }).click(); await sleep(300);
+  ok('a sheet written where the clock runs ahead reads Sent once it is marked sent here, and Changed once it is edited here afterwards', aheadSent[0] === 'sent' && /Sent/.test(aheadSent[1]) && !/Changed/.test(aheadSent[1]) && (await aheadState()) === 'changed', JSON.stringify([aheadSent, await aheadState()]));
+  await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 'cf-ahead'))); await sleep(200);
   // Sent, then the booking changes: the sheet says it changed; and a sheet sent as built is no "Draft"
   await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-bare', { view: 'callsheet' }))); await page.waitForSelector('.cs-page .cs-doc');
   await page.getByRole('button', { name: 'Mark as sent' }).click(); await sleep(300);
