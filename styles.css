@@ -420,6 +420,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .kind-character .sc-text { text-transform: uppercase; font-weight: 700; padding-left: 22%; margin-top: 4px; }
 .kind-paren .sc-text { padding-left: 16%; color: var(--muted); font-style: italic; }
 .kind-dialogue .sc-text { padding-left: 10%; padding-right: 6%; }
+.sc-para.dir .sc-text { color: var(--muted); font-style: italic; } /* the video column of a VIDEO | AUDIO script, a shot */
 .kind-transition .sc-text { text-align: right; text-transform: uppercase; color: var(--muted); }
 .sc-mark { background: color-mix(in srgb, var(--accent) 35%, transparent); color: inherit; border-radius: 3px; padding: 1px 0; box-shadow: 0 2px 0 var(--accent); }
 .sc-badge { all: unset; display: inline-block; cursor: pointer; font-size: .68rem; font-weight: 700; color: var(--accent-ink); background: var(--accent); border-radius: 5px; padding: 1px 5px; margin: 0 3px 0 0; vertical-align: text-top; user-select: none; -webkit-user-select: none; line-height: 1.5; white-space: nowrap; }
@@ -960,3 +961,166 @@ html[data-motion=off] .back-btn::after, html[data-motion=bar] .back-btn::after {
 .undo-bar > span { min-width: 0; overflow-wrap: anywhere; } .undo-bar .btn { min-height: var(--hit); background: var(--bg); color: var(--text); border-color: transparent; font-weight: 700; } .undo-bar .icon-btn { color: inherit; }
 .undo-bar .icon-btn:hover { background: transparent; color: inherit; } .undo-bar :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .undo-bar, body:has(.lock) .undo-bar { display: none; } /* never over a sheet's buttons, the menu, the search or the lock screen; it is back when they close, and Undo stays under Import… */
+
+/* The teleprompter (js/prompter.js): white on black whatever the theme, over the page and under sheets (100) and walkthroughs (150) */
+.prompter { position: fixed; inset: 0; z-index: 98; background: #000; color: #fff; overflow: hidden; overflow: clip; --pr-fs: 32px; }
+.prompter:focus { outline: none; }
+.pr-stage { position: absolute; inset: 0; overflow: hidden; overflow: clip; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.pr-stage.mirror { transform: scaleX(-1); } .pr-stage.flip { transform: scaleY(-1); } .pr-stage.mirror.flip { transform: scale(-1, -1); }
+.pr-track { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+.pr-col { position: relative; display: flow-root; margin: 0 auto; font: 600 var(--pr-fs)/1.32 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; letter-spacing: .01em; }
+.pr-line { margin: 0 0 .5em; padding-left: .3em; border-left: .12em solid transparent; white-space: pre-wrap; overflow-wrap: anywhere; opacity: .45; transition: opacity .3s; }
+.pr-line.now, .pr-line.now ~ .pr-line { opacity: 1; } /* what has scrolled past the reading line steps back */
+.pr-line.r-say[style], .pr-line.r-other[style] { border-left-color: var(--spk); }
+.pr-line.r-cue { color: var(--spk, #ffd166); font-size: .5em; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; margin: 1.1em 0 .25em; }
+.pr-line.r-head { color: #9a9a9a; font-size: .5em; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; margin: 1.6em 0 .6em; }
+.pr-line.r-dir { color: #8f8f8f; font-size: .6em; font-style: italic; font-weight: 500; }
+.pr-line.r-other { color: #9a9a9a; font-size: .72em; font-weight: 500; }
+.pr-dir { color: #8f8f8f; font-style: italic; font-weight: 500; font-size: .8em; }
+.em-b { font-weight: 800; } .em-i { font-style: italic; } .em-u { text-decoration: underline; text-decoration-thickness: .07em; text-underline-offset: .14em; } /* the stress the script's file gave a word */
+.pr-who { display: block; color: var(--spk, #ffd166); font-size: .5em; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+/* The reading line: a highlight bar (on or off) and a pointer (an arrow, an arrow with a thin line, or hidden); yellow,
+   white, red or green; faint, normal or bold. The arrow is a handle to drag it by (and to tap for its menu), with room
+   for a finger. */
+.pr-marker { --pr-line: #ffd166; --pr-a: 22%; --pr-b: 7%; --pr-edge: 31%; --pr-thin: 65%; --pr-rule: 1px; position: absolute; left: 0; right: 0; pointer-events: none;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--pr-line) var(--pr-a), transparent), color-mix(in srgb, var(--pr-line) var(--pr-b), transparent) 45%, transparent 80%);
+  border-top: var(--pr-rule) solid color-mix(in srgb, var(--pr-line) var(--pr-edge), transparent); }
+.pr-marker[data-colour=white] { --pr-line: #ffffff; } .pr-marker[data-colour=red] { --pr-line: #ff5a4e; } .pr-marker[data-colour=green] { --pr-line: #5fd68a; }
+.pr-marker[data-strength=faint] { --pr-a: 11%; --pr-b: 4%; --pr-edge: 16%; --pr-thin: 38%; } .pr-marker[data-strength=bold] { --pr-a: 38%; --pr-b: 14%; --pr-edge: 65%; --pr-thin: 100%; --pr-rule: 2px; }
+.pr-marker[data-bar=off] { background: none; border-top-color: transparent; }
+.pr-marker[data-look=thin] { border-top-color: color-mix(in srgb, var(--pr-line) var(--pr-thin), transparent); }
+.pr-handle { all: unset; position: absolute; left: 0; top: 50%; width: max(46px, calc(1.6em + 12px)); height: 46px; transform: translateY(-50%); cursor: ns-resize; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; font-size: max(14px, calc(var(--pr-fs) * .55)); }
+/* The ⋮ beside the arrow while it is paused (the usual sign of a menu; never while it runs, nor on the second screen,
+   which has no menu), and on pointing at it, how to use it. Both read the right way round on a mirrored rig. */
+.pr-dots { position: absolute; left: calc(6px + .75em); top: 50%; transform: translateY(-50%); font: 800 max(13px, .62em)/1 system-ui, sans-serif; color: var(--pr-line); opacity: 0; transition: opacity .2s; }
+.prompter[data-state=paused] .pr-dots { opacity: .85; }
+.prompter[data-state=paused] .pr-marker[data-look=hidden] .pr-dots { opacity: .3; }
+.pr-tip { position: absolute; left: calc(100% + 4px); top: 50%; transform: translateY(-50%); white-space: nowrap; background: #000e; color: #fff; border: 1px solid #ffd16680; border-radius: 8px; padding: 6px 10px; font: 600 14px/1.2 system-ui, sans-serif; opacity: 0; pointer-events: none; transition: opacity .15s; }
+@media (hover: hover) { .pr-handle:hover .pr-tip { opacity: 1; } }
+.pr-handle:focus-visible .pr-tip { opacity: 1; }
+.pr-stage.mirror .pr-tip, .pr-stage.mirror .pr-dots { transform: translateY(-50%) scaleX(-1); } .pr-stage.flip .pr-tip, .pr-stage.flip .pr-dots { transform: translateY(-50%) scaleY(-1); } .pr-stage.mirror.flip .pr-tip, .pr-stage.mirror.flip .pr-dots { transform: translateY(-50%) scale(-1, -1); }
+.pr-window .pr-dots, .pr-window .pr-tip { display: none; }
+.pr-handle::before { content: ''; position: absolute; left: 4px; top: 50%; transform: translateY(-50%); border-style: solid; border-width: .45em 0 .45em .7em; border-color: transparent transparent transparent var(--pr-line); }
+.pr-marker[data-strength=faint] .pr-handle::before { opacity: .55; } .pr-marker[data-strength=bold] .pr-handle::before { border-width: .55em 0 .55em .85em; }
+.pr-marker.locked .pr-handle { cursor: pointer; }
+.pr-handle:focus-visible { outline: 3px solid #ffd166; outline-offset: -3px; border-radius: 8px; }
+.pr-marker[data-look=hidden] .pr-handle::before { opacity: 0; }
+.prompter[data-state=paused] .pr-marker[data-look=hidden] .pr-handle::before { opacity: .3; } /* hidden from the talent; there to grab while it is paused */
+.prompter:is([data-state=running], [data-state=count]) .pr-marker[data-look=hidden] .pr-handle { pointer-events: none; } /* a tap there starts and stops it, as anywhere */
+.pr-count { position: absolute; inset: 0; display: grid; place-items: center; font: 800 min(42vw, 42vh)/1 system-ui, sans-serif; color: #fff; background: #000b; pointer-events: none; }
+.pr-count[hidden], .pr-rec[hidden], .pr-ratebox[hidden] { display: none; }
+.pr-left { position: absolute; right: 14px; bottom: 10px; font: 600 15px/1.2 ui-monospace, Menlo, Consolas, monospace; color: #8a8a8a; pointer-events: none; }
+.prompter:not(.hud-off) .pr-left, .prompter:not(.hud-off) .pr-rec { visibility: hidden; } /* under the buttons: the buttons say it then */
+.pr-rec { position: absolute; right: 14px; top: 12px; font: 800 15px/1 system-ui, sans-serif; color: #ff5a4e; letter-spacing: .08em; pointer-events: none; }
+.pr-hud { position: absolute; left: 0; right: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left)); background: #000000e0; color: #fff; transition: opacity .25s; }
+.pr-top { top: 0; padding-top: max(8px, env(safe-area-inset-top)); border-bottom: 1px solid #2c2c2e; }
+.pr-bottom { bottom: 0; padding-bottom: max(8px, env(safe-area-inset-bottom)); border-top: 1px solid #2c2c2e; justify-content: center; }
+.prompter.hud-off .pr-hud { opacity: 0; pointer-events: none; }
+.prompter.cursor-off, .prompter.cursor-off * { cursor: none !important; } /* the mouse pointer, while it runs (js/prompter.js says when) */
+/* The speed while it runs with the buttons away, in a corner: faint until a finger uses it; not there with voice-follow */
+.pr-live { position: absolute; z-index: 2; left: max(10px, env(safe-area-inset-left)); bottom: max(10px, env(safe-area-inset-bottom)); display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: #000; border: 1px solid #2c2c2e; }
+.prompter.hud-off:not(.following) .pr-live { display: flex; }
+.pr-live > * { opacity: .45; transition: opacity .2s; } /* solid underneath, so the script does not show through; faint on top */
+.pr-live.used > *, .pr-live:active > *, .pr-live:focus-within > * { opacity: 1; }
+.pr-live-btn { all: unset; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: #fff; font: 700 1.3rem/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pr-live-btn:active { background: #2c2c2e; } .pr-live-btn:focus-visible { outline: 3px solid #ffd166; }
+.pr-live-val { min-width: 4.4rem; text-align: center; font: 600 14px/1 ui-monospace, Menlo, Consolas, monospace; color: #ddd; font-variant-numeric: tabular-nums; }
+.pr-title { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
+.pr-tc { color: #ffd166; font-weight: 700; font-size: 1rem; }
+.prompter .icon-btn { color: #ddd; } .prompter .icon-btn:hover { background: #1d1d1f; color: #fff; }
+.pr-hud .btn, .pr-ratebox .btn { background: #1c1c1e; color: #fff; border-color: #3a3a3c; }
+.pr-hud .btn.primary { background: #fff; color: #000; border-color: #fff; min-width: 7.5rem; }
+.pr-hud .btn.pr-roll { background: #c62828; border-color: #c62828; color: #fff; font-weight: 800; min-width: 6.5rem; }
+.pr-hud .btn.pr-roll.cut { background: #fff; border-color: #fff; color: #000; }
+.pr-hud .btn.pr-voice.on, .pr-rpad .btn.pr-voice.on { background: #ffd166; border-color: #ffd166; color: #000; } /* voice-follow is on */
+.pr-speed, .pr-size { display: inline-flex; align-items: center; gap: 4px; } .pr-wpm { min-width: 4.6rem; text-align: center; font-variant-numeric: tabular-nums; font-weight: 700; }
+.pr-ratebox { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(96px + env(safe-area-inset-bottom)); z-index: 3; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; background: #111; border: 1px solid #48484a; border-radius: 14px; padding: 10px 12px; width: max-content; max-width: calc(100% - 24px); }
+.pr-rate-title { font-weight: 700; margin-right: 4px; }
+.pr-ratebox .btn.pr-good { background: #1f6f3a; border-color: #1f6f3a; } .pr-ratebox .btn.pr-ng { background: #8e2424; border-color: #8e2424; }
+.pr-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; background: #000d; border: 1px solid #333; color: #ddd; padding: 10px 14px; border-radius: 12px; font-size: .95rem; width: max-content; max-width: min(90%, 30rem); text-align: center; pointer-events: none; opacity: 0; transition: opacity .4s; }
+.pr-hint.shown { opacity: 1; }
+/* The prompter's controls, sliding out over the stage between its button bars: from the right on a wide or landscape
+   screen, from the bottom on an upright phone (the script is lifted above it, so the reading line stays in sight: the
+   stage's translate, set in prompter.js, slides with it); dark like the rest of it. */
+.pr-stage { transition: translate .25s ease; }
+.prompter:has(.pr-panel.open) .pr-hud { background: #000; } /* solid while the lifted script runs under the top bar */
+.pr-panel { --bg: #0e0e10; --bg2: #1c1c1e; --card: #161618; --line: #3a3a3c; --text: #f2f2f2; --muted: #a1a1a6; --accent: #ffd166; --accent-ink: #1a1305;
+  position: absolute; z-index: 1; top: var(--pr-top, 56px); bottom: var(--pr-bot, 64px); right: 0; width: min(380px, 46vw); overflow: hidden; display: flex; flex-direction: column;
+  background: #0e0e10; color: var(--text); border-left: 1px solid #2c2c2e; box-shadow: -12px 0 30px #0009; padding: 0 14px;
+  transform: translateX(105%); visibility: hidden; transition: transform .25s ease, visibility 0s linear .25s; }
+.pr-panel.open { transform: none; visibility: visible; transition: transform .25s ease; }
+@media (orientation: portrait) {
+  .pr-panel { top: auto; left: 0; width: auto; max-height: 52%; border-left: 0; border-top: 1px solid #2c2c2e; box-shadow: 0 -12px 30px #0009; transform: translateY(calc(100% + var(--pr-bot, 64px))); }
+  .pr-panel.open { transform: none; }
+}
+:root[data-motion=off] .pr-panel, :root[data-motion=off] .pr-panel.open, :root[data-motion=off] .pr-stage { transition: none; }
+.pr-panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 6px; background: #0e0e10; }
+.pr-panel-head h2 { margin: 0; font-size: 1rem; }
+/* in the panel, the icons stay where they are and the twirl-downs under them scroll */
+.pr-panel .pr-prefs { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; } .pr-panel .pref-label { color: var(--text); }
+.pr-panel .pr-tabs, .pr-panel .pr-panel-hint { flex: none; }
+.pr-panel .pr-tabbody { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: 16px; align-content: start; }
+.pr-panel .seg button { color: var(--text); } .pr-panel .seg button.on { color: var(--accent-ink); }
+.pr-panel .btn.ghost { background: var(--bg2); color: var(--text); border-color: var(--line); }
+.pr-panel .muted { color: var(--muted); }
+.pr-count-len { margin-top: 6px; }
+.pr-panel-hint { margin: 0; color: var(--muted); }
+/* The prompter's settings, wherever they are: three icons (Script, Format, Other), each with its twirl-downs */
+.pr-prefs { display: grid; gap: 10px; }
+.pr-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pr-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 62px; padding: 8px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); color: var(--text); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.pr-tab.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pr-tab:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.pr-tab-ico { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pr-twirl { margin-bottom: 0; } .pr-twirl > summary { grid-template-columns: minmax(0, 1fr) auto; } .pr-twirl .twirl-body { gap: 10px; }
+.pr-twirl .twirl-body > p { margin: 0; }
+.pr-jump, .pr-found { display: grid; gap: 2px; } .pr-jump { max-height: 40vh; overflow: auto; overscroll-behavior: contain; }
+.pr-jump-item { all: unset; display: block; box-sizing: border-box; width: 100%; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--text); line-height: 1.35; overflow-wrap: anywhere; }
+.pr-jump-item:hover { background: var(--card); } .pr-jump-item:focus-visible { outline: 3px solid var(--focus); }
+.pr-jump-top { color: var(--accent); font-weight: 700; }
+.pr-found mark { background: var(--accent); color: var(--accent-ink); border-radius: 3px; padding: 0 2px; }
+.pr-find { width: 100%; box-sizing: border-box; }
+.pr-colours button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.pr-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid #0007; flex: none; }
+.pr-swatch[data-colour=yellow] { background: #ffd166; } .pr-swatch[data-colour=white] { background: #fff; } .pr-swatch[data-colour=red] { background: #ff5a4e; } .pr-swatch[data-colour=green] { background: #5fd68a; }
+.pr-line-reset { justify-self: start; }
+/* A message while the controls are out goes where the script is still in sight: above them, or beside them. */
+.prompter:has(.pr-panel.open) .pr-hint { top: calc(var(--pr-top, 56px) + 24px); transform: translateX(-50%); }
+@media (orientation: landscape) { .prompter:has(.pr-panel.open) .pr-hint { left: calc((100% - min(380px, 46vw)) / 2); max-width: calc((100% - min(380px, 46vw)) - 24px); } }
+.prompter .icon-btn.pr-settings.on { background: #ffd166; color: #000; }
+body:has(.prompter) .update-bar, body:has(.prompter) .licence-bar, body:has(.prompter) .undo-bar { display: none; } /* nothing of the page over the prompter */
+/* The Prompter view of a log */
+.pr-launch { display: grid; gap: 10px; } .pr-open { font-size: 1.05rem; }
+.pr-setup h3, .pr-takes h3 { margin: 0 0 8px; }
+.pr-stepper { display: flex; align-items: center; gap: 10px; } .pr-stepper > .btn { flex: 0 0 auto; width: auto; min-width: 3.2rem; } /* not the full width .stack gives its buttons */ .pr-stepper .pr-val { flex: 1 1 0; min-width: 0; text-align: center; font-weight: 700; }
+.pr-take-list { list-style: none; margin: 0; padding: 0; display: grid; }
+.pr-take { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); } .pr-take:last-child { border-bottom: 0; }
+.pr-take-tc { color: var(--accent); font-weight: 700; } .pr-take .grow { flex: 1 1 10rem; min-width: 0; }
+.pr-rates { display: inline-flex; gap: 6px; } .pr-rates .btn.on.good { background: var(--ok); color: #fff; } .pr-rates .btn.on.ng { background: var(--danger); color: #fff; }
+.tc-take-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 2px 4px 4px; } .tc-take-row .tc-dur { padding: 0; }
+.tc-rate { all: unset; cursor: pointer; display: inline-flex; align-items: center; min-height: 2rem; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); font-size: .8rem; font-weight: 700; }
+.tc-rate.good { background: var(--ok); border-color: var(--ok); color: #fff; } .tc-rate.ng { background: var(--danger); border-color: var(--danger); color: #fff; } .tc-rate:focus-visible { outline: 3px solid var(--focus); }
+.imp-recent-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.tc-modes { margin: 10px 0; }
+.tc-markers { display: grid; gap: 6px; } .tc-marker-file p { margin: 2px 0 6px; } .tc-marker-file .btn { width: 100%; justify-content: flex-start; }
+.pr-elsewhere { display: grid; gap: 6px; } .pr-elsewhere .btn { justify-content: center; } .pr-elsewhere p { margin: 0; }
+/* The remote for a prompter shown elsewhere (js/prompter.js): the same dark look, its buttons first, then the script */
+.pr-remote { display: flex; flex-direction: column; }
+.pr-remote .pr-hud { position: static; }
+.pr-rstatus { padding: 10px 14px; color: #ddd; font-weight: 600; border-bottom: 1px solid #2c2c2e; }
+.pr-rpad { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; padding: 12px; border-bottom: 1px solid #2c2c2e; }
+.pr-rpad .btn { background: #1c1c1e; color: #fff; border-color: #3a3a3c; min-width: 3.4rem; }
+.pr-rpad .btn.primary { background: #fff; color: #000; border-color: #fff; min-width: 7.5rem; }
+.pr-rpad .btn.pr-roll { background: #c62828; border-color: #c62828; font-weight: 800; min-width: 6.5rem; } .pr-rpad .btn.pr-roll.cut { background: #fff; border-color: #fff; color: #000; }
+.pr-rlist { list-style: none; margin: 0; padding: 8px 10px calc(16px + env(safe-area-inset-bottom)); overflow: auto; flex: 1 1 auto; display: grid; gap: 2px; align-content: start; }
+.pr-ritem button { all: unset; display: block; width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: #eee; line-height: 1.35; overflow-wrap: anywhere; }
+.pr-ritem button:focus-visible { outline: 3px solid var(--focus); }
+.pr-ritem.r-dir button, .pr-ritem.r-head button, .pr-ritem.r-other button { color: #8f8f8f; font-size: .9em; }
+.pr-ritem.r-cue button { color: #ffd166; font-size: .8em; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; padding-bottom: 0; }
+.pr-ritem.now button { background: #ffd16626; box-shadow: inset 3px 0 0 #ffd166; color: #fff; }
+.pr-remote .pr-ratebox { bottom: calc(24px + env(safe-area-inset-bottom)); }
+/* The prompter's own window on a second screen (prompter.html) */
+.pr-screen-page { margin: 0; background: #000; }
+.pr-window .pr-fill { position: absolute; right: 14px; top: 12px; z-index: 3; background: #1c1c1e; color: #fff; border-color: #3a3a3c; }
+.prompter.pr-window[data-state=running] .pr-fill, .pr-fill[hidden] { display: none; }
+.pr-wait { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; color: #bbb; text-align: center; font-size: 1.1rem; } .pr-wait[hidden] { display: none; }

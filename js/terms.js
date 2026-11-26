@@ -5,7 +5,7 @@
 import { h } from './util.js';
 import { isApp } from './native.js';
 
-export const TERMS_VERSION = '2026-11-20'; // the terms' date, plus a count for a second change on the same day
+export const TERMS_VERSION = '2026-11-25'; // the terms' date, plus a count for a second change on the same day
 const KEY = 'logi-terms';
 const read = () => { try { return JSON.parse(localStorage.getItem(KEY)) || null; } catch { return null; } };
 export const acceptance = () => { const r = read(); return r && r.v === TERMS_VERSION ? r : null; };

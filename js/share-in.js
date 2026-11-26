@@ -1,11 +1,14 @@
-// A file another app handed to Vdex. A backup is restored (after a tap, and the usual question); anything else is a script for
-// TC Notes or a shot list for one of the bookings, and a spreadsheet (.csv, .tsv, .xlsx) may be the kit list for the
-// Equipment page (js/gear-import-ui.js). Which files can arrive depends on where Vdex runs:
+// A file another app handed to Vdex. A backup is restored (after a tap, and the usual question); anything else is a script
+// for TC Notes or for the teleprompter (a log of its own), or a shot list for one of the bookings, and a spreadsheet (.csv,
+// .tsv, .xlsx) may be the kit list for the Equipment page (js/gear-import-ui.js). A PDF or Final Draft file is a script
+// only. Which files can arrive depends on where Vdex runs:
 // - the web app installed from Chrome on Android takes what the share target in manifest.webmanifest lists: text,
-//   Word, CSV, tab-separated and Excel (.xlsx) files. The service worker parks the file and js/app.js picks it up;
-// - the Play app has a share filter of its own (android/), which lists text and Word files only, so a spreadsheet is
-//   not offered to it from the share sheet;
-// - the iPhone app ("Copy to Vdex") takes the document types in its Info.plist: text, Word and CSV, not .tsv or .xlsx.
+//   Word, PDF, Final Draft, CSV, tab-separated and Excel (.xlsx) files. The service worker parks the file and js/app.js
+//   picks it up;
+// - the Play app has a share filter of its own (android/), which lists text, Word and PDF files only (from the build
+//   after this one), so a spreadsheet is not offered to it from the share sheet;
+// - the iPhone app ("Copy to Vdex") takes the document types in its Info.plist: text, Word, PDF, Final Draft (from the
+//   build after this one) and CSV, not .tsv or .xlsx.
 // Everywhere else, and for everything not listed, Equipment → Import… is the way in.
 import { h, sheet, toast, todayISO } from './util.js';
 import { activeBookings, endOf, isSealed } from './store.js';
@@ -45,6 +48,8 @@ export async function arrived(file) {
     return;
   }
   const bookings = forShots(), table = isTable(file), workbook = isWorkbook(file);
+  // A PDF or a Final Draft file is a script (js/script-files.js reads it); a shot list is read from text or Word only.
+  const script = /\.(pdf|fdx)$/i.test(name) || file.type === 'application/pdf';
   const kitList = primary => h('button', { class: 'btn ' + (primary ? 'primary' : 'ghost'), onclick: () => { sh.close(); import('./gear-import-ui.js').then(m => m.openGearImport({ file })).catch(e => toast('Could not open the import: ' + (e.message || e))); } }, '🎥 Kit list for Equipment');
   const title = b => `${b.title}${b.date ? ' · ' + b.date : ''}`;
   const more = bookings.length > SHOWN && h('select', { 'aria-label': 'More bookings', onchange: e => { const b = bookings.find(x => x.id === e.target.value); if (b) shotList(b, file, sh); e.target.value = ''; } },
@@ -57,10 +62,11 @@ export async function arrived(file) {
       kitList(true)))
     : sheet('A file for Vdex', h('div', { class: 'stack' },
       h('p', { style: WRAP }, h('b', null, name)),
-      h('p', { class: 'small muted' }, 'Use it as a script in TC Notes, or as a shot list for a booking: one shot per line, with each scene’s heading above its shots.' + (table ? ' Or, if it is the kit list you already keep, bring it into Equipment: you check it there before anything is added.' : '')),
+      h('p', { class: 'small muted' }, script ? 'Use it as a script in TC Notes, or read it on the teleprompter (it gets a log of its own, where each take is logged).' : 'Use it as a script in TC Notes, read it on the teleprompter (it gets a log of its own, where each take is logged), or use it as a shot list for a booking: one shot per line, with each scene’s heading above its shots.' + (table ? ' Or, if it is the kit list you already keep, bring it into Equipment: you check it there before anything is added.' : '')),
       h('button', { class: 'btn primary', onclick: () => { sh.close(); import('./pages/tcnotes.js').then(m => m.receiveSharedFile(file)); } }, '🎬 Script for TC Notes'),
+      h('button', { class: 'btn ghost share-prompter', onclick: () => { sh.close(); import('./pages/tcnotes.js').then(m => m.receiveSharedFile(file, { prompter: true })); } }, '📜 Teleprompter'),
       table && kitList(false),
-      bookings.length
+      script ? '' : bookings.length
         ? h('div', { class: 'stack' }, h('div', { class: 'pref-label' }, 'Shot list for a booking'), ...bookings.slice(0, SHOWN).map(b => h('button', { class: 'btn ghost', style: WRAP, onclick: () => shotList(b, file, sh) }, title(b))), more)
         : h('p', { class: 'small muted' }, 'No active booking to add a shot list to.')));
 }

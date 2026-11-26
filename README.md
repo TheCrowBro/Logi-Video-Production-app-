@@ -37,7 +37,7 @@ The spinning drum at the top is called the Rolodex. Swipe it, or tap the little 
 | 🛡 **Insurance** | Your policies and when they run out. |
 | 🪪 **Me** | Your own details, with a QR code that hands your contact card to anyone who scans it: they can save it to their phone, or add you to their own Vdex. The contact card's code and link are made during the free trial or with a licence; the Phone contacts and Website codes always work. |
 | ☀️ **Field** | Sunrise and sunset, a white balance reader, a noise meter, a range finder. |
-| 🎬 **TC Notes** | Shoot notes that are stamped with the camera's timecode. |
+| 🎬 **TC Notes** | Shoot notes that are stamped with the camera's timecode; the script from Word, PDF or Final Draft, to mark lines on; and a teleprompter that reads it to the talent and logs each take. |
 | ⚙️ **Settings** | Everything else, including your templates, backups and the lock. |
 
 **Looking for something?** Tap the magnifier 🔍 at the top of any page and type a name, a place, a serial number or an invoice number. Vdex looks through everything you keep in it, on your own device, and opens the one you pick.

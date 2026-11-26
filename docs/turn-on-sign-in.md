@@ -60,6 +60,16 @@ Copy these exactly, including the slash at the end where there is one.
 
 **What people will see:** until Google has checked the brand, its window names the website's domain rather than "Vdex". Showing the app's name and logo needs a check that Google only does for a domain you own; crowmade.app is yours, so you can ask for it under **Branding** → **Verify branding** (Google asks you to prove the domain in Search Console). Google may take a few minutes, sometimes a few hours, before a new client ID works.
 
+### Google Docs for scripts (optional, about 5 minutes)
+
+TC Notes and the teleprompter can take a script straight from someone's Google Docs: **📄 Choose from Google Docs** opens Google's own file picker, and the Doc chosen is read as a Word copy. It uses the same Google project and the same **drive.file** permission as the calendar feed, so there is nothing new for Google to review. The picker needs a key of its own:
+
+1. In the Google Cloud console, with the **Vdex** project selected, open **APIs & Services → Library**, search for **Google Picker API** and press **Enable**. (The **Google Drive API** is already on, for storage.)
+2. **APIs & Services → Credentials → Create credentials → API key.** Press **Edit API key**: under *Application restrictions* choose **Websites** and add `https://vdex.crowmade.app/*`; under *API restrictions* choose **Restrict key** and tick **Google Picker API** only. Save.
+3. Put the key in `js/cloud-config.js` as `googlePickerKey: '…'` and publish. A key restricted this way is safe in the page, like the client ID.
+
+Until then the Add script sheet offers Google Docs as it always has: download as Word, share from the Docs app, or paste. The picker is offered on the website and in the Android app; the desktop and iPhone apps sign in to Google outside the page it opens in, so they keep the other ways.
+
 ## 2. Apple, for iCloud (about 30 minutes, plus Apple's sign-up)
 
 **Read this first.** Two things make iCloud different from the others:

@@ -34,6 +34,7 @@
       "delete-account.html",
       "invoice.html",
       "crew.html",
+      "prompter.html",
       "styles.css",
       "sw.js",
       "manifest.webmanifest",
