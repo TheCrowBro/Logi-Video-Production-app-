@@ -318,7 +318,8 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   const tip = { shown: await page.locator('.pr-tip').evaluate(e => Number(getComputedStyle(e).opacity)), text: await page.locator('.pr-tip').innerText() };
   ok('while it is paused, a ⋮ beside the arrow marks its menu, and pointing at the arrow says how: drag, or right-click', dotsPaused > 0.5 && tip.shown === 1 && tip.text === 'Drag to move · Right-click for options', JSON.stringify({ dotsPaused, ...tip }));
   await page.mouse.move(640, 420); await sleep(200);
-  const spot = await page.evaluate(() => { const m = document.querySelector('.pr-marker').getBoundingClientRect(), bar = document.querySelector('.pr-bottom').getBoundingClientRect().top; const l = [...document.querySelectorAll('.pr-line')].find(x => { const r = x.getBoundingClientRect(); return r.height > 0 && r.top > m.bottom + 10 && r.bottom < bar - 10; }); if (!l) return null; const r = l.getBoundingClientRect(); return { x: r.left + 30, y: r.top + r.height / 2 }; });
+  // A line below the reading line whose top is in sight (in a wider font, a whole paragraph may not fit above the buttons).
+  const spot = await page.evaluate(() => { const m = document.querySelector('.pr-marker').getBoundingClientRect(), bar = document.querySelector('.pr-bottom').getBoundingClientRect().top; const l = [...document.querySelectorAll('.pr-line')].find(x => { const r = x.getBoundingClientRect(); return r.height > 0 && r.top > m.bottom + 10 && r.top + 24 < bar - 10; }); if (!l) return null; const r = l.getBoundingClientRect(); return { x: r.left + 30, y: r.top + Math.min(16, r.height / 2) }; });
   await page.mouse.click(spot.x, spot.y, { button: 'right' }); await page.waitForSelector('.sheet[aria-label="This line"]');
   ok('a right-click on another line opens that line’s menu, as holding it does', (await page.locator('.sheet .btn', { hasText: 'Start from here' }).count()) === 1);
   await page.keyboard.press('Escape'); await sleep(250);
@@ -355,7 +356,8 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   const cls = () => page.evaluate(() => document.querySelector('.prompter').className);
   await page.keyboard.press('Home'); await page.keyboard.press('Space'); await sleep(200);
   ok('as it starts, the mouse pointer goes at once (the buttons a little later)', /cursor-off/.test(await cls()) && !/hud-off/.test(await cls()), await cls());
-  ok('…and the ⋮ beside the arrow is gone while it runs, so the talent never sees it', (await page.locator('.pr-dots').evaluate(e => Number(getComputedStyle(e).opacity))) === 0);
+  const dotsGone = await page.waitForFunction(() => getComputedStyle(document.querySelector('.pr-dots')).opacity === '0', null, { timeout: 1500 }).then(() => true, () => false); // after its fade
+  ok('…and the ⋮ beside the arrow is gone while it runs, so the talent never sees it', dotsGone);
   await page.mouse.move(402, 421); await sleep(30); await page.mouse.move(405, 423); await sleep(100);
   ok('…a nudge of the mouse leaves it out of sight', /cursor-off/.test(await cls()), await cls());
   await page.mouse.move(520, 470, { steps: 6 }); await sleep(100);
