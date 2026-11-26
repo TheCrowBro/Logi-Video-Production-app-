@@ -162,9 +162,30 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await sleep(300);
   ok('an invoice taken back from Paid has no paid date, and one taken back to Draft no sent date', dates.paid && dates.backToSent === null && dates.sent && dates.backToDraft === null && dates.sentAgain && !/ · paid \w/.test(await page.locator('.money-page .status-line').innerText()), JSON.stringify(dates));
   // Every figure from amounts rounded to cents
-  const sums = await page.evaluate(() => import('./js/money-doc.js').then(md => { const of = (rate, ...lines) => { const snap = { kind: 'invoice', status: 'Sent', number: 'X', taxRate: rate, lines: lines.map(([qty, price]) => ({ qty, price })), pay: { methods: [{ type: 'paypal', value: 'probefilms' }] }, code: 'EUR' }, t = md.calc(snap); return [t.lines.map(l => l.amount).join('+'), t.subtotal, t.tax, t.total, t.balance, (md.payButtons(snap)[0].href.match(/[\d.]+(?=EUR)/) || [])[0]].join(' '); };
+  const sums = await page.evaluate(() => import('./js/money-doc.js').then(md => { const of = (rate, ...lines) => { const snap = { calc: 2, kind: 'invoice', status: 'Sent', number: 'X', taxRate: rate, lines: lines.map(([qty, price]) => ({ qty, price })), pay: { methods: [{ type: 'paypal', value: 'probefilms' }] }, code: 'EUR' }, t = md.calc(snap); return [t.lines.map(l => l.amount).join('+'), t.subtotal, t.tax, t.total, t.balance, (md.payButtons(snap)[0].href.match(/[\d.]+(?=EUR)/) || [])[0]].join(' '); };
     return [of(19, [1, 117.5]), of(8.25, [1, 102]), of(10, [1, 100.05]), of(0, [1.5, 33.33], [1.5, 33.33])]; }));
   ok('lines add up to the subtotal, subtotal and tax to the total, and the balance and the Pay button ask for the total', sums.join(' | ') === '117.5 117.5 22.33 139.83 139.83 139.83 | 102 102 8.42 110.42 110.42 110.42 | 100.05 100.05 10.01 110.06 110.06 110.06 | 50+50 100 0 100 100 100.00', sums.join(' | '));
+  // A document that went out under 1.4.0 keeps the figures it showed: the arithmetic follows the document's mark
+  const kept = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js'), import('./js/money-doc.js'), import('./js/link-pack.js')]).then(async ([s, m, md, lp]) => {
+    const doc = status => ({ number: 'INV-OLD', date: '2026-11-01', due: '2026-11-15', status, taxRate: 17.5, taxLabel: 'VAT', deposit: '', payments: [], lines: [{ id: 'o1', desc: 'Hours', qty: 12.5, unit: 'hour', price: 12.95 }], updatedAt: 1 }); // as 1.4.0 saved it: no mark
+    const total = id => md.fmt(m.totals(s.byId('bookings', id).invoice).total, ''), mark = id => s.byId('bookings', id).invoice.calc || 0;
+    s.update(d => { d.bookings.push({ id: 'mn-old1', title: 'Sent before the update', date: '2026-11-01', status: 'Delivered', crew: [], gear: [], stakeholders: [], invoice: doc('Sent') }, { id: 'mn-old2', title: 'A draft from before', date: '2026-11-01', status: 'Shot', crew: [], gear: [], stakeholders: [], invoice: doc('Draft') }); });
+    const out = { sent: total('mn-old1') };
+    const snap = m.snapshot(s.byId('bookings', 'mn-old1'), 'invoice'); out.link = md.fmt(md.calc(await lp.unpack('#' + await lp.pack(snap))).total, ''); out.pay = (md.payButtons({ ...snap, pay: { methods: [{ type: 'paypal', value: 'probefilms' }] }, code: 'GBP' })[0].href.match(/[\d.]+(?=GBP)/) || [])[0];
+    // paid as the document asked: nothing is left due
+    out.left = m.totals({ ...s.byId('bookings', 'mn-old1').invoice, payments: [{ amount: 190.2 }] }).balance;
+    m.setDocStatus('mn-old1', 'invoice', 'Paid'); m.setDocStatus('mn-old1', 'invoice', 'Sent'); out.resent = total('mn-old1') + ' ' + mark('mn-old1');
+    m.setDocStatus('mn-old1', 'invoice', 'Draft'); out.redrafted = total('mn-old1') + ' ' + mark('mn-old1');
+    out.draft = total('mn-old2') + ' ' + mark('mn-old2'); m.setDocStatus('mn-old2', 'invoice', 'Sent'); out.draftSent = total('mn-old2') + ' ' + mark('mn-old2');
+    out.fresh = (m.snapshot(s.byId('bookings', 'mn-p'), 'invoice').v) + ' ' + mark('mn-p');
+    s.remove('bookings', 'mn-old1'); s.remove('bookings', 'mn-old2'); return out; }));
+  await sleep(300);
+  ok('an invoice sent before the update keeps its total, in the app, in its link and in the Pay button, and what it asked for pays it in full', kept.sent === '190.20' && kept.link === '190.20' && kept.pay === '190.20' && kept.left === 0 && kept.resent === '190.20 0', JSON.stringify(kept));
+  ok('…until it is taken back to Draft; a draft from before the update is sent as it stood; a document made now is rounded line by line', kept.redrafted === '190.21 2' && kept.draft === '190.20 0' && kept.draftSent === '190.20 0' && kept.fresh === '2 2', JSON.stringify(kept));
+  // A link made by 1.4.0 for a currency Vdex does not know carries that build's guess: the page does not ask for US dollars
+  const oldLink = await page.evaluate(() => import('./js/money-doc.js').then(md => { const snap = (v, currency, code) => ({ v, kind: 'invoice', status: 'Sent', number: 'X', currency, code, lines: [{ qty: 1, price: 3500 }], pay: { methods: [{ type: 'paypal', value: 'probefilms' }] } });
+    return [snap(1, '₪', 'USD'), snap(1, '$', 'USD'), snap(1, '₪', 'EUR'), snap(2, '₪', 'USD'), snap(2, '₪', '')].map(sn => md.payButtons(sn)[0].href.split('/').pop()); }));
+  ok('a link from before the update in a currency Vdex does not know opens with no currency in its PayPal button; dollars, a chosen currency and a link made now are as written', oldLink.join(' ') === '3500.00 3500.00USD 3500.00EUR 3500.00USD 3500.00', oldLink.join(' '));
   // No guessed currency in a payment link
   const money7 = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js'), import('./js/money-doc.js')]).then(([s, m, md]) => { const was = s.db.profile.currency, href = sym => { s.update(d => { d.profile.currency = sym; }); const snap = m.snapshot(s.byId('bookings', 'mn-p'), 'invoice'); return [snap.code, (md.payButtons({ ...snap, status: 'Sent', payments: [] }).find(b => b.id === 'paypal') || {}).href].join(' '); };
     m.setBilling({ currencyCode: '' }); const out = [href('₪'), href('US$'), href('zł ')]; m.setBilling({ currencyCode: 'EUR' }); s.update(d => { d.profile.currency = was; }); return out; }));

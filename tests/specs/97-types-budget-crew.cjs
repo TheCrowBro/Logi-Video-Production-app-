@@ -240,6 +240,20 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     return { notes: a.notes + '|' + b.notes, paid: [a, b].map(x => (x.invoice.payments || []).length).join(), deleted: !c.invoice && !d.invoice && c.notes === 'changed on the laptop', anew: !!e.invoice && e.invoice.updatedAt === now + 180000 }; }));
   ok('a payment recorded on one device survives a later change to the same booking on another: the newer invoice is kept with the newer booking', docs.notes === 'changed on the laptop|changed on the laptop' && docs.paid === '1,1', JSON.stringify(docs));
   ok('an invoice deleted on one device stays deleted after the sync, and one made anew afterwards stays', docs.deleted && docs.anew, JSON.stringify(docs));
+  // A device still on 1.4.0 takes a booking by its newer copy, whole. A booking joined here from both copies (the
+  // newer booking, the other copy's newer invoice) must count as newer than both, or that device keeps its own
+  // and the two upload their copies in turn for ever.
+  const mixed = await page.evaluate(() => import('./js/store.js').then(s => { const now = Date.now(), copy = x => JSON.parse(JSON.stringify(x));
+    const inv = (at, payments) => ({ number: 'INV-0600', date: '2026-11-01', status: 'Sent', lines: [], payments, updatedAt: at });
+    const here = copy(JSON.parse(s.serialize())), old = copy(here);
+    here.bookings.push({ id: 'mg-old', title: 'Mixed', date: '2026-12-01', notes: '', invoice: inv(now, [{ id: 'p1', amount: 400 }]), updatedAt: now });
+    old.bookings.push({ id: 'mg-old', title: 'Mixed', date: '2026-12-01', notes: 'changed on the older build', invoice: inv(now - 864e5, []), updatedAt: now + 60000 });
+    const pick = db => db.bookings.find(b => b.id === 'mg-old'), joined = s.mergeDb(here, old), j = pick(joined);
+    const asOld = (mine, theirs) => (Number(theirs.updatedAt) > Number(mine.updatedAt) ? theirs : mine); // 1.4.0's rule for a booking
+    const taken = asOld(pick(old), j), again = pick(s.mergeDb(joined, { ...old, bookings: old.bookings.map(b => (b.id === 'mg-old' ? taken : b)) }));
+    const same = pick(s.mergeDb(here, here)), plain = pick(s.mergeDb(here, { ...old, bookings: [{ ...pick(old), invoice: pick(here).invoice }] }));
+    return { joined: j.notes + ' ' + (j.invoice.payments || []).length, newer: j.updatedAt > now + 60000, taken: (taken.invoice.payments || []).length, settled: JSON.stringify(again) === JSON.stringify(j), untouched: same.updatedAt === now && plain.updatedAt === now + 60000 }; }));
+  ok('a booking joined from two copies counts as newer than both, so a device on the version before takes it and the two agree; a booking that follows one copy keeps its time', mixed.joined === 'changed on the older build 1' && mixed.newer && mixed.taken === 1 && mixed.settled && mixed.untouched, JSON.stringify(mixed));
   const costs = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => {
     s.upsert('bookings', { id: 'bd-1', title: 'Budget probe', date: '2026-12-01', status: 'Confirmed', crew: [], gear: [], stakeholders: [], rentals: [{ id: 'r1', item: 'Monitor', cost: 85.125 }, { id: 'r2', item: 'Slider', cost: 1250.75 }], licences: [{ id: 'l1', kind: 'Music', title: 'Track', cost: 49.999 }],
       budget: { lines: [{ id: 'b1', cat: 'Crew', desc: 'Gaffer', qty: 1, unit: 'day', rate: 12570.75, actual: '' }, { id: 'b2', cat: 'Travel & transport', desc: 'Van', qty: 1, unit: 'day', rate: 350, actual: 350 }] } });

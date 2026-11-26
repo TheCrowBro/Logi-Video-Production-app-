@@ -109,11 +109,11 @@ async function ensurePracticeQuote() {
   const bl = m.billing();
   // Suggested from the booking, as the button does; prices the rates leave blank get example figures.
   const lines = m.suggestLines(b, 'quote', 'booking').map(l => ({ ...l, price: l.price === '' || l.price == null ? (/shoot day/i.test(l.desc) ? 600 : 120) : l.price }));
-  patchPractice(x => { x.quote = { number: 'Q-PRACTICE', date: todayISO(), until: plus(30), lines, taxRate: Number(bl.taxRate) || 0, taxLabel: bl.taxLabel || 'Tax', notes: 'Example quote from the walkthrough. Includes one shoot day and the edit of the main film.', status: 'Draft', deposit: '' }; });
+  patchPractice(x => { x.quote = { number: 'Q-PRACTICE', date: todayISO(), until: plus(30), lines, taxRate: Number(bl.taxRate) || 0, taxLabel: bl.taxLabel || 'Tax', notes: 'Example quote from the walkthrough. Includes one shoot day and the edit of the main film.', status: 'Draft', deposit: '', calc: 2 }; });
 }
 async function ensurePracticeInvoice() {
   const m = await import('./money.js'), b = practiceJob(); if (!b || !b.quote) return;
-  if (!b.invoice) patchPractice(x => { x.invoice = { number: 'INV-PRACTICE', date: todayISO(), due: plus(14), lines: (x.quote.lines || []).map(l => ({ ...l, id: uid() })), taxRate: x.quote.taxRate, taxLabel: x.quote.taxLabel, notes: m.billing().terms || '', status: 'Draft', deposit: '', payments: [] }; });
+  if (!b.invoice) patchPractice(x => { x.invoice = { number: 'INV-PRACTICE', date: todayISO(), due: plus(14), lines: (x.quote.lines || []).map(l => ({ ...l, id: uid() })), taxRate: x.quote.taxRate, taxLabel: x.quote.taxLabel, notes: m.billing().terms || '', status: 'Draft', deposit: '', payments: [], calc: 2 }; });
   if ((practiceJob().invoice || {}).status === 'Draft') m.setDocStatus(PRACTICE, 'invoice', 'Sent');
 }
 const quoteState = async status => { const m = await import('./money.js'), b = practiceJob(); if (b && b.quote && b.quote.status !== status) m.setDocStatus(PRACTICE, 'quote', status); };

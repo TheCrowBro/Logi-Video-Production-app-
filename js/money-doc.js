@@ -2,7 +2,7 @@
 // makes the PDF and the email text from it, and packs it into the link the client opens; the public invoice page
 // renders the very same snapshot. Nothing here touches the store.
 import { h, parseISO } from './util.js';
-import { payLinks, payTexts, epcPayload } from './pay.js';
+import { payLinks, payTexts, epcPayload, knownCode } from './pay.js';
 
 export const KINDS = { quote: { label: 'Quote', statuses: ['Draft', 'Sent', 'Accepted', 'Declined'], dateLabel: 'Valid until', dateKey: 'until' }, invoice: { label: 'Invoice', statuses: ['Draft', 'Sent', 'Paid', 'Void'], dateLabel: 'Due', dateKey: 'due' } };
 export const fmt = (n, sym = '$') => { const v = Number(n) || 0; return (v < 0 ? '-' : '') + sym + Math.abs(v).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); };
@@ -14,15 +14,31 @@ export const docTitle = snap => `${KINDS[snap.kind].label} ${snap.number} — ${
 // recorded counts as paid in full) and the balance due. Every figure is rounded to cents once and the next is worked
 // out from the rounded ones, so the lines add up to the subtotal, subtotal and tax to the total, and the balance asked
 // for (on the document, the Pay buttons, the payment form and the accountant's file) is the total less what was paid.
+// That is the arithmetic of a document marked `calc: 2` (js/money.js marks one when it is made, and whenever it is
+// saved as a Draft). A document without the mark was made by 1.4.0 or before, which rounded nothing but the balance:
+// it keeps that arithmetic (calcV1), in the app and on the client's page for a link already sent, because a document
+// that has gone out must go on showing the total it showed, and one paid as it asked must not be left a cent short.
 const r2 = n => { const v = Math.sign(n) * Math.round(Number((Math.abs(n) * 100).toPrecision(15))) / 100; return Number.isFinite(v) ? v : 0; };
+function calcV1(snap) {
+  const lines = (snap.lines || []).map(l => ({ ...l, amount: (Number(l.qty) || 0) * (Number(l.price) || 0) }));
+  const subtotal = lines.reduce((s, l) => s + l.amount, 0), rate = Number(snap.taxRate) || 0, tax = subtotal * rate / 100, total = subtotal + tax;
+  const deposit = Number(snap.deposit) || 0, received = (snap.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0);
+  const paid = snap.kind === 'invoice' && snap.status === 'Paid' ? Math.max(total, deposit + received) : deposit + received;
+  return { lines, subtotal, rate, tax, total, deposit, received, paid, balance: Math.max(0, Math.round((total - paid) * 100) / 100) };
+}
 export function calc(snap) {
+  if (!(Number(snap.calc) >= 2)) return calcV1(snap);
   const lines = (snap.lines || []).map(l => ({ ...l, amount: r2((Number(l.qty) || 0) * (Number(l.price) || 0)) }));
   const subtotal = r2(lines.reduce((s, l) => s + l.amount, 0)), rate = Number(snap.taxRate) || 0, tax = r2(subtotal * rate / 100), total = r2(subtotal + tax);
   const deposit = r2(Number(snap.deposit) || 0), received = r2((snap.payments || []).reduce((s, p) => s + (Number(p.amount) || 0), 0));
   const paid = snap.kind === 'invoice' && snap.status === 'Paid' ? Math.max(total, r2(deposit + received)) : r2(deposit + received);
   return { lines, subtotal, rate, tax, total, deposit, received, paid, balance: Math.max(0, r2(total - paid)) };
 }
-export const payContext = snap => ({ amount: calc(snap).balance, code: snap.code || '', reference: snap.number, payee: snap.payee }); // no code: the currency is not one Vdex knows, and none is put in a link
+// No code: the currency is not one Vdex knows, and none is put in a link. A link made by 1.4.0 or before (v 1) carries
+// that build's guess, "USD", for every symbol it did not know: beside such a symbol it is not believed, so an invoice
+// in ₪ that a client already holds does not ask for US dollars.
+const codeOf = snap => (snap.code === 'USD' && !(Number(snap.v) >= 2) && !knownCode(snap.currency) ? '' : snap.code || '');
+export const payContext = snap => ({ amount: calc(snap).balance, code: codeOf(snap), reference: snap.number, payee: snap.payee });
 export const payButtons = snap => (snap.kind === 'invoice' && snap.status !== 'Void' && calc(snap).balance > 0 ? payLinks(snap.pay || {}, payContext(snap)) : []);
 // Paid: marked so (also at a total of nothing), or nothing left of a total that was something. Owing: something is
 // still to pay; a credit note or a zero total asks for nothing, shows no ways to pay and is never overdue.

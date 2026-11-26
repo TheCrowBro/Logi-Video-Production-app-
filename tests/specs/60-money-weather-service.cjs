@@ -139,6 +139,22 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('a quote made for one day, asked again once the job is three days, has three shoot days and three crew days, each once', !!merged && /^Shoot days 3 day \| Crew: [^|]+ 3 day \(\+0 ~2\)$/.test(merged.grown) && merged.price === 600, JSON.stringify(merged && merged.grown));
   ok('lines saved before this repair are known by what they say, and a line typed by hand is left as it is', !!merged && merged.old === 'Shoot days 2 day | Editing 8 hour | Travel 1 each (+0 ~2)', JSON.stringify(merged && merged.old));
   ok('“Lines from the quote” adds the quote’s Editing by the day beside the editing hours, once, and never changes a line', !!merged && merged.quoted === 'Shoot days 2 day | Editing 8 hour | Editing 1 day | Travel 1 each (+2 ~0)' && merged.again === 'Shoot days 2 day | Editing 8 hour | Editing 1 day | Travel 1 each (+0 ~0)' && !merged.leak, JSON.stringify(merged && [merged.quoted, merged.again, merged.leak]));
+  // Documents made before lines carried their source (1.4.0): a quote made "From the booking", its invoice made "From
+  // the quote", there or after the update. Asking for the lines again adds only what is missing.
+  const before = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => {
+    const c = s.db.crew[0], show = r => r.lines.map(l => [l.desc.split(' — ')[0], l.qty, l.unit].join(' ')).join(' | ') + ` (+${r.added} ~${r.updated})`;
+    const b = { id: 'mn-old', title: 'Made before', date: '2026-12-01', endDate: '2026-12-02', crew: [c.id], gear: ['g'], rentals: [{ id: 'r1', item: 'Prism lens', from: 'Camera Co', cost: 85 }], deliverables: [{ id: 'd1', name: 'Main film', duration: '3 min' }], stakeholders: [] };
+    const bare = lines => lines.map(({ src, ...l }) => l); // as 1.4.0 kept a line: no source
+    const quote = { lines: bare(m.suggestLines(b, 'quote', 'booking')) }, withQuote = { ...b, quote };
+    const invOld = bare(quote.lines.map(l => ({ ...l, id: 'i' + l.id }))); // the invoice 1.4.0 made from that quote
+    const fromQuote = m.mergeSuggested(invOld, m.suggestLines(withQuote, 'invoice', 'quote'), 'quote');
+    const invNew = m.suggestLines(withQuote, 'invoice', 'quote'); // the invoice made from that quote now
+    const fromBooking = m.mergeSuggested(invNew, m.suggestLines(withQuote, 'invoice', 'booking'), 'booking');
+    const typed = { ...b, quote: { lines: [...quote.lines, { id: 'h1', desc: 'Travel', qty: 1, unit: 'each', price: 80 }] } }; // a line typed on the quote by hand
+    const again = m.mergeSuggested(m.suggestLines(typed, 'invoice', 'quote'), m.suggestLines(typed, 'invoice', 'quote'), 'quote');
+    return { n: quote.lines.length, fromQuote: show(fromQuote), fromBooking: show(fromBooking), again: `+${again.added} ~${again.updated}` }; }));
+  ok('“Lines from the quote” on an invoice made from its quote before the update adds nothing: no line twice', !!before && before.n === 4 && /\(\+0 ~0\)$/.test(before.fromQuote), JSON.stringify(before));
+  ok('“Lines from the booking” on an invoice made from a quote of before the update adds the rented lens alone', !!before && /^Shoot days 2 day \| Crew: [^|]+ 2 day \| Equipment package 2 day \| Main film \(3 min\) 1 each \| Hire: Prism lens \(Camera Co\) 1 each \(\+1 ~0\)$/.test(before.fromBooking) && before.again === '+0 ~0', JSON.stringify(before));
   // The form: an emptied line goes; the document's own tax name can be changed
   await page.evaluate(() => import('./js/money.js').then(m => m.setBilling({ taxLabel: 'Sales tax' }))); await sleep(200);
   await page.locator('.money-page').getByRole('button', { name: 'Edit' }).click(); await mform.waitFor();

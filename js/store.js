@@ -560,6 +560,12 @@ const mergeBooking = (x, y) => {
   for (const k of ['quote', 'invoice']) if (docAt(other, k) > docAt(base, k)) {
     out = { ...out }; delete out[k]; delete out[k + 'GoneAt'];
     if (other[k]) out[k] = other[k]; else out[k + 'GoneAt'] = other[k + 'GoneAt'];
+    // The booking that results is neither copy, so it counts as newer than both: a device on 1.4.0, which takes a
+    // booking by its newer copy whole, then takes this one, and the two devices end with the same instead of each
+    // keeping its own and uploading it at every sync. (A copy written by 1.4.0 leaves no mark behind a document
+    // deleted there, so that document comes back from a device that still holds it: a booking edited on a device
+    // that never had the document looks exactly the same, and taking that for a deletion would lose an invoice.)
+    out.updatedAt = Math.max(ts(x), ts(y)) + 1;
   }
   const rows = base.shared && base.shared.rows, had = (rows && rows.strips) || [], seen = new Set(had), more = ((other.shared && other.shared.rows && other.shared.rows.strips) || []).filter(id => !seen.has(id));
   if (rows && more.length) out = { ...out, shared: { ...out.shared, rows: { ...rows, strips: [...had, ...more] } } };

@@ -67,7 +67,7 @@ const ownDeliverables = b => (b.deliverables || []).filter(x => x && !linkMade(b
 export function suggestLines(b, kind, source = 'booking') {
   const bl = billing(), days = shootDays(b), lines = [];
   const line = (src, desc, qty, unit, price) => lines.push({ id: uid(), desc, qty, unit, price: num(price), src });
-  if (source === 'quote') return ((b.quote && b.quote.lines) || []).map(l => ({ ...l, id: uid(), src: l.src || 'q:' + l.id }));
+  if (source === 'quote') return ((b.quote && b.quote.lines) || []).map(l => ({ ...l, id: uid(), src: srcOf(l) || 'q:' + l.id }));
   if (source === 'hours') {
     const shifts = db.shifts.filter(s => s.bookingId === b.id && s.end);
     const shoot = shifts.filter(s => (s.kind || 'shoot') === 'shoot'), edit = shifts.filter(s => s.kind === 'edit');
@@ -89,15 +89,18 @@ export function suggestLines(b, kind, source = 'booking') {
 }
 // Suggested lines put onto a document that already has lines. A suggestion and a line are the same thing when they
 // carry the same src; a line from before lines carried one is known by what it says (the shoot days, the editing
-// hours, the overtime and the kit by their wording, anything else by the same description). From the booking or the
-// hours, the line already there takes the new quantity; from the quote, only what is missing is added.
+// hours, the overtime and the kit by their wording, anything else by the same description). A line that only says
+// which line of the quote it was (q:…) has no source of its own either: the quote was written before lines carried
+// one, or by hand, so there the same description in the same unit is the same line (the quote's "Editing" by the day
+// is not the editing hours). From the booking or the hours, the line already there takes the new quantity; from the
+// quote, only what is missing is added.
 const SHOOT_LINE = /^Shoot days? — /;
-const srcOf = l => l.src || (SHOOT_LINE.test(l.desc || '') ? 'shoot' : l.desc === 'Editing' && l.unit === 'hour' ? 'hours:edit' : l.desc === 'Overtime on shoot days' ? 'hours:ot' : l.desc === 'Equipment package' ? 'kit' : '');
+function srcOf(l) { return l.src || (SHOOT_LINE.test(l.desc || '') ? 'shoot' : l.desc === 'Editing' && l.unit === 'hour' ? 'hours:edit' : l.desc === 'Overtime on shoot days' ? 'hours:ot' : l.desc === 'Equipment package' ? 'kit' : ''); }
 export function mergeSuggested(lines, suggested, source) {
-  const out = (lines || []).map(l => ({ ...l })), low = l => (l.desc || '').trim().toLowerCase(); let added = 0, updated = 0;
+  const out = (lines || []).map(l => ({ ...l })), low = l => (l.desc || '').trim().toLowerCase(), own = src => !!src && !src.startsWith('q:'); let added = 0, updated = 0;
   for (const sg of suggested) {
     let i = out.findIndex(l => srcOf(l) === sg.src);
-    if (i < 0) i = out.findIndex(l => !srcOf(l) && low(l) === low(sg));
+    if (i < 0) i = out.findIndex(l => { const src = srcOf(l); return (!src || (!(own(src) && own(sg.src)) && (l.unit || '') === (sg.unit || ''))) && low(l) === low(sg); });
     if (i < 0) { out.push(sg); added++; continue; }
     if (source === 'quote') continue;
     const l = out[i], next = { ...l, src: sg.src, qty: sg.qty, unit: sg.unit, desc: sg.src === 'shoot' && SHOOT_LINE.test(l.desc || '') ? sg.desc : l.desc };
@@ -108,8 +111,12 @@ export function mergeSuggested(lines, suggested, source) {
 }
 
 function saveDoc(id, kind, doc) {
-  const prev = docOf(byId('bookings', id), kind) || {}, now = Date.now();
+  const had = docOf(byId('bookings', id), kind), prev = had || {}, now = Date.now();
   const next = { ...doc, taxLabel: String(doc.taxLabel || '').trim() || billing().taxLabel, updatedAt: now };
+  // Its figures are rounded to cents one by one (calc in js/money-doc.js) from the day it is made, and from any day it
+  // is saved as a Draft. A document sent under 1.4.0 keeps that build's arithmetic until it is taken back to Draft:
+  // what went out does not change by a cent because Vdex was updated.
+  if (!had || next.status === 'Draft') next.calc = 2;
   // The dates follow the status: an invoice taken back from Paid has no paid date, and a document taken back to Draft
   // was not sent.
   if (next.status === 'Draft') next.sentAt = null;
@@ -195,7 +202,7 @@ export const billedName = b => { if (!(b.shared && b.shared.ref)) return b.clien
 export function snapshot(b, kind) {
   const doc = docOf(b, kind), bl = billing(), p = db.profile, to = billTo(b), contacts = to.contacts.filter(s => s.name);
   return {
-    v: 1, kind, number: doc.number, date: doc.date, due: doc.due, until: doc.until, status: doc.status, title: b.title, when: dateLabel(b),
+    v: 2, ...(doc.calc ? { calc: doc.calc } : {}), kind, number: doc.number, date: doc.date, due: doc.due, until: doc.until, status: doc.status, title: b.title, when: dateLabel(b),
     from: partyLines(), to: [to.head, ...contacts.slice(0, 3).map(s => [s.name, s.role, s.email || s.phone].filter(Boolean).join(' · '))],
     lines: (doc.lines || []).map(({ desc, qty, unit, price }) => ({ desc, qty, unit, price })), taxLabel: doc.taxLabel || bl.taxLabel, taxRate: doc.taxRate, deposit: doc.deposit,
     payments: (doc.payments || []).map(({ date, amount, method }) => ({ date, amount, method: methodLabel(method) })), notes: doc.notes,
