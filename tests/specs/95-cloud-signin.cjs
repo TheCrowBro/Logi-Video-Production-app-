@@ -489,7 +489,8 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
         const elsewhere = (id, title) => { const c = JSON.parse(text), at = Math.max(Date.now(), Number(c.updatedAt) || 0) + 5; c.bookings.push({ id, title, date: '2026-12-02', status: 'Confirmed', crew: [], gear: [], updatedAt: at }); c.updatedAt = at; text = JSON.stringify(c); };
         s.cloud.adapter = { id: 'fake', label: 'Stand-in', where: 'nowhere', ready: async () => true, read: async () => { log.push('read'); return JSON.parse(text); }, write: async t => { log.push('write'); text = t; }, writeAux: async x => { log.push('feed'); ics = x.text; }, shareLink: async n => 'https://files.example/' + n };
         s.update(d => { d.calSync = { ...d.calSync, feed: true, updatedAt: Date.now() }; });
-        await new Promise(r => setTimeout(r, 1500)); log.length = 0; // (the timed save of that change)
+        for (let i = 0; i < 200 && !(log.includes('write') && s.cloud.status === 'synced'); i++) await new Promise(r => setTimeout(r, 50)); // (the timed save of that change: waited for, not timed)
+        log.length = 0;
         elsewhere('there', 'Saved by another device');
         const link = await s.feedLink(), linkLog = log.splice(0).join(' '), afterLink = [s.db.bookings.map(b => b.id).sort().join(), JSON.parse(text).bookings.map(b => b.id).sort().join(), ics.includes('Saved by another device') && ics.includes('Made here')];
         elsewhere('last', 'One more from elsewhere'); ics = '';
