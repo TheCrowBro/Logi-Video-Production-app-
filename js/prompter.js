@@ -252,10 +252,26 @@ function run(logId, from, controls = true) {
     prefs, h('p', { class: 'small pr-panel-keys' }, KEYS_HELP));
   const root = h('div', { class: 'prompter', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Teleprompter', 'data-state': 'paused', tabindex: '-1' }, stage.el, panel, top, bottom, rateBox, hint);
   const gear = top.querySelector('.pr-settings');
+  // On an upright phone the drawer would cover the reading line, so while it is out the stage is lifted into the strip
+  // above it, with the reading line as far down that strip as it is down the whole screen: the text size, the spacing
+  // and the reading line itself all show as they are changed. (`translate` adds to the stage's mirror and upside down.)
+  const upright = matchMedia('(orientation: portrait)');
+  function fitStage() {
+    let lift = 0;
+    if (panel.classList.contains('open') && upright.matches) {
+      const m = stage.el.querySelector('.pr-marker'), H = stage.el.clientHeight, row = m.offsetHeight;
+      const y = stage.el.classList.contains('flip') ? H - m.offsetTop - row : m.offsetTop; // the reading line, where it shows
+      const a = top.offsetHeight, b = H - bottom.offsetHeight, to = panel.offsetTop; // the screen between the bars; the drawer's top, once out
+      const f = Math.max(0, Math.min(1, (y - a) / Math.max(1, b - a - row)));
+      lift = Math.min(0, Math.round(a + f * Math.max(0, to - a - row) - y));
+    }
+    stage.el.style.translate = lift ? `0 ${lift}px` : '';
+  }
   function showPanel(open) {
     if (open === panel.classList.contains('open')) return;
     if (open) { const s = stage.state(); if (s.playing || s.counting) stage.cmd('pause'); root.style.setProperty('--pr-top', top.offsetHeight + 'px'); root.style.setProperty('--pr-bot', bottom.offsetHeight + 'px'); prefs.redraw(); showHud(); }
     panel.classList.toggle('open', open); panel.inert = !open; gear.setAttribute('aria-expanded', String(open)); gear.classList.toggle('on', open);
+    fitStage();
     if (!open && panel.contains(document.activeElement)) root.focus({ preventScroll: true });
   }
 
@@ -271,7 +287,7 @@ function run(logId, from, controls = true) {
   function onState(s) {
     ear.check(s);
     if (s.playing || s.counting) showPanel(false); // prompting: the controls get out of the way
-    else if (was && (was.wpm !== s.wpm || was.size !== s.size) && panel.classList.contains('open')) prefs.redraw();
+    else if (panel.classList.contains('open')) { if (was && (was.wpm !== s.wpm || was.size !== s.size)) prefs.redraw(); fitStage(); } // measured again: a setting, a turn of the phone
     root.dataset.state = s.counting ? 'count' : s.playing ? 'running' : 'paused';
     if (s.playing && !(was && was.playing)) hudSoon();
     if (!s.playing && (!was || was.playing)) showHud();

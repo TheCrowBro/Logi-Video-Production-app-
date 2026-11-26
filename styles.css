@@ -984,7 +984,10 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; background: #000d; border: 1px solid #333; color: #ddd; padding: 10px 14px; border-radius: 12px; font-size: .95rem; width: max-content; max-width: min(90%, 30rem); text-align: center; pointer-events: none; opacity: 0; transition: opacity .4s; }
 .pr-hint.shown { opacity: 1; }
 /* The prompter's controls, sliding out over the stage between its button bars: from the right on a wide or landscape
-   screen, from the bottom on an upright phone (the reading line, a third down, stays in sight); dark like the rest of it. */
+   screen, from the bottom on an upright phone (the script is lifted above it, so the reading line stays in sight: the
+   stage's translate, set in prompter.js, slides with it); dark like the rest of it. */
+.pr-stage { transition: translate .25s ease; }
+.prompter:has(.pr-panel.open) .pr-hud { background: #000; } /* solid while the lifted script runs under the top bar */
 .pr-panel { --bg: #0e0e10; --bg2: #1c1c1e; --card: #161618; --line: #3a3a3c; --text: #f2f2f2; --muted: #a1a1a6; --accent: #ffd166; --accent-ink: #1a1305;
   position: absolute; z-index: 1; top: var(--pr-top, 56px); bottom: var(--pr-bot, 64px); right: 0; width: min(380px, 46vw); overflow: auto; overscroll-behavior: contain;
   background: #0e0e10; color: var(--text); border-left: 1px solid #2c2c2e; box-shadow: -12px 0 30px #0009; padding: 0 14px 16px;
@@ -994,7 +997,7 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
   .pr-panel { top: auto; left: 0; width: auto; max-height: 52%; border-left: 0; border-top: 1px solid #2c2c2e; box-shadow: 0 -12px 30px #0009; transform: translateY(calc(100% + var(--pr-bot, 64px))); }
   .pr-panel.open { transform: none; }
 }
-:root[data-motion=off] .pr-panel, :root[data-motion=off] .pr-panel.open { transition: none; }
+:root[data-motion=off] .pr-panel, :root[data-motion=off] .pr-panel.open, :root[data-motion=off] .pr-stage { transition: none; }
 .pr-panel-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 6px; background: #0e0e10; }
 .pr-panel-head h2 { margin: 0; font-size: 1rem; }
 .pr-panel .pr-prefs { gap: 10px; } .pr-panel .pref-label { color: var(--text); }
