@@ -143,36 +143,59 @@ export const redraw = () => emit('stored');
 
 // Every time of its own in a copy, under a name that is the same before and after a change: a record's, a booking's
 // budget, stripboard, quote and invoice (or the mark a deleted one left), a log's script, notes and note marks, the
-// deletion marks, and the settings that follow their newer copy. As [name, holder, field].
+// deletion marks, and the settings that follow their newer copy. As [name, holder, field, thing]: the thing a time
+// belongs to is the same for a record and the mark its deletion leaves, for a booking's quote or invoice and the mark
+// a deleted one leaves, and for a timecode note and its marks.
 function* stamps(d) {
   for (const list of [...LISTS, 'logs']) for (const x of d[list] || []) {
     if (!x || typeof x !== 'object') continue;
-    yield [`${list}/${x.id}`, x, 'updatedAt'];
-    if (list === 'bookings') { for (const k of ['budget', 'board', 'quote', 'invoice']) { if (x[k] && typeof x[k] === 'object') yield [`${x.id}/${k}`, x[k], 'updatedAt']; } for (const k of ['quoteGoneAt', 'invoiceGoneAt']) if (x[k]) yield [`${x.id}/${k}`, x, k]; }
-    if (list === 'logs') { yield [`${x.id}/script`, x, 'scriptAt']; for (const n of x.notes || []) { if (n && n.id) yield [`${x.id}/note/${n.id}`, n, 'upd']; } for (const id of Object.keys(x.dead || {})) yield [`${x.id}/dead/${id}`, x.dead, id]; }
+    yield [`${list}/${x.id}`, x, 'updatedAt', x.id];
+    if (list === 'bookings') { for (const k of ['budget', 'board', 'quote', 'invoice']) { if (x[k] && typeof x[k] === 'object') yield [`${x.id}/${k}`, x[k], 'updatedAt', `${x.id}/${k}`]; } for (const k of ['quote', 'invoice']) if (x[k + 'GoneAt']) yield [`${x.id}/${k}GoneAt`, x, k + 'GoneAt', `${x.id}/${k}`]; }
+    if (list === 'logs') { yield [`${x.id}/script`, x, 'scriptAt', `${x.id}/script`]; for (const n of x.notes || []) { if (n && n.id) yield [`${x.id}/note/${n.id}`, n, 'upd', n.id]; } for (const id of Object.keys(x.dead || {})) yield [`${x.id}/dead/${id}`, x.dead, id, id]; }
   }
-  for (const id of Object.keys(d.deleted || {})) yield [`deleted/${id}`, d.deleted, id];
-  for (const k of ['profile', 'billing', 'priceList', 'templates', 'calSync']) if (d[k] && typeof d[k] === 'object') yield [k, d[k], 'updatedAt'];
+  for (const id of Object.keys(d.deleted || {})) yield [`deleted/${id}`, d.deleted, id, id];
+  for (const k of ['profile', 'billing', 'priceList', 'templates', 'calSync']) if (d[k] && typeof d[k] === 'object') yield [k, d[k], 'updatedAt', k];
 }
-// The newest time anywhere in this device's copy: what a restore has to outrank.
+// The newest time anywhere in this device's copy.
 const newestIn = d => { let t = Number(d.updatedAt) || 0; for (const [, o, f] of stamps(d)) { const v = Number(o[f]) || 0; if (v > t) t = v; } return t; };
+// The newest time a copy holds for each thing (see stamps()).
+const newestOf = d => { const top = new Map(); for (const [, o, f, g] of stamps(d)) { const t = Number(o[f]) || 0; if (t > (top.get(g) || 0)) top.set(g, t); } return top; };
 
-// Mutate the db inside fn, then save + sync. Returns false when the change was refused.
-// A change counts as made after everything this copy has seen. Usually that is simply now. But a copy can hold times
-// this device's clock has not reached: another device's clock runs ahead (a restore there stamps every record with
-// it), or this one's runs behind. A change stamped with the plain clock would then lose to the copy it replaces at
-// the next sync, on every device, without a word. So while the copy is ahead of the clock, whatever fn stamps is
-// moved to one past the newest time the copy held.
-// "One past" is not the same number on every device: two devices that both hold that copy and each change the same
-// record before reading the other would then stamp it alike, each would keep its own at every merge (a tie goes to
-// the copy here), and both would upload the whole copy at every sync from then on. So each running Vdex counts in a
-// seat of its own, one of 256: the next time after t that is its seat's turn. Two such changes then differ, the later
-// number wins on both devices, and they agree. (A change made after reading the other's is later whatever the seats.)
-// Each change so stamped moves the copy's time on by up to a quarter of a second, so this is kept for a copy that is
-// that far ahead of the clock or more: another device's clock, never the millisecond a burst of changes shares.
+// A change counts as made after what it changes. Usually the clock says so. But a copy can hold times this device's
+// clock has not reached: another device's clock runs ahead (a restore there stamps every record with it), or this
+// one's runs behind. A change to such a thing, stamped with the plain clock, would lose to the copy it replaces at the
+// next sync, on every device, without a word. So a time a change, a restore or the sample data writes is moved past
+// the newest time the copy held for that same thing (newestOf()) where the clock has not passed it: past the record
+// it changes, past the record a deletion mark deletes (and the other way round), past the document a deleted quote or
+// invoice leaves its mark for, past the note a note's marks are for. Only that thing: whatever else carries a clock
+// that runs ahead keeps it to itself, as in 1.4.0, and a change to a record nobody stamped ahead counts by the clock,
+// so a device still on 1.4.0, or one that was out of reach, that changes it later is later.
+// "Past" t is not the same number on every device: two devices that both hold that copy and each change the same
+// thing before reading the other would then stamp it alike. So each running Vdex counts in a seat of its own, one of
+// 256: the next time after t that is its seat's turn. Two such changes then differ, the later number wins on both
+// devices, and they agree. (A change made after reading the other's is later whatever the seats.) Each change so
+// stamped moves the time on by up to a quarter of a second, so this is kept for a time that far ahead of the clock or
+// more: another device's clock, never the millisecond a burst of changes shares, where it is plainly one past.
 const SEAT = Math.floor(Math.random() * 256), SEATS = 256;
 const onePast = t => { const n = t + 1; return n + ((SEAT - n) % SEATS + SEATS) % SEATS; };
 export const stampSeat = () => SEAT; // (for the specs: two devices of a case must not sit in the same seat by chance)
+// Moves each time in d that fresh(name, value) picks past the newest time top held for the same thing, where the clock
+// (now) has not passed it. → the newest time it left on what it picked.
+function outrank(d, top, fresh, now) {
+  let high = 0;
+  for (const [k, o, f, g] of stamps(d)) {
+    const v = Number(o[f]) || 0; if (!v || !fresh(k, o[f])) continue;
+    const t = top.get(g) || 0;
+    if (v <= t) o[f] = t - now >= SEATS ? onePast(t) : t + 1;
+    high = Math.max(high, Number(o[f]) || 0);
+  }
+  return high;
+}
+
+// Mutate the db inside fn, then save + sync. Returns false when the change was refused.
+// While the copy holds a time later than the clock (db.updatedAt is the newest it has seen), what fn stamps is moved
+// past the time the same thing had before (outrank() above). Code that changes a record with a time of its own making
+// (remove() below, one past the record's own) keeps it: it is past the record already.
 // keepTimes: what fn puts in was made on another device and carries that device's times (a timecode log merged over
 // the link, js/pages/tcnotes.js), as a copy from the cloud does. Those times are kept as they are, never moved on as a
 // change made here: the linked device would take the moved copy, send it back, and each would move the other's on
@@ -180,11 +203,11 @@ export const stampSeat = () => SEAT; // (for the specs: two devices of a case mu
 // later than what came in.
 export function update(fn, { keepTimes = false } = {}) {
   if (gate && !gate()) return false;
-  const seen = Number(db.updatedAt) || 0, before = !keepTimes && seen > Date.now() ? new Map([...stamps(db)].map(([k, o, f]) => [k, o[f]])) : null;
+  const seen = Number(db.updatedAt) || 0, ahead = !keepTimes && seen > Date.now();
+  const before = ahead ? new Map([...stamps(db)].map(([k, o, f]) => [k, o[f]])) : null, top = ahead ? newestOf(db) : null;
   fn(db);
-  const now = Date.now(), at = before && seen >= now ? (seen - now >= SEATS ? onePast(seen) : seen + 1) : now; // (a lead of a few milliseconds, as after a burst of changes in one of them, is no other device's clock: plainly one past, and the clock is ahead again at once)
-  if (before) for (const [k, o, f] of stamps(db)) { const v = Number(o[f]) || 0; if (v && v < at && before.get(k) !== o[f]) o[f] = at; }
-  db.updatedAt = Math.max(at, Number(db.updatedAt) || 0, keepTimes ? newestIn(db) : 0);
+  const now = Date.now(), high = ahead ? outrank(db, top, (k, v) => before.get(k) !== v, now) : 0;
+  db.updatedAt = Math.max(now, Number(db.updatedAt) || 0, high, keepTimes ? newestIn(db) : 0);
   persistLocal();
   emit();
   schedulePush();
@@ -266,15 +289,16 @@ export const gearClash = (booking, gearId) => {
 // The same goes for the parts of a booking that keep a time of their own (budget, stripboard, quote, invoice). And what
 // this device held that the backup does not is marked deleted, so that the other devices let go of it too and do not
 // hand it back at the next sync: after a restore every device ends with what the backup holds.
-// "Now" is never earlier than the newest time in the copy this device holds (newestIn): on a device whose clock runs
-// behind, the plain clock would be older than the marks and edits it has already taken from the cloud, and the
-// restore would be undone by the next sync.
+// "Now" is never earlier than the time this device's copy held for the same thing (outrank(), as for a change): on a
+// device whose clock runs behind, the plain clock would be older than the marks and edits it has already taken from
+// the cloud, and the restore would be undone by the next sync. Only that thing: a copy that holds one time of a clock
+// that runs ahead does not hand it to everything restored.
 // A list or a setting the file does not carry at all (a backup made before it existed, a file with one list in it) is
 // no part of the backup: this device's own stays as it is, unstamped, and nothing of it is marked deleted. Only a
 // list the file does carry, empty or not, replaces the one here.
 export const carries = (data, k) => { const v = data && typeof data === 'object' ? data[k] : null; return LISTS.includes(k) || k === 'logs' ? Array.isArray(v) : ['profile', 'billing', 'priceList', 'templates', 'calSync', 'deleted'].includes(k) ? !!v && typeof v === 'object' : v != null; };
 export function replaceAll(data) {
-  const was = db, now = Math.max(Date.now(), newestIn(db) + 1), has = k => carries(data, k);
+  const was = db, now = Date.now(), top = newestOf(was), has = k => carries(data, k);
   db = normalise(data);
   for (const k of Object.keys(was)) if (!has(k) && k !== 'version' && k !== 'updatedAt') db[k] = was[k];
   for (const list of LISTS) if (has(list)) db[list] = (db[list] || []).map(x => (x && typeof x === 'object' ? { ...x, updatedAt: now } : x));
@@ -296,7 +320,7 @@ export function replaceAll(data) {
   // brought back). The calendar link is not content: it stays as the newer copy has it.
   for (const k of ['profile', 'billing', 'priceList', 'templates']) if (has(k) && db[k] && typeof db[k] === 'object') db[k] = { ...db[k], updatedAt: now };
   markGone(was, db, now);
-  db.updatedAt = now;
+  db.updatedAt = Math.max(now, Number(was.updatedAt) || 0, outrank(db, top, (k, v) => v === now, now));
   persistLocal();
   emit();
   schedulePush();
@@ -343,7 +367,7 @@ export function loadSample() {
   const venueA = uid(), todayJob = uid(), past0 = uid(), past1 = uid(), past2 = uid(), past3 = uid();
   // worked days for the hours chart: [booking, days ago, start h, end h, break min]
   const shift = (bid, ago, sh, eh, bm) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ago, sh, 0); const start = x.getTime(); return { id: uid(), bookingId: bid, date: iso(-ago), start, end: start + (eh - sh) * 36e5, breaks: bm ? [{ start: start + 4 * 36e5, end: start + 4 * 36e5 + bm * 6e4 }] : [], updatedAt: start }; };
-  const was = db, now = Math.max(Date.now(), newestIn(db) + 1); // never earlier than what this copy has seen, as for a restore
+  const was = db, now = Date.now(), top = newestOf(was); // never earlier than what this copy held for the same thing, as for a restore
   const g = (name, category, value, serial = '', qty = 1) => ({ id: uid(), name, category, value, serial, qty, notes: '' });
   const gear = [
     g('Sony FX6 body', 'Camera', 6000, 'FX6-120934'), g('Sony FE 24-70mm f/2.8 GM II', 'Lens', 2300),
@@ -390,7 +414,7 @@ export function loadSample() {
   // examples too, not with both (the shifts keep their own times: the hours chart reads them).
   for (const list of ['bookings', 'crew', 'gear', 'kits', 'venues', 'insurance']) db[list] = db[list].map(x => ({ ...x, updatedAt: now }));
   markGone(was, db, now);
-  db.updatedAt = now;
+  db.updatedAt = Math.max(now, Number(was.updatedAt) || 0, outrank(db, top, (k, v) => v === now, now));
   persistLocal(); emit(); schedulePush();
 }
 

@@ -459,6 +459,46 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       ok('two devices whose copy is ahead of their clocks each change the same booking before reading the other: they end with the same one and upload nothing more', aheadOfClock && both[0] === both[1] && /^x:Changed on [QR]$/.test(both[0]) && more === 0, JSON.stringify([aheadOfClock, both, more]));
       await P.ctx.close(); await Q.ctx.close(); await R.ctx.close();
     }
+    // …but only what was itself stamped ahead counts as ahead. Counted past the newest time in the whole copy, a change
+    // to a booking nobody stamped ahead carried the fast clock's time, and so did a deletion's mark on the bookings it
+    // was taken off and every record a restore brought back: a later change made on a device that had not read the
+    // fast clock (out of reach, or still on 1.4.0) was undone everywhere without a word, for as long as that clock led.
+    {
+      const cl = newCloud(), A = await device(cl, 'A'), C = await device(cl, 'C'), D = await device(cl, 'D'), X = await device(cl, 'X', { clock: 6 * 36e5 });
+      const view = page => st(page, s => { const b = s.byId('bookings', 'b'); return `${b.title} / ${b.notes || 'no notes'} / ${b.gear.join('+')}`; });
+      await start(A.page);
+      await st(A.page, s => { s.upsert('gear', { id: 'g1', name: 'Camera' }); s.upsert('gear', { id: 'g2', name: 'Lens' }); });
+      await add(A.page, 'b', 'Booked on A', { gear: ['g1', 'g2'], notes: '' }); await saved(A.page);
+      await start(C.page); await synced(C.page); await start(D.page); await synced(D.page); // C and D go out of reach before anything is stamped ahead
+      await start(X.page); await synced(X.page); await add(X.page, 'x', 'Made where the clock is 6 hours ahead'); await st(X.page, s => s.upsert('gear', { id: 'gx', name: 'Drone', serial: 'DX-1' })); await saved(X.page);
+      await front(A.page);
+      await st(A.page, s => s.upsert('bookings', { ...s.byId('bookings', 'b'), title: 'Renamed on A first' }));
+      const stampA = await st(A.page, s => s.byId('bookings', 'b').updatedAt - Date.now()), copyA = await st(A.page, s => s.db.updatedAt - Date.now());
+      await saved(A.page);
+      cl.offline = true; await sleep(1500);
+      await st(C.page, s => s.upsert('bookings', { ...s.byId('bookings', 'b'), title: 'Renamed on C later, out of reach', notes: 'Notes typed on C' })); await sleep(300);
+      await st(A.page, s => s.remove('gear', 'g1')); // taken off booking b, which counts as changed one moment after A's own copy of it
+      cl.offline = false; await sleep(1200);
+      for (let i = 0; i < 3; i++) { await syncNow(A.page); await syncNow(C.page); }
+      const ends = [await view(A.page), await view(C.page)], stored = cloudDb(cl).bookings.find(b => b.id === 'b'), WANT = 'Renamed on C later, out of reach / Notes typed on C / g2';
+      ok('with another device’s clock 6 hours ahead, a booking changed here keeps this clock’s time, and a later change on a device out of reach stands everywhere, a deletion’s mark on it included', copyA > 5 * 36e5 && stampA < 2000 && ends.every(v => v === WANT) && `${stored.title} / ${stored.notes} / ${stored.gear.join('+')}` === WANT, JSON.stringify([copyA, stampA, ends]));
+      // …and a restore made on a copy that holds the fast clock's time gives it to nothing restored: a change made after
+      // it on a device still out of reach stands
+      const file = await st(A.page, s => s.exportJSON());
+      await A.page.evaluate(text => import('./js/backup.js').then(m => m.importData(new File([text], 'file.json'))), file);
+      const restoredAt = await st(A.page, s => s.byId('bookings', 'b').updatedAt - Date.now());
+      await saved(A.page);
+      cl.offline = true; await sleep(1100);
+      await st(D.page, s => s.upsert('bookings', { ...s.byId('bookings', 'b'), title: 'Renamed on D after the restore, out of reach' }));
+      cl.offline = false; await sleep(1200);
+      for (let i = 0; i < 2; i++) { await syncNow(D.page); await syncNow(A.page); await syncNow(C.page); }
+      const after = [await view(A.page), await view(C.page), await view(D.page)];
+      ok('…and a restore on that copy stamps the booking with this clock, so a change made after it on a device out of reach stands on every device', restoredAt < 2000 && after.every(v => v.startsWith('Renamed on D after the restore, out of reach / ')), JSON.stringify([restoredAt, after]));
+      // …and an equipment import that updates the item stamped ahead and adds one beside it (the two then carry different times) is taken back by its Undo
+      const undo = await A.page.evaluate(async () => { const g = await import('./js/gear-import.js'), s = await import('./js/store.js'); const done = g.applyGearImport(g.planGearImport([{ name: 'Drone', serial: 'DX-1', notes: 'from a list' }, { name: 'Light from a list' }], { onSerial: 'update' }), {}); const ats = new Set(s.db.gear.filter(x => ['Drone', 'Light from a list'].includes(x.name)).map(x => x.updatedAt)).size, r = g.undoGearImport(done); return [ats, r.removed, r.restored, r.kept, s.db.gear.map(x => `${x.name}:${x.notes || ''}`).sort().join('+')].join(); });
+      ok('…and an equipment import that updates an item stamped ahead and adds another is taken back whole by its Undo', undo === '2,1,1,0,Drone:+Lens:', undo);
+      await A.ctx.close(); await C.ctx.close(); await D.ctx.close(); await X.ctx.close();
+    }
     {
       const cl = newCloud(), P = await device(cl, 'P'), Q = await device(cl, 'Q');
       const writes = name => cl.log.filter(l => l === `${name} PUT ${MAIN}`).length, rounds = async n => { cl.log.length = 0; for (let i = 0; i < n; i++) { await front(P.page); await sleep(150); await front(Q.page); await sleep(150); } return writes('P') + writes('Q'); };
