@@ -173,13 +173,18 @@ const newestIn = d => { let t = Number(d.updatedAt) || 0; for (const [, o, f] of
 const SEAT = Math.floor(Math.random() * 256), SEATS = 256;
 const onePast = t => { const n = t + 1; return n + ((SEAT - n) % SEATS + SEATS) % SEATS; };
 export const stampSeat = () => SEAT; // (for the specs: two devices of a case must not sit in the same seat by chance)
-export function update(fn) {
+// keepTimes: what fn puts in was made on another device and carries that device's times (a timecode log merged over
+// the link, js/pages/tcnotes.js), as a copy from the cloud does. Those times are kept as they are, never moved on as a
+// change made here: the linked device would take the moved copy, send it back, and each would move the other's on
+// for ever. And the copy's own time rises to the newest of them, so that a change made here afterwards counts as
+// later than what came in.
+export function update(fn, { keepTimes = false } = {}) {
   if (gate && !gate()) return false;
-  const seen = Number(db.updatedAt) || 0, before = seen > Date.now() ? new Map([...stamps(db)].map(([k, o, f]) => [k, o[f]])) : null;
+  const seen = Number(db.updatedAt) || 0, before = !keepTimes && seen > Date.now() ? new Map([...stamps(db)].map(([k, o, f]) => [k, o[f]])) : null;
   fn(db);
   const now = Date.now(), at = before && seen >= now ? (seen - now >= SEATS ? onePast(seen) : seen + 1) : now; // (a lead of a few milliseconds, as after a burst of changes in one of them, is no other device's clock: plainly one past, and the clock is ahead again at once)
   if (before) for (const [k, o, f] of stamps(db)) { const v = Number(o[f]) || 0; if (v && v < at && before.get(k) !== o[f]) o[f] = at; }
-  db.updatedAt = Math.max(at, Number(db.updatedAt) || 0);
+  db.updatedAt = Math.max(at, Number(db.updatedAt) || 0, keepTimes ? newestIn(db) : 0);
   persistLocal();
   emit();
   schedulePush();
