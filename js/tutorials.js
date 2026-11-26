@@ -370,7 +370,7 @@ export const TUTORIALS = {
     T('The script', 'The line being read is lit and follows the scroll. Tap any line to send the prompter there.', '.pr-rlist'),
     T('Its settings', 'The other screen’s own settings, under Script, Format and Other: how the script shows, jumping to a scene or finding a line there, the text, the reading line, the rig, the countdown and scrolling.', '.pr-settings'),
     C('Keys', 'A clicker or keyboard on this device drives it too: Space plays and pauses, Page Down and Page Up move a line, ← → and ↑ ↓ the speed, R rolls and cuts, F marks, G and N rate the take just cut.'),
-    T('Close', '✕ closes the remote and the prompter on the other screen.', '.pr-close'),
+    T('Close', '✕ closes the remote and the prompter on the other screen. A take rolled from it in free run ends with it; in record run it stays rolling until Cut on the log.', '.pr-close'),
   ] },
   tcexport: { name: 'Timecode: exporting notes', page: null, sheet: true, steps: [
     T('Text or spreadsheet', 'Share as text for anyone, or as a spreadsheet (CSV) with the timecode, the note, the script line and the time it was captured, for the edit suite.', '.sheet-body'),

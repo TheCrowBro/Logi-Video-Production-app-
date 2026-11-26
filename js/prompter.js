@@ -611,6 +611,10 @@ function openRemote(logId, port) {
   function close(keep) {
     if (!root.isConnected) return;
     clearInterval(iv); unsub(); ear.stop(); window.removeEventListener('keydown', onKey, true);
+    // A take rolled from here in free run ends with the remote (and the prompter it closes), as it does with the
+    // prompter over the page; in record run the camera may still be rolling, so it stays open for the log's own Cut.
+    // A remote that another one takes over (keep) leaves it to that one.
+    if (!keep) { const l = log(); if (l && l.open && !(l.mode === 'record' && l.sync)) endTake(logId); }
     if (!keep) port.closeScreen();
     port.done && port.done();
     root.remove(); REMOTE = null; settleApp();

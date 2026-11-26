@@ -102,8 +102,12 @@ const settings = async (page, scope, tab, twirl) => {
   ok('the remote’s ⚙ sets the window’s line spacing', (await win.evaluate(() => document.querySelector('.pr-col').style.lineHeight)) === '1.6');
   await page.keyboard.press('Escape'); await sleep(200);
   await win.screenshot({ path: S + '/prompter-window.png' });
+  await page.locator('.pr-remote .pr-roll').click(); await sleep(1300); // a take left rolling as the remote closes
+  const rolling = (await takes(page)).length;
   await page.locator('.pr-remote .pr-close').click(); await sleep(800);
   ok('closing the remote closes the window and gives the page back', win.isClosed() && (await page.locator('.pr-remote').count()) === 0 && !(await page.evaluate(() => document.getElementById('app').inert)));
+  const ended = await page.evaluate(() => import('./js/store.js').then(s => { const l = s.db.logs.find(x => x.practice); const t = l.notes.filter(n => n.kind === 'roll').pop(); return { open: !!l.open, dur: t && t.dur || '', n: l.notes.filter(n => n.kind === 'roll').length }; }));
+  ok('…and a take rolled from it in free run ends with it, timed, as with the prompter over the page', rolling === 2 && ended.n === 2 && !ended.open && /^\d+:\d\d$/.test(ended.dur), JSON.stringify(ended));
   ok('no errors with a second screen', page.errors.length === 0 && werrors.length === 0, [...page.errors, ...werrors].join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL the prompter remote spec crashed — ' + (e && e.stack || e)); process.exit(1); });
