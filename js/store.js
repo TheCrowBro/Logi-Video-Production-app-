@@ -217,7 +217,7 @@ export function replaceAll(data) {
   });
   // A timecode log's notes and its script each follow their own time in a merge (mergeLog): the notes are stamped, the
   // script counts as put in now (also "no script"), and markGone leaves a mark for each note made since the backup.
-  db.logs = db.logs.map(l => ({ ...l, updatedAt: now, ...('script' in l ? { scriptAt: now } : {}), notes: l.notes.map(n => (n && typeof n === 'object' ? { ...n, upd: now } : n)) }));
+  db.logs = db.logs.map(l => ({ ...l, updatedAt: now, script: l.script === undefined ? null : l.script, scriptAt: now, notes: l.notes.map(n => (n && typeof n === 'object' ? { ...n, upd: now } : n)) }));
   // The settings that follow their newer copy in a merge (the profile, the billing settings, the price list, the
   // checklists) count as changed now too: the save that follows a restore reads the cloud copy first, and its newer
   // settings would otherwise take the place of the restored ones at once (a price list emptied by mistake could not be
