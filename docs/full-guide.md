@@ -30,10 +30,10 @@ The two phone guides cover the same ground in the same order, so a crew with bot
 
 There are two ways. **The Vdex app on the App Store** (search for Vdex, or follow the link on vdex.crowmade.app) is the same Vdex with what only an app can do on an iPhone: break alerts that arrive with the app closed, a "Vdex bookings" calendar in the Calendar app, backups and spreadsheets saved through the Files app, scripts and shot lists handed to it from Mail or Files, printing through the phone's print sheet, and the licence bought in the app. Its Install button does not show, because it is installed already.
 
-Or, with no app at all, install the website from Safari:
+Or, with no app at all, install the website from the browser:
 
-1. Open the Vdex address in **Safari**. Other iPhone browsers can't add it to the Home Screen properly.
-2. Tap **Share**, the square with an arrow at the bottom of the screen.
+1. Open the Vdex address in **Safari**. Chrome, Edge and Firefox can add it to the Home Screen too (iOS 16.4 or later).
+2. Tap **Share**: in Safari the square with an arrow at the bottom of the screen, in the other browsers beside the address or in the browser's menu.
 3. Scroll down and tap **Add to Home Screen**, then **Add**.
 4. From now on, open Vdex from its Home Screen icon.
 
@@ -349,7 +349,7 @@ The Money overview (Bookings → Money) adds up what is invoiced and unpaid, wha
 
 Vdex is a web app, so there is nothing to find in the Play Store. You install it from the browser:
 
-1. Open the Vdex address in **Chrome**. Edge and Samsung Internet work too. Firefox can't install it, so use it in a tab there.
+1. Open the Vdex address in **Chrome**. Edge and Samsung Internet work too. In Firefox, use its menu **⋮ → Add app to Home screen**.
 2. Open Vdex's menu (**☰** at the top right), tap **Install Vdex** and confirm. If you don't see it, open Chrome's menu **⋮ → Install app** (older phones say *Add to Home screen*).
 3. Vdex appears in your app list and on the Home screen. It opens full-screen and works offline.
 

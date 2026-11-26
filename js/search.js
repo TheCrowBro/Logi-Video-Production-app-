@@ -212,7 +212,7 @@ async function land(tab, prepare) {
 }
 // Scrolls to something, clear of the Rolodex bar, and keeps that bar on screen: the jump is Vdex's own, not the person
 // scrolling down, and the bar is the way on from here (the sections, and the magnifier back to the results).
-const jump = (el, block) => { const nav = document.getElementById('rolodex'); el.style.scrollMarginTop = `${(nav ? nav.getBoundingClientRect().height : 0) + 12}px`; el.scrollIntoView({ block }); window.logiShowNav?.(true); };
+const jump = (el, block) => { el.scrollIntoView({ block }); window.logiShowNav?.(true); }; // clear of the bar: the page keeps its height free at the top of every scroll (scroll-padding-top, set in js/app.js)
 const toPage = () => document.getElementById('page')?.focus({ preventScroll: true });
 // Shows one card or box among others: scrolled to, outlined for a moment, and given the focus so a keyboard or a
 // screen reader carries on from it.
@@ -402,7 +402,7 @@ function run() {
       kids.push(h('div', { class: 'sr-group', role: 'group', 'aria-label': `${label(g)}, ${plural(all.length, 'result')}`, 'data-group': g },
         h('div', { class: 'sr-head', 'aria-hidden': 'true' }, h('span', null, label(g)), h('span', { class: 'sr-count' }, String(all.length))),
         some.map(r => option(r, terms)),
-        all.length > some.length && (filter ? more(`Show more (${all.length - some.length} more)`, () => { const y = listbox.scrollTop; limit += PAGE; run(); listbox.scrollTop = y; }) : more(`Show all ${all.length} in ${label(g)}`, () => setFilter(g)))));
+        all.length > some.length && (filter ? more(`Show more (${all.length - some.length} more)`, () => { const y = listbox.scrollTop, at = active; limit += PAGE; run(); listbox.scrollTop = y; if (at >= 0) setActive(at); }) /* the first newly shown result takes the place the Show more row had: the arrows carry on from there */ : more(`Show all ${all.length} in ${label(g)}`, () => setFilter(g)))));
     }
   }
   listbox.replaceChildren(...kids); listbox.hidden = !mine.length; listbox.scrollTop = 0;

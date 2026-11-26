@@ -227,7 +227,7 @@ export function workflowBlock(b, actions = {}) {
     return h('div', { class: 'checklist' },
       items.map(it => h('div', { class: 'check-item' + (it.done ? ' done' : '') },
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: it.done, onchange: e => { setCheck(b, it.id, e.target.checked); if (e.target.checked) offerArchive(b); } }), h('span', null, it.t)),
-        it.a && actions[it.a] && h('button', { class: 'btn ghost small', onclick: actions[it.a] }, '→'),
+        it.a && actions[it.a] && h('button', { class: 'btn ghost small', 'aria-label': `Open: ${it.t}`, title: 'Open what this line is about', onclick: actions[it.a] }, '→'),
         it.custom && h('button', { class: 'icon-btn', 'aria-label': 'Remove item', onclick: () => removeCustomItem(b, it.id) }, '✕'))),
       items.length > 0 && h('div', { class: 'check-item check-all' }, h('label', { class: 'check' }, allBox, h('span', null, allDone ? 'All done · untick all' : 'Check all'))),
       h('div', { class: 'row-edit' }, input, h('button', { class: 'btn ghost small', onclick: add }, 'Add')));

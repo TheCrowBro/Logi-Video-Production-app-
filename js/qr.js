@@ -2,7 +2,9 @@
 import { h } from './util.js';
 
 const load = (src, globalName) => window[globalName] ? Promise.resolve(window[globalName]) : new Promise((res, rej) => document.head.append(h('script', { src, onload: () => res(window[globalName]), onerror: () => rej(new Error('Could not load ' + src)) })));
-export const loadQR = () => load('vendor/qrcode.js', 'qrcode');
+// Text goes into a code as UTF-8, which is what phones read it as. (The library's own default keeps the low byte of
+// each character: a name outside ASCII, or a curly apostrophe, came out of a scan as other characters.)
+export const loadQR = () => load('vendor/qrcode.js', 'qrcode').then(q => { q.stringToBytes = q.stringToBytesFuncs['UTF-8']; return q; });
 export const loadJsQR = () => load('vendor/jsQR.js', 'jsQR');
 
 // SVG markup for a QR of `text` (byte mode), error-correction level L keeps dense codes scannable.

@@ -8,13 +8,14 @@ import { qrSvg } from './qr.js';
 
 const bar = document.getElementById('bar'), box = document.getElementById('doc');
 addEventListener('hashchange', () => location.reload()); // another invoice link opened in this same tab: draw that one
-const fail = msg => { box.replaceChildren(h('div', { class: 'msg' }, h('h2', null, 'This link does not open an invoice'), h('p', null, msg), h('p', null, 'Ask the person who sent it for a fresh link, or for the PDF.'))); };
+// old: the browser cannot unpack any link, so a fresh one would not help; the PDF would.
+const fail = (msg, old = false) => { box.replaceChildren(h('div', { class: 'msg' }, h('h2', null, 'This link does not open an invoice'), h('p', null, msg), h('p', null, old ? 'Or ask the person who sent it for the PDF.' : 'Ask the person who sent it for a fresh link, or for the PDF.'))); };
 const save = (text, name, type) => { const a = h('a', { href: URL.createObjectURL(new File([text], name, { type })), download: name }); document.body.append(a); a.click(); a.remove(); };
 const slug = s => String(s || 'doc').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40);
 
 (async () => {
   let snap;
-  try { snap = await unpack(location.hash); } catch (e) { return fail(e.message || 'It is incomplete or damaged.'); }
+  try { snap = await unpack(location.hash); } catch (e) { return fail(e.message || 'It is incomplete or damaged.', e.code === 'old'); }
   if (!snap || !KINDS[snap.kind] || !snap.number) return fail('It is incomplete or damaged.');
   const K = KINDS[snap.kind], t = calc(snap);
   document.title = docTitle(snap);

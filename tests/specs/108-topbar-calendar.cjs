@@ -133,6 +133,20 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await hform.locator('input[data-key="note"]').fill('second camera day'); await hform.locator('button[type=submit]').click(); await sleep(300);
   const onBrk = await page.evaluate(() => import('./js/hours.js').then(hh => { const r = hh.running(); const out = { running: !!r, on: hh.onBreak(r), planned: (hh.currentBreak(r) || {}).planned, note: r && r.note }; hh.stopShift(); return out; }));
   ok('saving a note on the running entry while on a break keeps the break and its countdown', brk === '0' && onBrk.running && onBrk.on && onBrk.planned === 30 && onBrk.note === 'second camera day', JSON.stringify({ brk, ...onBrk }));
+  // Between a phone and a wide window, with the lock button there (every device has a PIN): the tagline is whole or
+  // absent, never sliced. And on the narrowest phone at the largest text, the weekday names keep to their columns.
+  await page.evaluate(() => { document.getElementById('lockBtn').hidden = false; });
+  const cuts = {};
+  for (const w of [470, 561, 580, 640, 700, 760]) {
+    await page.setViewportSize({ width: w, height: 900 }); await sleep(200);
+    cuts[w] = await page.evaluate(() => { const b = document.querySelector('.top .brand'), sm = b.querySelector('small'), shown = getComputedStyle(sm).display !== 'none'; return { cut: b.scrollWidth - b.clientWidth, tag: shown, sliced: shown && sm.scrollWidth > sm.clientWidth }; });
+  }
+  ok('from 470 to 760 px wide, with the lock button showing, the brand is never cut off: the tagline is there whole or not at all', Object.values(cuts).every(c => c.cut <= 0 && !c.sliced) && cuts[470].tag && cuts[760].tag && !cuts[580].tag, JSON.stringify(cuts));
+  await page.evaluate(() => { document.getElementById('lockBtn').hidden = true; document.documentElement.dataset.text = 'xlarge'; });
+  await page.setViewportSize({ width: 320, height: 800 }); await page.evaluate(() => window.logiGo('bookings')); await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.showMonth())); await page.waitForSelector('.bk-month .wd'); await sleep(300);
+  const days = await page.evaluate(() => [...document.querySelectorAll('.wd')].map(w => { const r = document.createRange(); r.selectNodeContents(w); return Math.round(r.getBoundingClientRect().width - w.getBoundingClientRect().width); }));
+  ok('at 320 px with Extra large text the weekday names fit their columns, none running into the next', days.length === 7 && days.every(n => n <= 0), JSON.stringify(days));
+  await page.evaluate(() => { document.documentElement.dataset.text = 'normal'; });
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + e.message); process.exit(1); });

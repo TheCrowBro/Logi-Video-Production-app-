@@ -82,11 +82,17 @@ export function announce(msg) {
 export function settleApp() {
   const app = document.getElementById('app'); if (!app) return;
   app.inert = !!document.querySelector('.sheet-back, .tour, body > .lock, body > .terms-gate') || document.body.classList.contains('menu-open') || document.body.classList.contains('search-open');
+  // "Skip to content" leads into the page, so it is out of reach whenever the page is: Shift+Tab from a dialog must not
+  // land on a link that then does nothing.
+  const skip = document.querySelector('a.skip'); if (skip) skip.inert = app.inert;
 }
 
 // A full screen that covers everything else is up: the lock screen, the PIN set-up or the offer of a longer PIN
 // (coverAll in js/lock.js makes what is on the page at that moment inert and hides the sheets).
 export const covered = () => !!document.querySelector('body > .lock');
+// Something code adds to the page while such a screen is up (the update bar, the licence bar) was not there to be
+// covered: it starts out of reach like the rest, marked data-covered, and the screen's way out gives it back.
+export const underCover = el => { if (covered()) { el.inert = true; el.dataset.covered = ''; } return el; };
 
 // A page drawn again from the store replaces every control on it, and the page is drawn again after every change
 // (also one that arrives by itself: a calendar or a cloud sync). What identifies a control across that is its kind,
@@ -142,9 +148,11 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
     if (e.key !== 'Tab') return;
     const items = [...box.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
     if (!items.length) return;
-    const first = items[0], last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    const first = items[0], last = items[items.length - 1], at = document.activeElement;
+    // From the sheet itself (where the focus is put as it opens) or from anywhere outside it, Tab goes into the sheet.
+    if (!box.contains(at) || at === box) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+    else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
   };
   const box = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
     h('div', { class: 'sheet-head' }, h('h2', null, title), h('div', { class: 'sheet-tools' }, window.logiHelp && h('button', { class: 'icon-btn sheet-help', 'aria-label': 'Tutorial for this', title: 'Tutorial', onclick: () => window.logiHelp() }, '?'), h('button', { class: 'icon-btn', 'aria-label': 'Close', onclick: close }, '✕'))),
@@ -162,6 +170,10 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   document.body.append(back);
   sheetStack.push(back);
   settleApp();
+  // The keyboard focus moves into the dialog as it opens, so a screen reader announces it and Tab starts inside it: on
+  // the sheet itself, not on a button (someone still typing must not press one by accident). A caller that wants a
+  // field focused does so right after.
+  if (!back.inert && !box.contains(document.activeElement)) { box.tabIndex = -1; box.focus({ preventScroll: true }); }
   return { el: box, close };
 }
 

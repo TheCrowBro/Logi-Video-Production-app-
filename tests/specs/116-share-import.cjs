@@ -1256,6 +1256,71 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   ok('the same for a contact when the Crew page cannot be fetched: the person is added and said to be, and nothing says otherwise', o2.crew === 'Otto Offline' && o2.toasts.join('|') === 'Added to your Crew' && o2.sheets === 0 && O2.broke.length === 0, JSON.stringify([o2, O2.broke]));
   await O2.ctx.close();
   const origin = new URL(BASE).origin;
+  /* ============================== what a hunt after 1.4.0 found ============================== */
+  { // The Me page's Phone contacts code and its .vcf file keep a name that is not plain ASCII.
+    const R = await open({ width: 1100, height: 900 });
+    await R.page.goto(BASE); await R.page.waitForSelector('#rolodex .drum-btn');
+    await R.page.evaluate(() => window.logiGo('me')); await R.page.waitForSelector('.me-modes');
+    // The name the page gives the file it hands to the browser (the browser's own record of a download keeps only plain letters here).
+    await R.page.evaluate(() => { window.__files = []; const make = URL.createObjectURL; URL.createObjectURL = f => { if (f && f.name) window.__files.push(f.name); return make.call(URL, f); }; });
+    const read = {}, files = {};
+    for (const name of ['Łucja Przykładowa', 'Олена Приклад', 'Zoë O’Sample']) {
+      await R.page.evaluate(n => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: n, phone: '555 0100', updatedAt: Date.now() }; })), name); await sleep(300);
+      await R.page.locator('.me-modes button', { hasText: 'Phone contacts' }).click(); await R.page.waitForSelector('#page .qr svg', { timeout: 8000 }); await sleep(400);
+      read[name] = (await readQr(R.page)).includes(name);
+      await Promise.all([R.page.waitForEvent('download', { timeout: 8000 }), R.page.getByRole('button', { name: 'Share contact (.vcf)' }).click()]);
+      files[name] = await R.page.evaluate(() => window.__files[window.__files.length - 1]);
+    }
+    ok('the Phone contacts code, read back with Vdex’s own scanner, holds each name exactly as typed: Polish, Cyrillic, and one with ë and a curly apostrophe', Object.values(read).every(Boolean), JSON.stringify(read));
+    ok('…and the .vcf file is named after the person in their own letters, not “_.vcf”', files['Łucja Przykładowa'] === 'Łucja_Przykładowa.vcf' && files['Олена Приклад'] === 'Олена_Приклад.vcf' && files['Zoë O’Sample'] === 'Zoë_O_Sample.vcf', JSON.stringify(files));
+    await R.ctx.close(); }
+  { // The crew page on a phone: a web address in a schedule line, a scene or a deliverable wraps on the paper.
+    const R = await open({ width: 360, height: 800 }), URLY = 'https://maps.app.goo.gl/AbCdEfGhIjKlMnOpQ?g_st=ic';
+    const packed = await pack({ v: 1, kind: 'crew', ref: 'REF-WRAP', made: Date.now(), title: 'Harbour film', date: day(9), start: '09:00', end: '17:00', by: { name: 'Pat Producer' },
+      schedule: [{ time: '09:00', item: 'Parking: ' + URLY }], crew: [{ name: 'Sam Rivera', role: '1st AC', phone: '555 0101', email: 'sam@example.com', call: '08:30' }],
+      scenes: [{ n: 1, date: day(9), items: [{ scene: '1', ie: 'INT.', set: 'KITCHEN', tod: 'DAY', desc: 'Reference ' + URLY, cast: [], kind: 'sb-int-day' }] }], deliverables: [{ name: 'Master_file_https://example.com/a/very/long/address/without/any/spaces/in/it', duration: '90 s', due: day(30), status: 'Planned' }] });
+    await R.page.goto(BASE + 'crew.html#' + packed); await R.page.waitForSelector('.paper table'); await sleep(300);
+    const paper = await R.page.evaluate(() => ({ wide: document.documentElement.scrollWidth, shown: /maps\.app\.goo\.gl/.test(document.querySelector('.paper').textContent), role: getComputedStyle([...document.querySelectorAll('.paper td')].find(td => td.textContent === '1st AC')).overflowWrap }));
+    ok('on the crew page a web address in a schedule line, a scene and a deliverable wraps inside the paper at 360 px, while a role still never breaks mid-word', paper.shown && paper.wide <= 360 && paper.role === 'normal', JSON.stringify(paper));
+    await R.ctx.close(); }
+  { // A browser too old to unpack a link says so, instead of calling the link damaged and asking for a fresh one.
+    const R = await open({ width: 420, init: () => { delete window.DecompressionStream; } });
+    const packed = await pack({ v: 1, kind: 'crew', ref: 'REF-OLD', made: Date.now(), title: 'Harbour film', date: day(9), by: { name: 'Pat Producer' } });
+    await R.page.goto(BASE + 'crew.html#' + packed); await R.page.waitForSelector('.msg'); const crewSays = await R.page.locator('.msg').innerText();
+    await R.page.goto(cardLink); await R.page.waitForSelector('.msg'); const cardSays = await R.page.locator('.msg').innerText();
+    ok('with no DecompressionStream (Safari before 16.4) a good link is answered “this browser is too old”, on the crew page and the card’s page, with no word of damage or of a fresh link', [crewSays, cardSays].every(t => /This browser is too old to open/.test(t) && !/damaged|fresh/.test(t)), JSON.stringify([crewSays, cardSays]).slice(0, 400));
+    await R.ctx.close(); }
+  { // Add from a link: when the part that draws the preview cannot be fetched, the sheet stays, says so and keeps the link.
+    const R = await open(), had = errors.length;
+    await R.ctx.route('**/js/share-import.js*', r => r.abort());
+    await R.page.goto(BASE); await R.page.waitForSelector('#rolodex .drum-btn');
+    await R.page.locator('#page button', { hasText: 'Add from a link' }).click(); await R.page.waitForSelector('.sheet textarea');
+    await R.page.locator('.sheet textarea').fill(cardLink); await R.page.locator('.sheet button', { hasText: 'Show what it holds' }).click(); await sleep(1500);
+    const stuck = await R.page.evaluate(() => ({ sheet: document.querySelector('.sheet')?.getAttribute('aria-label') || '', said: document.querySelector('.sheet [role=alert]')?.textContent || '', kept: (document.querySelector('.sheet textarea') || {}).value || '' }));
+    errors.splice(had); // the browser's own line about the file that could not be fetched
+    ok('when the preview’s own file cannot be fetched, Add from a link stays open, says the link could not be opened, and still holds the link', stuck.sheet === 'Add from a link' && /could not be opened\. Check the connection and try again\./.test(stuck.said) && stuck.kept === cardLink, JSON.stringify(stuck).slice(0, 300));
+    await R.ctx.unroute('**/js/share-import.js*');
+    if (stuck.sheet) await R.page.locator('.sheet button', { hasText: 'Show what it holds' }).click();
+    ok('…and the same tap works once the connection is back', stuck.sheet === 'Add from a link' && await R.page.waitForSelector('.sheet .add-preview', { timeout: 10000 }).then(() => true, () => false));
+    await R.ctx.close(); }
+  // Scan a QR code while the scanner's file is still on its way (a first use on a slow connection): closing the sheet,
+  // or a second tap on Scan, must not leave a camera switched on with nothing on screen.
+  for (const twice of [false, true]) {
+    const R = await open({ width: 390 });
+    await R.ctx.route('**/js/qr.js*', async r => { await sleep(1200); r.continue().catch(() => {}); });
+    await R.page.goto(BASE); await R.page.waitForSelector('#rolodex .drum-btn');
+    await R.page.evaluate(() => { const c = document.createElement('canvas'); c.width = c.height = 64; c.getContext('2d').fillRect(0, 0, 64, 64); window.__streams = []; navigator.mediaDevices.getUserMedia = async () => { const s = c.captureStream(5); window.__streams.push(s); return s; }; });
+    await R.page.locator('#page button', { hasText: 'Add from a link' }).click(); await R.page.waitForSelector('.sheet textarea');
+    const scanBtn = R.page.locator('.sheet button', { hasText: 'Scan a QR code' });
+    await scanBtn.click(); await sleep(250);
+    if (twice) { await scanBtn.click(); await sleep(2600); }
+    const whileOpen = await R.page.evaluate(() => window.__streams.filter(s => s.getTracks().some(t => t.readyState === 'live')).length);
+    await R.page.locator('.sheet .icon-btn[aria-label="Close"]').click(); await sleep(twice ? 600 : 2600);
+    const cams = await R.page.evaluate(() => ({ asked: window.__streams.length, live: window.__streams.filter(s => s.getTracks().some(t => t.readyState === 'live')).length, sheets: document.querySelectorAll('.sheet').length }));
+    ok(twice ? 'Scan a QR code tapped twice while the scanner is still loading opens one camera, and closing the sheet switches it off' : 'Add from a link closed while the scanner is still loading opens no camera afterwards', cams.sheets === 0 && cams.live === 0 && (twice ? whileOpen === 1 && cams.asked === 1 : cams.asked === 0), JSON.stringify({ whileOpen, ...cams }));
+    await R.ctx.close();
+  }
+
   const outside = requests.filter(u => !u.startsWith(origin) && !u.startsWith('data:') && !u.startsWith('blob:') && !/^https:\/\/api\.open-meteo\.com\//.test(u) && !u.startsWith('https://dav.test/') && !/^https:\/\/(api|content)\.dropboxapi\.com\//.test(u)); // dav.test and Dropbox's addresses: the stand-ins for one's own cloud storage in the two-device cases
   const leaked = requests.filter(u => u.includes(hashOf(cardLink).slice(0, 40)) || u.includes(hashOf(kitLink).slice(0, 40)) || /[?&]add=/.test(u));
   ok('nothing was sent anywhere in all of this: every request was for the app’s own files, and no link’s contents were in any of them', outside.length === 0 && leaked.length === 0, [...outside, ...leaked].slice(0, 3).join(' | '));

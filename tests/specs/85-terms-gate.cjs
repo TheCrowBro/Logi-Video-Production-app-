@@ -79,6 +79,16 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     }
     await ctx.close(); }
 
+  // --- on a phone the gate opens at its heading, not scrolled down to the tick box ---
+  for (const [w, hgt] of [[360, 640], [390, 844]]) {
+    const ctx = await browser.newContext({ viewport: { width: w, height: hgt }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+    const page = await ctx.newPage(); page.on('pageerror', e => errors.push(e.message));
+    await page.goto(BASE); await page.waitForSelector('.terms-gate'); await sleep(500);
+    const at = await page.evaluate(() => ({ scrolled: Math.round(document.querySelector('.terms-gate').scrollTop), heading: Math.round(document.querySelector('.terms-gate h1').getBoundingClientRect().top), focus: document.activeElement && document.activeElement.id }));
+    ok(`at ${w}×${hgt} the terms open at “Before you start”, with the tick box still holding the focus`, at.scrolled === 0 && at.heading >= 0 && at.focus === 'terms-ok', JSON.stringify(at));
+    await ctx.close();
+  }
+
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

@@ -127,6 +127,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('Install closes the menu and, with no install prompt from the browser, shows how to install', !(await menuState(page)).open && (await page.locator('.sheet[aria-label="Install Vdex"]').count()) === 1);
   const installText = await page.locator('.sheet').innerText(), storageRow = await page.evaluate(() => document.querySelector('#cloudBtn .menu-name').textContent);
   ok('…its steps name the storage row as the menu does, and say that in this browser both ways use the same data', storageRow === 'Storage, sync & backups' && installText.includes(`Link a cloud storage under ${storageRow}, in the menu ☰`) && /Both ways use the same address and the same data\./.test(installText), installText.replace(/\s+/g, ' ').slice(0, 400));
+  ok('…and Firefox is given its own way to install on Android, not told it cannot', /Firefox/.test(installText) && /Add app to Home screen/.test(installText) && !/doesn’t install web apps/.test(installText));
   await page.keyboard.press('Escape'); await sleep(200);
   // The browser's own install prompt opens no sheet of ours: the row itself must have closed the menu before asking.
   await page.evaluate(() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.prompt = () => { window.__prompts = (window.__prompts || 0) + 1; window.__menuAtPrompt = !document.getElementById('menuBack').hidden; }; e.userChoice = Promise.resolve({ outcome: 'dismissed' }); window.dispatchEvent(e); });
@@ -885,11 +886,45 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await ctx.close();
 
   /* ------------------------------ Install, on an iPhone ------------------------------ */
-  // Safari and the Home Screen app each keep a copy of their own there, so the sheet must not say they share one.
+  // The browser and the Home Screen app each keep a copy of their own there, so the sheet must not say they share one.
   ({ ctx, page } = await open({ w: 390, h: 800, options: { hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1' } }));
   await menuClick(page, '#installBtn'); await page.waitForSelector('.sheet[aria-label="Install Vdex"]');
   const onPhone = await page.locator('.sheet').innerText();
-  ok('on an iPhone the Install sheet says the Home Screen app keeps its own copy, apart from Safari, and how to bring across what was entered; it does not say both ways use the same data', /On an iPhone or iPad the Home Screen app keeps its own copy, apart from Safari: to bring across what you entered here, link the same cloud storage in both, or export a backup here and import it there \(both need a licence\)\./.test(onPhone) && !/the same data/.test(onPhone) && /Add to Home Screen/.test(onPhone), onPhone.replace(/\s+/g, ' ').slice(0, 420));
+  ok('on an iPhone the Install sheet says the Home Screen app keeps its own copy, apart from the browser’s, and how to bring across what was entered; it does not say both ways use the same data', /On an iPhone or iPad the Home Screen app keeps its own copy, apart from the browser’s: to bring across what you entered here, link the same cloud storage in both, or export a backup here and import it there \(both need a licence\)\./.test(onPhone) && !/the same data/.test(onPhone) && /Add to Home Screen/.test(onPhone), onPhone.replace(/\s+/g, ' ').slice(0, 420));
+  ok('…and it does not send anyone to Safari: the other iPhone browsers have Add to Home Screen in their own Share menu', !/Open this page in Safari|Other iPhone browsers can’t/.test(onPhone) && /In Chrome, Edge or Firefox: Share/.test(onPhone));
+  await ctx.close();
+
+  /* ------------------- Install: the browser's prompt comes while the lock screen is up ------------------- */
+  // Every device has a PIN, and the browser sends its install prompt once, a moment after the page loads: before the
+  // PIN is in. It must still be there for the Install row afterwards.
+  ({ ctx, page } = await open({ w: 390, h: 800 }));
+  await page.evaluate(() => import('./js/lock.js').then(l => l.setPin('246810'))); await page.waitForFunction(() => !!localStorage.getItem('logi-vault'), null, { timeout: 60000 });
+  await page.reload(); await page.waitForSelector('.lock');
+  await page.evaluate(() => { const e = new Event('beforeinstallprompt', { cancelable: true }); e.prompt = () => { window.__prompts = (window.__prompts || 0) + 1; }; e.userChoice = Promise.resolve({ outcome: 'dismissed' }); window.dispatchEvent(e); });
+  await page.keyboard.type('246810'); await page.waitForSelector('#rolodex .drum-btn', { timeout: 60000 }); await sleep(300);
+  const kept = await page.evaluate(() => import('./js/install.js').then(m => m.installState().canPrompt));
+  await menuClick(page, '#installBtn'); await sleep(300);
+  const asked = await page.evaluate(() => ({ prompts: window.__prompts || 0, sheets: document.querySelectorAll('.sheet').length }));
+  ok('an install prompt the browser sent while the lock screen was up is kept: after the PIN, Install Vdex shows the browser’s prompt, not the written steps', kept === true && asked.prompts === 1 && asked.sheets === 0, JSON.stringify([kept, asked]));
+  await page.keyboard.press('Escape'); await sleep(200);
+  await ctx.close();
+
+  /* ------------------------------ Install, in the Play app ------------------------------ */
+  // The Play app is installed already, also while Android shows it with the browser's bar (as a tab, where the
+  // display mode says nothing): no Install row in the menu and no Install section in Settings.
+  ({ ctx, page } = await open({ w: 390, h: 800, options: { hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36' } }));
+  await page.goto(URL + 'index.html?src=play'); await page.waitForSelector('#rolodex .drum-btn');
+  await openMenu(page);
+  const playRows = await rows(page);
+  await page.keyboard.press('Escape'); await sleep(200);
+  await page.evaluate(() => window.logiGo('settings')); await sleep(500);
+  const playSettings = await page.locator('#page details.settings-section > summary .ss-title').allInnerTexts();
+  ok('opened from the Play app’s icon, Vdex offers no Install: not in the menu, not in Settings', playRows.length >= 3 && !playRows.includes('Install Vdex') && playSettings.length > 5 && !playSettings.includes('Install'), JSON.stringify([playRows, playSettings.includes('Install')]));
+  await page.waitForFunction(() => { try { return !!JSON.parse(localStorage.getItem('vdex-licence') || '{}').play; } catch { return false; } }, null, { timeout: 8000 }).catch(() => {});
+  await page.goto(URL); await page.waitForSelector('#rolodex .drum-btn'); // a later start by a link or a reload: without ?src=play
+  await openMenu(page);
+  ok('…and not at a later start that comes without the icon’s address either', !(await rows(page)).includes('Install Vdex'), (await rows(page)).join(', '));
+  await page.keyboard.press('Escape'); await sleep(200);
   await ctx.close();
 
   /* ---------------- extra large buttons on a touch screen: the bar's magnifier ---------------- */
@@ -949,6 +984,135 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await ctx.close();
 
   }
+
+  /* ------------------------------ the keyboard: dialogs, tabs, the Rolodex ------------------------------ */
+  const sample = page => page.evaluate(() => import('./js/store.js').then(s => s.loadSample()));
+  const focusOf = page => page.evaluate(() => { const a = document.activeElement; return a ? (a.id ? '#' + a.id : a.getAttribute('aria-label') || (a.textContent || '').trim().slice(0, 30) || a.tagName) : 'none'; });
+  ({ ctx, page } = await open({ w: 1100, h: 850 })); await sample(page); await sleep(300);
+  { // a sheet takes the focus as it opens, and Tab and Shift+Tab stay inside it
+    const seen = [];
+    for (const name of ['Pipeline', 'Hours & statistics']) {
+      await page.locator('#page button', { hasText: name }).first().focus(); await page.keyboard.press('Enter'); await page.waitForSelector('.sheet'); await sleep(300);
+      const opened = await page.evaluate(() => { const a = document.activeElement; return !!a && a.classList.contains('sheet') && a.getAttribute('role') === 'dialog'; });
+      await page.keyboard.press('Shift+Tab'); const back = await page.evaluate(() => !!document.activeElement.closest('.sheet') && !document.activeElement.classList.contains('sheet'));
+      await page.keyboard.press('Tab'); const on = await page.evaluate(() => !!document.activeElement.closest('.sheet'));
+      seen.push([name, opened, back, on].join(' '));
+      await page.keyboard.press('Escape'); await sleep(250);
+    }
+    await menuClick(page, '#cloudBtn'); await page.waitForSelector('.sheet'); await sleep(300);
+    const storage = await page.evaluate(() => ({ inSheet: !!document.activeElement.closest('.sheet'), skip: document.querySelector('a.skip').inert }));
+    await page.keyboard.press('Escape'); await sleep(250);
+    ok('a sheet takes the keyboard focus as it opens (the dialog itself, so it is announced), Shift+Tab and Tab stay inside it, and “Skip to content” is out of reach under it', seen.every(x => !/false/.test(x)) && storage.inSheet && storage.skip === true && (await page.evaluate(() => document.querySelector('a.skip').inert)) === false, seen.join(' | ') + ' ' + JSON.stringify(storage));
+    // a walkthrough card keeps Tab inside it too, and gives the focus back when it ends
+    await page.evaluate(() => window.logiGo('crew')); await sleep(400);
+    await menuClick(page, '#helpBtn'); await page.waitForSelector('.tour-card h2'); await sleep(400);
+    const stops = []; for (let i = 0; i < 6; i++) { await page.keyboard.press(i % 2 ? 'Shift+Tab' : 'Tab'); stops.push(await page.evaluate(() => !!document.activeElement.closest('.tour-card'))); }
+    for (let i = 0; i < 5; i++) { await page.keyboard.press('Tab'); stops.push(await page.evaluate(() => !!document.activeElement.closest('.tour-card'))); }
+    await page.keyboard.press('Escape'); await sleep(300);
+    ok('a walkthrough card keeps Tab and Shift+Tab inside it, and when it ends the focus is back where it was, not nowhere', stops.every(Boolean) && (await focusOf(page)) === '#menuBtn', JSON.stringify(stops) + ' then ' + await focusOf(page));
+  }
+  { // arrow keys on a tab or a radio button move among its own list; the Rolodex stays where it is
+    await page.evaluate(() => window.logiGo('me')); await sleep(700);
+    await page.locator('.me-modes button').first().focus(); await page.keyboard.press('ArrowRight'); await sleep(450);
+    const me = { page: await page.evaluate(() => window.logiPage()), focus: await focusOf(page) };
+    await page.keyboard.press('ArrowLeft'); await sleep(200);
+    const meBack = await focusOf(page);
+    await page.evaluate(() => window.logiGo('gear')); await sleep(700);
+    await page.locator('#page [role=tablist] [role=tab]').first().focus(); await page.keyboard.press('ArrowRight'); await sleep(450);
+    const gear = { page: await page.evaluate(() => window.logiPage()), focus: await focusOf(page) };
+    await page.evaluate(() => window.logiGo('settings')); await sleep(600);
+    await page.evaluate(() => { for (const d of document.querySelectorAll('#page details')) d.open = true; }); await sleep(300);
+    await page.locator('#page [role=radiogroup] [role=radio]').first().focus(); await page.keyboard.press('ArrowDown'); await sleep(450);
+    const radio = { page: await page.evaluate(() => window.logiPage()), second: await page.evaluate(() => document.activeElement === document.querySelectorAll('#page [role=radiogroup] [role=radio]')[1]) };
+    ok('on the Me page’s tabs, Equipment’s Items / Kits and the colour themes, an arrow key moves the focus to the next one and the section stays open', me.page === 'me' && /^Phone contacts/.test(me.focus) && /^Contact card/.test(meBack) && gear.page === 'gear' && /^Kits/.test(gear.focus) && radio.page === 'settings' && radio.second, JSON.stringify([me, meBack, gear, radio]));
+    // the Rolodex itself: the focus follows the tab in front
+    await page.evaluate(() => window.logiGo('bookings')); await sleep(500);
+    await page.locator('#rolodex .tab[aria-selected=true]').focus();
+    for (let i = 0; i < 3; i++) { await page.keyboard.press('ArrowDown'); await sleep(450); }
+    const turned = await page.evaluate(() => ({ page: window.logiPage(), selected: document.activeElement.getAttribute('aria-selected'), label: document.activeElement.getAttribute('aria-label') }));
+    await page.keyboard.press('Enter'); await sleep(450);
+    ok('turned with the arrow keys, the Rolodex keeps the focus on the tab in front, so Enter does not jump back to the section it started on', turned.page === 'venues' && turned.selected === 'true' && /^Venues/.test(turned.label) && (await page.evaluate(() => window.logiPage())) === 'venues', JSON.stringify(turned));
+  }
+  { // tabbing backwards up a long page: the focused control is never under the sticky Rolodex bar
+    const hidden = {};
+    for (const tab of ['gear', 'settings']) {
+      await page.evaluate(t => window.logiGo(t), tab); await sleep(800);
+      await page.evaluate(() => { document.querySelectorAll('#page details').forEach(d => { d.open = true; }); window.scrollTo(0, document.documentElement.scrollHeight); }); await sleep(500);
+      await page.evaluate(() => { const all = [...document.querySelectorAll('#page button, #page a[href], #page input, #page select, #page summary')].filter(e => e.offsetParent !== null); all[all.length - 1].focus(); });
+      let under = 0, n = 0;
+      for (let i = 0; i < 30; i++) {
+        await page.keyboard.press('Shift+Tab'); await sleep(330);
+        const r = await page.evaluate(() => { const a = document.activeElement; if (!a || !a.closest('#page')) return null; const r = a.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return { under: !!hit && !!hit.closest('#rolodex') }; });
+        if (!r) break; n++; if (r.under) under++;
+      }
+      hidden[tab] = `${under} of ${n}`;
+    }
+    ok('tabbing backwards up Equipment and Settings never leaves the focused control under the Rolodex bar', Object.values(hidden).every(x => /^0 of (1\d|2\d|30)$/.test(x)), JSON.stringify(hidden));
+  }
+  { // a checklist line's shortcut is named, and Display options keep the focus on the choice made
+    const id = await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings[0].id));
+    await page.evaluate(() => window.logiGo('bookings')); await sleep(500);
+    await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), id); await page.waitForSelector('.bk-detail'); await sleep(400);
+    await page.evaluate(() => { document.querySelectorAll('#page details').forEach(d => { d.open = true; }); }); await sleep(300);
+    const arrows = await page.evaluate(() => [...document.querySelectorAll('.check-item button')].filter(b => b.textContent.trim() === '→').map(b => b.getAttribute('aria-label') || ''));
+    ok('the → at the end of a checklist line is named for the line it opens', arrows.length > 3 && arrows.every(n => /^Open: \S/.test(n)), arrows.slice(0, 3).join(' | ') + ` (${arrows.length})`);
+    await menuClick(page, '#displayBtn'); await page.waitForSelector('.sheet');
+    await page.locator('.sheet .pref[aria-label="Text size"] button', { hasText: 'Large' }).first().focus(); await page.keyboard.press('Enter'); await sleep(200);
+    const size = await page.evaluate(() => ({ text: document.activeElement.textContent, pressed: document.activeElement.getAttribute('aria-pressed') }));
+    await page.locator('.sheet details.twirl > summary').click(); await sleep(200);
+    await page.locator('.sheet .theme-row', { hasText: 'Noir' }).focus(); await page.keyboard.press('Enter'); await sleep(200);
+    const theme = await page.evaluate(() => ({ text: document.activeElement.textContent.slice(0, 4), checked: document.activeElement.getAttribute('aria-checked') }));
+    await page.locator('.sheet .seg button', { hasText: 'Light' }).focus(); await page.keyboard.press('Enter'); await sleep(200);
+    const scheme = await page.evaluate(() => ({ text: document.activeElement.textContent, pressed: document.activeElement.getAttribute('aria-pressed') }));
+    ok('choosing a text size, a colour theme or an appearance by keyboard keeps the focus on the choice just made', size.text === 'Large' && size.pressed === 'true' && theme.text === 'Noir' && theme.checked === 'true' && scheme.text === 'Light' && scheme.pressed === 'true', JSON.stringify([size, theme, scheme]));
+    await page.locator('.sheet .pref[aria-label="Text size"] button', { hasText: 'Standard' }).first().click(); await page.keyboard.press('Escape'); await sleep(200);
+  }
+  await ctx.close();
+  // Search by keyboard: Enter on “Show more” carries on from the first result it adds.
+  ({ ctx, page } = await open({ w: 1100, h: 850 }));
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { for (let i = 1; i <= 150; i++) d.crew.push({ id: 't' + i, name: 'Testa Person ' + String(i).padStart(3, '0'), role: 'Grip', updatedAt: Date.now() }); })));
+  await page.keyboard.press('/'); await page.waitForSelector('#searchInput'); await page.locator('#searchInput').fill('testa'); await sleep(500);
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('Enter'); await sleep(400);
+  for (let i = 0; i < 61; i++) await page.keyboard.press('ArrowDown');
+  const marked = () => page.evaluate(() => ({ text: document.getElementById(document.getElementById('searchInput').getAttribute('aria-activedescendant') || 'none')?.textContent || '', top: Math.round(document.getElementById('searchList').scrollTop) }));
+  const onMore = await marked();
+  await page.keyboard.press('Enter'); await sleep(400);
+  const added = await marked();
+  await page.keyboard.press('ArrowDown'); await sleep(200);
+  const onward = await marked();
+  ok('after Enter on “Show more”, the first result it added is marked and the next arrow goes on from there, not back to the first result', /Show more/.test(onMore.text) && /Testa Person 061/.test(added.text) && /Testa Person 062/.test(onward.text) && onward.top > 1000, JSON.stringify([onMore, added, onward]));
+  await page.keyboard.press('Escape'); await sleep(200);
+  await ctx.close();
+
+  /* ------------------------------ text size and narrow phones ------------------------------ */
+  // Text size enlarges the main text too (names, notes, links, buttons), not only headings and small print.
+  ({ ctx, page } = await open({ w: 390, h: 800, options: { hasTouch: true, isMobile: true } })); await sample(page);
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, website: 'https://www.harbour-films.example/showreel', email: 'bookings@northlight-productions.example', updatedAt: Date.now() }; })));
+  await page.evaluate(() => window.logiGo('crew')); await sleep(600);
+  const sizes = () => page.evaluate(() => ({ body: parseFloat(getComputedStyle(document.body).fontSize), name: parseFloat(getComputedStyle(document.querySelector('.crew-card')).fontSize), button: parseFloat(getComputedStyle(document.querySelector('#page .btn')).fontSize), small: parseFloat(getComputedStyle(document.querySelector('#page .small')).fontSize) }));
+  const std = await sizes();
+  await page.evaluate(() => { document.documentElement.dataset.text = 'xlarge'; }); await sleep(200);
+  const xl = await sizes();
+  ok('Extra large text enlarges the main text by the same 138% as the small print: names, lines and buttons', std.body === 16 && Math.abs(xl.body - 22.08) < 0.1 && Math.abs(xl.name / std.name - 1.38) < 0.01 && Math.abs(xl.button / std.button - 1.38) < 0.01 && Math.abs(xl.small / std.small - 1.38) < 0.01, JSON.stringify([std, xl]));
+  await ctx.close();
+  // The narrowest phone at the largest text, in a wide font (what GitHub's runner draws in): the Me page's three choices
+  // stay inside their control, and a long website or email address wraps inside its row.
+  { const conf = path.join(S, 'fonts-wide.conf');
+    fs.writeFileSync(conf, '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n<fontconfig>\n  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>\n  <selectfont><rejectfont><pattern><patelt name="family"><string>Inter</string></patelt></pattern></rejectfont></selectfont>\n  <selectfont><rejectfont><pattern><patelt name="family"><string>Inter Display</string></patelt></pattern></rejectfont></selectfont>\n</fontconfig>\n');
+    const wideFont = await chromium.launch({ env: { ...process.env, FONTCONFIG_FILE: conf } });
+    for (const w of [320, 360]) {
+      const c = await wideFont.newContext({ viewport: { width: w, height: 800 }, hasTouch: true, isMobile: true });
+      await c.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); localStorage.setItem('logi-prefs', JSON.stringify({ text: 'xlarge' })); }); await c.addInitScript(acceptTerms());
+      const p = await c.newPage(); p.on('pageerror', e => errors.push(e.message));
+      await p.goto(URL); await p.waitForSelector('#rolodex .drum-btn');
+      await p.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); s.update(d => { d.profile = { ...d.profile, website: 'https://www.harbour-films.example/showreel', email: 'bookings@northlight-productions.example', updatedAt: Date.now() }; }); }));
+      await p.evaluate(() => window.logiGo('me')); await p.waitForSelector('.me-modes'); await sleep(600);
+      const me = await p.evaluate(w => { const seg = document.querySelector('.me-modes').getBoundingClientRect(); return { poke: Math.max(...[...document.querySelectorAll('.me-modes button')].map(b => Math.round(b.getBoundingClientRect().right - seg.right))), rows: Math.max(...[...document.querySelectorAll('#page .kv > div > :last-child')].map(x => Math.round(x.getBoundingClientRect().right))), wide: document.documentElement.scrollWidth - w, has: /harbour-films/.test(document.getElementById('page').textContent) }; }, w);
+      ok(`Me at ${w} px, Extra large text: Contact card / Phone contacts / Website stay inside their control, and a long website and email wrap inside the card`, me.has && me.poke <= 0 && me.rows <= w && me.wide <= 0, JSON.stringify(me));
+      await c.close();
+    }
+    await wideFont.close(); }
 
   ok('no page errors or Content Security Policy refusals', errors.length === 0, errors.join(' | '));
   await browser.close();

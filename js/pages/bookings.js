@@ -376,7 +376,7 @@ function venueBlock(b, gear) {
       warns.map(w => h('div', { class: 'warn' }, '⚠ ' + w.text)),
       venueChips(v),
       (v.rules || '').trim() && h('div', { class: 'muted small prewrap' }, v.rules.split('\n').slice(0, 3).join('\n')),
-      v.access && h('div', { class: 'small' }, h('span', { class: 'muted' }, 'Access: '), v.access),
+      v.access && h('div', { class: 'small prewrap' }, h('span', { class: 'muted' }, 'Access: '), v.access), // prewrap: a map link typed there wraps inside the card
       mapButtons(v)));
 }
 

@@ -233,8 +233,13 @@ async function previewGear(g, redrawn = false) {
 // For a link that cannot open this copy of Vdex by itself (the desktop app, the iPhone app, another browser): paste
 // it, or scan its QR code with the camera. The same preview follows.
 export function openAddFromLink() {
-  let scan = null, sh = null;
+  let scan = null, sh = null, gone = false, turn = 0; // gone: the sheet has closed. turn: counts the taps on Scan, so only the latest one opens the camera
   const stop = () => { if (scan) { scan.stop(); scan = null; } };
+  // The part that draws the preview (a file fetched on first use) is asked for before the sheet closes: when it cannot
+  // be had (no connection), the sheet stays open with the link still in its box, and says so.
+  const parts = snap => (snap.kind === 'gear' ? ['./gear-import.js'] : snap.kind === 'crew' ? ['./share-import.js', './money.js'] : ['./share-import.js']);
+  const reachable = snap => Promise.all(parts(snap).map(async p => { if (!(await fetch(new URL(p, import.meta.url))).ok) throw new Error(p); })).then(() => true, () => false);
+  const NOT_OPENED = 'The shared link could not be opened. Check the connection and try again.';
   const area = h('textarea', { class: 'share-link', rows: 4, 'aria-label': 'The shared Vdex link', placeholder: 'https://vdex.crowmade.app/…', spellcheck: false, autocapitalize: 'off' });
   const msg = h('p', { class: 'warn small', role: 'alert', hidden: true });
   const camBox = h('div', { class: 'stack' });
@@ -243,12 +248,18 @@ export function openAddFromLink() {
     msg.hidden = true;
     if (!area.value.trim()) { msg.textContent = 'Paste the link first, or scan its QR code.'; msg.hidden = false; area.focus(); return; }
     let snap; try { snap = await readShared(area.value, { scanned }); } catch (e) { msg.textContent = e.message; msg.hidden = false; area.focus(); return; }
-    sh.close(); await ready(); preview(snap);
+    if (!(await reachable(snap))) { msg.textContent = NOT_OPENED; msg.hidden = false; return; }
+    sh.close(); await ready(); preview(snap).catch(e => { console.error(e); toast(NOT_OPENED); });
   };
   const paste = async () => { try { const t = await navigator.clipboard.readText(); if (t) { area.value = t.trim(); go(); } else toast('The clipboard is empty'); } catch { toast('Vdex may not read the clipboard here: paste into the box instead'); area.focus(); } };
   const scanNow = async () => {
+    const mine = ++turn;
     stop(); msg.hidden = true;
     const { scanner } = await import('./qr.js');
+    // The scanner's file can take a while the first time: if the sheet was closed meanwhile, or Scan tapped again, this
+    // tap opens no camera (nothing would be on screen to show it, or to stop it).
+    if (gone || mine !== turn) return;
+    stop();
     scan = scanner(code => { area.value = code; camBox.replaceChildren(); scan = null; go({ scanned: true }); }, { hint: 'Point the camera at the QR code on their screen', instead: 'Paste the link instead.' });
     camBox.replaceChildren(scan.el, h('button', { class: 'btn ghost small', type: 'button', onclick: () => { stop(); camBox.replaceChildren(); } }, 'Stop the camera'));
     camBox.scrollIntoView({ block: 'nearest' });
@@ -260,6 +271,6 @@ export function openAddFromLink() {
       navigator.clipboard && navigator.clipboard.readText && h('button', { class: 'btn ghost', type: 'button', onclick: paste }, '📋 Paste'),
       navigator.mediaDevices && navigator.mediaDevices.getUserMedia && h('button', { class: 'btn ghost', type: 'button', onclick: () => scanNow().catch(() => toast('The camera could not be opened here')) }, '📷 Scan a QR code')),
     camBox,
-    h('p', { class: 'small muted' }, 'Nothing is sent anywhere: the booking, card or list is inside the link itself.')), { onClose: stop });
+    h('p', { class: 'small muted' }, 'Nothing is sent anywhere: the booking, card or list is inside the link itself.')), { onClose: () => { gone = true; stop(); } });
   setTimeout(() => area.focus(), 60);
 }

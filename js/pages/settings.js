@@ -30,9 +30,7 @@ export function reveal(title) {
   const d = [...document.querySelectorAll('#page details.settings-section, #page details.settings-group')].find(x => x.querySelector(':scope > summary .ss-title')?.textContent === title);
   if (!d) return false;
   for (let p = d; p; p = p.parentElement && p.parentElement.closest('details')) p.open = true;
-  const nav = document.getElementById('rolodex'); // sticky at the top: the section lands under it, not behind it
-  d.style.scrollMarginTop = `${(nav ? nav.getBoundingClientRect().height : 0) + 8}px`;
-  d.scrollIntoView({ block: 'start' });
+  d.scrollIntoView({ block: 'start' }); // under the sticky Rolodex bar, not behind it (the page's scroll-padding-top, set in js/app.js)
   d.querySelector(':scope > summary')?.focus({ preventScroll: true });
   return true;
 }

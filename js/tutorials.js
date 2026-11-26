@@ -125,7 +125,7 @@ async function recordHalf() {
 const moneyView = kind => async () => { await closeSheets(); await window.logiGo?.('bookings'); await wait(150); const m = await import('./pages/bookings.js'); m.openBooking(PRACTICE, { view: 'money', kind }); await wait(400); };
 const practiceRemover = ctx => h('div', { class: 'actions tour-done' }, practiceJob()
   ? h('button', { class: 'btn ghost', type: 'button', onclick: async () => { store.remove('bookings', PRACTICE); toast('Practice job removed'); (await import('./pages/bookings.js')).showMonth(); ctx.refresh(); } }, '🗑 Remove the practice job')
-  : h('span', { class: 'small muted' }, 'The practice job has been removed.'));
+  : h('span', { class: 'small muted' }, store.canChangeQuietly() ? 'The practice job has been removed.' : 'Vdex is read-only, so no practice job was made.'));
 
 export const TUTORIALS = {
   setup: { name: 'Set up Vdex', page: null, hidden: true, dynamic: setupSteps },
@@ -368,8 +368,12 @@ export function openSetup(from = 0) {
   return runTour(steps, { remember: true, from, footer: (n, stop) => (steps[n] && steps[n].footer ? steps[n].footer(stop) : null) });
 }
 
+// A page's walkthrough points at the page, so it never runs over a sheet that has no tutorial of its own (the ? in the
+// header of a form, of Set a PIN, of the sign-in sheet): its spotlight would land on that sheet's fields, with words
+// about something else. The chooser opens instead, and whatever is picked there closes the sheet first (overForm).
 export function openTutorial(key = currentContext()) {
   const t = TUTORIALS[key]; if (!t) return;
+  if (!t.sheet && document.querySelector('.sheet-back')) return openChooser();
   const steps = stepsFor(key);
   if (!steps.length) return toast('Nothing to show here yet');
   runTour(steps, { root: t.sheet ? topSheet : null, footer: (n, stop) => n === 0 && !t.sheet && [h('button', { class: 'btn ghost small', onclick: () => { stop(); openChooser(); } }, 'Other pages…'), key.startsWith('tc') && h('button', { class: 'btn ghost small', onclick: () => { stop(); openTcGuide(); } }, '📖 Guide'), (key === 'money' || key === 'moneycourse') && h('button', { class: 'btn ghost small', onclick: () => { stop(); openMoneyGuide(); } }, '📖 Guide')] });
@@ -378,10 +382,13 @@ export function openTutorial(key = currentContext()) {
 // Reaches a page (and, for a booking, a call sheet or money, the first booking) before running its tutorial.
 async function reach(key) {
   const t = TUTORIALS[key];
+  const click = sel => { const el = document.querySelector(sel); if (el) { el.click(); return true; } return false; };
+  // A course works on a practice job or a practice log that it makes: while Vdex is read-only it can make neither, and
+  // would pass over every card about it without a word. It says so instead, as the set-up walkthrough does.
+  if (t.course && !store.canChangeQuietly()) { toast('This walkthrough works on a practice job or log, which Vdex cannot make while it is read-only. The 📖 guides can be read meanwhile.'); return false; }
   if (t.page) { await window.logiGo?.(t.page); await wait(650); }
   if (key === 'tcnotes' && document.querySelector('.tc-log-head')) { click('.tc-log-head .btn.ghost.small'); await wait(300); }
   if (key === 'tclog' && !document.querySelector('.tc-log-head')) { if (!click('#page .list .card.tap')) { toast('Create a log first with + New log, then open the menu and tap Tutorial for this page inside it.'); return false; } await wait(350); }
-  const click = sel => { const el = document.querySelector(sel); if (el) { el.click(); return true; } return false; };
   if (['booking', 'callsheet', 'money', 'day', 'strips'].includes(key)) {
     // from wherever the Bookings page is, go to the month view first
     for (let i = 0; i < 3 && !document.querySelector('.bk-month'); i++) { if (!(click('.cs-page .page-head button') || click('.money-page .page-head button') || click('.sb-page .page-head button') || click('.bk-detail .page-head button') || click('button.btn.ghost.small'))) break; await wait(300); }
@@ -406,7 +413,7 @@ async function reach(key) {
 const TYPED = 'form, textarea, input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file])';
 function overForm(sh, what, go) {
   const under = [...document.querySelectorAll('.sheet-back')].filter(b => !b.contains(sh.el) && (b.hasAttribute('data-keeps') || b.querySelector(TYPED + ', .add-preview')));
-  if (!under.length) { sh.close(); return go(); }
+  if (!under.length) { sh.close(); return closeSheets().then(go); } // nothing to lose: whatever else is open (text size, an explanation) closes too, since what starts needs the page
   const top = under[under.length - 1], name = top.querySelector('.sheet').getAttribute('aria-label') || 'the form', typed = !!top.querySelector(TYPED);
   // Going back puts the focus on the first box or list in it that can be seen (a file chooser kept out of sight is
   // not one), else on its first button.
@@ -419,10 +426,11 @@ function overForm(sh, what, go) {
       h('button', { class: 'btn ghost', type: 'button', onclick: async () => { ask.close(); sh.close(); await closeSheets(); go(); } }, 'Close it and carry on'))));
 }
 export function openChooser() {
-  const start = (key, t) => async () => { const go = async () => { if (await reach(key)) openTutorial(key); }; if (t.course) return overForm(sh, 'This walkthrough', go); sh.close(); go(); };
+  // Every entry needs the page itself: the sheets under this one are closed first, after asking when one holds work.
+  const start = key => () => overForm(sh, 'This walkthrough', async () => { if (await reach(key)) openTutorial(key); });
   const body = h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'A short walkthrough of any page. Each one highlights the boxes on that page with a line about what they do.'),
-    h('div', { class: 'list' }, ...Object.entries(TUTORIALS).filter(([, t]) => !t.sheet && !t.hidden).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: start(key, t) }, h('strong', null, t.name)))),
+    h('div', { class: 'list' }, ...Object.entries(TUTORIALS).filter(([, t]) => !t.sheet && !t.hidden).map(([key, t]) => h('button', { class: 'card tap', type: 'button', onclick: start(key) }, h('strong', null, t.name)))),
     h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: () => { sh.close(); openTcGuide(); } }, '📖 Timecode guide'), h('button', { class: 'btn ghost small', onclick: () => { sh.close(); openMoneyGuide(); } }, '📖 Quotes & invoices guide'), h('button', { class: 'btn ghost small', onclick: () => overForm(sh, 'The set-up walkthrough', () => startTour()) }, '🧭 The set-up walkthrough again')));
   const sh = sheet('Tutorials', body);
 }

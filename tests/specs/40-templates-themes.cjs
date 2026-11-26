@@ -30,6 +30,15 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('.sheet .theme-row', { hasText: 'Nikon' }).click();
   const nik = await page.evaluate(() => ({ a: getComputedStyle(document.documentElement).getPropertyValue('--accent').trim(), ink: getComputedStyle(document.documentElement).getPropertyValue('--accent-ink').trim() }));
   ok('Nikon light uses dark ink on yellow', /d6b400/i.test(nik.a) && /1a1700/i.test(nik.ink), JSON.stringify(nik));
+  // …and where the accent is the colour of words (links, small headings, legends) it is dark enough to read on a card.
+  const words = await page.evaluate(() => {
+    const lum = c => { const [r, g, b] = c.match(/[\d.]+/g).slice(0, 3).map(v => { v = Number(v) / 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+    const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+    const card = document.createElement('div'); card.className = 'card'; const a = document.createElement('a'); a.href = '#'; a.textContent = 'a link'; const h4 = document.createElement('h4'); h4.textContent = 'A heading'; card.append(a, h4); document.getElementById('page').append(card);
+    const out = { link: +ratio(getComputedStyle(a).color, getComputedStyle(card).backgroundColor).toFixed(2), heading: +ratio(getComputedStyle(h4).color, getComputedStyle(card).backgroundColor).toFixed(2), onPage: +ratio(getComputedStyle(a).color, getComputedStyle(document.body).backgroundColor).toFixed(2) };
+    card.remove(); return out;
+  });
+  ok('in the light Nikon theme a link and a small heading have at least 4.5:1 against the card and the page (the yellow is for buttons)', words.link >= 4.5 && words.heading >= 4.5 && words.onPage >= 4.5, JSON.stringify(words));
   await page.screenshot({ path: S + '/theme-nikon.png' });
   await page.locator('.sheet .seg button', { hasText: 'Dark' }).click(); await page.locator('.sheet .theme-row', { hasText: 'Blackmagic' }).click();
   await page.keyboard.press('Escape'); await sleep(300);

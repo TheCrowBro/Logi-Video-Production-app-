@@ -244,6 +244,21 @@ const bridge = (start, price) => `(() => {
     const dl = await page.goto(URL + 'download.html');
     ok('the download page links the three installers, the shop and the steps, and fits a phone', dl.status() === 200 && (await page.locator('a.dl').count()) === 3 && (await page.getAttribute('a.buy', 'href')) === '/buy' && /Enter licence code/.test(await page.innerText('body')) && (await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)));
     await ctx.close();
+    // The desktop app's update check that failed: no new version is known, so none is offered for download.
+    ({ ctx, page } = await open({ enabled: true, mode: 'licensed', canEdit: true, seats: 3, licence: { name: 'Jane Smith', email: 'jane@example.com', comp: false, ref: '2:4242', seats: 3 } }));
+    await about(page);
+    const upd = page.locator('details.settings-section:has(> summary:has-text("About"))');
+    await page.evaluate(() => { window.vdexDesktop.checkForUpdates = async () => ({ status: 'error', error: 'net::ERR_INTERNET_DISCONNECTED' }); });
+    await upd.getByRole('button', { name: 'Check for updates' }).click(); await sleep(300);
+    const failed = await upd.innerText();
+    ok('a desktop update check that failed says so and offers the download page, not “Download the new version”', /Could not check for updates \(net::ERR_INTERNET_DISCONNECTED\)/.test(failed) && /Open the download page/.test(failed) && !/Download the new version/.test(failed), failed.replace(/\s+/g, ' ').slice(0, 200));
+    await page.evaluate(() => { window.vdexDesktop.checkForUpdates = async () => { throw new Error('ipc failed'); }; });
+    await upd.getByRole('button', { name: 'Check for updates' }).click(); await sleep(300);
+    ok('…and a check the app could not even make is reported the same way, not left as a page error', /Could not check for updates \(ipc failed\)/.test(await upd.innerText()) && !errors.length, errors.slice(0, 2).join(' | '));
+    await page.evaluate(() => { window.vdexDesktop.checkForUpdates = async () => ({ status: 'available', available: '9.9.9' }); });
+    await upd.getByRole('button', { name: 'Check for updates' }).click(); await sleep(300);
+    ok('…while a version that is known keeps its Download button', /Vdex 9\.9\.9 is available/.test(await upd.innerText()) && /Download the new version/.test(await upd.innerText()));
+    await ctx.close();
     ok('no page errors', !errors.length, errors.slice(0, 3).join(' | '));
   } catch (e) {
     console.log('FAIL spec crashed — ' + (e && e.stack || e));

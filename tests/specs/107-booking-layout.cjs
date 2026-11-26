@@ -385,6 +385,18 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
     await la.close();
   }
   await page.screenshot({ path: S + '/booking-layout.png', fullPage: true });
+  // A web address typed into a shot, or into the venue's Access box, wraps: the shot's ✕ stays on screen and the page
+  // does not scroll sideways on a phone.
+  { const ph = await browser.newContext({ viewport: { width: 320, height: 800 } });
+    await ph.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await ph.addInitScript(acceptTerms());
+    const pp = await ph.newPage(); pp.on('pageerror', e => errors.push(e.message));
+    await pp.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await pp.waitForSelector('#rolodex .drum-btn');
+    const bid = await pp.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); const b = s.db.bookings.find(x => x.venueId) || s.db.bookings[0]; s.update(d => { const x = d.bookings.find(y => y.id === b.id); x.shots = [...(x.shots || []), { id: 'long-shot', text: 'Reference https://www.youtube.com/watch?v=AbCdEfGhIjK&list=PL1234567890abcdef', done: false }]; x.updatedAt = Date.now(); const v = d.venues.find(y => y.id === x.venueId); if (v) { v.access = 'Park here https://maps.app.goo.gl/AbCdEfGhIjKlMnOpQ?g_st=ic'; v.updatedAt = Date.now(); } }); return b.id; }));
+    await pp.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), bid); await pp.waitForSelector('.bk-detail'); await sleep(400);
+    await pp.evaluate(() => { document.querySelectorAll('#page details').forEach(d => { d.open = true; }); }); await sleep(300);
+    const long = await pp.evaluate(() => { const row = [...document.querySelectorAll('.check-item')].find(x => /youtube/.test(x.textContent)); const ink = el => { const r = document.createRange(); r.selectNodeContents(el); return Math.round(r.getBoundingClientRect().right); }; const acc = [...document.querySelectorAll('#page .small')].find(x => /^Access: /.test(x.textContent)); return { shot: !!row, x: row ? Math.round(row.querySelector('.icon-btn').getBoundingClientRect().right) : 0, access: acc ? ink(acc) : -1, wide: document.documentElement.scrollWidth }; });
+    ok('a web address in a shot and in the venue’s access line wraps at 320 px: the shot’s ✕ stays on screen and the page does not scroll sideways', long.shot && long.x <= 320 && long.access > 0 && long.access <= 320 && long.wide <= 320, JSON.stringify(long));
+    await ph.close(); }
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + e.message); process.exit(1); });

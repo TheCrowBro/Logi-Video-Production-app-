@@ -43,16 +43,62 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     ok('…and the data is back when it shows', /Big Data 2/.test(await ls(page, 'logi-db-v1') || ''));
     await ctx.close(); }
 
-  // --- storage full at the set-up: no PIN is saved without its vault ---
+  // --- storage full at the set-up: the PIN is kept and the person gets in, the data in plain until there is room ---
+  // (Someone whose data has outgrown the room for an encrypted copy beside it would otherwise never get past the set-up.)
   { const { ctx, page } = await existing(null);
     await page.reload(); await page.waitForSelector('.lock-setup');
     await fullFor(page, 'logi-vault', true);
     await page.locator('.lock-setup .pin-input').nth(0).fill('246810'); await page.locator('.lock-setup .pin-input').nth(1).fill('246810'); await page.locator('.lock-setup button[type=submit]').click();
-    await page.waitForFunction(() => /Could not set the PIN/.test(document.querySelector('.lock-setup .lock-msg')?.textContent || ''), null, { timeout: 60000 });
-    ok('the set-up refuses a PIN whose vault cannot be saved, and keeps no half-made config', /storage is full/.test(await page.locator('.lock-setup .lock-msg').innerText()) && (await ls(page, 'logi-lock')) === null && !!(await ls(page, 'logi-db-v1')));
+    await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some(t => /Not enough storage to keep the encrypted copy/.test(t.textContent)) || /Could not set the PIN/.test(document.querySelector('.lock-setup .lock-msg')?.textContent || ''), null, { timeout: 60000 });
+    const said = (await page.locator('.toast').allInnerTexts()).some(t => /kept in plain/.test(t));
+    await page.waitForSelector('#rolodex .drum-btn', { timeout: 15000 }).catch(() => {});
+    ok('a first PIN whose vault cannot be saved is kept all the same: the set-up says the data stays in plain and lets the person in', said && (await page.locator('.lock-setup').count()) === 0 && !!(await ls(page, 'logi-lock')) && (await ls(page, 'logi-vault')) === null && !!(await ls(page, 'logi-db-v1')));
     await fullFor(page, 'logi-vault', false);
-    await page.locator('.lock-setup button[type=submit]').click(); await page.waitForSelector('#rolodex .drum-btn', { timeout: 60000 });
-    ok('…and takes it once there is room', !!(await ls(page, 'logi-lock')) && !!(await ls(page, 'logi-vault')));
+    await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'Room Again', updatedAt: Date.now() }; }))); await sleep(900);
+    ok('…and the encrypted copy is written by the first save that finds room', !!(await ls(page, 'logi-vault')));
+    await ctx.close(); }
+
+  // --- the data has outgrown the room for its encrypted copy: the next start still opens, from the plain copy ---
+  { const { ctx, page } = await existing();
+    await ctx.addInitScript(() => { if (!localStorage.getItem('spec-full')) return; const S = Storage.prototype, set = S.setItem; S.setItem = function (k, v) { if (k === 'logi-vault') { const e = new Error('quota'); e.name = 'QuotaExceededError'; throw e; } return set.call(this, k, v); }; });
+    await fullFor(page, 'logi-vault', true);
+    await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'Outgrown', updatedAt: Date.now() }; }))); await sleep(900);
+    await page.evaluate(() => localStorage.setItem('spec-full', '1'));
+    await page.close();
+    const again = await ctx.newPage(); watch(again);
+    await again.goto(BASE); await again.waitForSelector('.lock'); await again.keyboard.type('246810');
+    await again.waitForSelector('#rolodex .drum-btn', { timeout: 15000 }).catch(() => {});
+    ok('a start whose encrypted copy cannot be rewritten opens Vdex from the plain copy, not a blank page', (await again.locator('.lock').count()) === 0 && (await again.locator('#rolodex .drum-btn').count()) > 0 && (await again.locator('#page > *').count()) > 0 && (await again.evaluate(() => import('./js/store.js').then(s => s.db.profile.name))) === 'Outgrown');
+    await ctx.close(); }
+
+  // --- back to Vdex from another page in the same tab: the page the browser kept comes back locked ---
+  { const { ctx, page } = await existing();
+    // The events of a page going into the back-forward cache and coming out of it, in the order Chromium sends them.
+    await page.evaluate(() => {
+      const vis = h => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => h }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') }); document.dispatchEvent(new Event('visibilitychange')); };
+      window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })); vis(true); vis(false); window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }));
+    });
+    await sleep(600);
+    ok('a page restored from the back-forward cache shows the lock screen', (await page.locator('.lock').count()) === 1 && (await ls(page, 'logi-db-v1')) === null);
+    await page.keyboard.type('246810'); await page.waitForFunction(() => !document.querySelector('.lock'), null, { timeout: 60000 }).catch(() => {}); await sleep(600);
+    await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'After Back', updatedAt: Date.now() }; }))); await sleep(700);
+    ok('…and what is changed after the PIN is saved', /After Back/.test(await ls(page, 'logi-db-v1') || '') && !(await page.evaluate(() => import('./js/store.js').then(s => s.isSealed()))));
+    await ctx.close(); }
+
+  // --- Keep trying hides the panel it sits in: the focus goes back to Forgot PIN? ---
+  { const { ctx, page } = await existing();
+    await page.locator('#lockBtn').click(); await page.waitForSelector('.lock');
+    await page.locator('.lock button', { hasText: 'Forgot PIN?' }).focus(); await page.keyboard.press('Enter');
+    await page.locator('.lock-forgot button', { hasText: 'Keep trying' }).focus(); await page.keyboard.press('Enter'); await sleep(200);
+    ok('Keep trying gives the keyboard focus back to Forgot PIN?', (await page.evaluate(() => document.activeElement && document.activeElement.textContent)) === 'Forgot PIN?');
+    await ctx.close(); }
+
+  // --- Erase all data: the PIN set-up that follows is worded for an empty device ---
+  { const { ctx, page } = await existing();
+    await page.evaluate(() => import('./js/store.js').then(s => s.eraseAll()));
+    await page.waitForSelector('.lock-setup', { timeout: 15000 }); await sleep(300);
+    const text = await page.locator('.lock-setup').innerText();
+    ok('after Erase all data the set-up says the device was erased, not that the data stays where it is', /Everything on this device was erased/.test(text) && /First, set a PIN/.test(text) && !/Your data stays exactly where it is/.test(text), text.replace(/\s+/g, ' ').slice(0, 200));
     await ctx.close(); }
 
   // --- put away while the PIN is being checked ---

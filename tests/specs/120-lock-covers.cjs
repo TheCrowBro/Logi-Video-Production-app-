@@ -162,8 +162,9 @@ const PHONE = { width: 360, height: 740 };
   the('course from a form', async () => {
     const { ctx, page } = await existing();
     await addForm(page);
-    await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.tour-card h2'); await sleep(300);
-    await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap');
+    // The ? of a sheet with no tutorial of its own opens the list of tutorials: a page's walkthrough never runs over a sheet.
+    const toChooser = async () => { await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.sheet[aria-label="Tutorials"] .card.tap'); await sleep(200); };
+    await toChooser();
     const titles = () => page.evaluate(() => [...document.querySelectorAll('.sheet')].map(x => x.getAttribute('aria-label')));
     const course = () => page.locator('.sheet .card.tap', { hasText: 'Quotes & invoices, start to finish' }).click();
     // A course closes every sheet on its way, the form it was reached from included: that is said before it starts.
@@ -173,14 +174,14 @@ const PHONE = { width: 360, height: 740 };
     await page.locator('.sheet').last().locator('button', { hasText: 'Back to the form' }).click(); await sleep(300);
     const back = { titles: await titles(), ...(await state(page)) };
     ok('Back to the form goes back to it: the form is the only sheet, what was typed is in it, the cursor is in it, and no course runs', back.titles.join('|') === 'Add trusted crew' && back.typed === 'Robin Example' && back.focus === 'sheet' && back.tour === 0 && await page.locator('.sheet form [data-key="name"]').fill('Robin Example-Hale', { timeout: 2500 }).then(() => true, () => false), JSON.stringify(back));
-    // A page's own tutorial closes nothing, so it asks nothing and the form stays under it.
-    await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.tour-card h2'); await sleep(300);
-    await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap');
-    await page.locator('.sheet .card.tap', { hasText: /^Equipment$/ }).click(); await page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(900);
+    // A page's own tutorial points at the page, so it needs the form gone as well, and asks the same.
+    await toChooser();
+    await page.locator('.sheet .card.tap', { hasText: /^Equipment$/ }).click(); await sleep(400);
     const plain = { titles: await titles(), ...(await state(page)) };
-    ok('a page’s own tutorial, which closes nothing, starts without asking and leaves the form as it is', plain.titles.join('|') === 'Add trusted crew' && plain.tour === 1 && plain.typed === 'Robin Example-Hale', JSON.stringify(plain));
-    // …and from its first card the way to the course is the same, this time carried on with.
-    await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap');
+    ok('a page’s own tutorial chosen over an open form asks the same, and does not start over the form', plain.titles.join('|') === 'Add trusted crew|Tutorials|A form is still open' && plain.tour === 0 && plain.typed === 'Robin Example-Hale', JSON.stringify(plain));
+    await page.locator('.sheet').last().locator('button', { hasText: 'Back to the form' }).click(); await sleep(300);
+    // …and the way to the course is the same, this time carried on with.
+    await toChooser();
     await course(); await sleep(400);
     await page.locator('.sheet').last().locator('button', { hasText: 'Close it and carry on' }).click();
     await page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(300);
@@ -239,9 +240,9 @@ const PHONE = { width: 360, height: 740 };
   the('menu step over a form', async () => {
     const { ctx, page } = await existing();
     await addForm(page);
-    await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.tour-card h2'); await sleep(300);
-    await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap');
-    await page.locator('.sheet .card.tap', { hasText: 'Getting around' }).click();
+    await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.sheet[aria-label="Tutorials"] .card.tap'); await sleep(200);
+    await page.locator('.sheet .card.tap', { hasText: 'Getting around' }).click(); await sleep(400);
+    await page.locator('.sheet').last().locator('button', { hasText: 'Close it and carry on' }).click(); // the walkthrough needs the page: the form is closed first, after asking
     await page.waitForFunction(() => document.querySelector('.tour-card h2')?.textContent === 'The Rolodex', null, { timeout: 15000 }); await sleep(300);
     // What is drawn on top at the middle of the thing a step points at, the walkthrough's own layer aside.
     const onTop = sel => page.evaluate(sel => {
@@ -250,19 +251,17 @@ const PHONE = { width: 360, height: 740 };
       const r = document.querySelector(sel).getBoundingClientRect(), el = document.elementFromPoint(r.left + r.width / 2, r.top + Math.min(r.height / 2, 24));
       tour.style.display = ''; layers.forEach((l, i) => { l.inert = was[i]; });
       const z = x => Number(getComputedStyle(x).zIndex);
-      return { top: el ? (el.closest('#menuBack') ? 'menu' : el.closest('#searchBack') ? 'search' : el.closest('.sheet-back') ? 'form' : el.tagName) : 'nothing', z: { menu: z(document.getElementById('menuBack')), search: document.getElementById('searchBack') ? z(document.getElementById('searchBack')) : null, sheet: z(document.querySelector('.sheet-back')), tour: z(tour) } };
+      return { top: el ? (el.closest('#menuBack') ? 'menu' : el.closest('#searchBack') ? 'search' : el.closest('.sheet-back') ? 'form' : el.tagName) : 'nothing', z: { menu: z(document.getElementById('menuBack')), search: document.getElementById('searchBack') ? z(document.getElementById('searchBack')) : null, tour: z(tour) } };
     }, sel);
-    ok('(Getting around, started from a form’s ?, is on its search step with the form still open)', (await toCard(page, 'What to type')) && (await state(page)).sheets === 1 && (await shown(page)).search);
+    ok('(Getting around, started from a form’s ?, is on its search step, with the form closed)', (await toCard(page, 'What to type')) && (await state(page)).sheets === 0 && (await shown(page)).search);
     const s = await onTop('#searchInput');
-    ok('the search panel a step points at is drawn above the form, and below the walkthrough', s.top === 'search' && s.z.search > s.z.sheet && s.z.search < s.z.tour, JSON.stringify(s));
+    ok('the search panel a step points at is drawn on top of the page, and below the walkthrough', s.top === 'search' && s.z.search < s.z.tour, JSON.stringify(s));
     ok('(…and on to the step The menu)', (await toCard(page, 'The menu')) && (await shown(page)).menu);
     const m = await onTop('#menu .menu-list');
-    ok('the menu a step points at is drawn above the form, and below the walkthrough', m.top === 'menu' && m.z.menu > m.z.sheet && m.z.menu < m.z.tour, JSON.stringify(m));
+    ok('the menu a step points at is drawn on top of the page, and below the walkthrough', m.top === 'menu' && m.z.menu < m.z.tour, JSON.stringify(m));
     await page.keyboard.press('Escape'); await sleep(300);
     const st = await state(page);
-    ok('the form and what was typed in it survive the walkthrough', st.tour === 0 && st.sheets === 1 && st.typed === 'Robin Example' && st.appInert, JSON.stringify(st));
-    await page.keyboard.press('Escape'); await sleep(250);
-    ok('…and once it is closed the page is usable', (await state(page)).sheets === 0 && await usable(page));
+    ok('when the walkthrough ends nothing is left open, and the page is usable', st.tour === 0 && st.sheets === 0 && !st.appInert && await usable(page), JSON.stringify(st));
     ok('a menu opened to be used is still under a sheet’s layer, as before (only one shown by a walkthrough is raised)', await page.evaluate(() => { const m = document.getElementById('menuBack'); return !m.classList.contains('shown') && Number(getComputedStyle(m).zIndex) === 90; }));
     await ctx.close();
   });
@@ -753,10 +752,11 @@ const PHONE = { width: 360, height: 740 };
     const B = await existing();
     await slow(B.ctx, 'menu.js');
     await addForm(B.page);
-    await B.page.locator('.sheet .sheet-help').last().click(); await B.page.waitForSelector('.tour-card h2'); await sleep(300);
-    await B.page.getByRole('button', { name: 'Other pages…' }).click(); await B.page.waitForSelector('.sheet .card.tap');
-    await B.page.locator('.sheet .card.tap', { hasText: 'Getting around' }).click(); await B.page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(300);
-    ok('(Getting around, started from a form’s ?, is on the card before the first one that shows the menu)', await toCard(B.page, 'What comes back'));
+    await B.page.locator('.sheet .sheet-help').last().click(); await B.page.waitForSelector('.sheet[aria-label="Tutorials"] .card.tap'); await sleep(200);
+    await B.page.locator('.sheet .card.tap', { hasText: 'Getting around' }).click(); await sleep(400);
+    await B.page.locator('.sheet').last().locator('button', { hasText: 'Back to the form' }).click(); await sleep(300); // it asked first; the form is kept, and the walkthrough is started beside it
+    await B.page.evaluate(() => import('./js/tour.js').then(async t => { const m = await import('./js/tutorials.js'); t.runTour(m.stepsFor('around')); })); await B.page.waitForSelector('.tour-card h2', { timeout: 15000 }); await sleep(300);
+    ok('(Getting around, running over a form, is on the card before the first one that shows the menu)', await toCard(B.page, 'What comes back'));
     await leave(B.page);
     const sm = { ...(await state(B.page)), ...(await shown(B.page)) };
     ok('…left while the menu was still being fetched, no menu is drawn over the form afterwards, and the form can be used', sm.tour === 0 && !sm.menu && sm.sheets === 1 && sm.typed === 'Robin Example' && await B.page.locator('.sheet form [data-key="name"]').fill('Robin Example-Hale', { timeout: 2500 }).then(() => true, () => false), JSON.stringify(sm));
@@ -902,8 +902,8 @@ const PHONE = { width: 360, height: 740 };
   the('course from a sheet with work in it', async () => {
     const { ctx, page } = await existing();
     const titles = () => page.evaluate(() => [...document.querySelectorAll('.sheet')].map(x => x.getAttribute('aria-label')));
-    // The ? of the sheet on top, then Other pages…, then a course (which closes every sheet on its way).
-    const toCourse = async () => { await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.tour-card h2'); await sleep(300); await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet .card.tap'); await page.locator('.sheet .card.tap', { hasText: 'Quotes & invoices, start to finish' }).click(); await sleep(400); };
+    // The ? of the sheet on top (the list of tutorials), then a course (which closes every sheet on its way).
+    const toCourse = async () => { await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.sheet[aria-label="Tutorials"] .card.tap'); await sleep(200); await page.locator('.sheet .card.tap', { hasText: 'Quotes & invoices, start to finish' }).click(); await sleep(400); };
     const question = async () => ({ titles: await titles(), text: await page.locator('.sheet').last().locator('.sheet-body p').first().innerText().catch(() => ''), buttons: await page.locator('.sheet').last().locator('.actions button').allInnerTexts().catch(() => []), tour: (await state(page)).tour });
     // Equipment → Import…, a pasted list, and one column put right: nothing is left to type into, and there is work to lose
     await page.evaluate(() => window.logiGo('gear')); await page.locator('#page .subactions button', { hasText: 'Import…' }).click(); await page.waitForSelector('.sheet .gi-choose');

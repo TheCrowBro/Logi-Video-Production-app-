@@ -99,7 +99,10 @@ async function unseal(boot = false) {
   if (!S.key) return; // erased from another tab while this ran: nothing of this copy goes back
   store.setSealed(false); // writes anything saved while sealed
   if (boot) store.reload(); else if (lsGet(DB) == null) store.flush();
-  if (store.serialize() !== S.lastDb) await writeVault(true); // a normalised reload or edits made while sealed: keep the vault exact so sealing stays synchronous
+  // A normalised reload or edits made while sealed: keep the vault exact so sealing stays synchronous. A vault there is
+  // no room for (the data has outgrown it) must not stop a start: the plain copy stays and is what Vdex runs on, as
+  // after any save of the vault that failed (storageFull has said so).
+  if (store.serialize() !== S.lastDb) { try { await writeVault(true); } catch { /* said already; the plain copy stays, as in seal() */ } }
   if (document.hidden || S.locked) sealSoon(); // hidden or locked again meanwhile (at boot too: the page may have been put away while the PIN was checked)
 }
 
@@ -126,9 +129,13 @@ export async function setPin(pin) { // first PIN makes a new data key; a later o
   const after = (c, s) => [...new Set([...(c.past || []), s])].slice(-8);
   const next = { ...(S.cfg || { v: 1, autoLock: 1, wipe: false, bio: null }), salt: C.toB64(salt), iter, pin: wrap, len: pin.length, max: PIN_MAX, past: S.cfg ? after(S.cfg, S.cfg.salt) : undefined, attempts: 0, until: 0 };
   if (!saveCfg(next)) { holdCfg(before); dropKey(); throw new Error('the browser storage is full'); }
-  // No vault, no PIN: the plain copy stays as it was, and the config goes back to the one before. That one now replaces
-  // the PIN that was not kept, and says so in its own past, so a tab that had already taken the new config takes it back.
-  try { await writeVault(true); } catch (e) { saveCfg(before && { ...before, past: after(before, next.salt) }); dropKey(); throw e; }
+  // A changed PIN with no vault is a PIN that was not changed: the plain copy stays as it was, and the config goes back
+  // to the one before. That one now replaces the PIN that was not kept, and says so in its own past, so a tab that had
+  // already taken the new config takes it back. A first PIN is kept all the same: on a device whose data has outgrown
+  // the room for an encrypted copy beside it, refusing the PIN would leave the set-up with no way on. The PIN then
+  // locks the screen, the data stays in plain (storageFull has said so, and the privacy policy says the same), and the
+  // vault is written by the first save that finds room.
+  try { await writeVault(true); } catch (e) { if (!before) return; saveCfg({ ...before, past: after(before, next.salt) }); dropKey(); throw e; }
 }
 export async function checkPin(pin) { const raw = await openWithPin(pin); if (!raw) return false; await adopt(raw); return true; }
 export async function removePin() { // the caller has just checked the PIN
@@ -241,7 +248,8 @@ function derToRaw(sig) { // ECDSA signature: DER sequence of two integers → 64
 // itself (#app) is not put back from memory: it is out of reach or not by what is open once the screen has gone.
 // A sheet that code opens while the screen is up was not on the page to be covered: sheet() in js/util.js sees the
 // screen (covered()) and starts it covered, marked data-covered, and it comes back here with the rest. The same for a
-// walkthrough that starts under the screen (runTour() in js/tour.js).
+// walkthrough that starts under the screen (runTour() in js/tour.js), and for the update bar and the licence bar when
+// they are first put up under it (underCover() in js/util.js; the licence bar is one element whose contents change).
 // What had the keyboard focus in a form or a walkthrough gets it back, so typing carries on where it was: the screen's
 // own way out puts the focus on the page (#page), which takes none while something is open over it.
 export function coverAll(screen) {
@@ -255,7 +263,7 @@ export function coverAll(screen) {
     // A menu or a search that a walkthrough is showing may have been put up while the screen was over it (the step
     // that shows it runs on after an unlock): it is there to look at, and stays out of reach whatever it was before.
     document.querySelectorAll('#menuBack.shown, #searchBack.shown').forEach(el => { el.inert = true; });
-    document.querySelectorAll('.sheet-back[data-covered], .tour[data-covered]').forEach(el => { el.inert = false; el.removeAttribute('data-covered'); });
+    document.querySelectorAll('.sheet-back[data-covered], .tour[data-covered], .update-bar[data-covered]').forEach(el => { el.inert = false; el.removeAttribute('data-covered'); });
     settleApp();
     if (app) app.removeAttribute('aria-hidden');
     document.querySelectorAll('.sheet-back.behind-lock').forEach(el => el.classList.remove('behind-lock'));
@@ -285,7 +293,7 @@ function showLock(notice = '') {
   const count = () => `${S.entry.length} of ${len()}`;
   const forgot = h('div', { class: 'lock-forgot', id: 'lock-forgot', hidden: true },
     h('p', { class: 'small' }, 'The PIN is the only key to the data on this device, so it cannot be recovered. You can erase this device and start again: if you linked a cloud storage or exported a backup, link it or import it afterwards and everything comes back.'),
-    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn danger', onclick: () => { if (confirm('Erase all Vdex data on this device?')) wipe('This device was erased. Link your storage or import a backup to get your data back.'); } }, 'Erase this device'), h('button', { type: 'button', class: 'btn ghost', onclick: () => { forgot.hidden = true; forgotBtn.setAttribute('aria-expanded', 'false'); } }, 'Keep trying')));
+    h('div', { class: 'actions' }, h('button', { type: 'button', class: 'btn danger', onclick: () => { if (confirm('Erase all Vdex data on this device?')) wipe('This device was erased. Link your storage or import a backup to get your data back.'); } }, 'Erase this device'), h('button', { type: 'button', class: 'btn ghost', onclick: () => { forgot.hidden = true; forgotBtn.setAttribute('aria-expanded', 'false'); forgotBtn.focus(); } }, 'Keep trying')));
   const forgotBtn = h('button', { type: 'button', class: 'btn ghost small', 'aria-expanded': 'false', 'aria-controls': 'lock-forgot', onclick: () => { forgot.hidden = !forgot.hidden; forgotBtn.setAttribute('aria-expanded', String(!forgot.hidden)); if (!forgot.hidden) forgot.scrollIntoView({ block: 'nearest' }); } }, 'Forgot PIN?');
   // One dot for each digit, however long the PIN: its length is no secret this screen could keep (it sends the PIN by
   // itself at that many digits, and the config beside the vault states it), and the dots are how the owner of a long
@@ -486,7 +494,9 @@ function pinReady() {
   if (S.cfg) return offerLongerPin(); // a PIN from before longer PINs: the one-time offer, ahead of the app
   if (lsGet(SETUP) === 'skip') return Promise.resolve();
   if (readCfg()) return restart('A PIN was just set in another tab: enter it here.'); // made since gate() looked: this tab has no key for it
-  let firstRun = false; try { firstRun = !localStorage.getItem('logi-tour'); } catch { /* ignore */ }
+  const why = notice(); // the device was just erased (from the lock screen, or Erase all data): say so above the set-up
+  // The wording for someone new, and for a device that has just been erased: there is no data that "stays where it is".
+  let firstRun = !!why; try { firstRun = firstRun || !localStorage.getItem('logi-tour'); } catch { /* ignore */ }
   const a = pinField('New PIN', 'next'), b = pinField('Repeat the PIN', 'done');
   const err = h('div', { class: 'lock-msg', role: 'alert' });
   const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save the PIN and continue');
@@ -497,7 +507,6 @@ function pinReady() {
   const elsewhere = () => restart('A PIN was just set in another tab: enter it here.');
   const onStorage = e => { if (e.key === CFG && e.newValue) elsewhere(); };
   window.addEventListener('storage', onStorage);
-  const why = notice(); // the device was erased from the lock screen: say so above the set-up
   return new Promise(resolve => {
     let finished = false, uncover = null;
     const done = () => { if (finished) return; finished = true; window.removeEventListener('storage', onStorage); screen.remove(); if (uncover) uncover(); announce('PIN set'); resolve(); };
@@ -560,7 +569,10 @@ export function init() {
     }
   });
   window.addEventListener('pagehide', () => { S.unloading = true; if (S.cfg) sealSoon(); });
-  window.addEventListener('pageshow', () => { S.unloading = false; }); // back-forward cache
+  // Back to this page from another one in the same tab (the back-forward cache brings it back as it was left): leaving
+  // sealed the storage, as closing Vdex does, and the browser's own "visible" came while the page still counted as on
+  // its way out. So it comes back locked, as a start does, and the PIN unseals.
+  window.addEventListener('pageshow', e => { S.unloading = false; if (e.persisted && S.cfg) { clearTimeout(S.timer); showLock(); } });
   // This device erased from another tab is handled in gate(), whose listener is there from the first lock screen on.
   // Another tab sealing the storage while this one is in use means the plain copies are put back from memory and the
   // vault.

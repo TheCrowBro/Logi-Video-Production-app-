@@ -139,6 +139,10 @@ const rolodex = createRolodex(nav, tabs, { start, onSelect: (i, dir) => { showNa
 let navHeld = 0;
 function showNav(hold) { nav.classList.remove('tucked'); if (hold === true) navHeld = performance.now() + 600; }
 window.logiShowNav = showNav;
+// Whatever the browser scrolls into view lands below the Rolodex bar, not under it: a control reached with Shift+Tab
+// (the upward scroll is what brings the bar back), a section a line of the checklist jumps to, a search result. The
+// bar's height changes with the window's width and the text size, so it is measured whenever it changes.
+{ const clear = () => { document.documentElement.style.scrollPaddingTop = `${nav.offsetHeight + 12}px`; }; clear(); if (window.ResizeObserver) new ResizeObserver(clear).observe(nav); else window.addEventListener('resize', clear); }
 // The top bar scrolls away with the page and the Rolodex bar does not, so once the top bar's search control is out of
 // sight the Rolodex bar carries a magnifier of its own: the search (and the results just left) stay one tap away from
 // deep in a long list. It comes and goes with the bar it sits on.
@@ -176,15 +180,22 @@ if (native.isApp) native.files.onShared(file => import('./share-in.js').then(m =
 // The parked file is looked for at every start, which is always an unlocked one (this runs after the PIN), and not
 // only at the start the share itself made: a file shared while Vdex was locked, and never unlocked on that page, would
 // otherwise stay parked in plain form for good. caches.has() comes first, so no empty cache is made at every start.
+// A share of several files parks each under a key of its own ('shared-file', 'shared-file-1', …: sw.js): each is asked
+// about on a sheet of its own, the first one on top.
 if ('caches' in window) {
   if (new URLSearchParams(location.search).get('share') === '1') history.replaceState(null, '', location.pathname);
   caches.has('logi-share').then(has => has && caches.open('logi-share')).then(async c => {
     if (!c) return;
-    const r = await c.match('shared-file'); if (!r) return;
-    const name = decodeURIComponent(r.headers.get('X-Name') || 'shared.docx');
-    const file = new File([await r.blob()], name, { type: r.headers.get('Content-Type') || '' });
-    await c.delete('shared-file');
-    import('./share-in.js').then(m => m.arrived(file));
+    const nth = k => Number((/-(\d+)$/.exec(k) || [0, 0])[1]);
+    const keys = (await c.keys()).map(q => new URL(q.url).pathname.split('/').pop()).filter(k => /^shared-file(-\d+)?$/.test(k)).sort((a, b) => nth(a) - nth(b)), files = [];
+    for (const k of keys) {
+      const r = await c.match(k); if (!r) continue;
+      files.push(new File([await r.blob()], decodeURIComponent(r.headers.get('X-Name') || 'shared.docx'), { type: r.headers.get('Content-Type') || '' }));
+      await c.delete(k);
+    }
+    if (!files.length) return;
+    const m = await import('./share-in.js');
+    for (const file of files.reverse()) await m.arrived(file);
   }).catch(() => {});
 }
 

@@ -319,7 +319,7 @@ function logView(log, setTimer) {
   // Composer: the stamp is taken when you start typing (that is the moment you saw it), and shown live.
   if (S.draftFor !== log.id) { S.draftFor = log.id; S.draft = ''; S.pending = null; } // another log: its own empty box, and no stamp from the last one
   const stamp = h('span', { class: 'tc-mono tc-stamp' }, sync ? '—' : 'not synced');
-  const input = h('textarea', { rows: 2, placeholder: sync ? 'Type a note — timecode is captured when you start typing' : 'Sync first, or notes are stamped as “unsynced”', 'aria-label': 'New note', class: 'tc-compose', value: S.draft });
+  const input = h('textarea', { rows: 2, placeholder: sync ? 'Type a note — timecode is captured when you start typing' : 'Sync first, or notes are stamped as “unsynced”', 'aria-label': 'New note', class: 'tc-compose', 'data-draft': '', value: S.draft }); // data-draft: its text is saved only by + Add note (js/update.js asks before a reload loses it)
   const refreshStamp = () => { stamp.textContent = S.pending != null ? fmt(S.pending, log) : (sync ? 'stamps when you type' : 'not synced'); };
   refreshStamp();
   input.addEventListener('input', () => { S.draft = input.value; if (S.pending == null && input.value.trim()) { S.pending = nowFrames(log); refreshStamp(); } if (!input.value.trim()) { S.pending = null; refreshStamp(); } });
