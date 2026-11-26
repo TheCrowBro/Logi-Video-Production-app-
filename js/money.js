@@ -98,10 +98,14 @@ const SHOOT_LINE = /^Shoot days? — /;
 function srcOf(l) { return l.src || (SHOOT_LINE.test(l.desc || '') ? 'shoot' : l.desc === 'Editing' && l.unit === 'hour' ? 'hours:edit' : l.desc === 'Overtime on shoot days' ? 'hours:ot' : l.desc === 'Equipment package' ? 'kit' : ''); }
 export function mergeSuggested(lines, suggested, source) {
   const out = (lines || []).map(l => ({ ...l })), low = l => (l.desc || '').trim().toLowerCase(), own = src => !!src && !src.startsWith('q:'); let added = 0, updated = 0;
+  // A line answers for one suggestion only, and a suggestion just added for none: a quote may hold two lines that read
+  // alike (travel there and travel back, a second "Shoot day — …" for another unit), and each of them is a line.
+  const taken = new Set(), find = test => out.findIndex((l, j) => !taken.has(j) && test(l));
   for (const sg of suggested) {
-    let i = out.findIndex(l => srcOf(l) === sg.src);
-    if (i < 0) i = out.findIndex(l => { const src = srcOf(l); return (!src || (!(own(src) && own(sg.src)) && (l.unit || '') === (sg.unit || ''))) && low(l) === low(sg); });
-    if (i < 0) { out.push(sg); added++; continue; }
+    let i = find(l => srcOf(l) === sg.src);
+    if (i < 0) i = find(l => { const src = srcOf(l); return (!src || (!(own(src) && own(sg.src)) && (l.unit || '') === (sg.unit || ''))) && low(l) === low(sg); });
+    if (i < 0) { taken.add(out.push(sg) - 1); added++; continue; }
+    taken.add(i);
     if (source === 'quote') continue;
     const l = out[i], next = { ...l, src: sg.src, qty: sg.qty, unit: sg.unit, desc: sg.src === 'shoot' && SHOOT_LINE.test(l.desc || '') ? sg.desc : l.desc };
     if (Number(l.qty) !== Number(sg.qty) || (l.unit || '') !== (sg.unit || '') || l.desc !== next.desc) updated++;

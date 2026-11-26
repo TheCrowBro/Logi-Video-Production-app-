@@ -182,6 +182,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('Mark pressed from the keyboard marks the chosen line and gives it the focus back, and the line reads to a screen reader as its own words', marked[0] === 1 && marked[1] === 'line 3' && !!marked[2] && !/^Mark at/.test(marked[2]) && (await focusNow()) === 'line 4', JSON.stringify([marked, await focusNow()]));
   const under = await page.evaluate(() => { const bar = document.querySelector('.sc-bar').getBoundingClientRect(); return [...document.querySelectorAll('.sc-para')].slice(0, 12).filter(p => { p.focus(); const r = p.getBoundingClientRect(); return r.bottom > bar.top + 1 && r.top < bar.bottom; }).length; });
   ok('a line reached by the keyboard is scrolled clear of the Mark bar', under === 0, String(under));
+  // found by the last check: Mark tapped (or clicked) after reading ahead. The line was chosen, the page scrolled on,
+  // and the mark must not bring the page back to the line: the focus goes to it without scrolling.
+  await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/pages/tcnotes.js')]).then(([s, t]) => { s.upsert('logs', { id: 'LONG', title: 'A long script', rate: '25', mode: 'free', created: '2026-11-01', sync: null, take: 0, autoTakes: false, script: { name: 'Long', imported: '2026-11-01T09:00:00.000Z', paras: Array.from({ length: 90 }, (_, i) => ({ id: 'q' + i, kind: 'action', text: `Line ${i}: the quick brown fox jumps over the lazy dog and runs on across the field.` })) }, scriptAt: 1, notes: [] }); t.openLog('LONG', 'script'); })); await sleep(400);
+  await page.locator('#sc-q4').click(); await page.evaluate(() => window.scrollBy(0, 1500)); await sleep(150);
+  const readAt = await page.evaluate(() => window.scrollY);
+  await page.locator('.sc-bar button.primary').click(); await sleep(350);
+  const afterMark = await page.evaluate(() => [window.scrollY, document.querySelectorAll('#sc-q4 .sc-badge').length]);
+  ok('Mark tapped after the page was scrolled on marks the line and leaves the page where it was', readAt > 800 && afterMark[0] === readAt && afterMark[1] === 1, JSON.stringify([readAt, afterMark]));
 
   // ---- the Link sheet: closed with a code showing, it can be started again; unlinked, it says so ----
   await openLog(page, 'L1');

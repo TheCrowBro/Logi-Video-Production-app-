@@ -268,7 +268,7 @@ export const tcnotes = {
       root.append(logView(log, t => { timer = t; }));
       window.scrollTo(0, y);
       typeOn(was);
-      if (S.focusPara) { const line = document.getElementById('sc-' + S.focusPara); S.focusPara = null; if (line) line.focus(); }
+      if (S.focusPara) { const line = document.getElementById('sc-' + S.focusPara); S.focusPara = null; if (line) line.focus({ preventScroll: !!S.focusQuiet }); } // (quiet: Mark was tapped or clicked, and the page stays where it was scrolled to)
       if (S.shared) { const f = S.shared; S.shared = null; setTimeout(() => openImport(log, f), 50); }
     };
     S.redraw = draw;
@@ -605,7 +605,10 @@ function actionBar(log) {
     markBtn.disabled = noteBtn.disabled = !t;
   };
   const commit = (t, frames, text) => {
-    S.target = null; document.getSelection()?.removeAllRanges(); S.focusPara = el.contains(document.activeElement) ? t.para : null; // marked from the keyboard: the line has the focus again once the page is drawn
+    // Marked from the bar: the line has the focus again once the page is drawn, so from the keyboard the next line is
+    // one Tab on. After a tap or a click on Mark the page is not scrolled for it: someone reading ahead in the script
+    // while the take runs stays where they are, not back at the line they marked.
+    S.target = null; document.getSelection()?.removeAllRanges(); S.focusPara = el.contains(document.activeElement) ? t.para : null; S.focusQuiet = byPointer;
     pushNote(log, { id: uid(), frames, text, at: new Date().toISOString(), para: t.para, start: t.start, end: t.end, quote: t.quote });
     haptic(20); announce(`Marked ${frames == null ? 'unsynced' : fmt(frames, log)}`);
   };
@@ -624,7 +627,9 @@ function actionBar(log) {
   tick(); const iv = setInterval(tick, 250);
   const el = h('div', { class: 'sc-bar' }, h('div', { class: 'card-row' }, info, live), h('div', { class: 'actions' }, markBtn, noteBtn));
   // Escape on the bar lets the chosen line go and gives it the focus back: from the keyboard, the way back to a line that Enter chose
-  el.addEventListener('keydown', e => { if (e.key !== 'Escape' || !S.target || S.target.start != null) return; const line = document.getElementById('sc-' + S.target.para); if (!line) return; e.preventDefault(); line.click(); line.focus(); });
+  let byPointer = false; // whether the bar was last pressed with a finger or the mouse, or with a key
+  el.addEventListener('pointerdown', () => { byPointer = true; });
+  el.addEventListener('keydown', e => { byPointer = false; if (e.key !== 'Escape' || !S.target || S.target.start != null) return; const line = document.getElementById('sc-' + S.target.para); if (!line) return; e.preventDefault(); line.click(); line.focus(); });
   return { el, set, stop: () => clearInterval(iv) };
 }
 

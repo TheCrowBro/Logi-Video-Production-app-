@@ -419,6 +419,21 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       await saved(Q.page); await syncNow(P.page); await syncNow(Q.page);
       const after = await Promise.all([P, Q].map(d => st(d.page, s => s.db.bookings.map(b => `${b.id}:${b.title}:${Object.keys(b.checks || {}).join()}:${((b.invoice || {}).payments || []).length}`).join())));
       ok(`…and what the other device does after it is kept on both (the restoring clock ${word})`, after[0] === 'b2:Two edited after the restore:ticked:1' && after[1] === after[0], JSON.stringify(after));
+      // found by the last check: with the restoring clock ahead, the other device's copy holds a later time than its own
+      // clock, and whatever it changes is counted as later still. A change must go on knowing its own records by the
+      // time they got: an equipment import is taken back by its Undo, and a call sheet marked sent after its stripboard
+      // was arranged reads Sent (and Changed once the stripboard is arranged again).
+      const scene = n => ({ list: [{ id: 'day-1', type: 'break' }, { id: 'sc' + n, type: 'scene', scene: String(n), set: 'Hall' }], cast: [] });
+      const undo = await Q.page.evaluate(async () => { const g = await import('./js/gear-import.js'), s = await import('./js/store.js'); const done = g.applyGearImport(g.planGearImport([{ name: 'Lens from a list' }, { name: 'Light from a list' }], {}), {}), had = s.db.gear.length; const r = g.undoGearImport(done); return [had, r.removed, r.kept, s.db.gear.length].join(); });
+      ok(`an equipment import made while the copy is ${off > 0 ? 'ahead of this device\'s clock' : 'in step with it'} is taken back by its Undo`, undo === '2,2,0,0', undo);
+      await st(Q.page, (s, bd) => { s.update(d => { const b = d.bookings.find(x => x.id === 'b2'); b.board = { ...bd, updatedAt: Date.now() }; b.callSheet = { generalCall: '08:00', version: 1, editedAt: Date.now() }; b.updatedAt = Date.now(); }); }, scene(1));
+      await Q.page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('b2', { view: 'callsheet' })));
+      await Q.page.locator('button', { hasText: 'Mark as sent' }).first().click();
+      await Q.page.waitForFunction(() => import('./js/store.js').then(s => !!(s.byId('bookings', 'b2').callSheet || {}).sentAt));
+      const sheet = () => Q.page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js')]).then(([s, c]) => c.sheetState(s.byId('bookings', 'b2'))));
+      const sentThen = await sheet(), line = (await Q.page.locator('.status-line').first().innerText()).replace(/\s+/g, ' ');
+      await st(Q.page, (s, bd) => { s.update(d => { const b = d.bookings.find(x => x.id === 'b2'); b.board = { ...bd, updatedAt: Date.now() }; b.updatedAt = Date.now(); }); }, scene(2));
+      ok(`a call sheet marked sent after its stripboard was arranged reads Sent, and Changed once the scenes are arranged again (the other clock ${word})`, sentThen === 'sent' && /Sent/.test(line) && !/Changed/.test(line) && (await sheet()) === 'changed', JSON.stringify([sentThen, line, await sheet()]));
       await P.ctx.close(); await Q.ctx.close();
     }
     {
@@ -479,6 +494,26 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       await add(L.page, 'lat', 'Saved after the update'); await saved(L.page);
       ok('a WebDAV link from before the update with ä, ö and é in its password still syncs: the form that server took is tried after one refusal, and kept', first.status === 'synced' && first.refused === 1 && first.kept === true && seen.refused === 1 && files.has(MAIN) && /Saved after the update/.test(files.get(MAIN)), JSON.stringify([first, seen]));
       await L.ctx.close();
+      // found by the last check: Vdex put away while that first sync is being refused and tried again. The lock then
+      // takes the link's settings off the disk (they are in the encrypted copy) and puts them back when Vdex is in
+      // front again, unless something is there already. The form that worked must not be written in their place: a
+      // bare "latin1" was all that was left of the address, the username and the password.
+      const link = JSON.stringify({ kind: 'webdav', url: 'https://dav.example/vdex', user: 'u', pass: 'pässwörd-é1' }), M = await device(null, 'M', { seed: { 'logi-webdav': link } });
+      let away = false;
+      await M.ctx.route('https://dav.example/**', async route => {
+        const r = route.request(), m = r.method(), file = decodeURIComponent(new URL(r.url()).pathname.split('/').pop());
+        if (m === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+        if ((r.headers().authorization || '') !== want) { if (!away) { away = true; await M.page.evaluate(() => localStorage.removeItem('logi-webdav')); } return route.fulfill({ status: 401, headers: CORS, body: '' }); } // (as the lock does when Vdex is put away)
+        if (m === 'GET') return files.has(file) ? route.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: files.get(file) }) : route.fulfill({ status: 404, headers: CORS, body: '' });
+        if (m === 'PUT') { files.set(file, r.postData() || ''); return route.fulfill({ status: 201, headers: CORS }); }
+        return route.fulfill({ status: 201, headers: CORS }); });
+      await start(M.page); await synced(M.page);
+      const left = await M.page.evaluate(() => localStorage.getItem('logi-webdav')), then = (await state(M.page)).status;
+      await M.page.evaluate(text => { if (localStorage.getItem('logi-webdav') == null) localStorage.setItem('logi-webdav', text); }, link); // (as the lock does when Vdex is in front again)
+      await M.page.reload(); await M.page.waitForSelector('#rolodex .drum-btn'); await synced(M.page);
+      const whole = await M.page.evaluate(() => JSON.parse(localStorage.getItem('logi-webdav') || '{}'));
+      ok('…and with Vdex put away while it is tried again, nothing is written in place of the link’s settings: the link is whole afterwards and syncs', away && left === null && then === 'synced' && whole.url === 'https://dav.example/vdex' && whole.pass === 'pässwörd-é1' && whole.latin1 === true && (await state(M.page)).status === 'synced', JSON.stringify([left, then, whole, await state(M.page)]));
+      await M.ctx.close();
     }
 
     // ---- two windows of Vdex on one device ----

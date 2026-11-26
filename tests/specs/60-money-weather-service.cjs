@@ -155,6 +155,16 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     return { n: quote.lines.length, fromQuote: show(fromQuote), fromBooking: show(fromBooking), again: `+${again.added} ~${again.updated}` }; }));
   ok('“Lines from the quote” on an invoice made from its quote before the update adds nothing: no line twice', !!before && before.n === 4 && /\(\+0 ~0\)$/.test(before.fromQuote), JSON.stringify(before));
   ok('“Lines from the booking” on an invoice made from a quote of before the update adds the rented lens alone', !!before && /^Shoot days 2 day \| Crew: [^|]+ 2 day \| Equipment package 2 day \| Main film \(3 min\) 1 each \| Hire: Prism lens \(Camera Co\) 1 each \(\+1 ~0\)$/.test(before.fromBooking) && before.again === '+0 ~0', JSON.stringify(before));
+  // found by the last check: a quote may hold two lines that read alike (travel there and travel back, a second
+  // "Shoot day — …" or equipment package for another unit). Each is a line of its own on the invoice: asked for
+  // on an invoice that exists, none of them is left out, and asked for again, none comes twice.
+  const alike = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => {
+    const show = r => r.lines.map(l => `${l.desc} ${l.qty}x${l.price}`).join(' | ') + ` (+${r.added})`, own = [{ id: 'x', desc: 'Deposit handling', qty: 1, unit: 'each', price: 10 }];
+    const from = lines => { const b = { id: 'mn-alike', title: 'Alike', date: '2026-12-01', crew: [], gear: [], quote: { lines } }, first = m.mergeSuggested(own, m.suggestLines(b, 'invoice', 'quote'), 'quote'); return [show(first), `+${m.mergeSuggested(first.lines, m.suggestLines(b, 'invoice', 'quote'), 'quote').added}`]; };
+    return { travel: from([{ id: 'l1', desc: 'Travel', qty: 1, unit: 'each', price: 80 }, { id: 'l2', desc: 'Travel', qty: 1, unit: 'each', price: 45 }]),
+      shoot: from([{ id: 'l1', desc: 'Shoot day — main unit', qty: 1, unit: 'day', price: 600 }, { id: 'l2', desc: 'Shoot day — second unit', qty: 1, unit: 'day', price: 400 }]),
+      kit: from([{ id: 'l1', desc: 'Equipment package', qty: 1, unit: 'day', price: 100 }, { id: 'l2', desc: 'Equipment package', qty: 2, unit: 'day', price: 60 }]) }; }));
+  ok('“Lines from the quote” brings both of two quote lines that read alike, and none twice when asked again', !!alike && alike.travel.join() === 'Deposit handling 1x10 | Travel 1x80 | Travel 1x45 (+2),+0' && alike.shoot.join() === 'Deposit handling 1x10 | Shoot day — main unit 1x600 | Shoot day — second unit 1x400 (+2),+0' && alike.kit.join() === 'Deposit handling 1x10 | Equipment package 1x100 | Equipment package 2x60 (+2),+0', JSON.stringify(alike));
   // The form: an emptied line goes; the document's own tax name can be changed
   await page.evaluate(() => import('./js/money.js').then(m => m.setBilling({ taxLabel: 'Sales tax' }))); await sleep(200);
   await page.locator('.money-page').getByRole('button', { name: 'Edit' }).click(); await mform.waitFor();

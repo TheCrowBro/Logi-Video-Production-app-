@@ -657,14 +657,20 @@ export const webdavAdapter = () => {
   let host = 'WebDAV'; try { host = new URL(base).host; } catch { /* label only */ }
   const explain = r => r.status === 401 ? 'WebDAV: wrong username or password' : r.status === 403 ? 'WebDAV: no permission for that folder' : r.status === 507 ? 'WebDAV: the server has no room left' : `WebDAV ${r.status}`;
   // Every request says the same when it gets no answer, never the browser's own "Failed to fetch".
-  const send = (address, options) => fetch(address, { ...options, headers: { Authorization: 'Basic ' + basic, ...(options.headers || {}) } }).catch(() => { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); });
+  const send = (address, options, auth) => fetch(address, { ...options, headers: { Authorization: 'Basic ' + auth, ...(options.headers || {}) } }).catch(() => { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); });
+  // (Each request tries the other form for itself, so two that are refused at once do not undo each other's find. The
+  // form is written to the link's settings only while they are still this link's: not after a Disconnect, and not
+  // while the lock has taken the settings off the disk because Vdex was put away meanwhile, where a bare "latin1"
+  // written in their place would be all that is left of the address, the username and the password. It then stays in
+  // memory for this run and is found again, and kept, at the next start.)
   const ask = async (address, options = {}) => {
-    const r = await send(address, options);
+    const sent = basic, r = await send(address, options, sent);
     if (r.status !== 401 || !older) return r;
-    const first = basic; basic = first === older ? utf8 : older;
-    const again = await send(address, options);
-    if (again.status === 401) { basic = first; return r; }
-    settings.setWebdav({ ...settings.webdav(), latin1: basic === older });
+    const other = sent === older ? utf8 : older, again = await send(address, options, other);
+    if (again.status === 401) return r;
+    basic = other;
+    const kept = settings.webdav();
+    if (['kind', 'url', 'user', 'pass'].every(k => kept[k] === cfg[k]) && !!kept.latin1 !== (basic === older)) { settings.setWebdav({ ...kept, latin1: basic === older }); try { dispatchEvent(new Event('vdex-secrets')); } catch { /* no page */ } }
     return again;
   };
   const headers = extra => extra;

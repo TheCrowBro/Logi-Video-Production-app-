@@ -22,7 +22,11 @@ const hasContent = cs => !!(cs.generalCall || cs.lunch || cs.wrap || cs.schedule
 // their call times, the kit…): marking it sent keeps a short mark of all of that (sentPrint below) to compare with.
 // (When the stripboard's scenes were last changed: a restore stamps the board as changed now for the merge and keeps
 // the time of the scenes beside it as editedAt; an edit on the stripboard writes the board anew, without one.)
-export const sheetState = b => { const cs = sheetOf(b), boardAt = Number(b.board && (b.board.editedAt || b.board.updatedAt)) || 0; return cs.sentAt ? (cs.editedAt > cs.sentAt || (cs.include.scenes !== false && boardAt > cs.sentAt) || (!!cs.sentHash && cs.sentHash !== sentPrint(b)) ? 'changed' : 'sent') : hasContent(cs) ? 'draft' : 'none'; };
+// (And the two times are not set against each other when they need not be: a sheet marked sent keeps the stripboard's
+// time of that moment as sentBoard. The board's time is the store's, which runs ahead of this device's clock while
+// another device's clock does, and a sheet sent a minute after its scenes were arranged would read "changed".)
+const boardTime = b => Number(b.board && (b.board.editedAt || b.board.updatedAt)) || 0;
+export const sheetState = b => { const cs = sheetOf(b), boardAt = boardTime(b); return cs.sentAt ? (cs.editedAt > cs.sentAt || (cs.include.scenes !== false && boardAt > Math.max(cs.sentAt, Number(cs.sentBoard) || 0)) || (!!cs.sentHash && cs.sentHash !== sentPrint(b)) ? 'changed' : 'sent') : hasContent(cs) ? 'draft' : 'none'; };
 const STATE_LABEL = { none: 'Not started', draft: 'Draft', sent: 'Sent', changed: 'Changed since it was sent' };
 const dateLabel = (b, f = fmtLong) => (endOf(b) > b.date ? `${f(b.date)} → ${f(endOf(b))}` : f(b.date));
 const multiDay = b => endOf(b) > b.date;
@@ -281,7 +285,7 @@ function markSent(id, quiet = true) {
   if (!(quiet ? canChangeQuietly() : canChange())) return;
   const cur = byId('bookings', id); if (!cur) return;
   setCheck(cur, itemId('Prepped', 'Call sheet sent'), true);
-  upsert('bookings', { ...byId('bookings', id), callSheet: { ...sheetOf(cur), sentAt: Date.now(), sentHash: sentPrint(byId('bookings', id)) } });
+  upsert('bookings', { ...byId('bookings', id), callSheet: { ...sheetOf(cur), sentAt: Date.now(), sentBoard: boardTime(byId('bookings', id)), sentHash: sentPrint(byId('bookings', id)) } });
   toast('Marked: call sheet sent');
 }
 export function callSheetPage(b, go) {

@@ -111,7 +111,12 @@ function carry(d, plan, { kits = [], from = '' } = {}, out) {
 // (before, kitsBefore) and the kits it made (kitsAdded).
 export function applyGearImport(plan, { kits = [], from = '' } = {}) {
   const out = outcome();
-  return update(d => { carry(d, plan, { kits, from }, out); }) === false ? false : out;
+  if (update(d => { carry(d, plan, { kits, from }, out); }) === false) return false;
+  // "When it happened" is the time the records now carry, which is what Undo knows them by: the store counts a change
+  // as later than everything its copy has seen, and moves the time when another device's clock runs ahead (update()).
+  const one = db.gear.find(g => g.id === (out.added[0] || out.updated[0])) || db.kits.find(k => k.id === out.kits[0]);
+  if (one && Number(one.updatedAt)) out.at = one.updatedAt;
+  return out;
 }
 
 /* --------------------------------- room to keep it --------------------------------- */
