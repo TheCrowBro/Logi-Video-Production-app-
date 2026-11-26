@@ -20,7 +20,7 @@
     "path": "./upload-key.keystore",
     "alias": "vdex"
   },
-  "appVersionName": "1.5.0",
+  "appVersionName": "1.5.1",
   "appVersionCode": 1,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
@@ -65,5 +65,5 @@
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
   "displayOverride": [],
-  "appVersion": "1.5.0"
+  "appVersion": "1.5.1"
 }
