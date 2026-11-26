@@ -744,7 +744,7 @@ export async function replaceDamagedCopy() {
 }
 // The calendar feed, where this storage keeps one and it is switched on.
 async function writeFeed(a) {
-  if (!(db.calSync?.feed && auxWriter && a.writeAux) || cloud.adapter !== a) return;
+  if (!a || !(db.calSync?.feed && auxWriter && a.writeAux) || cloud.adapter !== a) return; // (no storage: unlinked while the caller was reading)
   try { await a.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
 }
 
