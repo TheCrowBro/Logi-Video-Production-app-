@@ -6,7 +6,7 @@
 // and says why, while opening, searching and printing keep working. Cloud storage and saving backup and spreadsheet
 // files need a licence from the start (store.setPaid). Making a link or QR code that passes on the contact card or
 // equipment needs the trial or a licence. A device a paid licence stopped covering keeps Export backup for 30 days.
-import { h, sheet, toast, announce, muteToasts, underCover } from './util.js';
+import { h, sheet, toast, announce, muteToasts } from './util.js';
 import { setGate, redraw, setPaid, importChecked } from './store.js';
 
 let P = null; // the licence: the desktop app's bridge, or the website's own
@@ -243,9 +243,12 @@ function paintBar() {
   if (!S.bar || S.bar.firstChild.textContent !== text) announce(text);
   // The same element every time, with its contents renewed: what the lock screen set on it when it came up (out of
   // reach while locked) stays, where a new element would sit behind that screen in the Tab order with a Buy button
-  // that works. A bar first added while that screen is up starts out of reach too (underCover in js/util.js).
+  // that works. A bar first added while that screen is up starts out of reach too, marked data-covered, and the
+  // screen's way out gives it back (coverAll in js/lock.js). That is underCover() in js/util.js, written out here:
+  // this file is fetched after the start, and must not ask a start-up file for a name that a page still running
+  // the build before does not have in it (such a page would then not load this file at all, and stay read-only).
   if (S.bar && S.bar.isConnected) { S.bar.className = cls; S.bar.replaceChildren(...parts); }
-  else { S.bar = underCover(h('div', { class: cls, role: 'status' }, ...parts)); document.body.append(S.bar); }
+  else { S.bar = h('div', { class: cls, role: 'status' }, ...parts); if (document.querySelector('body > .lock')) { S.bar.inert = true; S.bar.dataset.covered = ''; } document.body.append(S.bar); }
   document.body.classList.add('has-licence-bar');
 }
 

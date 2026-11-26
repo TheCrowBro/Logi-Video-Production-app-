@@ -954,8 +954,12 @@ const PHONE = { width: 360, height: 740 };
     const locked = { asked: [...asked], bookings: await bookings(page), toasts: await page.locator('.toast').count(), lock: (await state(page)).lock };
     ok('a backup file handed to Vdex while it is locked asks nothing over the lock screen and replaces nothing', before > 0 && locked.asked.length === 0 && locked.bookings === before && locked.toasts === 0 && locked.lock === 1, JSON.stringify([before, locked]));
     phase = 'unlocked'; await page.keyboard.type(OLD); await lockGone(page);
+    // After the PIN the file is asked about on a sheet, like any other file; the browser's question comes at the tap on Restore.
+    const offered = await page.waitForSelector('.sheet[aria-label="A file for Vdex"]', { timeout: 8000 }).then(() => true, () => false); await sleep(200);
+    const untouched = asked.length === 0 && (await bookings(page)) === before;
+    if (offered) await page.locator('.sheet button', { hasText: 'Restore this backup' }).click();
     await page.waitForFunction(() => document.querySelectorAll('.toast').length > 0, null, { timeout: 8000 }).catch(() => {});
-    ok('…the question comes once the PIN has been entered, and only then is the file taken', asked.length === 1 && asked[0].startsWith('unlocked: Replace your current data with this file?') && (await bookings(page)) === 0, JSON.stringify([asked, await bookings(page)]));
+    ok('…once the PIN has been entered the file is asked about on a sheet, and only Restore this backup brings the question and takes the file', offered && untouched && asked.length === 1 && asked[0].startsWith('unlocked: Replace your current data with this file?') && (await bookings(page)) === 0, JSON.stringify([offered, untouched, asked, await bookings(page)]));
     // any other file waits the same way: no sheet is made under the lock screen
     await lockNow(page); await lockUp(page);
     await hand('script.txt', 'INT. ROOM - DAY\nA line.', 'text/plain'); await sleep(1200);

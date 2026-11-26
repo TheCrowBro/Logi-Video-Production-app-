@@ -926,6 +926,66 @@ const ODD_XLSX = zip({
   await sp.evaluate(() => import('./js/share-in.js').then(m => m.arrived(new File(['Item,Serial number\nSony FX6,FX6-1\n'], 'shared', { type: 'text/csv' })))); await sp.waitForSelector('.sheet'); await sleep(150);
   ok('a spreadsheet that arrives without a name that says so is known by its type', (await sp.locator('.sheet button.btn').allInnerTexts()).includes('🎥 Kit list for Equipment'));
   await sp.keyboard.press('Escape'); await sleep(200);
+  // Text shared with no file (a note with a shot list, a link), and two files shared at once.
+  const postForm = (fields, files = []) => sp.evaluate(([fields, files]) => { const f = document.createElement('form'); f.method = 'POST'; f.action = './share'; f.enctype = 'multipart/form-data'; for (const [k, v] of Object.entries(fields)) { const i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = v; f.append(i); } if (files.length) { const i = document.createElement('input'), dt = new DataTransfer(); i.type = 'file'; i.name = 'file'; i.multiple = true; for (const [name, text] of files) dt.items.add(new File([text], name, { type: 'text/plain' })); i.files = dt.files; f.append(i); } document.body.append(f); f.submit(); }, [fields, files]);
+  await postForm({ title: 'Shoot info', text: 'INT. KITCHEN - DAY\nWide: Ana at the stove' });
+  const textIn = await sp.waitForSelector('.sheet[aria-label="A file for Vdex"]', { timeout: 10000 }).then(() => text(sp, '.sheet'), () => 'no sheet');
+  ok('text shared to Vdex with no file is parked as a text file and offered like one, as a script or a shot list', /Shared text\.txt/.test(textIn) && /Script for TC Notes/.test(textIn), textIn.replace(/\s+/g, ' ').slice(0, 120));
+  for (let i = 0; i < 3 && await sp.locator('.sheet').count(); i++) { await sp.keyboard.press('Escape'); await sleep(250); }
+  await sp.goto(BASE); await sp.waitForSelector('#rolodex .drum-btn');
+  await postForm({}, [['day one shots.txt', 'Wide: one'], ['day two shots.txt', 'Wide: two']]);
+  await sp.waitForSelector('.sheet', { timeout: 10000 }).catch(() => {}); await sleep(700);
+  const both = await sp.evaluate(() => [...document.querySelectorAll('.sheet')].map(x => x.querySelector('b')?.textContent));
+  ok('two files shared at once are both kept and both offered, the first on top', same(both, ['day two shots.txt', 'day one shots.txt']) && (await sp.evaluate(async () => (await (await caches.open('logi-share')).keys()).length)) === 0, JSON.stringify(both));
+  for (let i = 0; i < 3 && await sp.locator('.sheet').count(); i++) { await sp.keyboard.press('Escape'); await sleep(250); }
+  // A break notification's button goes to the app's own page, not to whichever page of the site was looked at last.
+  await sp.evaluate(() => { window.__got = []; navigator.serviceWorker.addEventListener('message', e => window.__got.push((e.data || {}).type)); });
+  const termsTab = await SW.newPage(); await termsTab.goto(BASE + 'terms.html');
+  await termsTab.evaluate(() => { window.__got = []; navigator.serviceWorker.addEventListener('message', e => window.__got.push((e.data || {}).type)); navigator.serviceWorker.startMessages(); });
+  await termsTab.bringToFront(); await termsTab.mouse.click(50, 50); await sleep(300);
+  const worker = SW.serviceWorkers()[0];
+  // The click as the worker gets it (the event carries the notification and the button's action).
+  await worker.evaluate(() => { const e = new ExtendableEvent('notificationclick'); Object.defineProperty(e, 'notification', { value: { close() {} } }); Object.defineProperty(e, 'action', { value: 'back' }); self.dispatchEvent(e); });
+  await sleep(800);
+  const told = { app: await sp.evaluate(() => window.__got), terms: await termsTab.evaluate(() => window.__got) };
+  ok('Back to work on a break notification reaches the app, not the terms page that was looked at last', told.app.includes('break-end') && !told.terms.includes('break-end'), JSON.stringify(told));
+  await termsTab.close(); await sp.bringToFront();
+  // "Shot list for a booking": the shoots coming up first, then the past ones, newest first; no archived ones; the rest in a list.
+  await sp.evaluate(() => import('./js/store.js').then(s => { const day = n => { const d = new Date(Date.now() + n * 864e5); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    for (let i = 1; i <= 18; i++) s.upsert('bookings', { id: 'past' + i, title: 'Past job ' + String(i).padStart(2, '0'), date: day(-400 + i * 20), status: i <= 10 ? 'Archived' : 'Delivered' });
+    s.upsert('bookings', { id: 'next', title: 'Harbour shoot NEXT WEEK', date: day(7), status: 'Confirmed' }); s.upsert('bookings', { id: 'month', title: 'Wedding IN A MONTH', date: day(30), status: 'Confirmed' });
+    s.upsert('bookings', { id: 'longname', title: 'Harbour_Brewing_Company_Autumn_Campaign_Brand_Film', date: day(3), status: 'Confirmed' });
+    for (let i = 1; i <= 6; i++) s.upsert('bookings', { id: 'later' + i, title: 'Later job ' + i, date: day(60 + i), status: 'Enquiry' }); }));
+  await sp.setViewportSize({ width: 360, height: 640 });
+  await sp.evaluate(() => import('./js/share-in.js').then(m => m.arrived(new File(['Wide: one\n'], 'Harbour_Brewing_shooting_script_v3_FINAL.txt', { type: 'text/plain' })))); await sp.waitForSelector('.sheet'); await sleep(200);
+  const shotChoice = await sp.evaluate(() => { const sh = document.querySelector('.sheet'), body = sh.querySelector('.sheet-body'), list = [...sh.querySelectorAll('.pref-label ~ button')].map(b => b.textContent); return { first: list.slice(0, 3).map(t => t.split(' · ')[0]), shown: list.length, archived: list.filter(t => /^Past job (0\d|10) /.test(t)).length, lastPast: list[list.length - 1].split(' · ')[0], more: [...sh.querySelectorAll('select option')].map(o => o.textContent).length - 1, wide: body.scrollWidth - body.clientWidth }; });
+  ok('a shared file’s “Shot list for a booking” offers the shoots coming up first (soonest first), then past ones newest first, leaves out archived ones, and lists the rest under More bookings', same(shotChoice.first, ['Harbour_Brewing_Company_Autumn_Campaign_Brand_Film', 'Harbour shoot NEXT WEEK', 'Wedding IN A MONTH']) && shotChoice.shown === 12 && shotChoice.archived === 0 && shotChoice.lastPast === 'Past job 16' && shotChoice.more === 5, JSON.stringify(shotChoice));
+  ok('…and a long file name and a long booking title with no spaces wrap inside the sheet at 360 px: nothing scrolls sideways', shotChoice.wide <= 0, 'wider by ' + shotChoice.wide);
+  await sp.locator('.sheet select').selectOption('past11'); await sleep(600);
+  ok('…a booking chosen from More bookings gets the shot list', (await sp.evaluate(() => import('./js/store.js').then(s => (s.byId('bookings', 'past11').shots || []).map(x => x.text)))).join() === 'Wide: one' && (await sp.locator('.sheet').count()) === 0);
+  await sp.setViewportSize({ width: 420, height: 900 });
+  // A Word file shared without .docx in its name is read as Word, by its type; another zip is refused, never read as text.
+  const DOCX = zip({ 'word/document.xml': XML + '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>INT. KITCHEN - DAY</w:t></w:r></w:p><w:p><w:r><w:t>Wide: Ana at the stove</w:t></w:r></w:p><w:p><w:r><w:t>Close-up: hands on the kettle</w:t></w:r></w:p></w:body></w:document>' }).toString('base64');
+  const handDocx = (name, type) => sp.evaluate(([b64, name, type]) => import('./js/share-in.js').then(m => m.arrived(new File([Uint8Array.from(atob(b64), c => c.charCodeAt(0))], name, { type }))), [DOCX, name, type]);
+  const nextShots = () => sp.evaluate(() => import('./js/store.js').then(s => (s.byId('bookings', 'next').shots || []).map(x => x.text)));
+  await handDocx('Shot list for Saturday', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'); await sp.waitForSelector('.sheet'); await sleep(150);
+  await sp.locator('.sheet button', { hasText: 'Harbour shoot NEXT WEEK' }).click(); await sleep(900);
+  const fromWord = await nextShots();
+  ok('a Word file shared without .docx in its name is read as a Word file: its lines become the shots, not the bytes of its zip', fromWord.includes('Wide: Ana at the stove') && fromWord.includes('Close-up: hands on the kettle') && !fromWord.some(t => /PK|\u0003|�/.test(t)), JSON.stringify(fromWord).slice(0, 200));
+  for (let i = 0; i < 2 && await sp.locator('.sheet').count(); i++) { await sp.keyboard.press('Escape'); await sleep(250); }
+  await handDocx('archive', 'application/zip'); await sp.waitForSelector('.sheet'); await sleep(150);
+  await sp.evaluate(() => { window.__toasts = []; new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true }); });
+  await sp.locator('.sheet button', { hasText: 'Harbour shoot NEXT WEEK' }).click(); await sleep(900);
+  ok('…and a packed file that is not a Word file is refused with a sentence, and adds nothing', same(await nextShots(), fromWord) && /not text, so it cannot be read as a shot list/.test(await sp.evaluate(() => window.__toasts.join(' | '))), await sp.evaluate(() => window.__toasts.join(' | ')));
+  for (let i = 0; i < 2 && await sp.locator('.sheet').count(); i++) { await sp.keyboard.press('Escape'); await sleep(250); }
+  // A backup file handed to Vdex is asked about on the same sheet first: nothing is restored, and no question comes, before a tap.
+  const asksBefore = dialogs.length;
+  await sp.evaluate(() => import('./js/store.js').then(s => import('./js/share-in.js').then(m => m.arrived(new File([s.exportJSON()], 'vdex-backup-2026-11-01.json', { type: 'application/json' }))))); await sleep(900);
+  const backupIn = { sheet: await sp.locator('.sheet[aria-label="A file for Vdex"]').count(), text: (await sp.locator('.sheet').count()) ? await text(sp, '.sheet') : '', asked: dialogs.length - asksBefore };
+  dialogs.splice(asksBefore);
+  ok('a backup file handed to Vdex opens “A file for Vdex” with Restore this backup, and asks nothing until that is tapped', backupIn.sheet === 1 && /vdex-backup-2026-11-01\.json/.test(backupIn.text) && /Restore this backup/.test(backupIn.text) && backupIn.asked === 0, JSON.stringify(backupIn).slice(0, 300));
+  if (backupIn.sheet) { await sp.locator('.sheet button', { hasText: 'Not now' }).click(); await sleep(250); }
+  await sp.evaluate(() => import('./js/store.js').then(s => { for (const b of [...s.db.bookings]) s.remove('bookings', b.id); })); await sleep(300);
   // Shared while Vdex is locked: the share opens Vdex on its lock screen, and the file waits, parked, behind it.
   const SPIN = '246810';
   const postKit = () => sp.evaluate(() => { const f = document.createElement('form'), i = document.createElement('input'), dt = new DataTransfer(); f.method = 'POST'; f.action = './share'; f.enctype = 'multipart/form-data'; i.type = 'file'; i.name = 'file'; dt.items.add(new File(['Item,Serial number,Value\nSony FX6,FX6-120934,6000\n'], 'insured kit.csv', { type: 'text/csv' })); i.files = dt.files; f.append(i); document.body.append(f); f.submit(); });
@@ -939,6 +999,16 @@ const ODD_XLSX = zip({
   const fileOffered = await sp.waitForSelector('.sheet[aria-label="A file for Vdex"]', { timeout: 15000 }).then(() => true, () => false);
   ok('a file shared while Vdex was locked, and not picked up then, is offered at the next start once the PIN is entered, and is no longer parked', /share=1/.test(waiting.url) && waiting.parked === 'insured kit.csv' && waiting.sheets === 0 && fileOffered && /insured kit\.csv/.test(await text(sp, '.sheet')) && (await parked()) === 'nothing parked', JSON.stringify([waiting, fileOffered, await parked()]));
   if (fileOffered) { await sp.keyboard.press('Escape'); await sleep(250); }
+  // Back to work, pressed on a break notification after Vdex's page was closed: Vdex opens on its lock screen and the
+  // worker's message arrives there, before the PIN. It is kept, and ends the break once the PIN is in.
+  await sp.evaluate(() => import('./js/hours.js').then(hh => { hh.startShift(null); hh.startBreak(15); })); await sleep(900);
+  await sp.goto(BASE + 'index.html'); await sp.waitForSelector('.lock:not(.lock-setup)', { timeout: 30000 }); await sleep(300);
+  await SW.serviceWorkers()[0].evaluate(async () => { for (const c of await self.clients.matchAll({ type: 'window', includeUncontrolled: true })) c.postMessage({ type: 'break-end' }); });
+  await sleep(500);
+  await sp.keyboard.type(SPIN); await sp.waitForSelector('#rolodex .drum-btn', { timeout: 60000 }); await sleep(1200);
+  const brk = await sp.evaluate(() => import('./js/hours.js').then(hh => ({ running: !!hh.running(), onBreak: hh.onBreak(hh.running()) })));
+  ok('Back to work pressed on a break notification while the lock screen is up is kept, and ends the break once the PIN is in', brk.running && brk.onBreak === false, JSON.stringify(brk));
+  await sp.evaluate(() => import('./js/hours.js').then(hh => { hh.stopShift(); })); await sleep(300);
   // Shared while locked again, and this time the device is erased on that very lock screen
   await postKit(); await sp.waitForSelector('.lock:not(.lock-setup)', { timeout: 30000 }); await sleep(300);
   const before2 = await parked();
