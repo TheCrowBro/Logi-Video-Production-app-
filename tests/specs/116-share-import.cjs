@@ -777,6 +777,13 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
       return main && cloud.file != null ? r.fulfill({ status: 200, headers: { ...CORS, 'Content-Type': 'application/json' }, body: cloud.garbled[who] ? '{"version":' : cloud.file }) : r.fulfill({ status: 404, headers: CORS });
     });
     await D.page.goto(BASE); await D.page.waitForSelector('#rolodex .drum-btn');
+    // A device has started once it has kept the licence server's answer. The page asks once whether licences are on
+    // (the tests' server says off, in a signed note), keeps the time before it asks, and checks the note's signature
+    // before it keeps the note. A page left in between keeps the time and no note, and the next page of that browser,
+    // which may not ask again for six hours, takes licences for on and its storage for paused: nothing is copied. A
+    // person does not leave a page a few milliseconds after it started; this spec does (the phone's first page is
+    // left for a link at once), and so it failed now and then, with the phone's work never reaching the storage.
+    await D.page.waitForFunction(() => { try { return !!JSON.parse(localStorage.getItem('vdex-licence')).note; } catch (e) { return false; } }, null, { timeout: 20000 });
     return D;
   };
   const hold = who => { cloud.held[who] = new Promise(res => { cloud.letGo[who] = () => { cloud.held[who] = null; res(); }; }); };
