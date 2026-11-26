@@ -9,7 +9,7 @@ import { byId, update, subscribe } from './store.js';
 import * as store from './store.js';
 import * as link from './link.js';
 import { haptic } from './a11y.js';
-import { P, SIZES, COLS, MARKS, SPACINGS, COUNTS, DIRS, analyse, speakersOf, wordsIn, clock, quote, makeStage, setSetting, clampSize, clampWpm, reload } from './prompter-stage.js';
+import { P, SIZES, COLS, MARKS, SPACINGS, COUNT_LENGTHS, DIRS, analyse, speakersOf, wordsIn, clock, quote, makeStage, setSetting, clampSize, clampWpm, reload } from './prompter-stage.js';
 import { nowTc, fmt, quoteOf, startTake, endTake, rateTake, openTake, markLine, editLine, openImport } from './pages/tcnotes.js';
 import { voiceSupported, voiceAgreed, agreeVoice, VOICE_NOTE, listen, voiceTrouble } from './prompter-voice.js';
 export { analyse } from './prompter-stage.js';
@@ -90,9 +90,17 @@ function settingsPanel(logId, onChange = () => {}, { get = () => P, set = (k, v)
     h('div', { class: 'seg wide' }, opts.map(([v, l]) => h('button', { type: 'button', class: get()[key] === v ? 'on' : '', 'aria-pressed': get()[key] === v, onclick: () => change(key, v) }, l))));
   const stepper = (cls, label, value, less, more, lessLabel, moreLabel) => h('div', { class: 'pref ' + cls }, h('div', { class: 'pref-label' }, label),
     h('div', { class: 'pr-stepper' }, h('button', { type: 'button', class: 'btn ghost', 'aria-label': lessLabel, onclick: less }, '−'), h('span', { class: 'pr-val' }, value), h('button', { type: 'button', class: 'btn ghost', 'aria-label': moreLabel, onclick: more }, '+')));
+  // The countdown before a take: a switch, and how long it is while it is on (the length is kept while it is off).
+  const countdown = p => {
+    const on = Number(p.count) > 0, len = Number(p.countLen) || Number(p.count) || 3;
+    return h('div', { class: 'pref pr-count-set', role: 'group', 'aria-label': 'Countdown before a take' }, h('div', { class: 'pref-label' }, 'Countdown before a take'),
+      h('div', { class: 'seg wide pr-count-switch' }, [[false, 'Off'], [true, 'On']].map(([v, l]) => h('button', { type: 'button', class: on === v ? 'on' : '', 'aria-pressed': on === v, onclick: () => change('count', v ? len : 0) }, l))),
+      on && h('div', { class: 'seg wide pr-count-len', role: 'group', 'aria-label': 'How long the countdown is' }, COUNT_LENGTHS.map(n => h('button', { type: 'button', class: Number(p.count) === n ? 'on' : '', 'aria-pressed': Number(p.count) === n, onclick: () => { set('countLen', n); change('count', n); } }, `${n} s`))));
+  };
   const draw = () => {
     const log = byId('logs', logId), speakers = log && log.script ? speakersOf(log.script) : [], focus = focusOf(log), p = get();
     box.replaceChildren(
+      countdown(p),
       stepper('pr-set-size', 'Text size', `about ${SIZES[clampSize(p.size)]} letters a line`, () => change('size', clampSize(p.size - 1)), () => change('size', clampSize(p.size + 1)), 'Smaller text', 'Bigger text'),
       stepper('pr-set-speed', 'Speed', `${p.wpm} words a minute`, () => change('wpm', clampWpm(p.wpm - 5)), () => change('wpm', clampWpm(p.wpm + 5)), 'Slower', 'Faster'),
       seg('Mirror', 'mirror', [[false, 'Off'], [true, 'Mirrored for a rig']]),
@@ -100,7 +108,6 @@ function settingsPanel(logId, onChange = () => {}, { get = () => P, set = (k, v)
       seg('Reading line', 'mark', MARKS),
       seg('Column', 'col', COLS.map(([v, l]) => [v, l])),
       seg('Line spacing', 'spacing', SPACINGS),
-      seg('Countdown before a take', 'count', COUNTS),
       seg('Directions', 'dirs', DIRS),
       seg('Speaker names', 'names', [[true, 'Shown'], [false, 'Hidden']]),
       speakers.length > 1 && h('div', { class: 'pref', role: 'group', 'aria-label': 'Lines to read' }, h('div', { class: 'pref-label' }, 'Lines to read'),
@@ -108,6 +115,7 @@ function settingsPanel(logId, onChange = () => {}, { get = () => P, set = (k, v)
       speakers.length > 1 && h('p', { class: 'small muted' }, 'Choosing one speaker dims the others’ lines, so they are still there as cues.'));
   };
   draw();
+  box.redraw = draw; // what the keys or the buttons changed meanwhile (the speed, the text size)
   return box;
 }
 function setFocus(logId, v) {
@@ -168,7 +176,7 @@ function promptKey(e, act) {
 }
 // Keeps Tab inside an overlay (a dialog of its own, like a sheet).
 function trapTab(e, root) {
-  const items = [...root.querySelectorAll('button:not([disabled]):not([hidden])')].filter(el => el.offsetParent !== null); if (!items.length) return;
+  const items = [...root.querySelectorAll('button:not([disabled]):not([hidden])')].filter(el => el.offsetParent !== null && !el.closest('[inert]')); if (!items.length) return;
   const i = items.indexOf(document.activeElement); e.preventDefault();
   items[(i + (e.shiftKey ? -1 : 1) + items.length) % items.length].focus();
 }
@@ -185,16 +193,16 @@ const keyFor = (e, root) => root.isConnected && !covered() && !document.querySel
 /* ------------------------------- the prompter ------------------------------- */
 let OPEN = null; // the prompter on screen: { logId, cmd, close }
 export const prompterOpen = () => !!OPEN;
-export function openPrompter(logId, { from = null } = {}) {
+export function openPrompter(logId, { from = null, controls = true } = {}) {
   if (OPEN) return;
   const log = byId('logs', logId);
   if (!log || !log.script || !log.script.paras || !log.script.paras.length) return;
   if (!store.requirePaid('prompter')) return; // free during the trial, then with a licence
-  OPEN = run(logId, from || lastLine.get(logId) || null);
+  OPEN = run(logId, from || lastLine.get(logId) || null, controls);
 }
 export function closePrompter() { if (OPEN) OPEN.close(); }
 
-function run(logId, from) {
+function run(logId, from, controls = true) {
   const opener = document.activeElement;
   let hudTimer = 0, hintTimer = 0, was = null, rate = null;
   const stage = makeStage({ onState: s => onState(s), onHold: id => lineMenu(id) });
@@ -208,7 +216,7 @@ function run(logId, from) {
     h('div', { class: 'pr-title' }, title, state),
     tc,
     h('button', { class: 'icon-btn pr-help', type: 'button', 'aria-label': 'Tutorial for the prompter', title: 'Tutorial', onclick: () => { stage.cmd('pause'); import('./tutorials.js').then(m => m.openTutorial('tcprompt')); } }, '?'),
-    h('button', { class: 'icon-btn pr-settings', type: 'button', 'aria-label': 'Prompter settings', title: 'Settings', onclick: () => { stage.cmd('pause'); sheet('Prompter settings', settingsPanel(logId, () => { stage.refresh(); drawHud(); })); } }, '⚙'));
+    h('button', { class: 'icon-btn pr-settings', type: 'button', 'aria-label': 'Prompter controls', 'aria-expanded': 'false', title: 'Controls', onclick: () => showPanel(!panel.classList.contains('open')) }, '⚙'));
   const rollBtn = h('button', { class: 'btn pr-roll', type: 'button', onclick: () => act('roll') });
   const playBtn = h('button', { class: 'btn primary pr-play', type: 'button', onclick: () => act('toggle') });
   const wpm = h('span', { class: 'pr-wpm' });
@@ -235,7 +243,21 @@ function run(logId, from) {
     setSetting('voice', on); stage.cmd('follow', on); ear.check(stage.state()); drawHud(); setTimeout(() => refocus(), 0);
     tell(on ? '🎙 Voice-follow: the script follows the talent as they read' : 'Voice-follow off: the script runs at its speed');
   }
-  const root = h('div', { class: 'prompter', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Teleprompter', 'data-state': 'paused', tabindex: '-1' }, stage.el, top, bottom, rateBox, hint);
+  // The controls, sliding out over the prompter: open while it is set up (the stage behind shows each change as it
+  // is made), away as soon as it prompts (Play, Roll, the countdown), and back with ⚙. Escape puts them away too.
+  const prefs = settingsPanel(logId, () => { stage.refresh(); drawHud(); });
+  const panel = h('aside', { class: 'pr-panel', 'aria-label': 'Prompter controls', inert: true },
+    h('div', { class: 'pr-panel-head' }, h('h2', null, 'Controls'), h('button', { class: 'icon-btn pr-panel-close', type: 'button', 'aria-label': 'Hide the controls', onclick: () => showPanel(false) }, '✕')),
+    h('p', { class: 'small pr-panel-hint' }, 'Set the screen up here; the script behind shows each change. ▶ Play or ● Roll starts it and puts these away, and ⚙ brings them back. Tap the text to start and stop; hold a line to start from it, mark it or edit it.'),
+    prefs, h('p', { class: 'small pr-panel-keys' }, KEYS_HELP));
+  const root = h('div', { class: 'prompter', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Teleprompter', 'data-state': 'paused', tabindex: '-1' }, stage.el, panel, top, bottom, rateBox, hint);
+  const gear = top.querySelector('.pr-settings');
+  function showPanel(open) {
+    if (open === panel.classList.contains('open')) return;
+    if (open) { const s = stage.state(); if (s.playing || s.counting) stage.cmd('pause'); root.style.setProperty('--pr-top', top.offsetHeight + 'px'); root.style.setProperty('--pr-bot', bottom.offsetHeight + 'px'); prefs.redraw(); showHud(); }
+    panel.classList.toggle('open', open); panel.inert = !open; gear.setAttribute('aria-expanded', String(open)); gear.classList.toggle('on', open);
+    if (!open && panel.contains(document.activeElement)) root.focus({ preventScroll: true });
+  }
 
   // What a button, a key or a remote asks: the stage's own commands go to it; takes and marks are done here.
   function act(name, arg) {
@@ -248,6 +270,8 @@ function run(logId, from) {
   }
   function onState(s) {
     ear.check(s);
+    if (s.playing || s.counting) showPanel(false); // prompting: the controls get out of the way
+    else if (was && (was.wpm !== s.wpm || was.size !== s.size) && panel.classList.contains('open')) prefs.redraw();
     root.dataset.state = s.counting ? 'count' : s.playing ? 'running' : 'paused';
     if (s.playing && !(was && was.playing)) hudSoon();
     if (!s.playing && (!was || was.playing)) showHud();
@@ -291,8 +315,11 @@ function run(logId, from) {
   const onKey = e => {
     if (!keyFor(e, root)) return;
     if (e.key === 'Tab') { showHud(); trapTab(e, root); return; }
+    if (e.key === 'Escape' && panel.classList.contains('open')) { e.preventDefault(); e.stopPropagation(); showPanel(false); return; } // the controls first, then the prompter
     if (promptKey(e, act)) { e.preventDefault(); e.stopPropagation(); }
   };
+  const onResize = () => { if (panel.classList.contains('open')) { root.style.setProperty('--pr-top', top.offsetHeight + 'px'); root.style.setProperty('--pr-bot', bottom.offsetHeight + 'px'); } };
+  addEventListener('resize', onResize);
 
   /* the screen stays on, and the page goes full screen where it can (the whole page, so sheets still show over it) */
   let wake = null, ownFull = false;
@@ -315,7 +342,7 @@ function run(logId, from) {
     // there stays open for the log's own Cut.
     const l = byId('logs', logId); if (l && l.open && !(l.mode === 'record' && l.sync)) endTake(logId);
     clearInterval(iv); clearTimeout(hudTimer); clearTimeout(hintTimer); ear.stop(); stage.destroy(); unsub();
-    window.removeEventListener('keydown', onKey, true); document.removeEventListener('visibilitychange', onVisible);
+    window.removeEventListener('keydown', onKey, true); document.removeEventListener('visibilitychange', onVisible); removeEventListener('resize', onResize);
     try { wake?.release(); } catch { /* gone already */ }
     if (ownFull && document.fullscreenElement === document.documentElement) document.exitFullscreen?.().catch(() => {});
     root.remove(); OPEN = null; settleApp();
@@ -334,7 +361,8 @@ function run(logId, from) {
   if (P.voice && voiceSupported() && voiceAgreed()) stage.cmd('follow', true); // left on last time on this device
   drawHud(); tick();
   root.focus({ preventScroll: true }); // the dialog itself: Space then plays, and no button wears a focus ring
-  tell('Tap the text or ▶ to start · hold a line to start from it, mark it or edit it');
+  if (controls) showPanel(true); // set it up first; it slides away when it prompts (and says how, at its top)
+  else tell('Tap the text or ▶ to start · hold a line to start from it, mark it or edit it');
   return { logId, cmd: (c, a) => stage.cmd(c, a), close };
 }
 
@@ -445,7 +473,7 @@ export function fromLink(m) {
     if (OPEN && OPEN.logId !== m.log) OPEN.close();
     if (OPEN) return;
     // The log and its script may still be on their way over the link: wait a few seconds for them.
-    const tryOpen = n => { const l = byId('logs', m.log); if (l && l.script && l.script.paras && l.script.paras.length) openPrompter(m.log, { from: m.from || null }); else if (n < 25) setTimeout(() => tryOpen(n + 1), 200); else link.send({ t: 'pr-closed', log: m.log, why: 'no script' }); };
+    const tryOpen = n => { const l = byId('logs', m.log); if (l && l.script && l.script.paras && l.script.paras.length) openPrompter(m.log, { from: m.from || null, controls: false }); else if (n < 25) setTimeout(() => tryOpen(n + 1), 200); else link.send({ t: 'pr-closed', log: m.log, why: 'no script' }); };
     tryOpen(0);
   } else if (m.t === 'pr-cmd') { if (OPEN && OPEN.logId === m.log) OPEN.cmd(m.cmd, m.arg); }
   else if (m.t === 'pr-close') { if (OPEN && OPEN.logId === m.log) OPEN.close(); }

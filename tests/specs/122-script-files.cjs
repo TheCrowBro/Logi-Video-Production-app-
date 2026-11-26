@@ -142,7 +142,7 @@ const AV_PDF = makePdf([[[72, 720, 12, 'VIDEO'], [320, 720, 12, 'AUDIO'], [72, 6
     await page.locator('.pr-open').click(); await page.waitForSelector('.prompter'); await sleep(300);
     ok('…where the video column shows as direction', (await page.locator('.pr-line.r-dir').count()) === 2 && (await page.locator('.pr-line.r-say').count()) === 2);
     await page.screenshot({ path: S + '/prompter-av.png' });
-    await page.keyboard.press('Escape');
+    await page.locator('.pr-close').click(); await sleep(200);
   } else ok('…and the teleprompter opens the Add script sheet for a log of its own', (await page.locator('.sheet[aria-label="Add script"]').count()) === 1);
 
   // Emphasis on the stage.
@@ -150,7 +150,7 @@ const AV_PDF = makePdf([[[72, 720, 12, 'VIDEO'], [320, 720, 12, 'AUDIO'], [72, 6
   await page.evaluate(() => import('./js/pages/tcnotes.js').then(m => m.openLog('log-em', 'prompter'))); await sleep(400);
   await page.locator('.pr-open').click(); await page.waitForSelector('.prompter'); await sleep(200);
   ok('the prompter shows the stress: bold and underlined words', (await page.locator('.pr-line .em-b').innerText()) === 'five' && (await page.locator('.pr-line .em-u').innerText()) === 'best part');
-  await page.keyboard.press('Escape');
+  await page.locator('.pr-close').click(); await sleep(200);
   ok('no errors', errors.length === 0, errors.join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL the script files spec crashed — ' + (e && e.stack || e)); process.exit(1); });

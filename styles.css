@@ -983,11 +983,35 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-ratebox .btn.pr-good { background: #1f6f3a; border-color: #1f6f3a; } .pr-ratebox .btn.pr-ng { background: #8e2424; border-color: #8e2424; }
 .pr-hint { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; background: #000d; border: 1px solid #333; color: #ddd; padding: 10px 14px; border-radius: 12px; font-size: .95rem; width: max-content; max-width: min(90%, 30rem); text-align: center; pointer-events: none; opacity: 0; transition: opacity .4s; }
 .pr-hint.shown { opacity: 1; }
+/* The prompter's controls, sliding out over the stage between its button bars: from the right on a wide or landscape
+   screen, from the bottom on an upright phone (the reading line, a third down, stays in sight); dark like the rest of it. */
+.pr-panel { --bg: #0e0e10; --bg2: #1c1c1e; --card: #161618; --line: #3a3a3c; --text: #f2f2f2; --muted: #a1a1a6; --accent: #ffd166; --accent-ink: #1a1305;
+  position: absolute; z-index: 1; top: var(--pr-top, 56px); bottom: var(--pr-bot, 64px); right: 0; width: min(380px, 46vw); overflow: auto; overscroll-behavior: contain;
+  background: #0e0e10; color: var(--text); border-left: 1px solid #2c2c2e; box-shadow: -12px 0 30px #0009; padding: 0 14px 16px;
+  transform: translateX(105%); visibility: hidden; transition: transform .25s ease, visibility 0s linear .25s; }
+.pr-panel.open { transform: none; visibility: visible; transition: transform .25s ease; }
+@media (orientation: portrait) {
+  .pr-panel { top: auto; left: 0; width: auto; max-height: 52%; border-left: 0; border-top: 1px solid #2c2c2e; box-shadow: 0 -12px 30px #0009; transform: translateY(calc(100% + var(--pr-bot, 64px))); }
+  .pr-panel.open { transform: none; }
+}
+:root[data-motion=off] .pr-panel, :root[data-motion=off] .pr-panel.open { transition: none; }
+.pr-panel-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 6px; background: #0e0e10; }
+.pr-panel-head h2 { margin: 0; font-size: 1rem; }
+.pr-panel .pr-prefs { gap: 10px; } .pr-panel .pref-label { color: var(--text); }
+.pr-panel .seg button { color: var(--text); } .pr-panel .seg button.on { color: var(--accent-ink); }
+.pr-panel .btn.ghost { background: var(--bg2); color: var(--text); border-color: var(--line); }
+.pr-panel .muted, .pr-panel-keys { color: var(--muted); }
+.pr-count-len { margin-top: 6px; }
+.pr-panel-hint { margin: 0 0 10px; color: var(--muted); }
+/* A message while the controls are out goes where the script is still in sight: above them, or beside them. */
+.prompter:has(.pr-panel.open) .pr-hint { top: calc(var(--pr-top, 56px) + 24px); transform: translateX(-50%); }
+@media (orientation: landscape) { .prompter:has(.pr-panel.open) .pr-hint { left: calc((100% - min(380px, 46vw)) / 2); max-width: calc((100% - min(380px, 46vw)) - 24px); } }
+.prompter .icon-btn.pr-settings.on { background: #ffd166; color: #000; }
 body:has(.prompter) .update-bar, body:has(.prompter) .licence-bar, body:has(.prompter) .undo-bar { display: none; } /* nothing of the page over the prompter */
 /* The Prompter view of a log */
 .pr-launch { display: grid; gap: 10px; } .pr-open { font-size: 1.05rem; }
 .pr-setup h3, .pr-takes h3 { margin: 0 0 8px; }
-.pr-stepper { display: flex; align-items: center; gap: 10px; } .pr-stepper > .btn { flex: 0 0 auto; min-width: 3.2rem; } .pr-stepper .pr-val { flex: 1 1 0; min-width: 0; text-align: center; font-weight: 700; }
+.pr-stepper { display: flex; align-items: center; gap: 10px; } .pr-stepper > .btn { flex: 0 0 auto; width: auto; min-width: 3.2rem; } /* not the full width .stack gives its buttons */ .pr-stepper .pr-val { flex: 1 1 0; min-width: 0; text-align: center; font-weight: 700; }
 .pr-take-list { list-style: none; margin: 0; padding: 0; display: grid; }
 .pr-take { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 0; border-bottom: 1px solid var(--line); } .pr-take:last-child { border-bottom: 0; }
 .pr-take-tc { color: var(--accent); font-weight: 700; } .pr-take .grow { flex: 1 1 10rem; min-width: 0; }

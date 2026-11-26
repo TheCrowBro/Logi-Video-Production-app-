@@ -38,6 +38,7 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   await page.locator('.pr-open').click(); await page.waitForSelector('.prompter');
   ok('Open the prompter puts it over the page, the page out of reach', (await page.evaluate(() => document.getElementById('app').inert)) && (await page.locator('.prompter[role=dialog]').count()) === 1);
   ok('it opens on the first line, at the reading line', /INT\. HARBOUR/.test(await now(page)) && (await pos(page)) > 0);
+  ok('its controls slide out as it opens, the countdown switch first', (await page.locator('.prompter .pr-panel.open').count()) === 1 && (await page.locator('.pr-panel .pref-label').first().innerText()) === 'Countdown before a take' && (await page.locator('.pr-settings').getAttribute('aria-expanded')) === 'true');
   ok('the stage reads the script as a screenplay: names, directions dimmed, dialogue read', (await page.locator('.pr-line.r-cue').count()) === 3 && (await page.locator('.pr-line.r-say').count()) === 3 && (await page.locator('.pr-line.r-dir').count()) >= 4);
   await page.keyboard.press('PageDown'); await sleep(100);
   ok('Page Down (a clicker’s next) goes to the next line read aloud, past the names and directions', /^Every batch starts before sunrise/.test(await now(page)), await now(page));
@@ -49,6 +50,7 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   for (let i = 0; i < 8; i++) await page.keyboard.press('ArrowUp');
   ok('↑ slows down by 5 words a minute a press', (await page.locator('.pr-wpm').innerText()) === '100 wpm', await page.locator('.pr-wpm').innerText());
   const slow = await runFor(1500);
+  ok('prompting puts the controls away', (await page.locator('.prompter .pr-panel.open').count()) === 0 && (await page.locator('.pr-settings').getAttribute('aria-expanded')) === 'false');
   for (let i = 0; i < 20; i++) await page.keyboard.press('ArrowDown');
   const fast = await runFor(1500);
   ok('twice the words a minute scrolls about twice as far', slow > 5 && fast / slow > 1.6 && fast / slow < 2.5, `${slow.toFixed(1)} px at 100, ${fast.toFixed(1)} px at 200`);
@@ -97,25 +99,36 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   ok('…a mark on words follows them, a mark on the line takes its new words, and the script is marked as changed', nw.para === every.id && p2.text.slice(nw.start, nw.end) === 'before sunrise' && nl.para === every.id && /^Every single batch/.test(nl.quote) && !!L.script.rev, JSON.stringify({ nw, q: nl.quote }));
 
   // Settings for the screen: mirrored for a rig, kept on this device; bigger text.
-  await page.locator('.pr-settings').click(); await page.waitForSelector('.sheet[aria-label="Prompter settings"]');
-  await page.locator('.sheet .pref[aria-label="Mirror"] button', { hasText: 'Mirrored' }).click(); await sleep(150);
+  await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
+  ok('⚙ brings the controls back', (await page.locator('.pr-settings').getAttribute('aria-expanded')) === 'true');
+  await page.locator('.pr-panel .pref[aria-label="Mirror"] button', { hasText: 'Mirrored' }).click(); await sleep(150);
   const fs0 = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pr-stage')).getPropertyValue('--pr-fs')));
-  await page.locator('.sheet .pr-set-size button[aria-label="Bigger text"]').click(); await sleep(150);
-  await page.keyboard.press('Escape'); await sleep(200);
+  await page.locator('.pr-panel .pr-set-size button[aria-label="Bigger text"]').click(); await sleep(150);
+  await page.keyboard.press('Escape'); await sleep(350);
   const fs1 = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pr-stage')).getPropertyValue('--pr-fs')));
-  ok('Escape closes the settings, not the prompter', (await page.locator('.sheet').count()) === 0 && (await page.locator('.prompter').count()) === 1);
+  ok('Escape puts the controls away, not the prompter', (await page.locator('.prompter .pr-panel.open').count()) === 0 && (await page.locator('.prompter').count()) === 1);
   ok('mirrored turns the stage and not the buttons, and is kept on this device', (await page.evaluate(() => document.querySelector('.pr-stage').classList.contains('mirror') && getComputedStyle(document.querySelector('.pr-bottom')).transform === 'none')) && JSON.parse(await page.evaluate(() => localStorage.getItem('logi-prompter'))).mirror === true);
   ok('bigger text is bigger', fs1 > fs0, `${fs0} → ${fs1}`);
-  await page.locator('.pr-settings').click(); await page.waitForSelector('.sheet[aria-label="Prompter settings"]');
-  await page.locator('.sheet .pref[aria-label="Line spacing"] button', { hasText: 'Loose' }).click(); await sleep(150); await page.keyboard.press('Escape'); await sleep(200);
+  await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
+  await page.locator('.pr-panel .pref[aria-label="Line spacing"] button', { hasText: 'Loose' }).click(); await sleep(150); await page.keyboard.press('Escape'); await sleep(300);
   ok('loose line spacing spreads the lines', (await page.evaluate(() => document.querySelector('.pr-col').style.lineHeight)) === '1.6');
   await page.screenshot({ path: S + '/prompter-mirrored.png' });
 
   // Its own walkthrough, over it.
   await page.locator('.pr-help').click(); await page.waitForSelector('.tour-card h2');
-  let spots = 0, cards = 0;
-  for (let i = 0; i < 16; i++) { if (!(await page.locator('.tour-card h2').count())) break; cards++; if (!(await page.locator('.tour-spot').evaluate(el => el.classList.contains('center')))) spots++; const label = await page.locator('.tour-card .btn.primary').innerText(); await page.locator('.tour-card .btn.primary').click(); await sleep(420); if (label === 'Done') break; }
-  ok(`the prompter’s ? walks through it: ${cards} steps, ${spots} highlighted, and it is still open after`, cards >= 10 && spots >= 9 && (await page.locator('.tour').count()) === 0 && (await page.locator('.prompter').count()) === 1);
+  let spots = 0, cards = 0; const lit = {};
+  for (let i = 0; i < 30; i++) {
+    if (!(await page.locator('.tour-card h2').count())) break; cards++;
+    const title = await page.locator('.tour-card h2').innerText(), centred = await page.locator('.tour-spot').evaluate(el => el.classList.contains('center'));
+    if (!centred) spots++;
+    lit[title] = !centred && (await page.evaluate(() => !!document.querySelector('.prompter .pr-panel.open')));
+    // A step that opens or closes the controls first takes longer to come up: wait for the card to change, not a set time.
+    const where = await page.locator('.tour-card .tour-step').innerText(), label = await page.locator('.tour-card .btn.primary').innerText();
+    await page.locator('.tour-card .btn.primary').click(); if (label === 'Done') { await sleep(420); break; }
+    await page.waitForFunction(w => document.querySelector('.tour-card .tour-step')?.innerText !== w, where, { timeout: 5000 }).catch(() => {}); await sleep(150);
+  }
+  ok(`the prompter’s ? walks through it: ${cards} steps, ${spots} highlighted, and it is still open after`, cards >= 13 && spots >= 12 && (await page.locator('.tour').count()) === 0 && (await page.locator('.prompter').count()) === 1);
+  ok('…its steps open the controls to show them and the countdown, and put them away for the rest', lit['The controls'] === true && lit['The countdown'] === true && lit['The script, full screen'] === false && (await page.locator('.prompter .pr-panel.open').count()) === 0, JSON.stringify(lit));
 
   // A take left rolling in free run ends with the prompter.
   await page.keyboard.press('r'); await sleep(400); await page.keyboard.press('Escape'); await sleep(300);
@@ -135,7 +148,7 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   await page.locator('.sc-para', { hasText: 'Interview' }).click(); await sleep(150);
   await page.locator('.sc-prompt').click(); await page.waitForSelector('.prompter'); await sleep(200);
   ok('Prompt from here, in the script, opens the prompter on that line', /^Interview/.test(await now(page)), await now(page));
-  await page.keyboard.press('Escape'); await sleep(200);
+  await page.locator('.pr-close').click(); await sleep(200);
 
   // The licence: free in the trial; after it, without a licence, the prompter offers one instead of opening.
   await page.locator('.tc-views button', { hasText: 'Prompter' }).click(); await sleep(300);
@@ -145,7 +158,7 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   await page.evaluate(() => import('./js/store.js').then(s => s.setPaid(false, what => window.__asked.push(what), { links: true })));
   await page.locator('.pr-open').click(); await sleep(300);
   ok('in the free trial it opens', (await page.locator('.prompter').count()) === 1);
-  await page.keyboard.press('Escape'); await sleep(200);
+  await page.locator('.pr-close').click(); await sleep(200);
   await page.evaluate(() => import('./js/store.js').then(s => s.setPaid(true, null, { links: true })));
 
   // Record run with a sync: Roll and Cut in the prompter run the log's clock.
@@ -193,6 +206,17 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   await sleep(2800);
   ok('while it runs the buttons step out of the way', await page.evaluate(() => document.querySelector('.prompter').classList.contains('hud-off')));
   await page.screenshot({ path: S + '/prompter-running.png' });
+  await page.keyboard.press('Space'); await sleep(200); await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
+  await page.locator('.pr-panel .pr-count-switch button', { hasText: 'Off' }).click(); await sleep(150);
+  ok('the countdown switches off, its lengths put away', (await page.locator('.pr-panel .pr-count-len').count()) === 0 && JSON.parse(await page.evaluate(() => localStorage.getItem('logi-prompter'))).count === 0);
+  await page.keyboard.press('Home'); await page.locator('.pr-play').click(); await sleep(300);
+  ok('…and Play from the top then runs straight away', (await page.evaluate(() => document.querySelector('.prompter').dataset.state)) === 'running' && (await page.locator('.pr-count').isHidden()));
+  await page.keyboard.press('Space'); await sleep(200); await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
+  await page.locator('.pr-panel .pr-count-switch button', { hasText: 'On' }).click(); await sleep(150);
+  ok('switched on again, it keeps its length', (await page.locator('.pr-panel .pr-count-len button.on').innerText()) === '3 s');
+  await page.locator('.pr-panel .pr-count-len button', { hasText: '10 s' }).click(); await sleep(150);
+  await page.keyboard.press('Home'); await page.locator('.pr-roll').click(); await sleep(300);
+  ok('a 10-second countdown counts from 10, and the controls go', (await page.locator('.pr-count').innerText()) === '10' && (await page.locator('.prompter .pr-panel.open').count()) === 0);
   ok('no errors in landscape', page.errors.length === 0, page.errors.join(' | '));
   await ctx.close();
 

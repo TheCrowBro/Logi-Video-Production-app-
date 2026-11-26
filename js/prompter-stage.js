@@ -17,9 +17,9 @@ export const SIZES = [52, 44, 38, 33, 29, 25, 22, 19, 16, 13];
 export const COLS = [['narrow', 'Narrow', 0.62], ['medium', 'Medium', 0.8], ['full', 'Full width', 0.95]];
 export const MARKS = [[0.2, 'Near the top'], [0.33, 'A third down'], [0.5, 'The middle']];
 export const SPACINGS = [[1.15, 'Tight'], [1.32, 'Normal'], [1.6, 'Loose']];
-export const COUNTS = [[0, 'Off'], [3, '3 s'], [5, '5 s']];
+export const COUNT_LENGTHS = [3, 5, 10]; // seconds of countdown before a take, when it is on (count 0 is off)
 export const DIRS = [['dim', 'Dimmed'], ['hide', 'Hidden'], ['read', 'Like the rest']];
-const DEF = { size: 5, wpm: 140, mark: 0.33, col: 'medium', spacing: 1.32, mirror: false, flip: false, count: 3, dirs: 'dim', names: true, voice: false };
+const DEF = { size: 5, wpm: 140, mark: 0.33, col: 'medium', spacing: 1.32, mirror: false, flip: false, count: 3, countLen: 3, dirs: 'dim', names: true, voice: false };
 const WPM_MIN = 60, WPM_MAX = 300;
 const read = () => { try { return { ...DEF, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return { ...DEF }; } };
 export const P = read();
@@ -28,7 +28,7 @@ export const save = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); 
 export const reload = () => Object.assign(P, read());
 export const clampSize = n => Math.max(0, Math.min(SIZES.length - 1, n));
 export const clampWpm = n => Math.max(WPM_MIN, Math.min(WPM_MAX, n));
-const SETTABLE = { size: v => clampSize(Number(v)), wpm: v => clampWpm(Number(v)), mark: v => (MARKS.some(m => m[0] === v) ? v : P.mark), col: v => (COLS.some(c => c[0] === v) ? v : P.col), spacing: v => (SPACINGS.some(s => s[0] === v) ? v : P.spacing), mirror: v => !!v, flip: v => !!v, count: v => (COUNTS.some(c => c[0] === v) ? v : P.count), dirs: v => (DIRS.some(d => d[0] === v) ? v : P.dirs), names: v => !!v, voice: v => !!v };
+const SETTABLE = { size: v => clampSize(Number(v)), wpm: v => clampWpm(Number(v)), mark: v => (MARKS.some(m => m[0] === v) ? v : P.mark), col: v => (COLS.some(c => c[0] === v) ? v : P.col), spacing: v => (SPACINGS.some(s => s[0] === v) ? v : P.spacing), mirror: v => !!v, flip: v => !!v, count: v => ([0, ...COUNT_LENGTHS].includes(Number(v)) ? Number(v) : P.count), countLen: v => (COUNT_LENGTHS.includes(Number(v)) ? Number(v) : P.countLen), dirs: v => (DIRS.some(d => d[0] === v) ? v : P.dirs), names: v => !!v, voice: v => !!v };
 export const setSetting = (k, v) => { if (!SETTABLE[k]) return false; P[k] = SETTABLE[k](v); save(); return true; };
 
 /* --------------------------------- script --------------------------------- */
