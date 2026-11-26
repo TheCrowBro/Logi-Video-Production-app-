@@ -53,7 +53,7 @@ const again = what => h('p', { class: 'note small add-again' }, `Your ${what} ch
 // The read above gets nothing when the storage wants a new sign-in first (Google Drive does an hour after the last
 // one) or cannot be reached, and then no later read puts the preview right before the tap. A preview that would add
 // says so, since the same thing added on another device would then be here twice after the next sync.
-const unread = () => { const c = store.cloud, signIn = c.status === 'needs-permission'; return !!c.adapter && !c.paused && (signIn || c.status === 'error') && h('p', { class: 'note small add-unread', role: 'note' }, `Vdex could not sync with your cloud storage just now${signIn ? ': it needs you to sign in again (the menu ☰ at the top, then Storage, sync & backups)' : ''}, so this device may not have what your other devices have added. If one of them has added this already, adding it here makes a second copy.`); };
+const unread = () => { const c = store.cloud, signIn = c.status === 'needs-permission'; return !!c.adapter && !c.paused && (signIn || c.status === 'error') && h('p', { class: 'note small add-unread', role: 'note' }, `Vdex could not sync with your cloud storage just now${signIn ? `: it needs ${c.adapter.id === 'file' ? 'your permission to use the file again' : 'you to sign in again'} (the menu ☰ at the top, then Storage, sync & backups)` : ''}, so this device may not have what your other devices have added. If one of them has added this already, adding it here makes a second copy.`); };
 
 // A link that came in with the address. Shown once Vdex is ready; a link that cannot be read says why.
 export async function arrived(link) {
