@@ -168,6 +168,8 @@ const newestIn = d => { let t = Number(d.updatedAt) || 0; for (const [, o, f] of
 // the copy here), and both would upload the whole copy at every sync from then on. So each running Vdex counts in a
 // seat of its own, one of 256: the next time after t that is its seat's turn. Two such changes then differ, the later
 // number wins on both devices, and they agree. (A change made after reading the other's is later whatever the seats.)
+// Each change so stamped moves the copy's time on by up to a quarter of a second, so this is kept for a copy that is
+// that far ahead of the clock or more: another device's clock, never the millisecond a burst of changes shares.
 const SEAT = Math.floor(Math.random() * 256), SEATS = 256;
 const onePast = t => { const n = t + 1; return n + ((SEAT - n) % SEATS + SEATS) % SEATS; };
 export const stampSeat = () => SEAT; // (for the specs: two devices of a case must not sit in the same seat by chance)
@@ -175,7 +177,7 @@ export function update(fn) {
   if (gate && !gate()) return false;
   const seen = Number(db.updatedAt) || 0, before = seen > Date.now() ? new Map([...stamps(db)].map(([k, o, f]) => [k, o[f]])) : null;
   fn(db);
-  const now = Date.now(), at = before && seen >= now ? onePast(seen) : now;
+  const now = Date.now(), at = before && seen >= now ? (seen - now >= SEATS ? onePast(seen) : seen + 1) : now; // (a lead of a few milliseconds, as after a burst of changes in one of them, is no other device's clock: plainly one past, and the clock is ahead again at once)
   if (before) for (const [k, o, f] of stamps(db)) { const v = Number(o[f]) || 0; if (v && v < at && before.get(k) !== o[f]) o[f] = at; }
   db.updatedAt = Math.max(at, Number(db.updatedAt) || 0);
   persistLocal();
@@ -267,7 +269,7 @@ export const gearClash = (booking, gearId) => {
 // list the file does carry, empty or not, replaces the one here.
 export const carries = (data, k) => { const v = data && typeof data === 'object' ? data[k] : null; return LISTS.includes(k) || k === 'logs' ? Array.isArray(v) : ['profile', 'billing', 'priceList', 'templates', 'calSync', 'deleted'].includes(k) ? !!v && typeof v === 'object' : v != null; };
 export function replaceAll(data) {
-  const was = db, now = Math.max(Date.now(), onePast(newestIn(db))), has = k => carries(data, k);
+  const was = db, now = Math.max(Date.now(), newestIn(db) + 1), has = k => carries(data, k);
   db = normalise(data);
   for (const k of Object.keys(was)) if (!has(k) && k !== 'version' && k !== 'updatedAt') db[k] = was[k];
   for (const list of LISTS) if (has(list)) db[list] = (db[list] || []).map(x => (x && typeof x === 'object' ? { ...x, updatedAt: now } : x));
@@ -336,7 +338,7 @@ export function loadSample() {
   const venueA = uid(), todayJob = uid(), past0 = uid(), past1 = uid(), past2 = uid(), past3 = uid();
   // worked days for the hours chart: [booking, days ago, start h, end h, break min]
   const shift = (bid, ago, sh, eh, bm) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ago, sh, 0); const start = x.getTime(); return { id: uid(), bookingId: bid, date: iso(-ago), start, end: start + (eh - sh) * 36e5, breaks: bm ? [{ start: start + 4 * 36e5, end: start + 4 * 36e5 + bm * 6e4 }] : [], updatedAt: start }; };
-  const was = db, now = Math.max(Date.now(), onePast(newestIn(db))); // never earlier than what this copy has seen, as for a restore
+  const was = db, now = Math.max(Date.now(), newestIn(db) + 1); // never earlier than what this copy has seen, as for a restore
   const g = (name, category, value, serial = '', qty = 1) => ({ id: uid(), name, category, value, serial, qty, notes: '' });
   const gear = [
     g('Sony FX6 body', 'Camera', 6000, 'FX6-120934'), g('Sony FE 24-70mm f/2.8 GM II', 'Lens', 2300),
