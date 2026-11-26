@@ -283,6 +283,7 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null, onL
   handle.addEventListener('pointerup', e => { e.stopPropagation(); const d = lineDrag; lineDrag = null; if (!d) return; if (d.moved) { if (!P.lineLock) { save(); emit(); } return; } onLine('menu'); });
   handle.addEventListener('pointercancel', () => { if (lineDrag && lineDrag.moved && !P.lineLock) save(); lineDrag = null; });
   handle.addEventListener('click', e => { e.stopPropagation(); if (e.detail === 0) onLine('menu'); }); // Enter or Space on it
+  handle.addEventListener('mousedown', e => e.preventDefault()); // a click or a tap leaves no focus on it (no ring for the talent); Tab still reaches it
   handle.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); lineDrag = null; onLine('menu'); });
 
   /* driving it */
