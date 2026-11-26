@@ -431,6 +431,12 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .sc-target { min-width: 0; word-break: break-word; }
 .import-preview { display: grid; gap: 6px; } .import-sample { border-left: 3px solid var(--line); padding-left: 10px; display: grid; gap: 2px; }
 
+/* Settings → Report a problem or send feedback (js/feedback.js): its own card above the fold-downs */
+.feedback-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; margin: 0 0 12px; display: grid; gap: 6px; }
+.feedback-card .feedback-btn { width: 100%; justify-content: center; white-space: normal; }
+.feedback-card p { margin: 0; }
+.feedback-details { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg2); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin: 0; max-height: 14rem; overflow: auto; font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+
 /* install */
 .install-steps { padding-left: 1.3rem; display: grid; gap: 10px; margin: 0; }
 

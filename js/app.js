@@ -13,6 +13,14 @@ import { initUpdates, updateState } from './update.js';
 import { termsGate } from './terms.js';
 import * as native from './native.js';
 
+// The last few errors met since Vdex opened, in memory only and never sent anywhere: Settings → Report a problem puts
+// them in the email the person writes (js/feedback.js), where they see them before they send it. The message and the
+// file and line it came from, nothing more.
+window.__vdexErrors = window.__vdexErrors || [];
+{ const note = text => { const a = window.__vdexErrors, t = String(text).replace(/\s+/g, ' ').slice(0, 200); if (t && a[a.length - 1] !== t) a.push(t); if (a.length > 5) a.shift(); };
+  addEventListener('error', e => { if (e && e.message) note(e.message + (e.filename ? ` (${String(e.filename).split('?')[0].split('/').pop()}:${e.lineno || 0})` : '')); });
+  addEventListener('unhandledrejection', e => { try { const r = e && e.reason; note(r && r.message ? `${r.name || 'Error'}: ${r.message}` : `Unhandled: ${r}`); } catch { /* a reason that cannot be put in words */ } }); }
+
 applyPrefs();
 // A shared Vdex link opened in the app (index.html#add=…, from "Add to my Vdex" on a shared page): taken out of the
 // address bar at once and kept for this tab, through the lock, the terms, the PIN set-up and any sign-in on the way.

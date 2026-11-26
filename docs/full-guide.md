@@ -306,6 +306,9 @@ A stolen, lost or broken phone should cost you a phone, not your business record
 
 ### iPhone questions and answers
 
+**Something isn't working, or I have an idea.**
+Settings → **Report a problem or send feedback**, the button at the top. Your email app opens a message to support@crowmade.app with your Vdex version and phone details already in it (nothing from your bookings, crew, kit or notes): say what happened, add a screenshot if you can, and send it. If no email app opens, tap **Copy the details** and paste them into an email.
+
 **I installed it and my bookings vanished.**
 They're still in Safari: the installed app and the Safari tab are separate copies. In Safari, Settings → *Storage, sync & backups* → **Export backup** (with a licence), then **Import backup** in the installed app.
 
@@ -636,6 +639,9 @@ A stolen, lost or broken phone should cost you a phone, not your business record
 
 ### Android questions and answers
 
+**Something isn't working, or I have an idea.**
+Settings → **Report a problem or send feedback**, the button at the top. Your email app opens a message to support@crowmade.app with your Vdex version and phone details already in it (nothing from your bookings, crew, kit or notes): say what happened, add a screenshot if you can, and send it. If no email app opens, tap **Copy the details** and paste them into an email.
+
 **There's no Install button.**
 Either Vdex is already installed (open it from your app list), or you're in a browser that can't install web apps. Open the address in Chrome.
 
@@ -708,6 +714,7 @@ The installed app opens in its own window, works offline, and keeps its data on 
 - The PIN lock works the same way (every computer has a PIN too, 4 to 20 digits; Settings → *Security* changes it), with Windows Hello or Touch ID where the browser offers it. On the lock screen you can type the PIN on the keyboard, or paste it. It locks when the window goes to the background or when you press 🔒.
 - **Updates:** the desktop app checks download.crowmade.app for a new version when it starts and every few hours. Windows, Linux and a signed Mac download it in the background and install it on the next restart (Settings → *General* → *About & Licence* shows progress and has **Restart to update**). On an unsigned Mac, Settings → *General* → *About & Licence* shows the new version with a download link instead, because Apple only allows silent updates for code-signed apps. The browser version updates like the phone apps do.
 - **Search from the keyboard:** press **/** (when you are not typing in a box) or **Ctrl+K** (**⌘K** on a Mac) on any page to open the search, the **↑ ↓** arrow keys to move through the results, **Enter** to open the one that is marked (with none marked, Enter marks the first) and **Esc** to close. In a wide window the search is a box in the top bar rather than a magnifier.
+- **Report a problem or send an idea:** Settings → **Report a problem or send feedback**, the button at the top. It opens your email program with the details filled in; with no email program set up, **Copy the details** and paste them into an email to support@crowmade.app from your webmail.
 - To link a phone: the computer shows the code, the phone scans it and shows a reply; scan the reply with the webcam, or copy and paste it.
 - A link someone shared with you (a booking, a contact card, an equipment list) opens in your web browser, not in the desktop app. To add it to the desktop app, copy the link and use **Add from a link** on the Bookings, Crew or Equipment page, or scan its QR code with the webcam. Links you make in the desktop app open on vdex.crowmade.app.
 - Everything else, from bookings to timecode notes, works as described in the phone guides; the [Android guide](#android-guide) is the closer match.
