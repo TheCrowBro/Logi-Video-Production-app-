@@ -115,12 +115,20 @@ function openSync(log) {
     manual.value = d.replace(/(\d{2})(?=\d)/g, '$1:');
   });
   const applySync = (frames, ms, how) => {
-    const rolling = record ? rollingBox.checked : true, cur = byId('logs', log.id) || log;
+    const rolling = record ? rollingBox.checked : true;
+    // A take the prompter rolled before the log was synced is timed by the clock on the wall (startTake(): open,
+    // openAt). In record run the log's own clock times its takes from the sync on: synced with the camera stopped, that
+    // take ends here, with its length; synced while it records, it is the take that is rolling, and the clock carries it
+    // on (its Cut gives it its length), as on a log that was already rolling.
+    const wall = l => !!(l && l.open) && !runsClock(l);
+    if (record && !rolling && wall(byId('logs', log.id))) endTake(log.id);
+    const cur = byId('logs', log.id) || log, held = record && wall(cur);
     // Record run, synced while the camera is recording: that is a take the log has not seen start, so it starts here,
     // as Roll would have started it (a log that was already rolling goes on with its take).
-    const starts = record && rolling && !(cur.sync && cur.sync.rolling !== false), take = (cur.take || 0) + (starts ? 1 : 0);
+    const starts = record && rolling && !held && !(cur.sync && cur.sync.rolling !== false), take = (cur.take || 0) + (starts ? 1 : 0);
     const takeNote = starts && cur.autoTakes !== false ? [{ id: uid(), frames, text: `▶ Take ${take}`, at: new Date().toISOString(), kind: 'roll', take }] : [];
-    upsert('logs', { ...cur, sync: { frames, ms, how, rolling, dev: link.me.id, at: new Date().toISOString() }, rate: log.rate, take, notes: [...(cur.notes || []), ...takeNote] });
+    const { open, openAt, ...clocked } = cur; // (record run: from here on the clock, not the wall, times the log's takes)
+    upsert('logs', { ...(record ? clocked : cur), sync: { frames, ms, how, rolling, dev: link.me.id, at: new Date().toISOString() }, rate: log.rate, take, notes: [...(cur.notes || []), ...takeNote] });
     haptic(30); toast('Synced to ' + framesToTc(frames, r)); announce('Timecode synced'); closeSheet();
   };
   const syncNow = () => {
@@ -826,11 +834,15 @@ function actionBar(log) {
   };
   tick(); const iv = setInterval(tick, 250);
   const el = h('div', { class: 'sc-bar' }, h('div', { class: 'card-row' }, info, live), h('div', { class: 'actions' }, markBtn, noteBtn, fromBtn, editBtn));
+  // A line reached by Tab is scrolled clear of the bar (.sc-para's scroll-margin-bottom in styles.css) by the bar's own
+  // height, which grows when its four buttons wrap: a third row on a phone 360 px wide, more at a larger text size.
+  const fit = typeof ResizeObserver === 'function' ? new ResizeObserver(() => { const box = el.parentElement; if (box && el.offsetHeight) box.style.setProperty('--sc-bar-h', el.offsetHeight + 'px'); }) : null;
+  if (fit) fit.observe(el);
   // Escape on the bar lets the chosen line go and gives it the focus back: from the keyboard, the way back to a line that Enter chose
   let byPointer = false; // whether the bar was last pressed with a finger or the mouse, or with a key
   el.addEventListener('pointerdown', () => { byPointer = true; });
   el.addEventListener('keydown', e => { byPointer = false; if (e.key !== 'Escape' || !S.target || S.target.start != null) return; const line = document.getElementById('sc-' + S.target.para); if (!line) return; e.preventDefault(); line.click(); line.focus(); });
-  return { el, set, stop: () => clearInterval(iv) };
+  return { el, set, stop: () => { clearInterval(iv); if (fit) fit.disconnect(); } };
 }
 
 function jumpTo(log, n) {

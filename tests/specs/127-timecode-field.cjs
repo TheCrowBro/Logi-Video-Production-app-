@@ -41,7 +41,9 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
       log('L3', 'Not synced', '23.976'),
       log('L4', 'Rec run', '23.976', { mode: 'record' }),
       log('L5', 'Drop frame', '29.97df'),
-      log('L6', 'Thirty', '29.97', { sync: { frames: 108028, ms: now, how: 'typed', rolling: true } })); }); })); // 01:00:00:28
+      log('L6', 'Thirty', '29.97', { sync: { frames: 108028, ms: now, how: 'typed', rolling: true } }), // 01:00:00:28
+      log('L7', 'Rec run, prompter first', '23.976', { mode: 'record' }),
+      log('L8', 'Rec run, prompter first, stopped', '23.976', { mode: 'record' })); }); }));
 
   // ---- a note being typed outlives a redraw of the page; its stamp stays with it ----
   await openLog(page, 'L1');
@@ -143,6 +145,23 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('Cut gives that take its length and announces take 1', !!log.notes[0].dur && /^Cut\. Take 1 was/.test(await page.locator('#sr-live').innerText()), JSON.stringify([log.notes[0].dur, await page.locator('#sr-live').innerText()]));
   await page.getByRole('button', { name: /Roll/ }).click(); await sleep(300);
   ok('…and the next Roll is take 2', (await logOf(page, 'L4')).notes.some(n => n.text === '▶ Take 2'));
+  // A take the teleprompter rolled before the sync is timed by the clock on the wall: the sync carries it on as the
+  // take that is rolling (one take, not two), or, with the camera stopped, ends it there with its length.
+  const tcm = (fn, id) => page.evaluate(([fn, id]) => import('./js/pages/tcnotes.js').then(m => JSON.parse(JSON.stringify(m[fn](id)))), [fn, id]);
+  await tcm('startTake', 'L7'); await openLog(page, 'L7');
+  await page.getByRole('button', { name: 'Sync', exact: true }).click(); await page.waitForSelector('.sheet .tc-input');
+  await page.locator('.sheet label.check input[type=checkbox]').check();
+  await page.locator('.sheet .tc-input').fill('02000000'); await page.locator('.sheet .row-edit button.primary').click(); await sleep(400);
+  log = await logOf(page, 'L7');
+  ok('a take the prompter rolled before a record-run log was synced, synced as recording, is still take 1: no second take, and the log’s clock carries it', log.take === 1 && log.notes.length === 1 && log.notes[0].text === '▶ Take 1' && !('open' in log) && !('openAt' in log) && /recording take 1/.test(await page.locator('.tc-head').innerText()), JSON.stringify([log.take, log.notes, log.open]));
+  await sleep(1100); await page.getByRole('button', { name: /Cut/ }).click(); await sleep(300);
+  log = await logOf(page, 'L7');
+  ok('…and Cut gives that take its length', log.notes.length === 1 && !!log.notes[0].dur && /^Cut\. Take 1 was/.test(await page.locator('#sr-live').innerText()), JSON.stringify(log.notes));
+  await tcm('startTake', 'L8'); await sleep(1100); await openLog(page, 'L8');
+  await page.getByRole('button', { name: 'Sync', exact: true }).click(); await page.waitForSelector('.sheet .tc-input');
+  await page.locator('.sheet .tc-input').fill('02000000'); await page.locator('.sheet .row-edit button.primary').click(); await sleep(400);
+  log = await logOf(page, 'L8');
+  ok('synced with the camera stopped, a take the prompter rolled before ends there with its length, and no take is left rolling', log.take === 1 && log.notes.length === 1 && /^0:0[1-9]$/.test(log.notes[0].dur || '') && !('open' in log) && log.sync && log.sync.rolling === false && (await tcm('openTake', 'L8')) === null, JSON.stringify([log.notes, log.open, log.sync]));
 
   await openLog(page, 'L2');
   await page.getByRole('button', { name: 'Re-sync' }).click(); await page.waitForSelector('.sheet .tc-clear');
@@ -182,6 +201,10 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('Mark pressed from the keyboard marks the chosen line and gives it the focus back, and the line reads to a screen reader as its own words', marked[0] === 1 && marked[1] === 'line 3' && !!marked[2] && !/^Mark at/.test(marked[2]) && (await focusNow()) === 'line 4', JSON.stringify([marked, await focusNow()]));
   const under = await page.evaluate(() => { const bar = document.querySelector('.sc-bar').getBoundingClientRect(); return [...document.querySelectorAll('.sc-para')].slice(0, 12).filter(p => { p.focus(); const r = p.getBoundingClientRect(); return r.bottom > bar.top + 1 && r.top < bar.bottom; }).length; });
   ok('a line reached by the keyboard is scrolled clear of the Mark bar', under === 0, String(under));
+  await page.setViewportSize({ width: 360, height: 900 }); await sleep(300);
+  const narrow = await page.evaluate(() => { const bar = document.querySelector('.sc-bar').getBoundingClientRect(), rows = new Set([...document.querySelectorAll('.sc-bar .actions .btn')].map(b => Math.round(b.getBoundingClientRect().top))).size; return { rows, bar: Math.round(bar.height), under: [...document.querySelectorAll('.sc-para')].slice(0, 12).filter(p => { p.focus(); const r = p.getBoundingClientRect(); return r.bottom > bar.top + 1 && r.top < bar.bottom; }).length }; });
+  await page.setViewportSize({ width: 420, height: 900 }); await sleep(300);
+  ok('…on a phone 360 px wide too, where the bar’s buttons take another row', narrow.under === 0, JSON.stringify(narrow));
   // found by the last check: Mark tapped (or clicked) after reading ahead. The line was chosen, the page scrolled on,
   // and the mark must not bring the page back to the line: the focus goes to it without scrolling.
   await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/pages/tcnotes.js')]).then(([s, t]) => { s.upsert('logs', { id: 'LONG', title: 'A long script', rate: '25', mode: 'free', created: '2026-11-01', sync: null, take: 0, autoTakes: false, script: { name: 'Long', imported: '2026-11-01T09:00:00.000Z', paras: Array.from({ length: 90 }, (_, i) => ({ id: 'q' + i, kind: 'action', text: `Line ${i}: the quick brown fox jumps over the lazy dog and runs on across the field.` })) }, scriptAt: 1, notes: [] }); t.openLog('LONG', 'script'); })); await sleep(400);

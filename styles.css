@@ -409,7 +409,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .sc-head { margin: 4px 0 8px; flex-wrap: wrap; } .sc-head .actions { margin: 0; }
 .sc-body { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px 10px 8px; display: grid; gap: 2px; user-select: text; -webkit-user-select: text; -webkit-touch-callout: none; }
 .sc-para { display: grid; grid-template-columns: 2.6rem 1fr; gap: 4px; padding: 6px 4px; border-radius: 8px; border-left: 3px solid transparent; cursor: pointer; line-height: 1.5; }
-.sc-para { scroll-margin-bottom: 11rem; } /* a line reached by Tab is scrolled clear of the Mark bar, which stays at the foot of the screen */
+.sc-para { scroll-margin-bottom: calc(var(--sc-bar-h, 10rem) + 1rem); } /* a line reached by Tab is scrolled clear of the Mark bar, which stays at the foot of the screen (--sc-bar-h: its height, actionBar() in js/pages/tcnotes.js) */
 .sc-para:hover { background: var(--bg2); } .sc-para:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
 .sc-para.sel { background: color-mix(in srgb, var(--accent) 16%, var(--card)); border-left-color: var(--accent); }
 .sc-para.flash { background: color-mix(in srgb, var(--accent) 30%, var(--card)); }
