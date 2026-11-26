@@ -3,8 +3,8 @@
 // details with a scannable EPC (SEPA) code. Pure functions: the app and the public invoice page both use them.
 export const CURRENCIES = [['USD', '$'], ['EUR', '€'], ['GBP', '£'], ['AUD', 'A$'], ['CAD', 'C$'], ['NZD', 'NZ$'], ['CHF', 'CHF '], ['SEK', 'kr '], ['NOK', 'kr '], ['DKK', 'kr '], ['JPY', '¥'], ['INR', '₹'], ['ZAR', 'R'], ['SGD', 'S$'], ['HKD', 'HK$'], ['MXN', 'MX$'], ['BRL', 'R$'], ['PLN', 'zł '], ['CZK', 'Kč '], ['AED', 'AED ']];
 const BY_SYMBOL = { '$': 'USD', '€': 'EUR', '£': 'GBP', 'A$': 'AUD', 'C$': 'CAD', 'NZ$': 'NZD', '¥': 'JPY', '₹': 'INR', 'R': 'ZAR', 'S$': 'SGD', 'HK$': 'HKD', 'MX$': 'MXN', 'R$': 'BRL', 'zł': 'PLN', 'Kč': 'CZK', 'CHF': 'CHF', 'kr': 'SEK', 'AED': 'AED' };
-export const codeFor = sym => BY_SYMBOL[String(sym || '$').trim()] || 'USD';
 // The code only when it is really known (a symbol from the list, or a code typed as such): '' otherwise, never a guess.
+// (There was a second reader that answered USD for anything it did not know, and invoices in ₪ asked for US dollars.)
 const WRITTEN = { 'US$': 'USD', 'AU$': 'AUD', 'CA$': 'CAD', 'NZ$': 'NZD' }; // other common ways of writing them
 export const knownCode = sym => { const t = String(sym ?? '').trim(), u = t.toUpperCase(); return BY_SYMBOL[t] || WRITTEN[u] || (CURRENCIES.some(c => c[0] === u) ? u : ''); };
 export const amountStr = n => (Math.round((Number(n) || 0) * 100) / 100).toFixed(2);
