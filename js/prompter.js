@@ -295,13 +295,16 @@ const typing = e => !!(e.target && e.target.closest && e.target.closest('input, 
 const keyFor = (e, root) => root.isConnected && !covered() && !document.querySelector('.sheet-back, .tour') && !(e.ctrlKey || e.metaKey || e.altKey) && !((e.key === ' ' || e.key === 'Enter') && e.target && e.target.closest && e.target.closest('button, summary')) && !(typing(e) && e.key !== 'Escape');
 
 /* ------------------------------- the prompter ------------------------------- */
+// Free during the trial, then with a licence. linksAllowed() is that same rule, and a page still running the build from
+// before the prompter (whose licence check does not know it yet) has it too, so the trial opens it there as well.
+const mayPrompt = () => store.linksAllowed() || store.requirePaid('prompter');
 let OPEN = null; // the prompter on screen: { logId, cmd, close }
 export const prompterOpen = () => !!OPEN;
 export function openPrompter(logId, { from = null, controls = true } = {}) {
   if (OPEN) return;
   const log = byId('logs', logId);
   if (!log || !log.script || !log.script.paras || !log.script.paras.length) return;
-  if (!store.requirePaid('prompter')) return; // free during the trial, then with a licence
+  if (!mayPrompt()) return; // free during the trial, then with a licence
   OPEN = run(logId, from || lastLine.get(logId) || null, controls);
 }
 export function closePrompter() { if (OPEN) OPEN.close(); }
@@ -624,7 +627,7 @@ function openRemote(logId, port) {
 // remote. The other device needs the log's script first; the link sends it with the log.
 function promptOnPeer(logId) {
   if (link.link.status !== 'connected') { toast('Link the devices first: 🔗 Link device.'); return; }
-  if (!store.requirePaid('prompter')) return;
+  if (!mayPrompt()) return;
   link.send({ t: 'pr-open', log: logId, from: lastLine.get(logId) || null });
   openRemote(logId, { kind: 'link', name: link.link.peer?.name || 'the linked device', send: (cmd, arg) => link.send({ t: 'pr-cmd', log: logId, cmd, arg }), closeScreen: () => link.send({ t: 'pr-close', log: logId }) });
 }
@@ -649,7 +652,7 @@ link.onChange(l => { if (l.status !== 'connected' && REMOTE && REMOTE.port.kind 
 // can (and the desktop app always), with this window as its remote. They talk over a BroadcastChannel: this window
 // sends the script and the commands, that one answers with its state and the takes' keys pressed in it.
 function promptInWindow(logId) {
-  if (!store.requirePaid('prompter')) return;
+  if (!mayPrompt()) return;
   const w = window.open('prompter.html', 'vdex-prompter', 'popup=yes,width=1024,height=640');
   if (!w) { toast('The window was blocked. Allow pop-ups for Vdex, then try again.'); return; }
   placeOnOtherScreen(w);

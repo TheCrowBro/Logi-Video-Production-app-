@@ -115,7 +115,9 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null, onL
   const padTop = h('div', { class: 'pr-pad' }), padBottom = h('div', { class: 'pr-pad' });
   const track = h('div', { class: 'pr-track' }, padTop, col, padBottom);
   // The reading line; its arrow is a handle (a drag moves the line; a tap, a hold or a right-click asks for its menu).
-  const handle = h('button', { class: 'pr-handle', type: 'button', 'aria-label': 'The reading line: drag it up or down, or open its menu' });
+  // While it is paused, a ⋮ beside the arrow says it has a menu; pointing at it says how (drag, right-click).
+  const handle = h('button', { class: 'pr-handle', type: 'button', 'aria-label': 'The reading line: drag it up or down, or open its menu' },
+    h('span', { class: 'pr-dots', 'aria-hidden': 'true' }, '⋮'), h('span', { class: 'pr-tip', 'aria-hidden': 'true' }, 'Drag to move · Right-click for options'));
   const marker = h('div', { class: 'pr-marker' }, handle);
   const count = h('div', { class: 'pr-count', 'aria-hidden': 'true', hidden: true });
   const left = h('div', { class: 'pr-left', 'aria-hidden': 'true' });
@@ -290,7 +292,7 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null, onL
   const look = () => {
     el.classList.toggle('mirror', !!P.mirror); el.classList.toggle('flip', !!P.flip);
     marker.dataset.look = P.lineLook; marker.dataset.bar = P.lineBar ? 'on' : 'off'; marker.dataset.colour = P.lineColour; marker.dataset.strength = P.lineStrength; marker.classList.toggle('locked', !!P.lineLock);
-    handle.title = P.lineLock ? 'The reading line is locked · tap or right-click for its menu' : 'Drag to move the reading line · tap or right-click for its menu';
+    handle.lastChild.textContent = P.lineLock ? 'Locked · Right-click for options' : 'Drag to move · Right-click for options';
   };
   const refresh = () => { look(); if (data && keyOf(data) !== key) { const at = anchor(); render(); measure(at); } else measure(); };
   const cmd = (name, arg) => {

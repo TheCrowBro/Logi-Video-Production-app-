@@ -968,7 +968,17 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-marker[data-strength=faint] { --pr-a: 11%; --pr-b: 4%; --pr-edge: 16%; --pr-thin: 38%; } .pr-marker[data-strength=bold] { --pr-a: 38%; --pr-b: 14%; --pr-edge: 65%; --pr-thin: 100%; --pr-rule: 2px; }
 .pr-marker[data-bar=off] { background: none; border-top-color: transparent; }
 .pr-marker[data-look=thin] { border-top-color: color-mix(in srgb, var(--pr-line) var(--pr-thin), transparent); }
-.pr-handle { all: unset; position: absolute; left: 0; top: 50%; width: 46px; height: 46px; transform: translateY(-50%); cursor: ns-resize; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; font-size: max(14px, calc(var(--pr-fs) * .55)); }
+.pr-handle { all: unset; position: absolute; left: 0; top: 50%; width: max(46px, calc(1.6em + 12px)); height: 46px; transform: translateY(-50%); cursor: ns-resize; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; font-size: max(14px, calc(var(--pr-fs) * .55)); }
+/* The ⋮ beside the arrow while it is paused (the usual sign of a menu; never while it runs, nor on the second screen,
+   which has no menu), and on pointing at it, how to use it. Both read the right way round on a mirrored rig. */
+.pr-dots { position: absolute; left: calc(6px + .75em); top: 50%; transform: translateY(-50%); font: 800 max(13px, .62em)/1 system-ui, sans-serif; color: var(--pr-line); opacity: 0; transition: opacity .2s; }
+.prompter[data-state=paused] .pr-dots { opacity: .85; }
+.prompter[data-state=paused] .pr-marker[data-look=hidden] .pr-dots { opacity: .3; }
+.pr-tip { position: absolute; left: calc(100% + 4px); top: 50%; transform: translateY(-50%); white-space: nowrap; background: #000e; color: #fff; border: 1px solid #ffd16680; border-radius: 8px; padding: 6px 10px; font: 600 14px/1.2 system-ui, sans-serif; opacity: 0; pointer-events: none; transition: opacity .15s; }
+@media (hover: hover) { .pr-handle:hover .pr-tip { opacity: 1; } }
+.pr-handle:focus-visible .pr-tip { opacity: 1; }
+.pr-stage.mirror .pr-tip, .pr-stage.mirror .pr-dots { transform: translateY(-50%) scaleX(-1); } .pr-stage.flip .pr-tip, .pr-stage.flip .pr-dots { transform: translateY(-50%) scaleY(-1); } .pr-stage.mirror.flip .pr-tip, .pr-stage.mirror.flip .pr-dots { transform: translateY(-50%) scale(-1, -1); }
+.pr-window .pr-dots, .pr-window .pr-tip { display: none; }
 .pr-handle::before { content: ''; position: absolute; left: 4px; top: 50%; transform: translateY(-50%); border-style: solid; border-width: .45em 0 .45em .7em; border-color: transparent transparent transparent var(--pr-line); }
 .pr-marker[data-strength=faint] .pr-handle::before { opacity: .55; } .pr-marker[data-strength=bold] .pr-handle::before { border-width: .55em 0 .55em .85em; }
 .pr-marker.locked .pr-handle { cursor: pointer; }
