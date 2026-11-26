@@ -240,7 +240,7 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   await sleep(2800);
   ok('while it runs the buttons step out of the way', await page.evaluate(() => document.querySelector('.prompter').classList.contains('hud-off')));
   await page.screenshot({ path: S + '/prompter-running.png' });
-  ok('…and the speed waits in the bottom-left corner, faint', (await page.locator('.pr-live').isVisible()) && Number(await page.locator('.pr-live').evaluate(el => getComputedStyle(el).opacity)) < 0.6 && (await page.locator('.pr-live-val').innerText()) === '140 wpm');
+  ok('…and the speed waits in the bottom-left corner, faint', (await page.locator('.pr-live').isVisible()) && Number(await page.locator('.pr-live-val').evaluate(el => getComputedStyle(el).opacity)) < 0.6 && (await page.locator('.pr-live-val').innerText()) === '140 wpm');
   await page.locator('.pr-live-btn[aria-label="Faster"]').click(); await sleep(250);
   ok('a tap on its + speeds it up without stopping it or bringing the buttons back', (await page.evaluate(() => document.querySelector('.prompter').dataset.state)) === 'running' && (await page.locator('.pr-live-val').innerText()) === '145 wpm' && (await page.evaluate(() => document.querySelector('.prompter').classList.contains('hud-off'))), await page.locator('.pr-live-val').innerText());
   await page.keyboard.press('Space'); await sleep(200); await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');

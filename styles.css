@@ -986,9 +986,10 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .prompter.hud-off .pr-hud { opacity: 0; pointer-events: none; }
 .prompter.cursor-off, .prompter.cursor-off * { cursor: none !important; } /* the mouse pointer, while it runs (js/prompter.js says when) */
 /* The speed while it runs with the buttons away, in a corner: faint until a finger uses it; not there with voice-follow */
-.pr-live { position: absolute; z-index: 2; left: max(10px, env(safe-area-inset-left)); bottom: max(10px, env(safe-area-inset-bottom)); display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: #000c; border: 1px solid #2c2c2e; opacity: .45; transition: opacity .2s; }
+.pr-live { position: absolute; z-index: 2; left: max(10px, env(safe-area-inset-left)); bottom: max(10px, env(safe-area-inset-bottom)); display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: #000; border: 1px solid #2c2c2e; }
 .prompter.hud-off:not(.following) .pr-live { display: flex; }
-.pr-live.used, .pr-live:active, .pr-live:focus-within { opacity: 1; }
+.pr-live > * { opacity: .45; transition: opacity .2s; } /* solid underneath, so the script does not show through; faint on top */
+.pr-live.used > *, .pr-live:active > *, .pr-live:focus-within > * { opacity: 1; }
 .pr-live-btn { all: unset; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: #fff; font: 700 1.3rem/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .pr-live-btn:active { background: #2c2c2e; } .pr-live-btn:focus-visible { outline: 3px solid #ffd166; }
 .pr-live-val { min-width: 4.4rem; text-align: center; font: 600 14px/1 ui-monospace, Menlo, Consolas, monospace; color: #ddd; font-variant-numeric: tabular-nums; }
