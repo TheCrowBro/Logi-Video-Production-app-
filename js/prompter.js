@@ -104,11 +104,13 @@ function kit(get, change) {
     h('div', { class: 'seg wide' }, opts.map(([v, l]) => h('button', { type: 'button', class: get()[key] === v ? 'on' : '', 'aria-pressed': get()[key] === v, 'data-fk': `${key}:${v}`, onclick: () => change(key, v) }, l))));
   const stepper = (cls, label, value, less, more, lessLabel, moreLabel) => h('div', { class: 'pref ' + cls }, h('div', { class: 'pref-label' }, label),
     h('div', { class: 'pr-stepper' }, h('button', { type: 'button', class: 'btn ghost', 'aria-label': lessLabel, 'data-fk': `${cls}:less`, onclick: less }, '−'), h('span', { class: 'pr-val' }, value), h('button', { type: 'button', class: 'btn ghost', 'aria-label': moreLabel, 'data-fk': `${cls}:more`, onclick: more }, '+')));
-  // The reading line's look, in its menu and in Format: how it shows, its colour and strength, the lock, and Reset.
+  // The reading line's look, in its menu and in Format: the highlight bar, the pointer, its colour and strength, the
+  // lock, and Reset.
   const lineLook = () => {
     const p = get();
     return [
-      seg('How it looks', 'lineLook', LOOKS),
+      seg('Highlight bar', 'lineBar', [[true, 'On'], [false, 'Off']]),
+      seg('Pointer', 'lineLook', LOOKS),
       h('div', { class: 'pref', role: 'group', 'aria-label': 'Colour' }, h('div', { class: 'pref-label' }, 'Colour'),
         h('div', { class: 'seg wide pr-colours' }, LINE_COLOURS.map(([v, l]) => h('button', { type: 'button', class: p.lineColour === v ? 'on' : '', 'aria-pressed': p.lineColour === v, 'data-fk': `lineColour:${v}`, onclick: () => change('lineColour', v) }, h('i', { class: 'pr-swatch', 'data-colour': v, 'aria-hidden': 'true' }), l)))),
       seg('Strength', 'lineStrength', STRENGTHS),
@@ -118,7 +120,7 @@ function kit(get, change) {
   };
   return { seg, stepper, lineLook };
 }
-const lineSum = p => { const at = MARKS.find(m => m[0] === p.mark); return [at ? at[1].toLowerCase() : `${Math.round(p.mark * 100)}% down`, labelOf(LOOKS, p.lineLook).toLowerCase(), labelOf(LINE_COLOURS, p.lineColour).toLowerCase(), p.lineLock && 'locked'].filter(Boolean).join(' · '); };
+const lineSum = p => { const at = MARKS.find(m => m[0] === p.mark); return [at ? at[1].toLowerCase() : `${Math.round(p.mark * 100)}% down`, p.lineBar ? 'highlight bar' : 'no highlight bar', labelOf(LOOKS, p.lineLook).toLowerCase(), labelOf(LINE_COLOURS, p.lineColour).toLowerCase(), p.lineLock && 'locked'].filter(Boolean).join(' · '); };
 
 function settingsPanel(logId, onChange = () => {}, { get = () => P, set = (k, v) => setSetting(k, v), goto = null, replace = null, hint = '' } = {}) {
   const u = readUi();
@@ -187,7 +189,7 @@ function settingsPanel(logId, onChange = () => {}, { get = () => P, set = (k, v)
       twirl('line', 'Reading line', lineSum(p),
         seg('Where it sits', 'mark', MARKS),
         !MARKS.some(m => m[0] === p.mark) && h('p', { class: 'small muted' }, `Where it was dragged to: ${Math.round(p.mark * 100)}% down the screen.`),
-        h('p', { class: 'small muted' }, 'Or drag its arrow on the prompter. Its menu (tap the arrow, or right-click the line) has the rest of these.'),
+        h('p', { class: 'small muted' }, 'Or drag its arrow on the prompter: the pointer moves and the script stays where it is. Its menu (tap the arrow, or right-click the line) has the rest of these.'),
         ...lineLook()),
       twirl('rig', 'Rig', [p.mirror ? 'mirrored' : 'not mirrored', p.flip ? 'upside down' : 'upright'].join(' · '),
         seg('Mirror', 'mirror', [[false, 'Off'], [true, 'Mirrored for a rig']]),
@@ -441,14 +443,14 @@ function run(logId, from, controls = true) {
   root.addEventListener('pointerdown', e => { if (!e.target.closest('.pr-live')) showHud(); });
   root.addEventListener('focusin', e => { if (e.target !== root && !e.target.closest('.pr-live')) showHud(); }); // a button reached with Tab shows them all (the speed in the corner works without them)
   const refocus = giveBackFocus(root);
-  // The reading line's own menu (its arrow tapped or held, or the line right-clicked): how it looks, its colour and
-  // strength, the lock, and Reset. Opening it pauses, as a line's menu does; each change shows behind it at once.
+  // The reading line's own menu (its arrow tapped or held, or the line right-clicked): the highlight bar, the pointer,
+  // its colour and strength, the lock, and Reset. Opening it pauses, as a line's menu does; each change shows at once.
   function readingLineMenu() {
     stage.cmd('pause');
     const body = h('div', { class: 'stack pr-line-menu' });
     const change = (k, v) => { setSetting(k, v); haptic(); stage.refresh(); draw(); if (panel.classList.contains('open')) prefs.redraw(); };
     const { lineLook } = kit(() => P, change);
-    const draw = () => body.replaceChildren(h('p', { class: 'small muted' }, P.lineLock ? 'Locked: unlock it to drag it again.' : 'Drag its arrow up or down on the screen to move it.'), ...lineLook());
+    const draw = () => body.replaceChildren(h('p', { class: 'small muted' }, P.lineLock ? 'Locked: unlock it to drag it again.' : 'Drag its arrow up or down to move the pointer; the script stays where it is.'), ...lineLook());
     draw();
     sheet('The reading line', body);
   }

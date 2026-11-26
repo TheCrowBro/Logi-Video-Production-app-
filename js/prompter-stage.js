@@ -5,8 +5,10 @@
 //
 // The speed is in words a minute: the height a word takes up is measured from the lines that are read aloud, so a
 // speed means the same at any text size and on any screen. The reading line sits at a fixed height on the screen; the
-// line under it is the current line; its arrow drags it up or down (the line being read stays under it), and it can be
-// a band, the arrow alone, a thin line or hidden, in a colour and a strength, and locked. A mouse wheel or a trackpad
+// line under it is the current line. Its arrow (the pointer) drags it up or down over the script, which stays where it
+// is (the line beside it then is the one being read; at the very top of the script the first line goes with it, so
+// nothing is skipped); it has a highlight bar that switches on and off, the arrow alone, with a thin line, or hidden,
+// in a colour and a strength, and a lock. A mouse wheel or a trackpad
 // scrolls the text as on a web page (and while it runs, the scroll holds while it does and carries on from there), unless
 // that is switched off. Mirror and upside down turn the stage (the text, the reading line, the countdown and the time
 // left, which the talent reads through the glass of a rig) and never the buttons around it. These settings belong to
@@ -20,16 +22,17 @@ export const SIZES = [52, 44, 38, 33, 29, 25, 22, 19, 16, 13];
 export const COLS = [['narrow', 'Narrow', 0.62], ['medium', 'Medium', 0.8], ['full', 'Full width', 0.95]];
 export const MARKS = [[0.2, 'Near the top'], [0.33, 'A third down'], [0.5, 'The middle']];
 export const MARK_RANGE = [0.1, 0.75]; // where the reading line can be dragged: from near the top to three quarters down
-export const LOOKS = [['band', 'Arrow and band'], ['arrow', 'Arrow only'], ['thin', 'A thin line'], ['hidden', 'Hidden']];
+export const LOOKS = [['arrow', 'Arrow'], ['thin', 'Arrow and thin line'], ['hidden', 'Hidden']]; // the pointer; the highlight bar is lineBar
 export const LINE_COLOURS = [['yellow', 'Yellow'], ['white', 'White'], ['red', 'Red'], ['green', 'Green']];
 export const STRENGTHS = [['faint', 'Faint'], ['normal', 'Normal'], ['bold', 'Bold']];
-export const LINE_DEF = { mark: 0.33, lineLook: 'band', lineColour: 'yellow', lineStrength: 'normal', lineLock: false }; // what Reset puts back
+export const LINE_DEF = { mark: 0.33, lineBar: true, lineLook: 'arrow', lineColour: 'yellow', lineStrength: 'normal', lineLock: false }; // what Reset puts back
 export const SPACINGS = [[1.15, 'Tight'], [1.32, 'Normal'], [1.6, 'Loose']];
 export const COUNT_LENGTHS = [3, 5, 10]; // seconds of countdown before a take, when it is on (count 0 is off)
 export const DIRS = [['dim', 'Dimmed'], ['hide', 'Hidden'], ['read', 'Like the rest']];
 const DEF = { size: 5, wpm: 140, ...LINE_DEF, col: 'medium', spacing: 1.32, mirror: false, flip: false, count: 3, countLen: 3, dirs: 'dim', names: true, voice: false, wheel: true };
 const WPM_MIN = 60, WPM_MAX = 300;
-const read = () => { try { return { ...DEF, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return { ...DEF }; } };
+// (a reading line kept as 'band' is the arrow with its highlight bar on)
+const read = () => { let p; try { p = { ...DEF, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { p = { ...DEF }; } if (p.lineLook === 'band') { p.lineLook = 'arrow'; p.lineBar = true; } return p; };
 export const P = read();
 export const save = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); } catch { /* kept for this visit */ } };
 // Another window of Vdex on this device changed them (the second screen's window and the page share them).
@@ -39,7 +42,7 @@ export const clampWpm = n => Math.max(WPM_MIN, Math.min(WPM_MAX, n));
 export const clampMark = n => Math.max(MARK_RANGE[0], Math.min(MARK_RANGE[1], Math.round(n * 1000) / 1000));
 const markOf = v => { const n = typeof v === 'number' ? v : parseFloat(v); return Number.isFinite(n) ? clampMark(n) : P.mark; };
 const oneOf = (list, v, was) => (list.some(x => x[0] === v) ? v : was);
-const SETTABLE = { size: v => clampSize(Number(v)), wpm: v => clampWpm(Number(v)), mark: markOf, lineLook: v => oneOf(LOOKS, v, P.lineLook), lineColour: v => oneOf(LINE_COLOURS, v, P.lineColour), lineStrength: v => oneOf(STRENGTHS, v, P.lineStrength), lineLock: v => !!v, wheel: v => !!v, col: v => (COLS.some(c => c[0] === v) ? v : P.col), spacing: v => (SPACINGS.some(s => s[0] === v) ? v : P.spacing), mirror: v => !!v, flip: v => !!v, count: v => ([0, ...COUNT_LENGTHS].includes(Number(v)) ? Number(v) : P.count), countLen: v => (COUNT_LENGTHS.includes(Number(v)) ? Number(v) : P.countLen), dirs: v => (DIRS.some(d => d[0] === v) ? v : P.dirs), names: v => !!v, voice: v => !!v };
+const SETTABLE = { size: v => clampSize(Number(v)), wpm: v => clampWpm(Number(v)), mark: markOf, lineLook: v => oneOf(LOOKS, v, P.lineLook), lineBar: v => !!v, lineColour: v => oneOf(LINE_COLOURS, v, P.lineColour), lineStrength: v => oneOf(STRENGTHS, v, P.lineStrength), lineLock: v => !!v, wheel: v => !!v, col: v => (COLS.some(c => c[0] === v) ? v : P.col), spacing: v => (SPACINGS.some(s => s[0] === v) ? v : P.spacing), mirror: v => !!v, flip: v => !!v, count: v => ([0, ...COUNT_LENGTHS].includes(Number(v)) ? Number(v) : P.count), countLen: v => (COUNT_LENGTHS.includes(Number(v)) ? Number(v) : P.countLen), dirs: v => (DIRS.some(d => d[0] === v) ? v : P.dirs), names: v => !!v, voice: v => !!v };
 export const setSetting = (k, v) => { if (!SETTABLE[k]) return false; P[k] = SETTABLE[k](v); save(); return true; };
 
 /* --------------------------------- script --------------------------------- */
@@ -137,8 +140,11 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null, onL
 
   /* layout: the font size from the screen's width, where each line sits, how far a word is */
   const anchor = () => (A[cur] && lines[cur] ? { id: A[cur].id, frac: lines[cur].h ? (pos - lines[cur].top) / lines[cur].h : 0 } : null);
-  const measure = (at = anchor()) => {
+  // still: the pointer is being dragged, so the script stays where it is on the screen and the line beside the pointer
+  // becomes the current one (otherwise the line at `at` stays at the reading line).
+  const measure = (at = anchor(), still = false) => {
     const W = el.clientWidth, H = el.clientHeight; if (!W || !H || !data) return;
+    const wasMark = markY;
     const colW = Math.round(W * ((COLS.find(c => c[0] === P.col) || COLS[1])[2]));
     const fs = Math.max(14, Math.round(colW / (SIZES[P.size] * 0.52)));
     const lh = Number(P.spacing) || 1.32;
@@ -152,7 +158,7 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null, onL
     pxWord = sw ? sh / sw : rowH / 5;
     maxPos = Math.max(0, end - rowH * 0.6);
     const i = at ? A.findIndex(a => a.id === at.id) : -1;
-    pos = i >= 0 ? clampPos(lines[i].top + (at.frac || 0) * lines[i].h) : clampPos(pos);
+    pos = still ? clampPos(pos + (markY - wasMark)) : i >= 0 ? clampPos(lines[i].top + (at.frac || 0) * lines[i].h) : clampPos(pos);
     apply(); drawLeft(); emit();
   };
   const clampPos = p => Math.max(0, Math.min(maxPos, p));
@@ -256,11 +262,13 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null, onL
     if (x && onHold) onHold(x.dataset.id);
   });
 
-  /* the reading line's arrow: dragged up or down it moves the line (snapping to the three heights), live while it runs */
+  /* the reading line's arrow: dragged up or down it moves the pointer over the script (snapping to the three heights),
+     live while it runs; the script stays still, except at its very top, where the first line goes with the pointer */
   const snapMark = (n, H) => { const m = clampMark(n), near = MARKS.find(([v]) => Math.abs(v - m) * H <= 10); return near ? near[0] : m; };
   handle.addEventListener('pointerdown', e => {
     e.stopPropagation(); if (e.pointerType !== 'mouse') lastTouch = Date.now(); if (e.button !== 0) return;
-    lineDrag = { y: e.clientY, mark: P.mark, moved: false };
+    const top = !lines.length || pos <= ((lines.find(l => l.h) || { top: 0 }).top + 1);
+    lineDrag = { y: e.clientY, mark: P.mark, moved: false, still: !top };
     try { handle.setPointerCapture(e.pointerId); } catch { /* fine */ }
   });
   handle.addEventListener('pointermove', e => {
@@ -270,7 +278,7 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null, onL
     if (P.lineLock) { if (!lineDrag.moved) { lineDrag.moved = true; onLine('locked'); } return; }
     lineDrag.moved = true;
     const next = snapMark(lineDrag.mark + dy / el.clientHeight, el.clientHeight);
-    if (next !== P.mark) { P.mark = next; measure(); }
+    if (next !== P.mark) { P.mark = next; measure(anchor(), lineDrag.still); }
   });
   handle.addEventListener('pointerup', e => { e.stopPropagation(); const d = lineDrag; lineDrag = null; if (!d) return; if (d.moved) { if (!P.lineLock) { save(); emit(); } return; } onLine('menu'); });
   handle.addEventListener('pointercancel', () => { if (lineDrag && lineDrag.moved && !P.lineLock) save(); lineDrag = null; });
@@ -280,7 +288,7 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null, onL
   /* driving it */
   const look = () => {
     el.classList.toggle('mirror', !!P.mirror); el.classList.toggle('flip', !!P.flip);
-    marker.dataset.look = P.lineLook; marker.dataset.colour = P.lineColour; marker.dataset.strength = P.lineStrength; marker.classList.toggle('locked', !!P.lineLock);
+    marker.dataset.look = P.lineLook; marker.dataset.bar = P.lineBar ? 'on' : 'off'; marker.dataset.colour = P.lineColour; marker.dataset.strength = P.lineStrength; marker.classList.toggle('locked', !!P.lineLock);
     handle.title = P.lineLock ? 'The reading line is locked · tap or right-click for its menu' : 'Drag to move the reading line · tap or right-click for its menu';
   };
   const refresh = () => { look(); if (data && keyOf(data) !== key) { const at = anchor(); render(); measure(at); } else measure(); };

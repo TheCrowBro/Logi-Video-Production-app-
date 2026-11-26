@@ -958,15 +958,16 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-dir { color: #8f8f8f; font-style: italic; font-weight: 500; font-size: .8em; }
 .em-b { font-weight: 800; } .em-i { font-style: italic; } .em-u { text-decoration: underline; text-decoration-thickness: .07em; text-underline-offset: .14em; } /* the stress the script's file gave a word */
 .pr-who { display: block; color: var(--spk, #ffd166); font-size: .5em; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-/* The reading line: a band with its arrow, the arrow alone, a thin line, or hidden; yellow, white, red or green; faint,
-   normal or bold. Its arrow is a handle to drag it by (and to tap for its menu), with room for a finger. */
+/* The reading line: a highlight bar (on or off) and a pointer (an arrow, an arrow with a thin line, or hidden); yellow,
+   white, red or green; faint, normal or bold. The arrow is a handle to drag it by (and to tap for its menu), with room
+   for a finger. */
 .pr-marker { --pr-line: #ffd166; --pr-a: 22%; --pr-b: 7%; --pr-edge: 31%; --pr-thin: 65%; --pr-rule: 1px; position: absolute; left: 0; right: 0; pointer-events: none;
   background: linear-gradient(90deg, color-mix(in srgb, var(--pr-line) var(--pr-a), transparent), color-mix(in srgb, var(--pr-line) var(--pr-b), transparent) 45%, transparent 80%);
   border-top: var(--pr-rule) solid color-mix(in srgb, var(--pr-line) var(--pr-edge), transparent); }
 .pr-marker[data-colour=white] { --pr-line: #ffffff; } .pr-marker[data-colour=red] { --pr-line: #ff5a4e; } .pr-marker[data-colour=green] { --pr-line: #5fd68a; }
 .pr-marker[data-strength=faint] { --pr-a: 11%; --pr-b: 4%; --pr-edge: 16%; --pr-thin: 38%; } .pr-marker[data-strength=bold] { --pr-a: 38%; --pr-b: 14%; --pr-edge: 65%; --pr-thin: 100%; --pr-rule: 2px; }
-.pr-marker[data-look=arrow], .pr-marker[data-look=hidden] { background: none; border-top-color: transparent; }
-.pr-marker[data-look=thin] { background: none; border-top-color: color-mix(in srgb, var(--pr-line) var(--pr-thin), transparent); }
+.pr-marker[data-bar=off] { background: none; border-top-color: transparent; }
+.pr-marker[data-look=thin] { border-top-color: color-mix(in srgb, var(--pr-line) var(--pr-thin), transparent); }
 .pr-handle { all: unset; position: absolute; left: 0; top: 50%; width: 46px; height: 46px; transform: translateY(-50%); cursor: ns-resize; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; font-size: max(14px, calc(var(--pr-fs) * .55)); }
 .pr-handle::before { content: ''; position: absolute; left: 4px; top: 50%; transform: translateY(-50%); border-style: solid; border-width: .45em 0 .45em .7em; border-color: transparent transparent transparent var(--pr-line); }
 .pr-marker[data-strength=faint] .pr-handle::before { opacity: .55; } .pr-marker[data-strength=bold] .pr-handle::before { border-width: .55em 0 .55em .85em; }
