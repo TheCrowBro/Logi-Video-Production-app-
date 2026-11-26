@@ -1283,13 +1283,13 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
     const paper = await R.page.evaluate(() => ({ wide: document.documentElement.scrollWidth, shown: /maps\.app\.goo\.gl/.test(document.querySelector('.paper').textContent), role: getComputedStyle([...document.querySelectorAll('.paper td')].find(td => td.textContent === '1st AC')).overflowWrap }));
     ok('on the crew page a web address in a schedule line, a scene and a deliverable wraps inside the paper at 360 px, while a role still never breaks mid-word', paper.shown && paper.wide <= 360 && paper.role === 'normal', JSON.stringify(paper));
     // …and on the narrowest phone a deliverable's short name is not broken inside a word to leave its due date whole
-    await R.page.setViewportSize({ width: 320, height: 800 });
-    await R.page.goto(BASE + 'crew.html#' + await pack({ v: 1, kind: 'crew', ref: 'REF-NARROW', made: Date.now(), title: 'Harbour film', date: day(9), endDate: day(10), by: { name: 'Pat Producer' }, deliverables: [{ name: 'Main film', duration: '90s', due: day(29), status: 'Planned' }] })); await R.page.reload(); await R.page.waitForSelector('.paper table'); await sleep(300);
-    const narrow = await R.page.evaluate(() => { const td = [...document.querySelectorAll('.paper td')].find(x => x.textContent === 'Main film'), paper = document.querySelector('.paper'), r = document.createRange(); r.selectNodeContents(td);
+    const N = await open({ width: 320, height: 800 });
+    await N.page.goto(BASE + 'crew.html#' + await pack({ v: 1, kind: 'crew', ref: 'REF-NARROW', made: Date.now(), title: 'Harbour film', date: day(9), endDate: day(10), by: { name: 'Pat Producer' }, deliverables: [{ name: 'Main film', duration: '90s', due: day(29), status: 'Planned' }] })); await N.page.waitForSelector('.paper table'); await sleep(300);
+    const narrow = await N.page.evaluate(() => { const td = [...document.querySelectorAll('.paper td')].find(x => x.textContent === 'Main film'), paper = document.querySelector('.paper'), r = document.createRange(); r.selectNodeContents(td);
       const lines = new Set([...r.getClientRects()].map(q => Math.round(q.top))).size, lh = parseFloat(getComputedStyle(td).lineHeight) || 20;
       return { lines: Math.max(lines, Math.round(r.getBoundingClientRect().height / lh)), table: Math.round(td.closest('table').getBoundingClientRect().right), paper: Math.round(paper.getBoundingClientRect().right), wide: document.documentElement.scrollWidth }; });
     ok('at 320 px a deliverable named “Main film” keeps its two words whole (two lines at most) and its table stays on the paper', narrow.lines <= 2 && narrow.table <= narrow.paper && narrow.wide <= 320, JSON.stringify(narrow));
-    await R.ctx.close(); }
+    await N.ctx.close(); await R.ctx.close(); }
   { // A browser too old to unpack a link says so, instead of calling the link damaged and asking for a fresh one.
     const R = await open({ width: 420, init: () => { delete window.DecompressionStream; } });
     const packed = await pack({ v: 1, kind: 'crew', ref: 'REF-OLD', made: Date.now(), title: 'Harbour film', date: day(9), by: { name: 'Pat Producer' } });
