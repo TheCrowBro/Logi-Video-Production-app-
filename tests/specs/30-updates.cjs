@@ -194,6 +194,12 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   // A start with no connection (the page came from the offline copy) checked nothing: it does not say "checked" with the time of that start.
   const offStart = await p5.evaluate(() => import('./js/update.js').then(async m => { for (let i = 0; i < 40 && !m.updateState().failed; i++) await new Promise(r => setTimeout(r, 100)); return { line: m.updatePanel().el.textContent, last: m.updateState().lastCheck }; }));
   ok('a start with no connection says it could not check for updates, not “Up to date · checked” at the time of that start', /Could not check for updates \(no connection\)/.test(offStart.line) && !/Up to date/.test(offStart.line) && offStart.last === 0, JSON.stringify(offStart));
+  // found by the last check: …and once the connection is back it asks again by itself (the browser says "online"),
+  // not ten minutes later: until then it went on saying it could not check, with the connection long back.
+  down = false; await sleep(5200); // (a check that failed is not repeated within five seconds)
+  const backBy = await p5.evaluate(() => import('./js/update.js').then(async m => { window.dispatchEvent(new Event('online')); for (let i = 0; i < 80 && m.updateState().failed; i++) await new Promise(r => setTimeout(r, 100)); return { line: m.updatePanel().el.textContent, failed: m.updateState().failed, last: m.updateState().lastCheck > 0 }; }));
+  down = true;
+  ok('…and when the connection comes back it checks again by itself and says up to date', !backBy.failed && backBy.last && /Up to date/.test(backBy.line) && !/Could not check/.test(backBy.line), JSON.stringify(backBy));
   // A check that cannot be made (the server cannot be reached) is not a check that found nothing.
   const cutOff = await p5.evaluate(() => import('./js/update.js').then(async m => { const before = m.updateState().lastCheck; await new Promise(r => setTimeout(r, 1100)); const r = await m.checkForUpdates(); return { status: r.status, kept: m.updateState().lastCheck === before, line: m.updatePanel().el.textContent }; }));
   down = false;

@@ -476,6 +476,31 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       await P.ctx.close(); await Q.ctx.close();
     }
 
+    // "Get the subscription link" and "Create feed file" read the cloud copy before they write as well (the repair of
+    // the feed switch covered them by reading only): with a stand-in storage that another device saves to meanwhile,
+    // each reads first, keeps that device's booking here and in the storage, and writes a feed that holds it.
+    {
+      const F = await device(null, 'F', { linked: false });
+      await start(F.page);
+      const feed = await F.page.evaluate(async () => {
+        const s = await import('./js/store.js'); await import('./js/calendar.js');
+        s.upsert('bookings', { id: 'here', title: 'Made here', date: '2026-12-01', status: 'Confirmed', crew: [], gear: [] });
+        const log = []; let text = s.exportJSON(), ics = '';
+        const elsewhere = (id, title) => { const c = JSON.parse(text), at = Math.max(Date.now(), Number(c.updatedAt) || 0) + 5; c.bookings.push({ id, title, date: '2026-12-02', status: 'Confirmed', crew: [], gear: [], updatedAt: at }); c.updatedAt = at; text = JSON.stringify(c); };
+        s.cloud.adapter = { id: 'fake', label: 'Stand-in', where: 'nowhere', ready: async () => true, read: async () => { log.push('read'); return JSON.parse(text); }, write: async t => { log.push('write'); text = t; }, writeAux: async x => { log.push('feed'); ics = x.text; }, shareLink: async n => 'https://files.example/' + n };
+        s.update(d => { d.calSync = { ...d.calSync, feed: true, updatedAt: Date.now() }; });
+        await new Promise(r => setTimeout(r, 1500)); log.length = 0; // (the timed save of that change)
+        elsewhere('there', 'Saved by another device');
+        const link = await s.feedLink(), linkLog = log.splice(0).join(' '), afterLink = [s.db.bookings.map(b => b.id).sort().join(), JSON.parse(text).bookings.map(b => b.id).sort().join(), ics.includes('Saved by another device') && ics.includes('Made here')];
+        elsewhere('last', 'One more from elsewhere'); ics = '';
+        window.showSaveFilePicker = async () => ({ name: 'vdex-bookings.ics' });
+        await s.createFeedFile();
+        return { link, linkLog, afterLink, fileLog: log.splice(0).join(' '), afterFile: [s.cloud.auxName, s.db.bookings.map(b => b.id).sort().join(), JSON.parse(text).bookings.map(b => b.id).sort().join(), ics.includes('One more from elsewhere') && ics.includes('Made here')] }; });
+      ok('Get the subscription link reads the cloud copy first and keeps another device’s booking, in the feed too', feed.link === 'https://files.example/vdex-bookings.ics' && /^read /.test(feed.linkLog) && /feed/.test(feed.linkLog) && JSON.stringify(feed.afterLink) === '["here,there","here,there",true]', JSON.stringify([feed.link, feed.linkLog, feed.afterLink]));
+      ok('Create feed file reads the cloud copy first and keeps another device’s booking, in the feed too', /^read /.test(feed.fileLog) && /feed/.test(feed.fileLog) && JSON.stringify(feed.afterFile) === '["vdex-bookings.ics","here,last,there","here,last,there",true]', JSON.stringify([feed.fileLog, feed.afterFile]));
+      await F.ctx.close();
+    }
+
     // A WebDAV link made under 1.4.0 with an accented letter in its password: that build sent one byte a letter, so the
     // server that accepted it refuses the UTF-8 form. The link goes on working, and remembers which form was taken.
     {

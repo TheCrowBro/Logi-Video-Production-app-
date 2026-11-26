@@ -82,7 +82,9 @@ export function initUpdates() {
     reg.addEventListener('updatefound', () => { emit(); if (reg.installing) reg.installing.addEventListener('statechange', emit); });
   }).catch(() => {});
   if (document.readyState === 'complete') register(); else window.addEventListener('load', register, { once: true });
-  const check = () => { if (S.reg && !S.ready && Date.now() - S.asked > 10 * 60000) { S.asked = Date.now(); S.reg.update().then(() => { S.failed = false; S.last = Date.now(); emit(); }, () => { S.failed = true; emit(); }); } };
+  // (After a check that did not get through, the next occasion asks again at once, not ten minutes later: a start in
+  // a tunnel would otherwise go on saying it could not check, with the connection long back.)
+  const check = () => { if (S.reg && !S.ready && Date.now() - S.asked > (S.failed ? 5000 : 10 * 60000)) { S.asked = Date.now(); S.reg.update().then(() => { S.failed = false; S.last = Date.now(); emit(); }, () => { S.failed = true; emit(); }); } };
   setInterval(check, 60 * 60000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
   window.addEventListener('online', check);
