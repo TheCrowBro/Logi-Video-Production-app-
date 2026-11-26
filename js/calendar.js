@@ -155,11 +155,18 @@ function patchFromEvent(b, r) {
       put('date', date); put('start', start); put('end', end); put('endDate', endDate > date ? endDate : '');
     }
   }
-  const title = b.client && r.title.endsWith(' — ' + b.client) ? r.title.slice(0, -(' — ' + b.client).length) : r.title;
-  if (title && title !== b.title) patch.title = title;
-  if ((r.location || '') !== ev.location) patch.address = r.location || ''; // eventOf: the booking's address, or its venue's
+  // The title and the place are compared as words, not character for character: a calendar that hands back what it
+  // was sent with the spaces at the ends gone, or a run of spaces made one, has not been edited. (Read exactly, its
+  // form went into the booking after every push, an address lost its line break, and a client's name it had re-spaced
+  // was no longer known at the end of the title, which then grew by " — client" at every sync.)
+  if (words(r.title) !== words(ev.title)) {
+    const got = words(r.title), tail = b.client ? ' — ' + words(b.client) : '', title = tail && got.endsWith(tail) ? got.slice(0, -tail.length).trim() : got;
+    if (title && title !== words(b.title)) patch.title = title;
+  }
+  if (words(r.location) !== words(ev.location)) patch.address = r.location || ''; // eventOf: the booking's address, or its venue's
   return Object.keys(patch).length ? patch : null;
 }
+const words = s => String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
 
 // The dates a sync covers: every event it wants, and every event it made before (the mapping keeps each one's day), so
 // an adapter that can only list a window of dates (the phone's calendar) lists all of them.
@@ -195,7 +202,7 @@ async function runSync(link, interactive) {
       if (!m.hash || hashOf(eventOf(b)) !== m.hash) continue;
       if (m.seen != null && r.updated && r.updated <= m.seen) continue;
       const p = patchFromEvent(b, r); if (p) changes.push([bid, p]);
-      if ((m.seen || null) !== (r.updated || null)) mapping[bid] = { ...m, seen: r.updated || null };
+      if ((m.seen || null) !== (r.updated || null)) mapping[bid] = { ...m, seen: r.updated || null, at: (m.at || 0) + 1 }; // a newer entry: the other devices take it (mergeDb), a device on 1.4.0 too, instead of each keeping its own
     }
     if (changes.length) update(d => { for (const [bid, p] of changes) { const b = d.bookings.find(x => x.id === bid); if (b) { Object.assign(b, p); for (const k of ['endDate', 'start', 'end']) if (b[k] === undefined || b[k] === '') delete b[k]; b.updatedAt = Date.now(); } } });
     // push: what the bookings are now, after the pull
@@ -221,7 +228,19 @@ async function runSync(link, interactive) {
   if (link.again) { link.again = false; await runSync(link, false); }
 }
 // Keeps the calendars in step now: both links, or one of them (which: 'account' | 'phone').
-export async function syncCalendar({ interactive = false, which: w } = {}) { await Promise.all(which(w).map(l => runSync(l, interactive))); }
+// One window of Vdex at a time: a booking saved in one window reaches the others within milliseconds (the storage
+// listener in js/store.js), and each would then list the calendar before another had made the event, and make one
+// more. The window that waited starts with the first one's map, or finds the event in its listing. A sync someone
+// tapped for is not kept waiting (a sign-in window must open from the tap); it holds the others off while it runs.
+const ONE = 'vdex-calendar-sync';
+export async function syncCalendar({ interactive = false, which: w } = {}) {
+  const links = which(w), go = () => Promise.all(links.map(l => runSync(l, interactive)));
+  const locks = typeof navigator !== 'undefined' && navigator.locks && navigator.locks.request ? navigator.locks : null;
+  if (!locks || links.every(l => l.busy || !l.adapter())) return void await go(); // nothing to wait for: not connected, or a sync is running in this window (it then runs once more when that one ends)
+  if (!interactive) return void await locks.request(ONE, go);
+  const run = go(); locks.request(ONE, { ifAvailable: true }, held => (held ? run.catch(() => {}) : null)).catch(() => {});
+  await run;
+}
 // Connect = sign in and make the calendar. If the sign-in is cancelled or fails, go back to not connected and say why.
 export async function connectCalendar(provider) {
   if (provider === 'apple') { // the phone's calendar: this device only, no account

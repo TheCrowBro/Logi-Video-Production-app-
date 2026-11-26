@@ -605,7 +605,8 @@ export function mergeDb(local, remote) {
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking
     const a = local.calSync || {}, b = remote.calSync || {}, base = ts(b) > ts(a) ? b : a;
     const events = { ...(a.events || {}) };
-    for (const [k, v] of Object.entries(b.events || {})) if (!events[k] || (v.at || 0) > (events[k].at || 0)) events[k] = v;
+    // (two entries of the same time: the one that looked at the calendar later, so that both devices choose the same)
+    for (const [k, v] of Object.entries(b.events || {})) { const cur = events[k]; if (!cur || (v.at || 0) > (cur.at || 0) || ((v.at || 0) === (cur.at || 0) && (Number(v.seen) || 0) > (Number(cur.seen) || 0))) events[k] = v; }
     out.calSync = { ...base, events };
   }
   out.templates = ts(remote.templates) > ts(local.templates) ? remote.templates : local.templates;

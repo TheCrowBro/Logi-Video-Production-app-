@@ -204,7 +204,7 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   await page.evaluate(async () => {
     const [c, s] = await Promise.all([import('./js/calendar.js'), import('./js/store.js')]);
     const G = c.ADAPTERS.google, fake = { events: new Map(), n: 0, skew: 0, delay: 0, calendars: [], updates: [] };
-    const shape = e => ({ title: e.title, allDay: e.allDay, start: e.allDay ? e.start : e.start.toISOString(), end: e.allDay ? e.end : e.end.toISOString(), location: e.location });
+    const shape = e => ({ title: fake.tidy ? fake.tidy(e.title) : e.title, allDay: e.allDay, start: e.allDay ? e.start : e.start.toISOString(), end: e.allDay ? e.end : e.end.toISOString(), location: fake.tidy ? fake.tidy(e.location) : e.location }); // tidy: what this calendar does to a title or a place it is given
     const wait = () => (fake.delay ? new Promise(r => setTimeout(r, fake.delay)) : null);
     window.__cal = { fake, real: { ...G }, c, s, of: id => [...fake.events.values()].find(e => e.logiId === id),
       sync: async () => { await c.syncCalendar({ interactive: true, which: 'account' }); while (c.calState.status === 'syncing') await new Promise(r => setTimeout(r, 20)); },
@@ -242,6 +242,25 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
     await nap(80); C.s.upsert('bookings', { ...C.s.byId('bookings', 'cs-norm'), start: '06:00' }); C.c.syncCalendar(); // asked for while the first is still sending
     await first; C.fake.delay = 0; const ev = C.of('cs-norm'); return { title: ev.title, hour: new Date(ev.start).getHours(), state: C.c.calState.status }; });
   ok('a change made while a sync is running reaches the calendar when that sync ends', queued.title === 'Renamed again' && queued.hour === 6 && queued.state === 'ok', JSON.stringify(queued));
+  // A calendar that hands back a title and a place with the spaces tidied has not been edited
+  const tidy = await page.evaluate(async () => { const C = window.__cal, nap = ms => new Promise(r => setTimeout(r, ms)), settle = async () => { await nap(1700); while (C.c.calState.status === 'syncing') await nap(20); };
+    C.fake.tidy = t => String(t || '').replace(/\s+/g, ' ').trim();
+    const was = { title: 'Title  with   odd spacing ', client: 'ACME  Ltd ', address: ' 12 High St \n London ' };
+    C.s.upsert('bookings', { id: 'cs-space', ...was, type: 'brand', status: 'Confirmed', date: '2026-12-19', start: '10:00', end: '12:00', stakeholders: [], crew: [], gear: [], notes: '' });
+    await settle(); C.fake.updates.length = 0;
+    for (let i = 0; i < 3; i++) { await C.sync(); await settle(); }
+    const b = () => C.s.byId('bookings', 'cs-space'), out = { kept: b().title === was.title && b().address === was.address, sent: C.fake.updates.filter(id => id === 'cs-space').length, event: C.of('cs-space').title };
+    C.edit('cs-space', { title: 'Renamed in the calendar — ACME Ltd', location: 'Unit 4, The Yard' }); await C.sync(); await settle();
+    out.renamed = b().title + ' | ' + b().address; out.eventAfter = C.of('cs-space').title;
+    // the calendar's stamp of an event moves though nothing Vdex reads has changed: the entry that says so is a newer entry
+    const entry = () => ({ ...C.s.db.calSync.events['cs-norm'] }), e0 = entry(); C.edit('cs-norm', {}); await C.sync(); const e1 = entry();
+    out.newer = e1.seen > e0.seen && e1.at > e0.at;
+    const copy = seen => ({ ...JSON.parse(C.s.serialize()), calSync: { ...C.s.db.calSync, events: { x: { id: 'ev', hash: 'h', at: 5, seen } } } }), pickSeen = (a, b) => C.s.mergeDb(a, b).calSync.events.x.seen;
+    out.tie = [pickSeen(copy(402), copy(710)), pickSeen(copy(710), copy(402))].join();
+    C.fake.tidy = null; C.s.remove('bookings', 'cs-space'); await settle(); return out; });
+  ok('a calendar that returns the title and the address with the spaces tidied changes nothing in the booking, and nothing more is sent', tidy.kept && tidy.sent === 0 && tidy.event === 'Title with odd spacing — ACME Ltd', JSON.stringify(tidy));
+  ok('a title changed in such a calendar comes back without the client’s name at its end, once', tidy.renamed === 'Renamed in the calendar | Unit 4, The Yard' && tidy.eventAfter === 'Renamed in the calendar — ACME Ltd', JSON.stringify(tidy));
+  ok('a look at the calendar that only moves the stamp makes a newer entry in the map, and of two entries of the same time every device keeps the same one', tidy.newer && tidy.tie === '710,710', JSON.stringify(tidy));
   // Disconnect and Connect again use the calendar Vdex made before
   const reconnect = await page.evaluate(async () => { const C = window.__cal; C.c.disconnectCalendar('account'); await C.c.connectCalendar('google'); while (C.c.calState.status === 'syncing') await new Promise(r => setTimeout(r, 20));
     const out = { cals: C.fake.calendars.length, id: C.s.db.calSync.calendarId, events: [...C.fake.events.values()].filter(e => e.logiId === 'cs-norm').length };
@@ -397,6 +416,37 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
     const long = await pp.evaluate(() => { const row = [...document.querySelectorAll('.check-item')].find(x => /youtube/.test(x.textContent)); const ink = el => { const r = document.createRange(); r.selectNodeContents(el); return Math.round(r.getBoundingClientRect().right); }; const acc = [...document.querySelectorAll('#page .small')].find(x => /^Access: /.test(x.textContent)); return { shot: !!row, x: row ? Math.round(row.querySelector('.icon-btn').getBoundingClientRect().right) : 0, access: acc ? ink(acc) : -1, wide: document.documentElement.scrollWidth }; });
     ok('a web address in a shot and in the venue’s access line wraps at 320 px: the shot’s ✕ stays on screen and the page does not scroll sideways', long.shot && long.x <= 320 && long.access > 0 && long.access <= 320 && long.wide <= 320, JSON.stringify(long));
     await ph.close(); }
+  // Vdex open in two windows with a calendar connected (the calendar stood in for at the network, a quarter of a second
+  // an answer): a booking saved in one window reaches the other at once, and both keep the calendar in step.
+  { const SCOPE = 'https://www.googleapis.com/auth/calendar.app.created', CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+    const cal = { events: new Map(), n: 0 }, mine = () => [...cal.events.values()].filter(e => e.extendedProperties && e.extendedProperties.private && e.extendedProperties.private.logiId === 'two-win');
+    const two = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    await two.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await two.addInitScript(acceptTerms());
+    await two.addInitScript(([scope]) => { if (localStorage.getItem('two-seeded')) return; localStorage.setItem('two-seeded', '1');
+      localStorage.setItem('logi-db-v1', JSON.stringify({ version: 1, updatedAt: 1, bookings: [], crew: [], gear: [], kits: [], venues: [], insurance: [], shifts: [], logs: [], deleted: {}, calSync: { provider: 'google', calendarId: 'cal1', calendarFor: 'google', events: {}, feed: false, updatedAt: 5 } }));
+      localStorage.setItem('logi-google-tokens', JSON.stringify({ [scope]: { value: 'tok', exp: Date.now() + 3600e3 } })); localStorage.setItem('logi-google-scopes', scope); }, [SCOPE]);
+    await two.route('https://www.googleapis.com/calendar/v3/**', async route => {
+      const r = route.request(), m = r.method(), path = new URL(r.url()).pathname.replace('/calendar/v3', '');
+      if (m === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+      const json = (status, body) => route.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      await sleep(250);
+      if (m === 'GET' && path === '/calendars/cal1') return json(200, { id: 'cal1' });
+      if (m === 'GET' && path === '/calendars/cal1/events') return json(200, { items: [...cal.events.values()] });
+      if (m === 'POST' && path === '/calendars/cal1/events') { const id = 'ev' + (++cal.n); cal.events.set(id, { id, ...JSON.parse(r.postData()), updated: new Date().toISOString() }); return json(200, { id }); }
+      const one = /^\/calendars\/cal1\/events\/(.+)$/.exec(path);
+      if (one && m === 'PATCH') { const id = decodeURIComponent(one[1]); if (cal.events.has(id)) Object.assign(cal.events.get(id), JSON.parse(r.postData()), { updated: new Date().toISOString() }); return json(200, {}); }
+      if (one && m === 'DELETE') { cal.events.delete(decodeURIComponent(one[1])); return route.fulfill({ status: 204, headers: CORS }); }
+      return json(404, {}); });
+    const w1 = await two.newPage(), w2 = await two.newPage(); for (const w of [w1, w2]) { w.on('pageerror', e => errors.push(e.message)); await w.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await w.waitForSelector('#rolodex .drum-btn'); }
+    await sleep(2500);
+    const quiet = async () => { let n = -1, at = Date.now(); const count = () => cal.n * 1000 + JSON.stringify([...cal.events.values()]).length; while (Date.now() - at < 12000) { await sleep(2600); const now = count(); if (now === n) return; n = now; } };
+    await w1.evaluate(() => import('./js/store.js').then(s => { s.upsert('bookings', { id: 'two-win', title: 'Harbour shoot', date: '2026-12-01', start: '09:00', end: '17:00', status: 'Confirmed', crew: [], gear: [] }); })); await quiet();
+    const made = mine().length;
+    await w1.evaluate(() => import('./js/store.js').then(s => { s.upsert('bookings', { ...s.byId('bookings', 'two-win'), date: '2026-12-20' }); })); await quiet();
+    const moved = mine().map(e => (e.start.dateTime || e.start.date).slice(0, 10)).join();
+    await w1.evaluate(() => import('./js/store.js').then(s => { s.remove('bookings', 'two-win'); })); await quiet();
+    ok('with Vdex open in two windows a new booking gets one event in the calendar, which moves with the booking and goes when it is deleted', made === 1 && moved === '2026-12-20' && mine().length === 0, JSON.stringify({ made, moved, left: mine().length }));
+    await two.close(); }
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + e.message); process.exit(1); });
