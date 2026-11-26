@@ -95,11 +95,12 @@ export const covered = () => !!document.querySelector('body > .lock');
 // so ticking by keyboard stays in place, and a box that was being typed in keeps what was typed and where the cursor was.
 const CONTROLS = 'button, input, select, textarea, a[href], summary, [tabindex]';
 const controlKey = el => [el.tagName, el.type || '', el.id || el.getAttribute('aria-label') || el.name || '', ((el.closest('label') || el).textContent || '').trim().slice(0, 80)].join('|');
-export function redrawKeeping(root, draw) {
+// typed: false leaves the redrawn box with what the page drew in it (after a change that was refused).
+export function redrawKeeping(root, draw, { typed: keep = true } = {}) {
   const el = document.activeElement, mine = el && el !== document.body && root.contains(el), key = mine ? controlKey(el) : null;
   const twins = key ? [...root.querySelectorAll(CONTROLS)].filter(x => controlKey(x) === key) : [], at = twins.indexOf(el);
   const typing = mine && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'file', 'button', 'submit', 'range', 'color'].includes(el.type)));
-  const typed = typing ? { value: el.value, start: null, end: null } : null;
+  const typed = typing && keep ? { value: el.value, start: null, end: null } : null;
   if (typed) try { typed.start = el.selectionStart; typed.end = el.selectionEnd; } catch { /* a date or time box has no cursor to keep */ }
   draw();
   if (!key) return;

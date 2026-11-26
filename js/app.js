@@ -102,10 +102,12 @@ function show(i, dir = 0) {
 
 // Re-render the active page when data changes (field tools keep their own live state).
 // Redraws are coalesced: a burst of changes in one go (an import, a template applied, a merge) draws the page once.
-let redrawQueued = false;
-// The control that had the focus has it again afterwards, with what was being typed in it (redrawKeeping in js/util.js).
+let redrawQueued = false, asStored = false;
+// The control that had the focus has it again afterwards, with what was being typed in it (redrawKeeping in js/util.js);
+// not after a change that was refused (store.redraw()): the box then shows what is stored, not what was typed.
 function redraw() {
   redrawQueued = false;
+  const typed = !asStored; asStored = false;
   const p = current >= 0 && tabs[current] && tabs[current].page;
   if (!p || p.static) return; // a section still loading draws itself fresh when it arrives
   const y = window.scrollY;
@@ -116,12 +118,13 @@ function redraw() {
     holder.replaceChildren();
     cleanup = p.render(holder) || null;
     window.scrollTo(0, y);
-  });
+  }, { typed });
 }
 store.subscribe(reason => {
   paintCloud();
   if (reason === 'licence') return; // the licence changed what may be linked or saved: the panels concerned redraw themselves
   if (reason === 'status' && tabs[current] && tabs[current].id !== 'settings') return; // sync status alone is not worth redrawing a page for
+  if (reason === 'stored') asStored = true;
   if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); }
 });
 

@@ -124,8 +124,9 @@ export const canChange = () => !gate || gate({ form: true });
 // (marking a call sheet sent when it is printed), which are simply skipped when Vdex is read-only.
 export const canChangeQuietly = () => !gate || gate({ quiet: true });
 
-// Redraws the page from what is stored (after a refused change, so a ticked box shows the stored value again).
-export const redraw = () => emit();
+// Redraws the page from what is stored (after a refused change, so a ticked box or a typed field shows the stored
+// value again). 'stored': the page does not put back what was being typed (js/app.js), as it does after other changes.
+export const redraw = () => emit('stored');
 
 // Mutate the db inside fn, then save + sync. Returns false when the change was refused.
 export function update(fn) {
