@@ -647,17 +647,32 @@ export const webdavAdapter = () => {
   const base = webdavFolder(cfg);
   const url = name => base + '/' + encodeURIComponent(name);
   // The username and password go as UTF-8 (RFC 7617): btoa alone refuses a character such as € and garbles an ä.
-  const basic = btoa(String.fromCharCode(...new TextEncoder().encode(`${cfg.user || ''}:${cfg.pass || ''}`)));
-  const headers = extra => ({ Authorization: 'Basic ' + basic, ...extra });
+  // Version 1.4.0 and before sent one byte a letter instead, so a link with an ä or an é in its password only ever
+  // worked with a server that reads it that way, and such a server refuses the UTF-8 form. So when the server says
+  // 401 and the text can be written both ways (letters up to ÿ, none beyond), the other form is tried once, and the
+  // one that was accepted is kept with the link (latin1) and sent first from then on.
+  const who = `${cfg.user || ''}:${cfg.pass || ''}`, utf8 = btoa(String.fromCharCode(...new TextEncoder().encode(who)));
+  const older = /[\u0080-\u00ff]/.test(who) && !/[^\u0000-\u00ff]/.test(who) ? btoa(who) : '';
+  let basic = cfg.latin1 && older ? older : utf8;
   let host = 'WebDAV'; try { host = new URL(base).host; } catch { /* label only */ }
   const explain = r => r.status === 401 ? 'WebDAV: wrong username or password' : r.status === 403 ? 'WebDAV: no permission for that folder' : r.status === 507 ? 'WebDAV: the server has no room left' : `WebDAV ${r.status}`;
   // Every request says the same when it gets no answer, never the browser's own "Failed to fetch".
-  const ask = (address, options) => fetch(address, options).catch(() => { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); });
+  const send = (address, options) => fetch(address, { ...options, headers: { Authorization: 'Basic ' + basic, ...(options.headers || {}) } }).catch(() => { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); });
+  const ask = async (address, options = {}) => {
+    const r = await send(address, options);
+    if (r.status !== 401 || !older) return r;
+    const first = basic; basic = first === older ? utf8 : older;
+    const again = await send(address, options);
+    if (again.status === 401) { basic = first; return r; }
+    settings.setWebdav({ ...settings.webdav(), latin1: basic === older });
+    return again;
+  };
+  const headers = extra => extra;
   return {
     id: 'webdav', label: cfg.kind === 'nextcloud' ? `Nextcloud (${host})` : `WebDAV (${host})`, where: cfg.kind === 'nextcloud' ? 'the folder Vdex in your files' : 'the folder you gave',
     ready: async () => !!(base && cfg.user),
     // Make the folder if it is not there yet: 201 made, 405 already there. A server that refuses is told about on the first read.
-    ensureFolder: async () => { try { await fetch(base + '/', { method: 'MKCOL', headers: headers({}) }); } catch { /* the read below explains */ } },
+    ensureFolder: async () => { try { await ask(base + '/', { method: 'MKCOL' }); } catch { /* the read below explains */ } },
     read: async () => {
       const r = await ask(url(FILE), { headers: headers({}) });
       if (r.status === 404) return null; if (!r.ok) throw new Error(explain(r)); return parse(await r.text());

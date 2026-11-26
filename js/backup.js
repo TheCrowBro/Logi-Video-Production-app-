@@ -105,12 +105,29 @@ export async function importData(f) {
       try { data = JSON.parse(await C.decryptText(await C.pbkdf2Key(pass, C.fromB64(data.kdf.salt), data.kdf.iter), data)); } catch { throw new Error('wrong passphrase'); }
     }
     if (!data || typeof data !== 'object' || !(Array.isArray(data.bookings) || Array.isArray(data.gear))) throw new Error(NOT_ONE);
-    if (confirm(`Replace your current data with this file? It holds ${holds(data)}.${others()}`)) { store.replaceAll(data); toast('Imported'); }
+    if (confirm(`Replace your current data with this file? It holds ${holds(data)}.${goes(data)}${others()}`)) { store.replaceAll(data); toast('Imported'); }
   } catch (err) { toast('Import failed: ' + err.message + '.'); }
 }
 
 // What a backup holds, counted as the app will read it (js/store.js leaves out what is not a record).
-const holds = data => { const n = k => (Array.isArray(data[k]) ? data[k].filter(x => x && typeof x === 'object' && typeof x.id === 'string').length : 0), say = (k, one, many) => `${n(k)} ${n(k) === 1 ? one : many}`; return [say('bookings', 'booking', 'bookings'), say('crew', 'person', 'people'), say('gear', 'item', 'items')].join(', '); };
+// Of bookings, people and items, the ones the file carries (a file with only an equipment list holds "1 item").
+const holds = data => { const n = k => (Array.isArray(data[k]) ? data[k].filter(x => x && typeof x === 'object' && typeof x.id === 'string').length : 0), say = (k, one, many) => (store.carries(data, k) ? `${n(k)} ${n(k) === 1 ? one : many}` : ''); return [say('bookings', 'booking', 'bookings'), say('crew', 'person', 'people'), say('gear', 'item', 'items')].filter(Boolean).join(', '); };
+// What the file would take away, and what it leaves alone. A list the file carries replaces the one here, so what is
+// here and not in it is deleted (and counted, kind by kind, before anything is replaced); a list the file does not
+// carry at all (a backup from before hours or logs existed, a file with one list in it) is no part of the backup, and
+// the one here stays (replaceAll in js/store.js).
+const KINDS = [['bookings', 'booking', 'bookings'], ['crew', 'person', 'people'], ['gear', 'item', 'items'], ['kits', 'kit', 'kits'], ['venues', 'venue', 'venues'], ['insurance', 'policy', 'policies'], ['shifts', 'day of hours', 'days of hours'], ['logs', 'timecode log', 'timecode logs'], ['projectTemplates', 'job type', 'job types']];
+const listed = (a, last = 'and') => (a.length > 1 ? `${a.slice(0, -1).join(', ')} ${last} ${a[a.length - 1]}` : a.join(''));
+function goes(data) {
+  const lost = [], stay = [];
+  for (const [k, one, many] of KINDS) {
+    const here = store.db[k] || []; if (!here.length) continue;
+    if (!store.carries(data, k)) { stay.push(many); continue; }
+    const kept = new Set((Array.isArray(data[k]) ? data[k] : []).map(x => x && x.id)), n = here.filter(x => !kept.has(x.id)).length;
+    if (n) lost.push(`${n} ${n === 1 ? one : many}`);
+  }
+  return (lost.length ? ` What is here and not in the file will be deleted: ${listed(lost)}.` : '') + (stay.length ? ` It does not carry ${listed(stay, 'or')}: those stay as they are.` : '');
+}
 // A restore replaces what is here, and through the linked storage what is on the other devices too.
 const others = () => (store.cloud.adapter && !store.cloud.paused ? ' Your other devices follow at their next sync.' : '');
 

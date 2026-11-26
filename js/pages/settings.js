@@ -183,7 +183,7 @@ function fieldDefaults() {
 function profilePanel() {
   const p = db.profile;
   const line = (label, value) => value && h('div', null, h('span', { class: 'muted' }, label), h('span', null, value));
-  const cur = h('input', { type: 'text', value: p.currency || '$', 'aria-label': 'Currency symbol', maxLength: 4, onchange: e => { update(d => { d.profile = { ...d.profile, currency: e.target.value.trim() || '$', updatedAt: Date.now() }; }); toast('Saved'); } });
+  const cur = h('input', { type: 'text', value: p.currency || '$', 'aria-label': 'Currency symbol', maxLength: 4, onchange: e => { const v = e.target.value.trim() || '$'; e.target.value = v; setTimeout(() => { update(d => { d.profile = { ...d.profile, currency: v, updatedAt: Date.now() }; }); toast('Saved'); }, 0); } }); // the box shows what is stored (the page drawn again keeps what the box holds); saved a moment later, once the focus has moved on
   return h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'Your details go on call sheets, quotes and invoices, and make the contact card and QR code on the Me page.'),
     p.name || p.business || p.phone || p.email

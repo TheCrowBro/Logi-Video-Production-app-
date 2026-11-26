@@ -85,7 +85,7 @@ const save = (text, name, type) => { const a = h('a', { href: URL.createObjectUR
       snap.cut > 0 && h('p', { class: 'note' }, `This link holds more scenes than one shoot may bring: ${snap.cut.toLocaleString()} more ${snap.cut === 1 ? 'is' : 'are'} not shown.`)),
     ...section('Shot list', (snap.shots || []).length ? h('ul', { class: 'plain' }, snap.shots.map(s => h('li', { class: s.done ? 'done' : '' }, (s.done ? '✓ ' : '○ ') + s.text))) : null),
     ...section('Equipment', kitGroups.size ? [...kitGroups].map(([cat, items]) => [h('div', { class: 'day' }, cat), h('ul', { class: 'plain' }, items.map(k => h('li', null, k.name + (k.qty > 1 ? ` × ${k.qty}` : ''))))]) : null),
-    ...section('Deliverables', (snap.deliverables || []).length ? h('table', null, h('tbody', null, snap.deliverables.map(x => h('tr', null, h('td', { class: 'free' }, x.name), h('td', { class: 'nw' }, x.duration || ''), h('td', { class: 'nw' }, isDate(x.due) ? 'due ' + fmtShort(x.due) : ''), h('td', null, x.status || ''))))) : null),
+    ...section('Deliverables', (snap.deliverables || []).length ? h('table', null, h('tbody', null, snap.deliverables.map(x => h('tr', null, h('td', { class: 'free' }, x.name), h('td', { class: 'nw' }, x.duration || ''), h('td', null, isDate(x.due) ? 'due ' + fmtShort(x.due) : ''), h('td', null, x.status || ''))))) : null),
     ...section('Instructions', snap.notes && h('p', { class: 'pre' }, snap.notes)),
     h('p', { class: 'note' }, `Sent ${snap.made ? new Date(snap.made).toLocaleString() : ''}. This is a copy from that moment: if plans change, the producer sends a new link.`),
     // Inside the paper, so it is printed too: the page's footer is not (crew.html hides .foot on paper).

@@ -183,7 +183,7 @@ const setup = async ctx => {
 
   // ---- a backup, the cloud and another device ----
   const backup = await store(() => import('./js/store.js').then(s => s.exportJSON()));
-  await store(() => import('./js/store.js').then(s => s.replaceAll({ bookings: [], crew: [] }))); await sleep(200);
+  await store(() => import('./js/store.js').then(s => s.replaceAll({ bookings: [], crew: [], myRoles: [] }))); await sleep(200); // (a file replaces the lists it carries; one it does not carry stays as it is)
   const wiped = await mine();
   await page.evaluate(text => import('./js/backup.js').then(b => b.importData(new File([text], 'vdex-backup.json', { type: 'application/json' }))), backup); await sleep(400);
   ok('a backup carries My roles: gone with the data, back when the backup is imported', JSON.parse(backup).myRoles.length === 2 && wiped.length === 0 && JSON.stringify(await mine()) === JSON.stringify(['Clapper trainee', 'Jib assistant']) && (await store(() => import('./js/store.js').then(s => s.db.crew.some(c => c.name === 'Zed Own' && c.role === 'Jib assistant')))));

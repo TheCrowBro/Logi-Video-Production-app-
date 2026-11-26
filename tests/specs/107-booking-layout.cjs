@@ -313,6 +313,31 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   const call = await page.evaluate(id => import('./js/store.js').then(s => Object.values(s.byId('bookings', id).crewCall)[0]), back1.id);
   ok('typing 0 8 4 5 over a call time of 07:30 gives 08:45, with the focus still in the box while typing', call === '08:45' && midFocus === 'time', call + ' / focus on ' + midFocus);
 
+  // …and the control pressed next still gets its click: leaving the box saves, the save draws the page again, and a
+  // page drawn between the press and its release took the pressed tick box away
+  const bookingNow = () => page.evaluate(id => import('./js/store.js').then(s => { const b = s.byId('bookings', id), a = document.activeElement; return { call: Object.values(b.crewCall)[0], shots: (b.shots || []).map(x => x.text + (x.done ? ' ✓' : '')).join('|'), focus: a && a !== document.body ? a.tagName + ' ' + (a.getAttribute('aria-label') || a.type || a.textContent.trim().slice(0, 20)) : 'nothing' }; }), back1.id);
+  const press = async loc => { await loc.scrollIntoViewIfNeeded(); await sleep(100); const box = await loc.boundingBox(); await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await sleep(500); };
+  await callBox.focus(); await page.keyboard.type('0915'); await sleep(200);
+  await press(page.locator('#bk-shots .check-item input[type=checkbox]').first());
+  const ticked = await bookingNow();
+  ok('a call time typed and then one click on a shot’s tick box: the time is saved and the shot is ticked', ticked.call === '09:15' && ticked.shots === 'Wide of the brewhouse from the mezzanine ✓', JSON.stringify(ticked));
+  await page.locator('#bk-shots input[aria-label="New shot"]').fill('Typed and not yet added');
+  await callBox.focus(); await page.keyboard.type('1005'); await sleep(200);
+  await press(page.locator('#bk-shots .row-edit button', { hasText: 'Add' }));
+  const added = await bookingNow();
+  ok('…and one click on Add after a call time adds the shot that was typed', added.call === '10:05' && /\|Typed and not yet added$/.test(added.shots), JSON.stringify(added));
+  await callBox.focus(); await page.keyboard.type('1120'); await sleep(100);
+  let tabbed = null; for (let i = 0; i < 6; i++) { await page.keyboard.press('Tab'); await sleep(200); tabbed = await bookingNow(); if (!/call time/.test(tabbed.focus)) break; }
+  ok('Tab out of the call time saves it and lands on the next control, not at the top of the page', tabbed.call === '11:20' && tabbed.focus !== 'nothing' && !/call time/.test(tabbed.focus), JSON.stringify(tabbed));
+  // Text typed in one booking's box and not entered does not turn up in the same box of another booking
+  const other = await page.evaluate(() => import('./js/store.js').then(s => { s.upsert('bookings', { id: 'carry-2', title: 'Another job', date: new Date().toISOString().slice(0, 10), status: 'Confirmed', crew: [], gear: [], stakeholders: [] }); return 'carry-2'; })); await sleep(300);
+  await page.locator('#bk-shots input[aria-label="New shot"]').click(); await page.keyboard.type('Draft for the first job'); await sleep(100);
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), other); await sleep(400);
+  const carried = await page.evaluate(() => ({ title: document.querySelector('.bk-detail h2, .card.hero h2')?.textContent || '', boxes: [...document.querySelectorAll('#page input[type=text], #page input:not([type])')].map(i => i.value).filter(Boolean) }));
+  ok('a shot half typed on one booking is not in the box of the booking opened next', /Another job/.test(carried.title) && carried.boxes.length === 0, JSON.stringify(carried));
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), back1.id); await sleep(400);
+  await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 'carry-2'))); await sleep(300);
+
   // Long unbroken names and a pasted map link wrap inside a 360-pixel phone
   await page.evaluate(id => import('./js/store.js').then(s => s.upsert('bookings', { ...s.byId('bookings', id), title: 'ACME_BrandFilm_Q4_2026_SocialCutdowns_v2', client: 'Bundesverband_der_Filmschaffenden_Deutschland_eV', address: 'https://www.google.com/maps/place/Harbour+Brewing+Co/@51.5072178,-0.1275862,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d51.5072178!4d-0.1275862', date: new Date().toISOString().slice(0, 10), endDate: '' })), back1.id);
   await page.setViewportSize({ width: 360, height: 800 }); await sleep(300);
@@ -395,9 +420,10 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
     ok('a map link with a stray % sign is still read', (await lat.inputValue()) === '51.5007' && (await lon.inputValue()) === '-0.1246' && /Location read from link/.test((await vp.evaluate(() => window.__toasts.splice(0))).join('|')), await lat.inputValue());
     await lon.fill(''); await vp.locator('.sheet form button[type=submit]').click(); await sleep(300);
     const half = [await vp.locator('.sheet form').count(), await lon.evaluate(e => e.validationMessage), await vp.evaluate(() => import('./js/store.js').then(s => s.db.venues.filter(v => v.name === 'Map Hall').length))];
-    await lon.fill('-0.1246'); await vp.locator('.sheet form button[type=submit]').click(); await sleep(350);
+    await lon.evaluate(e => { e.value = '-0.1246'; }); // filled in as “I’m here now” and “Find from address” fill it: by the form, with no typing
+    await vp.locator('.sheet form button[type=submit]').click(); await sleep(350);
     const whole = await vp.evaluate(() => import('./js/store.js').then(s => s.db.venues.find(v => v.name === 'Map Hall')));
-    ok('a latitude without a longitude is refused with a word on the empty box, and saved once both are there', half[0] === 1 && /both/.test(half[1]) && half[2] === 0 && !!whole && whole.geo && whole.geo.lat === 51.5007 && whole.geo.lon === -0.1246, JSON.stringify([half, whole && whole.geo]));
+    ok('a latitude without a longitude is refused with a word on the empty box, and saved once both are there, also when the form’s own buttons filled the other in', half[0] === 1 && /both/.test(half[1]) && half[2] === 0 && (await vp.locator('.sheet form').count()) === 0 && !!whole && whole.geo && whole.geo.lat === 51.5007 && whole.geo.lon === -0.1246, JSON.stringify([half, whole && whole.geo]));
     // a venue's rules go by what kind of thing an item is, however its category was typed
     const warned = await vp.evaluate(() => Promise.all([import('./js/pages/venues.js'), import('./js/store.js')]).then(([v, s]) => ['Drone', 'Drones', 'drone', ' DRONES ', 'Lighting', 'lighting', 'Camera'].map(category => v.venueWarnings(s.byId('venues', 'v-today'), [{ category }]).length)));
     ok('“drone”, “Drones” and “Drone” all bring the venue’s drone rule to a booking', warned.join() === '1,1,1,1,1,1,0', warned.join());
@@ -415,6 +441,15 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
     await pp.evaluate(() => { document.querySelectorAll('#page details').forEach(d => { d.open = true; }); }); await sleep(300);
     const long = await pp.evaluate(() => { const row = [...document.querySelectorAll('.check-item')].find(x => /youtube/.test(x.textContent)); const ink = el => { const r = document.createRange(); r.selectNodeContents(el); return Math.round(r.getBoundingClientRect().right); }; const acc = [...document.querySelectorAll('#page .small')].find(x => /^Access: /.test(x.textContent)); return { shot: !!row, x: row ? Math.round(row.querySelector('.icon-btn').getBoundingClientRect().right) : 0, access: acc ? ink(acc) : -1, wide: document.documentElement.scrollWidth }; });
     ok('a web address in a shot and in the venue’s access line wraps at 320 px: the shot’s ✕ stays on screen and the page does not scroll sideways', long.shot && long.x <= 320 && long.access > 0 && long.access <= 320 && long.wide <= 320, JSON.stringify(long));
+    // Extra large text on that phone: a name and its pill, an item and its quantity, no longer fit one row
+    await pp.evaluate(() => { document.documentElement.dataset.text = 'xlarge'; window.logiGo('insurance'); }); await pp.waitForSelector('#page .card .pill'); await sleep(400);
+    const xl = await pp.evaluate(() => { const broken = []; for (const el of document.querySelectorAll('#page .card .card-row > div:first-child')) { const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); for (let n; (n = w.nextNode());) { const re = /[A-Za-z]+/g; let m; while ((m = re.exec(n.data))) { const r = document.createRange(); r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length); if (new Set([...r.getClientRects()].map(q => Math.round(q.top))).size > 1) broken.push(m[0]); } } }
+      return { broken, cards: document.querySelectorAll('#page .card .card-row').length, wide: document.documentElement.scrollWidth }; });
+    ok('at Extra large text on a 320 px phone no word on an Insurance card is broken in two: the pill goes under the name', xl.cards > 0 && xl.broken.length === 0 && xl.wide <= 320, JSON.stringify(xl));
+    await pp.evaluate(() => import('./js/pages/gear.js').then(m => m.editKit())); await pp.waitForSelector('.sheet form .checks .check-row'); await sleep(300);
+    const list = await pp.evaluate(() => { const box = [...document.querySelectorAll('.sheet form .checks')].find(c => c.querySelector('.check-row')), plus = [...box.querySelectorAll('.stepper .icon-btn')].map(b => Math.round(b.getBoundingClientRect().right)); return { wide: box.scrollWidth, room: box.clientWidth, plus: Math.max(...plus), edge: Math.round(box.getBoundingClientRect().right) }; });
+    ok('…and the Equipment list of a form is no wider than the form: every quantity’s + is inside it', list.wide <= list.room + 1 && list.plus <= list.edge, JSON.stringify(list));
+    await pp.keyboard.press('Escape'); await sleep(200);
     await ph.close(); }
   // Vdex open in two windows with a calendar connected (the calendar stood in for at the network, a quarter of a second
   // an answer): a booking saved in one window reaches the other at once, and both keep the calendar in step.

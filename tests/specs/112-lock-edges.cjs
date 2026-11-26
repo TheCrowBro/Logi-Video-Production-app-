@@ -55,7 +55,32 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     ok('a first PIN whose vault cannot be saved is kept all the same: the set-up says the data stays in plain and lets the person in', said && (await page.locator('.lock-setup').count()) === 0 && !!(await ls(page, 'logi-lock')) && (await ls(page, 'logi-vault')) === null && !!(await ls(page, 'logi-db-v1')));
     await fullFor(page, 'logi-vault', false);
     await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'Room Again', updatedAt: Date.now() }; }))); await sleep(900);
+    // While the data is in plain, Settings → Security says so where it says the PIN is set (the toast lasts a few seconds)
+    await fullFor(page, 'logi-vault', true);
+    await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'No Room Again', updatedAt: Date.now() }; }))); await sleep(900);
+    await page.evaluate(() => window.logiGo('settings')); await sleep(500);
+    await page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => x.dataset.s === 'Security'); d.open = true; d.scrollIntoView(); }); await sleep(300);
+    const sec = () => page.evaluate(() => { const d = [...document.querySelectorAll('details.settings-section')].find(x => x.dataset.s === 'Security'); return { warn: (d.querySelector('.warn') || {}).textContent || '', green: (d.querySelector('.status-line[data-state=synced]') || {}).textContent || '' }; });
+    const inPlain = await sec();
+    await fullFor(page, 'logi-vault', false);
+    await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile = { ...d.profile, name: 'Room Once More', updatedAt: Date.now() }; }))); await sleep(900);
+    const encrypted = await sec();
+    ok('with a PIN set and no room for the encrypted copy, Settings → Security says the data is kept in plain, and goes back to “PIN set” once it is written', /^PIN set/.test(inPlain.warn) && /kept in plain/.test(inPlain.warn) && inPlain.green === '' && /PIN set/.test(encrypted.green) && encrypted.warn === '', JSON.stringify([inPlain, encrypted]));
     ok('…and the encrypted copy is written by the first save that finds room', !!(await ls(page, 'logi-vault')));
+    await ctx.close(); }
+
+  // --- storage full to the brim at the set-up: no room even for the PIN's own settings. The set-up is no dead end:
+  // Vdex opens for this visit without a PIN, says so, and asks again at the next start. ---
+  { const { ctx, page } = await existing(null);
+    await page.reload(); await page.waitForSelector('.lock-setup');
+    await fullFor(page, 'logi-lock', true);
+    await page.locator('.lock-setup .pin-input').nth(0).fill('246810'); await page.locator('.lock-setup .pin-input').nth(1).fill('246810'); await page.locator('.lock-setup button[type=submit]').click();
+    const opened = await page.waitForSelector('#rolodex .drum-btn', { timeout: 30000 }).then(() => true, () => false);
+    await page.waitForFunction(() => [...document.querySelectorAll('.toast')].some(t => /Not enough storage to keep a PIN/.test(t.textContent)), null, { timeout: 5000 }).catch(() => {});
+    const brim = { opened, said: (await page.locator('.toast').allInnerTexts()).some(t => /Not enough storage to keep a PIN, so Vdex is open without one for now/.test(t)), cfg: await ls(page, 'logi-lock'), data: (await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.length))) > 0 };
+    await fullFor(page, 'logi-lock', false);
+    await page.reload(); await page.waitForSelector('.lock-setup', { timeout: 15000 }).catch(() => {});
+    ok('a PIN there is no room to keep at all does not leave the set-up a dead end: Vdex opens with the data, says why there is no PIN, and asks again at the next start', brim.opened && brim.said && brim.cfg === null && brim.data && (await page.locator('.lock-setup').count()) === 1, JSON.stringify(brim));
     await ctx.close(); }
 
   // --- the data has outgrown the room for its encrypted copy: the next start still opens, from the plain copy ---
@@ -186,6 +211,37 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
     ok('…the erased tab lands on the terms with the reason written on them', /This device was erased/.test(await b.locator('.terms-gate').innerText()));
     await sleep(500);
     ok('…and the other tab started again too', (await a.locator('.terms-gate').count()) === 1);
+    await ctx.close(); }
+
+  // --- The same erase by a window still running 1.4.0 (a tab left open across the update): it says no word of its own,
+  // it removes everything Vdex keeps and then writes an empty copy. The window on this build must not take that for a
+  // save, merge its own copy into it and write everything back. ---
+  { const { ctx, page: a } = await existing();
+    const held = await a.evaluate(() => import('./js/store.js').then(s => s.db.bookings.length));
+    const old = await ctx.newPage(); await old.goto(BASE + 'privacy.html'); // a page of the site that runs none of the app: it does to the storage what 1.4.0's Erase all data did
+    await old.evaluate(() => { const KEEP = new Set(['logi-terms', 'logi-prefs', 'logi-tour', 'logi-tab', 'spec-seeded']); const keys = []; for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); keys.filter(k => k.startsWith('logi-') && !KEEP.has(k)).forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('logi-db-v1', JSON.stringify({ version: 1, updatedAt: Date.now(), profile: {}, bookings: [], crew: [], gear: [], insurance: [], kits: [], venues: [], logs: [], shifts: [], deleted: {} })); });
+    await a.waitForSelector('.lock-setup', { timeout: 15000 }); await sleep(1200);
+    const disk = await old.evaluate(() => { let n = -1; try { n = JSON.parse(localStorage.getItem('logi-db-v1') || '{"bookings":[]}').bookings.length; } catch { /* not a database */ } return { n, vault: localStorage.getItem('logi-vault'), cfg: localStorage.getItem('logi-lock') }; });
+    ok('Erase all data in a window still on 1.4.0, with a window of this build open: nothing is written back, and that window starts again', held > 0 && disk.n === 0 && disk.vault === null && disk.cfg === null && (await a.evaluate(() => import('./js/store.js').then(s => s.db.bookings.length + s.db.crew.length + s.db.gear.length))) === 0, JSON.stringify({ held, ...disk }));
+    await ctx.close(); }
+
+  // --- A window put away (sealed) while another window of Vdex goes on working, and whose encrypted copy could not be
+  // rewritten for want of room: the work is in the plain copy alone. The window that comes back takes it, and its
+  // next save does not write its older copy over it. ---
+  { const { ctx, page: a } = await existing();
+    await setVis(a, true); await a.waitForFunction(() => localStorage.getItem('logi-db-v1') === null, null, { timeout: 15000 });
+    const b = await ctx.newPage(); watch(b);
+    await b.goto(BASE); await b.waitForSelector('.lock'); await b.keyboard.type('246810'); await b.waitForSelector('#rolodex .drum-btn', { timeout: 60000 }); await sleep(500);
+    await fullFor(b, 'logi-vault', true);
+    await b.evaluate(() => import('./js/store.js').then(s => { s.upsert('bookings', { id: 'made-in-two', title: 'Made in the second window', date: '2026-12-05', status: 'Confirmed', crew: [], gear: [] }); })); await sleep(900);
+    const plain = /made-in-two/.test(await ls(b, 'logi-db-v1') || ''), vault = await ls(b, 'logi-vault');
+    await b.close(); // closed: its plain copy stays on the disk, the vault is the older one
+    await setVis(a, false); await sleep(900);
+    const back = await a.evaluate(() => import('./js/store.js').then(s => !!s.byId('bookings', 'made-in-two')));
+    await a.evaluate(() => import('./js/store.js').then(s => { s.upsert('crew', { id: 'saved-in-one', name: 'Saved In One' }); })); await sleep(900);
+    const disk = await ls(a, 'logi-db-v1') || '';
+    ok('a window that comes back holds what another window saved in plain while it was away (its encrypted copy could not be rewritten), and its next save keeps it', plain && (await ls(a, 'logi-vault')) !== null && back && /made-in-two/.test(disk) && /saved-in-one/.test(disk), JSON.stringify({ plain, vaultUnchanged: vault === await ls(a, 'logi-vault'), back, onDisk: /made-in-two/.test(disk) }));
     await ctx.close(); }
 
   // --- Erase all data in one window, with Vdex open and in view in a second one: that one does not write its copy back ---

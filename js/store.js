@@ -78,7 +78,20 @@ export const revision = () => rev;
 export const isSealed = () => sealed;
 export const serialize = () => JSON.stringify(db);
 // Unlocking runs what waited: deferred work is a full sync, which reads and merges what is in the cloud before writing.
-export function setSealed(on) { if (on && writeQueued) writeNow(); sealed = on; if (!on) { if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; sync({ quiet: true }); } } }
+// A window that was sealed did not hear what another window of Vdex saved meanwhile (the storage listener below skips
+// a sealed window). The plain copy on the disk may hold that work, and nothing else may: with the storage nearly
+// full the other window's encrypted copy could not be rewritten. So a window coming back merges the plain copy
+// first, as it would have merged the save itself, and what it has more is saved in turn. fresh: the caller reads the
+// disk anew right after (a start), so there is nothing to merge.
+function takeDisk() {
+  if (erased) return;
+  let theirs; try { const raw = localStorage.getItem(KEY); if (!raw) return; theirs = normalise(JSON.parse(raw)); } catch { return; }
+  const merged = mergeDb(db, theirs);
+  if (JSON.stringify(merged) === JSON.stringify(db)) return;
+  db = merged; rev++; if (!sameCopy(merged, theirs)) dirty = true;
+  emit();
+}
+export function setSealed(on, fresh = false) { const was = sealed; if (on && writeQueued) writeNow(); sealed = on; if (!on) { if (was && !fresh) takeDisk(); if (dirty) { dirty = false; persistLocal(); } if (pendingSync) { pendingSync = false; sync({ quiet: true }); } } }
 export function flush() { rev++; writeNow(); }
 export function reload() { db = load(); rev++; emit(); }
 export const touch = () => { rev++; emit(); };
@@ -128,11 +141,35 @@ export const canChangeQuietly = () => !gate || gate({ quiet: true });
 // value again). 'stored': the page does not put back what was being typed (js/app.js), as it does after other changes.
 export const redraw = () => emit('stored');
 
+// Every time of its own in a copy, under a name that is the same before and after a change: a record's, a booking's
+// budget, stripboard, quote and invoice (or the mark a deleted one left), a log's script, notes and note marks, the
+// deletion marks, and the settings that follow their newer copy. As [name, holder, field].
+function* stamps(d) {
+  for (const list of [...LISTS, 'logs']) for (const x of d[list] || []) {
+    if (!x || typeof x !== 'object') continue;
+    yield [`${list}/${x.id}`, x, 'updatedAt'];
+    if (list === 'bookings') { for (const k of ['budget', 'board', 'quote', 'invoice']) { if (x[k] && typeof x[k] === 'object') yield [`${x.id}/${k}`, x[k], 'updatedAt']; } for (const k of ['quoteGoneAt', 'invoiceGoneAt']) if (x[k]) yield [`${x.id}/${k}`, x, k]; }
+    if (list === 'logs') { yield [`${x.id}/script`, x, 'scriptAt']; for (const n of x.notes || []) { if (n && n.id) yield [`${x.id}/note/${n.id}`, n, 'upd']; } for (const id of Object.keys(x.dead || {})) yield [`${x.id}/dead/${id}`, x.dead, id]; }
+  }
+  for (const id of Object.keys(d.deleted || {})) yield [`deleted/${id}`, d.deleted, id];
+  for (const k of ['profile', 'billing', 'priceList', 'templates', 'calSync']) if (d[k] && typeof d[k] === 'object') yield [k, d[k], 'updatedAt'];
+}
+// The newest time anywhere in this device's copy: what a restore has to outrank.
+const newestIn = d => { let t = Number(d.updatedAt) || 0; for (const [, o, f] of stamps(d)) { const v = Number(o[f]) || 0; if (v > t) t = v; } return t; };
+
 // Mutate the db inside fn, then save + sync. Returns false when the change was refused.
+// A change counts as made after everything this copy has seen. Usually that is simply now. But a copy can hold times
+// this device's clock has not reached: another device's clock runs ahead (a restore there stamps every record with
+// it), or this one's runs behind. A change stamped with the plain clock would then lose to the copy it replaces at
+// the next sync, on every device, without a word. So while the copy is ahead of the clock, whatever fn stamps is
+// moved to one past the newest time the copy held.
 export function update(fn) {
   if (gate && !gate()) return false;
+  const seen = Number(db.updatedAt) || 0, before = seen > Date.now() ? new Map([...stamps(db)].map(([k, o, f]) => [k, o[f]])) : null;
   fn(db);
-  db.updatedAt = Date.now();
+  const now = Date.now(), at = before && seen >= now ? seen + 1 : now;
+  if (before) for (const [k, o, f] of stamps(db)) { const v = Number(o[f]) || 0; if (v && v < at && before.get(k) !== o[f]) o[f] = at; }
+  db.updatedAt = Math.max(at, Number(db.updatedAt) || 0);
   persistLocal();
   emit();
   schedulePush();
@@ -148,15 +185,24 @@ export function upsert(list, item) {
   });
 }
 
+// What is deleted is taken off the bookings, kits and logs that named it. Each of those then counts as changed one
+// moment after its copy before: later than the copy another device still holds, so that device takes it (should the
+// deleted thing come back there, changed by someone who had not heard, the two would otherwise each keep their own
+// copy of the booking for ever and upload it in turn), and earlier than any real change to the booking made
+// meanwhile, which is kept.
 export function remove(list, id) {
   return update(d => {
     d[list] = d[list].filter(x => x.id !== id);
     d.deleted[id] = Date.now();
-    if (list === 'gear') { d.bookings.forEach(b => { b.gear = (b.gear || []).filter(g => g !== id); if (b.gearQty) delete b.gearQty[id]; }); d.kits.forEach(k => { if (k.gearQty) delete k.gearQty[id]; }); d.kits.forEach(k => k.gear = (k.gear || []).filter(g => g !== id)); }
-    if (list === 'bookings') { d.logs.forEach(l => { if (l.bookingId === id) delete l.bookingId; }); d.shifts.forEach(s => { if (s.bookingId === id) { s.bookingId = null; s.updatedAt = Date.now(); } }); }
-    if (list === 'venues') d.bookings.forEach(b => { if (b.venueId === id) delete b.venueId; });
-    if (list === 'kits') d.bookings.forEach(b => b.kits = (b.kits || []).filter(k => k !== id));
-    if (list === 'crew') d.bookings.forEach(b => b.crew = (b.crew || []).filter(c => c !== id));
+    const less = (o, k) => { if (!(o[k] || []).includes(id)) return false; o[k] = o[k].filter(x => x !== id); return true; };
+    const lessQty = o => { if (!(o.gearQty && id in o.gearQty)) return false; delete o.gearQty[id]; return true; };
+    const lessKey = (o, k) => { if (o[k] !== id) return false; delete o[k]; return true; };
+    const each = (name, change) => d[name].forEach(o => { if (change(o)) o.updatedAt = ts(o) + 1; });
+    if (list === 'gear') { each('bookings', b => [less(b, 'gear'), lessQty(b)].some(Boolean)); each('kits', k => [less(k, 'gear'), lessQty(k)].some(Boolean)); }
+    if (list === 'bookings') { each('logs', l => lessKey(l, 'bookingId')); d.shifts.forEach(s => { if (s.bookingId === id) { s.bookingId = null; s.updatedAt = Date.now(); } }); }
+    if (list === 'venues') each('bookings', b => lessKey(b, 'venueId'));
+    if (list === 'kits') each('bookings', b => less(b, 'kits'));
+    if (list === 'crew') each('bookings', b => less(b, 'crew'));
   });
 }
 
@@ -205,24 +251,35 @@ export const gearClash = (booking, gearId) => {
 // The same goes for the parts of a booking that keep a time of their own (budget, stripboard, quote, invoice). And what
 // this device held that the backup does not is marked deleted, so that the other devices let go of it too and do not
 // hand it back at the next sync: after a restore every device ends with what the backup holds.
+// "Now" is never earlier than the newest time in the copy this device holds (newestIn): on a device whose clock runs
+// behind, the plain clock would be older than the marks and edits it has already taken from the cloud, and the
+// restore would be undone by the next sync.
+// A list or a setting the file does not carry at all (a backup made before it existed, a file with one list in it) is
+// no part of the backup: this device's own stays as it is, unstamped, and nothing of it is marked deleted. Only a
+// list the file does carry, empty or not, replaces the one here.
+export const carries = (data, k) => { const v = data && typeof data === 'object' ? data[k] : null; return LISTS.includes(k) || k === 'logs' ? Array.isArray(v) : ['profile', 'billing', 'priceList', 'templates', 'calSync', 'deleted'].includes(k) ? !!v && typeof v === 'object' : v != null; };
 export function replaceAll(data) {
-  const was = db, now = Date.now();
+  const was = db, now = Math.max(Date.now(), newestIn(db) + 1), has = k => carries(data, k);
   db = normalise(data);
-  for (const list of LISTS) db[list] = (db[list] || []).map(x => (x && typeof x === 'object' ? { ...x, updatedAt: now } : x));
-  db.bookings = db.bookings.map(b => {
+  for (const k of Object.keys(was)) if (!has(k) && k !== 'version' && k !== 'updatedAt') db[k] = was[k];
+  for (const list of LISTS) if (has(list)) db[list] = (db[list] || []).map(x => (x && typeof x === 'object' ? { ...x, updatedAt: now } : x));
+  if (has('bookings')) db.bookings = db.bookings.map(b => {
     const o = { ...b };
+    // (the stripboard also says when its scenes were last changed, which is what a sent call sheet is set against:
+    // being restored is no change to them)
+    if (o.board && typeof o.board === 'object') o.board = { ...o.board, editedAt: Number(o.board.editedAt) || Number(o.board.updatedAt) || 0 };
     for (const k of ['budget', 'board']) if (o[k] && typeof o[k] === 'object') o[k] = { ...o[k], updatedAt: now };
     for (const k of ['quote', 'invoice']) { if (o[k] && typeof o[k] === 'object') { o[k] = { ...o[k], updatedAt: now }; delete o[k + 'GoneAt']; } else o[k + 'GoneAt'] = now; }
     return o;
   });
   // A timecode log's notes and its script each follow their own time in a merge (mergeLog): the notes are stamped, the
   // script counts as put in now (also "no script"), and markGone leaves a mark for each note made since the backup.
-  db.logs = db.logs.map(l => ({ ...l, updatedAt: now, script: l.script === undefined ? null : l.script, scriptAt: now, notes: l.notes.map(n => (n && typeof n === 'object' ? { ...n, upd: now } : n)) }));
+  if (has('logs')) db.logs = db.logs.map(l => ({ ...l, updatedAt: now, script: l.script === undefined ? null : l.script, scriptAt: now, notes: l.notes.map(n => (n && typeof n === 'object' ? { ...n, upd: now } : n)) }));
   // The settings that follow their newer copy in a merge (the profile, the billing settings, the price list, the
   // checklists) count as changed now too: the save that follows a restore reads the cloud copy first, and its newer
   // settings would otherwise take the place of the restored ones at once (a price list emptied by mistake could not be
   // brought back). The calendar link is not content: it stays as the newer copy has it.
-  for (const k of ['profile', 'billing', 'priceList', 'templates']) if (db[k] && typeof db[k] === 'object') db[k] = { ...db[k], updatedAt: now };
+  for (const k of ['profile', 'billing', 'priceList', 'templates']) if (has(k) && db[k] && typeof db[k] === 'object') db[k] = { ...db[k], updatedAt: now };
   markGone(was, db, now);
   db.updatedAt = now;
   persistLocal();
@@ -271,7 +328,7 @@ export function loadSample() {
   const venueA = uid(), todayJob = uid(), past0 = uid(), past1 = uid(), past2 = uid(), past3 = uid();
   // worked days for the hours chart: [booking, days ago, start h, end h, break min]
   const shift = (bid, ago, sh, eh, bm) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ago, sh, 0); const start = x.getTime(); return { id: uid(), bookingId: bid, date: iso(-ago), start, end: start + (eh - sh) * 36e5, breaks: bm ? [{ start: start + 4 * 36e5, end: start + 4 * 36e5 + bm * 6e4 }] : [], updatedAt: start }; };
-  const was = db, now = Date.now();
+  const was = db, now = Math.max(Date.now(), newestIn(db) + 1); // never earlier than what this copy has seen, as for a restore
   const g = (name, category, value, serial = '', qty = 1) => ({ id: uid(), name, category, value, serial, qty, notes: '' });
   const gear = [
     g('Sony FX6 body', 'Camera', 6000, 'FX6-120934'), g('Sony FE 24-70mm f/2.8 GM II', 'Lens', 2300),
@@ -312,7 +369,7 @@ export function loadSample() {
       { id: uid(), type: 'Equipment', provider: 'ProShield Mutual', policy: 'EQ-448120', cover: 12000, premium: 640, renewal: iso(21), phone: '+1 555 0900', claims: '+1 555 0901', link: '', notes: 'Covers kit on location & in transit.' },
       { id: uid(), type: 'Public Liability', provider: 'ProShield Mutual', policy: 'PL-991302', cover: 2000000, premium: 210, renewal: iso(200), phone: '+1 555 0900', claims: '', link: '', notes: '' },
     ],
-    profile: { ...db.profile, name: db.profile.name || 'Your Name', business: db.profile.business || 'Your Studio', title: 'Videographer / DOP', phone: db.profile.phone || '+1 555 0100', email: db.profile.email || 'you@example.com', website: db.profile.website || 'https://example.com' },
+    profile: { ...db.profile, name: db.profile.name || 'Your Name', business: db.profile.business || 'Your Studio', title: 'Videographer / DOP', phone: db.profile.phone || '+1 555 0100', email: db.profile.email || 'you@example.com', website: db.profile.website || 'https://example.com', updatedAt: now }, // changed now: a linked device takes it, instead of each keeping its own for ever
   });
   // What the examples replace is marked deleted and the examples count as made now, so a linked device ends with the
   // examples too, not with both (the shifts keep their own times: the hours chart reads them).
@@ -506,9 +563,11 @@ export async function initCloud() {
 // it is opened again.
 // Erase all data in another window is no save: this window lets go of its copy as well (the lock of its key, as in the
 // window that erased), writes nothing back, and starts again as that window does.
+// An erase by a window still running 1.4.0 says no such word; the lock sees the PIN's settings go from the disk, which
+// every erase removes before the empty copy is written, and calls this (js/lock.js).
 const ERASING = 'logi-erasing';
 let erased = false;
-function erasedElsewhere() {
+export function erasedElsewhere() {
   if (erased) return; erased = true;
   clearTimeout(timer); cloud.adapter = null;
   db = blank(); dirty = false; rev++;
@@ -708,11 +767,15 @@ async function pushNow() {
     if (cloud.adapter === a) setStatus(cloud.paused ? 'paused' : 'synced');
   } catch (e) { if (cloud.adapter === a) setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
 }
+// The three feed actions read the cloud copy before they write, as every save does (sync): a blind write of this
+// device's copy would take out of the storage what another device saved since this one last read it. Switching the
+// feed on changes the calendar link, so its sync uploads, and the upload writes the feed; the other two write the
+// feed themselves once the copies are in step.
 export async function setFeed(on) {
   if (on) mustBePaid();
   if (on && cloud.adapter?.enableFeed) await cloud.adapter.enableFeed();
   update(d => { d.calSync = { ...d.calSync, feed: !!on, updatedAt: Date.now() }; });
-  if (on) await push();
+  if (on) await sync();
 }
 export async function createFeedFile() { // local-file storage: pick where the feed file lives (same synced folder)
   mustBePaid();
@@ -720,12 +783,12 @@ export async function createFeedFile() { // local-file storage: pick where the f
   await kv('readwrite', s => s.put(handle, 'auxHandle'));
   if (cloud.adapter) cloud.adapter.aux = handle;
   cloud.auxName = handle.name;
-  await push();
+  await sync(); await writeFeed(cloud.adapter);
 }
 export async function feedLink() {
   mustBePaid();
   if (!cloud.adapter?.shareLink) throw new Error('No link for this storage');
-  await push();
+  await sync(); await writeFeed(cloud.adapter);
   cloud.feedUrl = await cloud.adapter.shareLink('vdex-bookings.ics');
   lsSet('logi-feed-url', cloud.feedUrl); emit();
   return cloud.feedUrl;
@@ -753,8 +816,10 @@ function schedulePush() {
   if (!cloud.adapter || cloud.paused || cloud.status === 'needs-permission') return;
   // Read, merge, then write (sync), never a blind write: another device may have saved since this one last read, and
   // its work would be gone from the cloud copy, and for good if that device were lost before it synced again.
+  // Not quiet: from the read on it says "Saving…", since the change is not in the storage until the write is done (on
+  // a slow connection "Synced" would stand there meanwhile, over a change that is on this device alone).
   clearTimeout(timer);
-  timer = setTimeout(() => sync({ quiet: true }), 800);
+  timer = setTimeout(() => sync(), 800);
 }
 
 export function reconnectNeeded(msg) { if (cloud.adapter) setStatus('needs-permission', msg || ''); }

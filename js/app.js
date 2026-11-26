@@ -105,8 +105,17 @@ function show(i, dir = 0) {
 let redrawQueued = false, asStored = false;
 // The control that had the focus has it again afterwards, with what was being typed in it (redrawKeeping in js/util.js);
 // not after a change that was refused (store.redraw()): the box then shows what is stored, not what was typed.
+// Not under a press: a box that saves as it is left (a call time, a rate in Settings) is left by the press on the next
+// control, and a page drawn again between that press and its release takes the pressed control away, so the click
+// never comes (a tick box not ticked, a box not entered, an Add that adds nothing). The page is drawn once the press
+// has ended, a moment after the click it brought; a press that is held (a drag, a long press) waits 0.7 s at most.
+let downAt = 0, heldBack = false;
+const drawHeldBack = () => { downAt = 0; if (!heldBack) return; heldBack = false; setTimeout(() => { if (!redrawQueued) { redrawQueued = true; queueMicrotask(redraw); } }, 0); };
+document.addEventListener('pointerdown', () => { downAt = Date.now(); }, true);
+for (const t of ['pointerup', 'pointercancel']) document.addEventListener(t, drawHeldBack, true);
 function redraw() {
   redrawQueued = false;
+  if (downAt && Date.now() - downAt < 700) { if (!heldBack) { heldBack = true; setTimeout(() => { if (heldBack) drawHeldBack(); }, 700); } return; }
   const typed = !asStored; asStored = false;
   const p = current >= 0 && tabs[current] && tabs[current].page;
   if (!p || p.static) return; // a section still loading draws itself fresh when it arrives

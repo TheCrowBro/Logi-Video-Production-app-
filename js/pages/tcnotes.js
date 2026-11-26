@@ -268,6 +268,7 @@ export const tcnotes = {
       root.append(logView(log, t => { timer = t; }));
       window.scrollTo(0, y);
       typeOn(was);
+      if (S.focusPara) { const line = document.getElementById('sc-' + S.focusPara); S.focusPara = null; if (line) line.focus(); }
       if (S.shared) { const f = S.shared; S.shared = null; setTimeout(() => openImport(log, f), 50); }
     };
     S.redraw = draw;
@@ -318,17 +319,20 @@ function logView(log, setTimer) {
 
   // Composer: the stamp is taken when you start typing (that is the moment you saw it), and shown live.
   if (S.draftFor !== log.id) { S.draftFor = log.id; S.draft = ''; S.pending = null; } // another log: its own empty box, and no stamp from the last one
+  // The note being written is kept while another section is in front. The page says so on the body, where "Reload for
+  // the new version" looks before it reloads (js/update.js), so it asks first also when this section is not shown.
+  const held = () => document.body.toggleAttribute('data-draft-held', !!String(S.draft || '').trim()); held();
   const stamp = h('span', { class: 'tc-mono tc-stamp' }, sync ? '—' : 'not synced');
   const input = h('textarea', { rows: 2, placeholder: sync ? 'Type a note — timecode is captured when you start typing' : 'Sync first, or notes are stamped as “unsynced”', 'aria-label': 'New note', class: 'tc-compose', 'data-draft': '', value: S.draft }); // data-draft: its text is saved only by + Add note (js/update.js asks before a reload loses it)
   const refreshStamp = () => { stamp.textContent = S.pending != null ? fmt(S.pending, log) : (sync ? 'stamps when you type' : 'not synced'); };
   refreshStamp();
-  input.addEventListener('input', () => { S.draft = input.value; if (S.pending == null && input.value.trim()) { S.pending = nowFrames(log); refreshStamp(); } if (!input.value.trim()) { S.pending = null; refreshStamp(); } });
+  input.addEventListener('input', () => { S.draft = input.value; held(); if (S.pending == null && input.value.trim()) { S.pending = nowFrames(log); refreshStamp(); } if (!input.value.trim()) { S.pending = null; refreshStamp(); } });
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); add(); } });
   const add = () => {
     const text = input.value.trim();
     if (!text && S.pending == null) return;
     const frames = S.pending ?? nowFrames(log);
-    S.pending = null; S.draft = input.value = '';
+    S.pending = null; S.draft = input.value = ''; held();
     pushNote(log, { id: uid(), frames, text, at: new Date().toISOString() }); // re-renders the page
     document.querySelector('.tc-compose')?.focus(); haptic();
   };
@@ -549,7 +553,7 @@ function offsetIn(root, node, offset) {
 function paraEl(log, p, notes, bar) {
   const selected = S.target && S.target.para === p.id && S.target.start == null;
   const whole = notes.filter(n => n.start == null), ranged = notes.filter(n => n.start != null);
-  const el = h('div', { class: `sc-para kind-${p.kind}` + (selected ? ' sel' : ''), 'data-id': p.id, id: 'sc-' + p.id, role: 'button', tabindex: '0', 'aria-pressed': String(!!selected) },
+  const el = h('div', { class: `sc-para kind-${p.kind}` + (selected ? ' sel' : ''), 'data-id': p.id, id: 'sc-' + p.id, role: 'button', tabindex: '0', 'aria-pressed': String(!!selected), 'aria-label': quoteOf(p) },
     whole.length > 0 && h('div', { class: 'sc-gutter' }, whole.map(n => badge(log, n))),
     h('div', { class: 'sc-text' }, segments(log, p, ranged)));
   // Chosen or not is asked at the tap (S.target as it is now), not remembered from when the line was drawn.
@@ -564,7 +568,9 @@ function paraEl(log, p, notes, bar) {
     const s = document.getSelection(); if (s && !s.isCollapsed) return; // the user is selecting words
     pick();
   });
-  el.addEventListener('keydown', e => { if (e.target === el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pick(); } }); // from the keyboard, as a tap
+  // From the keyboard, as a tap; and the focus goes to Mark, which by Tab is as many presses away as there are lines
+  // left in the script. Mark gives it back to the line (commit, and draw above), so the next line is one Tab on.
+  el.addEventListener('keydown', e => { if (e.target === el && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); pick(); if (S.target) bar.el.querySelector('.actions .btn:not([disabled])')?.focus(); } });
   return el;
 }
 
@@ -599,7 +605,7 @@ function actionBar(log) {
     markBtn.disabled = noteBtn.disabled = !t;
   };
   const commit = (t, frames, text) => {
-    S.target = null; document.getSelection()?.removeAllRanges();
+    S.target = null; document.getSelection()?.removeAllRanges(); S.focusPara = el.contains(document.activeElement) ? t.para : null; // marked from the keyboard: the line has the focus again once the page is drawn
     pushNote(log, { id: uid(), frames, text, at: new Date().toISOString(), para: t.para, start: t.start, end: t.end, quote: t.quote });
     haptic(20); announce(`Marked ${frames == null ? 'unsynced' : fmt(frames, log)}`);
   };
@@ -617,6 +623,8 @@ function actionBar(log) {
   };
   tick(); const iv = setInterval(tick, 250);
   const el = h('div', { class: 'sc-bar' }, h('div', { class: 'card-row' }, info, live), h('div', { class: 'actions' }, markBtn, noteBtn));
+  // Escape on the bar lets the chosen line go and gives it the focus back: from the keyboard, the way back to a line that Enter chose
+  el.addEventListener('keydown', e => { if (e.key !== 'Escape' || !S.target || S.target.start != null) return; const line = document.getElementById('sc-' + S.target.para); if (!line) return; e.preventDefault(); line.click(); line.focus(); });
   return { el, set, stop: () => clearInterval(iv) };
 }
 

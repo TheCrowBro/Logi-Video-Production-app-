@@ -119,7 +119,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
       d.bookings.push(
         { id: 'cf-bare', title: 'Bare shoot', date: '2026-12-08', start: '08:00', end: '17:00', address: '1 Test Road', status: 'Confirmed', stakeholders: [], crew: [], gear: [], callSheet: { lunch: '12:30' } },
         { id: 'cf-far', title: 'Far shoot', date: '2026-12-08', start: '08:00', venueId: 'cf-far', status: 'Confirmed', stakeholders: [], crew: [], gear: [] }, { id: 'cf-near', title: 'Near shoot', date: '2026-12-08', start: '08:00', venueId: 'cf-near', status: 'Confirmed', stakeholders: [], crew: [], gear: [] },
-        { id: 'cf-days', title: 'Moved shoot', date: '2026-12-08', endDate: '2026-12-10', status: 'Confirmed', stakeholders: [], crew: [c1.id, c2.id], crewStatus: { [c2.id]: 'declined' }, gear: [], callSheet: { schedule: [{ id: 'a', date: '2026-12-01', time: '08:00', item: 'Day one' }, { id: 'b', date: '2026-12-02', time: '09:00', item: 'Day two' }, { id: 'c', date: '2026-12-09', time: '10:00', item: 'Middle day' }] } },
+        { id: 'cf-days', title: 'Moved shoot', date: '2026-12-08', endDate: '2026-12-10', status: 'Confirmed', stakeholders: [], crew: [c1.id, c2.id], crewStatus: { [c2.id]: 'declined' }, gear: [], callSheet: { schedule: [{ id: 'a', date: '2026-12-01', time: '08:00', item: 'Day one' }, { id: 'b', date: '2026-12-02', time: '09:00', item: 'Day two' }, { id: 'c', date: '2026-12-09', time: '10:00', item: 'Middle day' }, { id: 'd', time: '11:00', item: 'No date' }] } },
         { id: 'cf-shift', title: 'Shifting shoot', date: '2026-12-01', endDate: '2026-12-03', status: 'Confirmed', stakeholders: [], crew: [], gear: [], callSheet: { schedule: ['01', '02', '03'].map((d, i) => ({ id: 's' + i, date: '2026-12-' + d, time: '08:00', item: 'Line ' + (i + 1) })) } }); });
     const zeros = el => { const out = [], w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); for (let n; (n = w.nextNode());) if (/^0+$/.test(n.data.trim())) out.push(n.parentNode.tagName); return out; };
     const get = id => s.byId('bookings', id), bare = get('cf-bare'), days = get('cf-days');
@@ -133,7 +133,7 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   }));
   ok('a call sheet with no contacts, no kit and no crew prints no stray “0”, also in the editor and on a multi-day sheet, and no empty Kit heading', csFix.zeros.length === 0 && !csFix.kit, JSON.stringify({ zeros: csFix.zeros, kit: csFix.kit }));
   ok('the sheet’s text has one blank line between sections, never a run of them', csFix.gaps === 0 && csFix.endsClean, JSON.stringify(csFix.text || csFix.gaps));
-  ok('schedule lines dated outside the shoot (it was moved) are printed under its first day, on the sheet, in its text and on the crew link', csFix.lines === '2026-12-08 Day one,2026-12-08 Day two,2026-12-09 Middle day' && csFix.heads === 2 && csFix.rows === 3 && csFix.link === '2026-12-08,2026-12-08,2026-12-09' && csFix.asText === 3, JSON.stringify({ lines: csFix.lines, heads: csFix.heads, rows: csFix.rows, link: csFix.link }));
+  ok('a schedule line dated outside the shoot is printed under the date its editor shows, and a line with no date under the first day: on the sheet, in its text and on the crew link', csFix.lines === '2026-12-01 Day one,2026-12-02 Day two,2026-12-08 No date,2026-12-09 Middle day' && csFix.heads === 4 && csFix.rows === 4 && csFix.link === '2026-12-01,2026-12-02,2026-12-08,2026-12-09' && csFix.asText === 3, JSON.stringify({ lines: csFix.lines, heads: csFix.heads, rows: csFix.rows, link: csFix.link }));
   ok('a crew member who declined is not on the call sheet or the crew link', csFix.crew === csFix.first && csFix.linkCrew === csFix.first, csFix.crew + ' / ' + csFix.linkCrew);
   ok('sun times for a venue on another clock name their zone and say they are not the venue’s local time; a venue on this clock reads as before', csFix.far.includes(' ' + csFix.zone + ' ·') && /not the venue’s local time/.test(csFix.far) && csFix.farBox.includes(csFix.zone) && !csFix.near.includes(csFix.zone) && !/local time/.test(csFix.near), JSON.stringify({ far: csFix.far, near: csFix.near, zone: csFix.zone }));
   // Moving the shoot in its form moves the schedule lines with it; one day clears their dates
@@ -146,6 +146,14 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await cform.locator('input[data-key="endDate"]').fill(''); await cform.locator('button[type=submit]').click(); await sleep(400);
   const oneDay = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js')]).then(([s, m]) => { const b = s.byId('bookings', 'cf-shift'); return { dates: b.callSheet.schedule.map(r => r.date).join(), rows: m.renderDoc(b).querySelectorAll('.cs-sec table tbody tr').length }; }));
   ok('a shoot moved a week in its form takes its schedule lines with it, and cut to one day its lines lose their dates and are all printed', movedLines === '2026-12-08,2026-12-09,2026-12-10' && oneDay.dates === ',,' && oneDay.rows === 3, movedLines + ' / ' + JSON.stringify(oneDay));
+  // A restore stamps the stripboard as changed now (for the merge); the scenes themselves were not changed
+  const restored = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/callsheet.js')]).then(([s, m]) => { const t = Date.now() - 864e5, get = () => s.byId('bookings', 'cf-sent');
+    s.update(d => { d.bookings.push({ id: 'cf-sent', title: 'Sent sheet', date: '2026-12-08', endDate: '2026-12-10', status: 'Confirmed', stakeholders: [], crew: [], gear: [], board: { list: [{ id: 'day-1', type: 'break' }, { id: 'sc1', type: 'scene', scene: '1', set: 'Hall' }], cast: [], updatedAt: t - 1000 }, callSheet: { generalCall: '08:00', version: 2, editedAt: t - 500, sentAt: t } }); });
+    const out = { before: m.sheetState(get()) };
+    s.replaceAll(JSON.parse(s.exportJSON())); out.after = m.sheetState(get()); s.replaceAll(JSON.parse(s.exportJSON())); out.twice = m.sheetState(get());
+    s.update(d => { const x = d.bookings.find(b => b.id === 'cf-sent'); x.board = { list: [...x.board.list, { id: 'sc2', type: 'scene', scene: '2', set: 'Yard' }], cast: [], updatedAt: Date.now() }; x.updatedAt = Date.now(); }); out.edited = m.sheetState(get());
+    s.remove('bookings', 'cf-sent'); return out; }));
+  ok('a call sheet that was sent still reads Sent after a backup is restored, twice over, and Changed once its stripboard is edited', restored.before === 'sent' && restored.after === 'sent' && restored.twice === 'sent' && restored.edited === 'changed', JSON.stringify(restored));
   // Sent, then the booking changes: the sheet says it changed; and a sheet sent as built is no "Draft"
   await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-bare', { view: 'callsheet' }))); await page.waitForSelector('.cs-page .cs-doc');
   await page.getByRole('button', { name: 'Mark as sent' }).click(); await sleep(300);
@@ -166,6 +174,17 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.getByRole('button', { name: 'Cancel' }).click(); await page.waitForFunction(() => !document.querySelector('.cs-paper.editing'));
   const afterCancel = await page.evaluate(() => import('./js/store.js').then(s => s.byId('bookings', 'cf-bare').callSheet.lunch));
   ok('a call sheet being edited is saved when Vdex goes to the background, the editing carries on, and Cancel still takes the edit back', hiddenSave === '13:15' && stillEditing === 1 && afterCancel === '12:30', JSON.stringify({ hiddenSave, stillEditing, afterCancel }));
+  // The crew table on a phone: a phone number and an email address wrap inside their cells, so the table ends at the
+  // paper's edge and the Email column is not cut off (names and roles keep whole words)
+  await page.evaluate(() => import('./js/store.js').then(s => { const crew = [['cw-1', 'Sam Rivera', 'Sound Recordist', '+1 555 0101', 'sam.rivera@example.com'], ['cw-2', 'Jo Chen', '1st AC', '+1 555 0102', 'jo@example.com'], ['cw-3', 'Priya Nair', 'Editor', '+1 555 0104', 'priya.nair@example.com']];
+    s.update(d => { for (const [id, name, role, phone, email] of crew) d.crew.push({ id, name, role, phone, email, updatedAt: Date.now() }); d.bookings.push({ id: 'cf-phone', title: 'Crew table', date: '2026-12-08', start: '08:00', status: 'Confirmed', stakeholders: [], crew: crew.map(c => c[0]), gear: [], updatedAt: Date.now() }); }); }));
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('cf-phone', { view: 'callsheet' }))); await page.waitForSelector('.cs-paper table');
+  const fits = [];
+  for (const width of [320, 360, 390]) { await page.setViewportSize({ width, height: 800 }); await sleep(250);
+    fits.push(await page.evaluate(() => { const paper = document.querySelector('.cs-paper'), t = [...paper.querySelectorAll('table')].find(x => /Email/.test(x.textContent)), words = [...t.querySelectorAll('td')].filter(td => /^(Sam Rivera|Sound Recordist|1st AC)$/.test(td.textContent)).every(td => getComputedStyle(td).overflowWrap !== 'anywhere');
+      return { inside: paper.scrollWidth <= paper.clientWidth + 1 && t.getBoundingClientRect().right <= paper.getBoundingClientRect().right + 1, words, page: document.documentElement.scrollWidth <= innerWidth }; })); }
+  ok('at 320, 360 and 390 px the call sheet’s crew table ends at the paper’s edge: the email address wraps in its cell, names and roles keep whole words', fits.every(f => f.inside && f.words && f.page), JSON.stringify(fits));
+  await page.setViewportSize({ width: 420, height: 900 }); await sleep(200);
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.error('TEST CRASHED', e); process.exit(1); });

@@ -94,6 +94,11 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('.sheet input[type=number]').nth(1).fill('300');
   await page.locator('.sheet button:has-text("Save")').click(); await sleep(400);
   ok('a quantity can be a half day', await page.evaluate(id => import('./js/store.js').then(s => s.byId('bookings', id).budget.lines.some(l => l.desc === 'Half-day grip' && Number(l.qty) === 1.5)), seed.id));
+  // A category unfolded by hand is still unfolded after a line in it is saved (the save draws the page again)
+  await page.locator('#bk-budget details.budget-cat:has-text("Travel & transport") > summary').click(); await sleep(200);
+  await page.locator('#bk-budget button.budget-line:has-text("Van")').click(); await page.waitForSelector('.sheet');
+  await page.locator('.sheet button:has-text("Save")').click(); await sleep(400);
+  ok('a budget category stays unfolded after one of its lines is saved', await page.locator('#bk-budget details.budget-cat:has-text("Travel & transport")').evaluate(d => d.open));
   await page.locator('#bk-budget details.budget-cat:has-text("Equipment hire")').evaluate(d => { d.open = true; });
   await page.locator('#bk-budget button.budget-line:has-text("Prism lens")').click(); await page.waitForSelector('.sheet');
   await page.locator('.sheet button:has-text("Delete")').click(); await sleep(400);

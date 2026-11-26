@@ -71,6 +71,39 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('the sheet behind the menu’s storage row carries the same name and the backups', (await page.locator('.sheet[aria-label="Storage, sync & backups"]').count()) === 1 && (await page.locator('.sheet').getByRole('button', { name: 'Export backup' }).count()) === 1);
   await page.keyboard.press('Escape'); await sleep(250);
 
+  // ---- boxes that save as they are left: the next box still gets the focus, and what is typed there ----
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.evaluate(() => window.logiGo('settings')); await sleep(400);
+  await page.evaluate(() => { document.querySelectorAll('#page details').forEach(d => { d.open = true; }); }); await sleep(400);
+  await page.evaluate(() => import('./js/money.js').then(m => m.setBilling({ dayRate: '', hourRate: '', overtimeRate: '', kitRate: '' }))); await sleep(300);
+  const focusOn = () => page.evaluate(() => { const a = document.activeElement; return a === document.body ? 'nothing' : a.getAttribute('aria-label') || a.tagName; });
+  const rates = () => page.evaluate(() => import('./js/money.js').then(m => { const b = m.billing(); return [b.dayRate, b.hourRate, b.overtimeRate, b.kitRate].join('/'); }));
+  const QI = '#page details[data-s="Quotes & invoices"] input';
+  const dayBox = page.locator(QI + '[aria-label^="Day rate"]'); await dayBox.scrollIntoViewIfNeeded(); await dayBox.click(); await page.keyboard.type('650'); await page.keyboard.press('Tab'); await sleep(300);
+  const tab1 = await focusOn(); await page.keyboard.type('75'); await page.keyboard.press('Tab'); await sleep(300);
+  const tab2 = await focusOn();
+  ok('a rate typed, Tab, the next rate typed, Tab: the focus goes from box to box and both rates are stored', /^Hour rate/.test(tab1) && /^Overtime/.test(tab2) && (await rates()) === '650/75//', JSON.stringify([tab1, tab2, await rates()]));
+  await page.locator(QI + '[aria-label^="Overtime"]').click(); await page.keyboard.type('95');
+  const kitBox = await page.locator(QI + '[aria-label^="Equipment package"]').boundingBox(); await page.mouse.click(kitBox.x + kitBox.width / 2, kitBox.y + kitBox.height / 2); await sleep(400);
+  const clicked = await focusOn(); await page.keyboard.type('120'); await page.keyboard.press('Tab'); await sleep(300);
+  ok('…and one click into the next box after typing a rate puts the cursor there: both are stored', /^Equipment package/.test(clicked) && (await rates()) === '650/75/95/120', JSON.stringify([clicked, await rates()]));
+  // the currency box shows what was stored, not what was typed
+  const cur = page.locator('#page input[aria-label="Currency symbol"]'); await cur.scrollIntoViewIfNeeded();
+  const curNow = async typed => { await cur.click(); await cur.press('Control+a'); await cur.press('Delete'); if (typed) await page.keyboard.type(typed); await page.keyboard.press('Enter'); await sleep(350); return [await page.evaluate(() => import('./js/store.js').then(s => s.db.profile.currency)), await page.locator('#page input[aria-label="Currency symbol"]').inputValue()].join('|'); };
+  const curSpaced = await curNow(' £ '), curEmpty = await curNow('');
+  ok('a currency symbol typed with spaces, or emptied, shows in its box as it was stored', curSpaced === '£|£' && curEmpty === '$|$', curSpaced + ' / ' + curEmpty);
+  await curNow('€');
+  // a job type's checklists stay unfolded while they are edited: every save draws the page again
+  const wed = page.locator('#page details.twirl', { has: page.locator('.twirl-name', { hasText: /Wedding/ }) }).first();
+  await wed.evaluate(d => { d.open = false; }); await wed.locator('summary').click(); await sleep(200);
+  const enq = wed.locator('textarea[aria-label$="Enquiry checklist"]'); await enq.click(); await page.keyboard.press('Control+End'); await page.keyboard.type('\nAsk about the venue curfew');
+  const quoted = await wed.locator('textarea[aria-label$="Quoted checklist"]').boundingBox(); await page.mouse.click(quoted.x + 20, quoted.y + 10); await sleep(400);
+  const inQuoted = await focusOn(); await page.keyboard.press('Control+End'); await page.keyboard.type('\nSend the contract'); await page.keyboard.press('Tab'); await sleep(400);
+  const tplNow = await page.evaluate(() => import('./js/store.js').then(s => { const t = (s.db.templates || {}).wedding || {}; return { enquiry: (t.Enquiry || []).slice(-1)[0], quoted: (t.Quoted || []).slice(-1)[0], open: [...document.querySelectorAll('#page details.twirl')].filter(d => /Wedding/.test(d.querySelector('.twirl-name')?.textContent || '')).map(d => d.open).join() }; }));
+  ok('a job type stays unfolded while its checklists are edited: a line added to one stage, a click into the next, a line added there, and both are stored', /Quoted checklist$/.test(inQuoted) && tplNow.enquiry === 'Ask about the venue curfew' && tplNow.quoted === 'Send the contract' && tplNow.open === 'true', JSON.stringify([inQuoted, tplNow]));
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { if (d.templates) { delete d.templates.wedding; d.templates.updatedAt = Date.now(); } }))); await sleep(200);
+  await page.setViewportSize({ width: 420, height: 900 }); await sleep(200);
+
   // ---- the Settings tutorial walks the groups and their sections ----
   await page.evaluate(() => window.logiGo('settings')); await sleep(400);
   const steps = await page.evaluate(async () => { const m = await import('./js/tutorials.js'); return m.TUTORIALS.settings.dynamic().map(s => s.title); });

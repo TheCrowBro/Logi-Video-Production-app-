@@ -166,6 +166,7 @@ export function editMoney(b, kind, onDone, preset) {
   });
 }
 
+const CAT_OPEN = new Set(); // the budget categories unfolded on a booking's page: a line saved there draws the page again, and its category is open still
 /* --------------------------------- documents --------------------------------- */
 const dateLabel = b => (endOf(b) > b.date ? `${fmtLong(b.date)} → ${fmtLong(endOf(b))}` : fmtLong(b.date));
 const partyLines = () => { const p = db.profile; return [p.business || p.name, p.business && p.name ? p.name : null, p.phone, p.email, p.website, p.location].filter(Boolean); };
@@ -427,7 +428,7 @@ export function budgetBlock(b) {
         ? [h('div', { class: 'stats' }, stat(fmtMoney(t.est), 'Estimate'), stat(fmtMoney(t.spent), 'Spent so far'), stat(fmtMoney(t.toPay), 'Still to pay')),
           Math.abs(t.forecast - t.est) > 0.005 && h('p', { class: 'small' + (t.forecast > t.est ? ' overdue' : '') }, `Expected total cost, with the actual costs so far: ${fmtMoney(t.forecast)} (${t.forecast > t.est ? fmtMoney(t.forecast - t.est) + ' over' : fmtMoney(t.est - t.forecast) + ' under'} the estimate).`),
           t.quoted != null && h('p', { class: 'small' + (t.margin < 0 ? ' overdue' : '') }, `Quoted to the client: ${fmtMoney(t.quoted)} before tax. Left for you after costs: ${fmtMoney(t.margin)}${t.quoted > 0 ? ` (${Math.round(t.margin / t.quoted * 100)}%)` : ''}.`),
-          ...t.byCat.map(c => h('details', { class: 'twirl budget-cat' }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, c.cat), h('span', { class: 'twirl-sub' }, `${c.lines.length} line${c.lines.length === 1 ? '' : 's'} · ${fmtMoney(c.est)}${c.spent ? ' · spent ' + fmtMoney(c.spent) : ''}`))),
+          ...t.byCat.map(c => h('details', { class: 'twirl budget-cat', open: CAT_OPEN.has(b.id + '|' + c.cat), ontoggle: e => { if (!e.target.isConnected) return; const k = b.id + '|' + c.cat; if (e.target.open) CAT_OPEN.add(k); else CAT_OPEN.delete(k); } }, h('summary', null, h('span', null, h('span', { class: 'twirl-name' }, c.cat), h('span', { class: 'twirl-sub' }, `${c.lines.length} line${c.lines.length === 1 ? '' : 's'} · ${fmtMoney(c.est)}${c.spent ? ' · spent ' + fmtMoney(c.spent) : ''}`))),
             h('div', { class: 'twirl-body stack' }, c.lines.map(line))))]
         : h('p', { class: 'muted small' }, 'Plan what this job will cost you: crew, hires, travel, locations and more. Only you see it: it never goes into a quote, an invoice or a crew link.'),
       h('div', { class: 'actions' },
@@ -502,9 +503,13 @@ function payMethodsList() {
 export function billingPanel() {
   const wrap = h('div', { class: 'stack' });
   const bl = billing();
+  // A box saves as it is left, a moment later: the focus has then arrived in the next box (by Tab or by a click), and
+  // the page drawn again by the save keeps it there. Saved at once, the page was drawn while the focus was nowhere, and
+  // the next box had to be entered twice (every second rate typed went missing).
+  const later = patch => setTimeout(() => setBilling(patch), 0);
   const field = (label, key, type = 'text', extra = {}) => h('div', { class: 'field' }, h('label', null, label), type === 'textarea'
-    ? h('textarea', { rows: 2, value: bl[key] ?? '', 'aria-label': label, onchange: e => setBilling({ [key]: e.target.value }) })
-    : h('input', { type, value: bl[key] ?? '', 'aria-label': label, inputMode: type === 'number' ? 'decimal' : null, ...extra, onchange: e => setBilling({ [key]: type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value }) }));
+    ? h('textarea', { rows: 2, value: bl[key] ?? '', 'aria-label': label, onchange: e => later({ [key]: e.target.value }) })
+    : h('input', { type, value: bl[key] ?? '', 'aria-label': label, inputMode: type === 'number' ? 'decimal' : null, ...extra, onchange: e => later({ [key]: type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value }) }));
   wrap.append(
     h('p', { class: 'small muted' }, 'Rates feed the suggested lines on quotes and invoices; each crew member’s day or hourly rate is on their own card (an hourly rate is quoted for a standard day’s hours per shoot day). Your name, business, phone and email come from your profile (Settings → General → Profile).'),
     h('div', { class: 'grid2' }, field(`Day rate (${sym()})`, 'dayRate', 'number', { min: 0 }), field(`Hour rate for editing (${sym()})`, 'hourRate', 'number', { min: 0 }), field(`Overtime hour rate (${sym()})`, 'overtimeRate', 'number', { min: 0 }), field(`Equipment package per day (${sym()})`, 'kitRate', 'number', { min: 0 })),

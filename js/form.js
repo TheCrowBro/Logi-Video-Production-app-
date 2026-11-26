@@ -164,6 +164,9 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
   const refuse = (el, message) => { if (!el || !el.setCustomValidity) return; el.setCustomValidity(message); refused.add(el); el.reportValidity(); };
   const clearRefused = () => { refused.forEach(el => el.setCustomValidity('')); refused.clear(); };
   form.addEventListener('input', clearRefused); form.addEventListener('change', clearRefused);
+  // …and at every Save, before the browser's own check (which would stop the submit below from ever running): a box
+  // that the form's buttons filled since it was refused (a place found from the address) fires neither event.
+  form.querySelector('[type=submit]')?.addEventListener('click', clearRefused);
   form.addEventListener('submit', e => {
     e.preventDefault();
     clearRefused();

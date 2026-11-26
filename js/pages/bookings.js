@@ -46,7 +46,9 @@ export const bookings = {
   render(root) {
     // A page drawn again in place (after a form was saved, a line added) gives the focus back to the control that had
     // it, as the redraw after every change does: a keyboard or a screen reader is not sent back to the top of the page.
-    const go = patch => { if (patch.view && patch.view !== 'callsheet') commitDraft(); Object.assign(S, patch); redrawKeeping(root, draw); window.scrollTo({ top: 0 }); };
+    // What was being typed stays only when the same booking and view are drawn again: opened from the search with a
+    // half-typed shot in the box, another booking would otherwise show that text in its own box.
+    const go = patch => { if (patch.view && patch.view !== 'callsheet') commitDraft(); const same = (patch.id == null || patch.id === S.id) && (patch.view == null || patch.view === S.view); Object.assign(S, patch); redrawKeeping(root, draw, { typed: same }); window.scrollTo({ top: 0 }); };
     GO = go;
     const draw = () => {
       if ((S.view === 'booking' || S.view === 'callsheet' || S.view === 'money' || S.view === 'strips') && !byId('bookings', S.id)) S.view = 'day';

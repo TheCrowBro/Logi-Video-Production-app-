@@ -176,16 +176,25 @@ export const defaultLines = (type, stage) => [...(BASE[stage] || []), ...((EXTRA
 // Arabic, Chinese, emoji…) and the same for two lines that differ only in punctuation, and those lines would share
 // one tick: such a line gets a short stable mark of its whole text after the id. A line whose id is its own keeps it,
 // so the ticks already on bookings stay.
-export function itemsFor(b, stage) {
+// A line that got a mark was ticked, before marks, under the plain id it shared: that tick goes on counting for it
+// (a line ticked before the update is ticked after it) until the booking's ticks are next changed. Then each such
+// line gets its tick written under its own id (ownTicks), the booking says so (ticksOwn), and from there on every
+// line answers for itself alone.
+function linesOf(b, stage) {
   const tpl = templateFor(b.type)[stage] || [], used = new Set();
-  const idOf = t => { let id = itemId(stage, t); if (id.endsWith(':') || used.has(id)) id += '~' + shortHash(t); used.add(id); return id; };
+  const idOf = t => { const plain = itemId(stage, t); let id = plain; if (id.endsWith(':') || used.has(id)) id += '~' + shortHash(t); used.add(id); return { id, plain }; };
+  return tpl.map(x => ({ ...x, ...idOf(x.t) }));
+}
+const shared = (b, x) => !b.ticksOwn && x.plain !== x.id && !(b.checks && x.id in b.checks) && !!(b.checks && b.checks[x.plain]); // its tick is still the one from before marks
+const ownTicks = x => { if (x.ticksOwn) return; for (const [stage] of STAGES) for (const l of linesOf(x, stage)) if (shared(x, l)) x.checks[l.id] = x.checks[l.plain]; x.ticksOwn = 1; };
+export function itemsFor(b, stage) {
   const extra = (b.extraChecks || []).filter(x => x.stage === stage).map(x => ({ t: x.text, id: x.id, custom: true }));
-  return [...tpl.map(x => ({ ...x, id: idOf(x.t) })), ...extra].map(x => ({ ...x, done: !!(b.checks && b.checks[x.id]) }));
+  return [...linesOf(b, stage).map(({ plain, ...x }) => ({ ...x, done: !!(b.checks && b.checks[x.id]) || shared(b, { ...x, plain }) })), ...extra.map(x => ({ ...x, done: !!(b.checks && b.checks[x.id]) }))];
 }
 export const progress = (b, stage) => { const items = itemsFor(b, stage); return { done: items.filter(x => x.done).length, total: items.length }; };
-export const setCheck = (b, id, done) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (!x) return; x.checks = { ...(x.checks || {}) }; if (done) x.checks[id] = Date.now(); else delete x.checks[id]; x.updatedAt = Date.now(); });
+export const setCheck = (b, id, done) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (!x) return; x.checks = { ...(x.checks || {}) }; ownTicks(x); if (done) x.checks[id] = Date.now(); else delete x.checks[id]; x.updatedAt = Date.now(); });
 // A whole stage at once: one change, one redraw, one sync push; each item still gets its own time.
-export const setChecks = (b, ids, done) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (!x) return; x.checks = { ...(x.checks || {}) }; for (const id of ids) { if (done) x.checks[id] = Date.now(); else delete x.checks[id]; } x.updatedAt = Date.now(); });
+export const setChecks = (b, ids, done) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (!x) return; x.checks = { ...(x.checks || {}) }; ownTicks(x); for (const id of ids) { if (done) x.checks[id] = Date.now(); else delete x.checks[id]; } x.updatedAt = Date.now(); });
 // Moving the stage by hand also forgets a "no" to archiving, so the question can come again once everything is done.
 export const setStage = (b, stage) => update(d => { const x = d.bookings.find(y => y.id === b.id); if (x) { x.status = stage; delete x.archiveAsked; x.updatedAt = Date.now(); } });
 // Every stage's checklist complete (stages with items): the project can be archived.
@@ -374,9 +383,11 @@ export function crewRow(b, c, { sub = '', onEdit = null } = {}) {
   const sel = h('select', { 'aria-label': `${c.name} status`, onchange: e => patch(b, x => { x.crewStatus = { ...(x.crewStatus || {}), [c.id]: e.target.value }; }) }, CREW_STATES.map(([v, l]) => h('option', { value: v, selected: v === st }, l)));
   // Saved when the box is left or Enter is pressed, not on every change: with a keyboard a browser reports a change
   // after each part of a time typed over another, and each save draws the page again under the box. A time chosen in
-  // a phone's picker (no keyboard: a coarse pointer) comes as one change and is saved at once.
+  // a phone's picker (no keyboard: a coarse pointer) comes as one change and is saved at once. Leaving the box saves a
+  // moment later, once the focus has arrived where it was going: the page drawn again then keeps it there (Tab goes on
+  // to the next control, and a click that left the box still lands: js/app.js holds the redraw back under a press).
   const saveCall = () => { const v = callIn.value, cur = ((byId('bookings', b.id) || b).crewCall || {})[c.id] || ''; if (v !== cur) patch(b, x => { x.crewCall = { ...(x.crewCall || {}), [c.id]: v }; }); };
-  const callIn = h('input', { type: 'time', value: call, 'aria-label': `${c.name} call time`, onblur: saveCall, onchange: () => { if (window.matchMedia && matchMedia('(pointer: coarse)').matches) saveCall(); }, onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); saveCall(); } } });
+  const callIn = h('input', { type: 'time', value: call, 'aria-label': `${c.name} call time`, onblur: () => setTimeout(saveCall, 0), onchange: () => { if (window.matchMedia && matchMedia('(pointer: coarse)').matches) saveCall(); }, onkeydown: e => { if (e.key === 'Enter') { e.preventDefault(); saveCall(); } } });
   const ask = `Hi ${String(c.name || '').split(' ')[0]}, are you free for "${b.title}" on ${fmtShort(b.date)}${b.start ? ' from ' + b.start : ''}${b.address ? ' at ' + b.address.split('\n')[0] : ''}? Role: ${c.role || 'crew'}. Let me know and I’ll send the call sheet.`;
   return h('div', { class: 'card crew-line' },
     h('div', { class: 'card-row' }, h('div', null, h('strong', null, c.name), h('div', { class: 'muted' }, [c.role, sub].filter(Boolean).join(' · '))), h('span', { class: 'pill ' + (st === 'confirmed' ? 'st-confirmed' : st === 'declined' ? 'st-cancelled' : st === 'asked' ? 'st-enquiry' : '') }, CREW_STATES.find(x => x[0] === st)[1])),
@@ -385,12 +396,15 @@ export function crewRow(b, c, { sub = '', onEdit = null } = {}) {
 }
 
 /* ----------------------------- templates editor ----------------------------- */
+// TPL_OPEN: the job types whose checklists are unfolded: the page drawn again (every save draws it) shows them open
+// still. A box saves a moment after it is left, once the focus has arrived in the next box, which the redraw keeps.
+const TPL_OPEN = new Set();
 export function templatesPanel() {
   const wrap = h('div', { class: 'stack' });
   const draw = () => {
     wrap.replaceChildren(...nodes(h('p', { class: 'small muted' }, 'One checklist item per line. Items with an arrow in the app (call sheet, kit, media…) keep their shortcut if you leave their wording as it is. Changes apply to every booking of that type.'),
-      [...projectTemplates().map(t => [t.id, `${t.icon || '📐'} ${t.name} (yours)`]), ...TYPES].map(([type, label]) => h('details', { class: 'twirl' }, h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, '📋'), h('span', null, h('span', { class: 'twirl-name' }, label), h('span', { class: 'twirl-sub' }, db.templates && db.templates[type] ? 'customised' : 'default'))),
-        h('div', { class: 'twirl-body' }, STAGES.map(([stage]) => { const lines = templateFor(type)[stage].map(x => x.t); const ta = h('textarea', { rows: Math.min(8, lines.length + 1), value: lines.join('\n'), 'aria-label': `${label}: ${stage} checklist` }); ta.addEventListener('change', () => update(d => { d.templates = d.templates || {}; d.templates[type] = { ...(d.templates[type] || {}), [stage]: ta.value.split('\n').map(s => s.trim()).filter(Boolean) }; d.templates.updatedAt = Date.now(); })); return h('div', { class: 'field' }, h('label', null, stage), ta); }),
+      [...projectTemplates().map(t => [t.id, `${t.icon || '📐'} ${t.name} (yours)`]), ...TYPES].map(([type, label]) => h('details', { class: 'twirl', open: TPL_OPEN.has(type), ontoggle: e => { if (!e.target.isConnected) return; if (e.target.open) TPL_OPEN.add(type); else TPL_OPEN.delete(type); } }, h('summary', null, h('span', { class: 'twirl-ico', 'aria-hidden': 'true' }, '📋'), h('span', null, h('span', { class: 'twirl-name' }, label), h('span', { class: 'twirl-sub' }, db.templates && db.templates[type] ? 'customised' : 'default'))),
+        h('div', { class: 'twirl-body' }, STAGES.map(([stage]) => { const lines = templateFor(type)[stage].map(x => x.t); const ta = h('textarea', { rows: Math.min(8, lines.length + 1), value: lines.join('\n'), 'aria-label': `${label}: ${stage} checklist` }); ta.addEventListener('change', () => { const v = ta.value; setTimeout(() => update(d => { d.templates = d.templates || {}; d.templates[type] = { ...(d.templates[type] || {}), [stage]: v.split('\n').map(s => s.trim()).filter(Boolean) }; d.templates.updatedAt = Date.now(); }), 0); }); return h('div', { class: 'field' }, h('label', null, stage), ta); }),
           h('button', { class: 'btn ghost small', onclick: () => { update(d => { if (d.templates) { delete d.templates[type]; d.templates.updatedAt = Date.now(); } }); toast('Reset to defaults'); draw(); } }, 'Reset this type to defaults'))))));
   };
   draw();

@@ -348,6 +348,14 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .check-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .check-row .check { flex: 1; min-width: 0; }
 .stepper { display: flex; align-items: center; flex: none; }
+/* The narrowest phones at the larger text sizes: a name and its pill, or an item and its quantity, no longer fit one
+   row. The pill goes under the name (which kept breaking inside a word to make room) and the quantity under the item
+   (which pushed the list wider than its form). */
+@media (max-width: 400px) {
+  html[data-text=large] .card-row, html[data-text=xlarge] .card-row { flex-wrap: wrap; }
+  html[data-text=large] .card-row > .grow, html[data-text=large] .card-row > div:first-child, html[data-text=xlarge] .card-row > .grow, html[data-text=xlarge] .card-row > div:first-child { flex: 1 1 9rem; }
+  html[data-text=large] .check-row, html[data-text=xlarge] .check-row { flex-wrap: wrap; justify-content: flex-end; }
+}
 .stepper input { width: 3.2rem; text-align: center; padding-left: 4px; padding-right: 4px; -moz-appearance: textfield; appearance: textfield; }
 .stepper input::-webkit-outer-spin-button, .stepper input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 .stepper .icon-btn { border: 1px solid var(--line); color: var(--text); font-size: 1.3rem; }
@@ -401,6 +409,7 @@ html[data-motion=off] *, html[data-motion=off] *::before, html[data-motion=off] 
 .sc-head { margin: 4px 0 8px; flex-wrap: wrap; } .sc-head .actions { margin: 0; }
 .sc-body { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px 10px 8px; display: grid; gap: 2px; user-select: text; -webkit-user-select: text; -webkit-touch-callout: none; }
 .sc-para { display: grid; grid-template-columns: 2.6rem 1fr; gap: 4px; padding: 6px 4px; border-radius: 8px; border-left: 3px solid transparent; cursor: pointer; line-height: 1.5; }
+.sc-para { scroll-margin-bottom: 11rem; } /* a line reached by Tab is scrolled clear of the Mark bar, which stays at the foot of the screen */
 .sc-para:hover { background: var(--bg2); } .sc-para:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
 .sc-para.sel { background: color-mix(in srgb, var(--accent) 16%, var(--card)); border-left-color: var(--accent); }
 .sc-para.flash { background: color-mix(in srgb, var(--accent) 30%, var(--card)); }
@@ -696,6 +705,7 @@ body.has-licence-bar.has-update-bar #page { padding-bottom: 180px; }
 .cs-paper .money-parties h4 { margin: 0 0 4px; font-size: .66rem; letter-spacing: .14em; text-transform: uppercase; opacity: .7; }
 .cs-paper .money-totals { margin: 8px 0 0 auto; max-width: 320px; } .cs-paper .money-totals .cs-kv { grid-template-columns: 1fr auto; text-align: right; } .cs-paper .money-totals .total b { font-size: 1rem; }
 .cs-paper th.num, .cs-paper td.num { text-align: right; white-space: nowrap; }
+.cs-paper td.free { overflow-wrap: anywhere; } /* a phone number or an email address is one long word: it wraps inside its cell, so the crew table stays on the paper on a phone */
 .money-pills { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
 /* The money overview on a phone: the four totals two by two, and a booking's quote and invoice under its name when they do not fit beside it. */
 .money-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }

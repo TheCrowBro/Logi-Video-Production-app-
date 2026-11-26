@@ -262,12 +262,13 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       return route.fulfill({ status: 405, headers: CORS });
     });
     const scriptErrors = [];
-    const device = async (cloud, name, { linked = true, width = 420, seed = null } = {}) => {
+    const device = async (cloud, name, { linked = true, width = 420, seed = null, clock = 0 } = {}) => { // clock: how far this device's clock is out (ms)
       const ctx = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
       await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
       await ctx.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: `export const CLOUD_APPS = ${JSON.stringify(IDS)};` }));
       await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); window.__toasts = []; addEventListener('DOMContentLoaded', () => new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true })); });
       await ctx.addInitScript(acceptTerms());
+      if (clock) await ctx.addInitScript(off => { const R = Date, real = R.now.bind(R); class D extends R { constructor(...a) { if (a.length) super(...a); else super(real() + off); } static now() { return real() + off; } } window.Date = D; }, clock);
       // what a device holds before its first start: the link to the storage, and anything else the case gives it (once: a reload keeps what Vdex then wrote)
       await ctx.addInitScript(([linked, seed]) => { if (localStorage.getItem('case-seeded')) return; localStorage.setItem('case-seeded', '1'); if (linked) { localStorage.setItem('logi-webdav', JSON.stringify({ kind: 'webdav', url: 'https://dav.example/vdex', user: 'u', pass: 'p' })); localStorage.setItem('logi-provider', 'webdav'); } for (const [k, v] of Object.entries(seed || {})) localStorage.setItem(k, v); }, [linked, seed]);
       if (cloud) await dav(ctx, cloud, name);
@@ -399,6 +400,87 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     ok('Erase all data while a sync is reading leaves nothing on the device', (await st(A.page, s => [s.db.bookings.length, s.db.crew.length, s.db.gear.length, !!s.cloud.adapter].join())) === '0,0,0,false' && (await A.page.evaluate(() => JSON.parse(localStorage.getItem('logi-db-v1') || '{"bookings":[]}').bookings.length)) === 0);
     await A.ctx.close(); await B.ctx.close();
 
+    // ---- found by the second check of these repairs ----
+    // A restore on a device whose clock is out: 20 minutes behind it must still outrank what that device has taken
+    // from the cloud; 20 minutes ahead it must not outrank what the other device does afterwards.
+    for (const [word, off] of [['behind', -20 * 60e3], ['ahead', 20 * 60e3]]) {
+      const cl = newCloud(), P = await device(cl, 'P', { clock: off }), Q = await device(cl, 'Q');
+      await start(Q.page); await add(Q.page, 'b1', 'One'); await add(Q.page, 'b2', 'Two as in the backup'); await saved(Q.page);
+      await start(P.page); await synced(P.page);
+      const file = await st(P.page, s => s.exportJSON());
+      await st(Q.page, s => { s.remove('bookings', 'b1'); s.upsert('bookings', { ...s.byId('bookings', 'b2'), title: 'Two changed since' }); }); await add(Q.page, 'b3', 'Three made since'); await saved(Q.page);
+      await syncNow(P.page); const before = (await held(P.page)).join();
+      await P.page.evaluate(text => import('./js/backup.js').then(m => m.importData(new File([text], 'file.json'))), file);
+      await saved(P.page); await syncNow(Q.page); await syncNow(P.page);
+      const want = 'b1:One,b2:Two as in the backup', restored = [(await held(P.page)).join(), (await held(Q.page)).join()];
+      ok(`a restore on a device whose clock is 20 minutes ${word} holds after the sync, on both devices`, before === 'b2:Two changed since,b3:Three made since' && restored[0] === want && restored[1] === want, JSON.stringify([before, ...restored]));
+      // …and work done on the other device afterwards is kept: an edit through the form, a deletion, a tick (stamped by its own code) and a payment on an invoice
+      await st(Q.page, s => { s.upsert('bookings', { ...s.byId('bookings', 'b2'), title: 'Two edited after the restore', invoice: { number: 'INV-1', status: 'Sent', lines: [], payments: [{ id: 'p', amount: 5 }], updatedAt: Date.now() } }); s.remove('bookings', 'b1'); s.update(d => { const b = d.bookings.find(x => x.id === 'b2'); b.checks = { ticked: 1 }; b.updatedAt = Date.now(); }); });
+      await saved(Q.page); await syncNow(P.page); await syncNow(Q.page);
+      const after = await Promise.all([P, Q].map(d => st(d.page, s => s.db.bookings.map(b => `${b.id}:${b.title}:${Object.keys(b.checks || {}).join()}:${((b.invoice || {}).payments || []).length}`).join())));
+      ok(`…and what the other device does after it is kept on both (the restoring clock ${word})`, after[0] === 'b2:Two edited after the restore:ticked:1' && after[1] === after[0], JSON.stringify(after));
+      await P.ctx.close(); await Q.ctx.close();
+    }
+    {
+      const cl = newCloud(), P = await device(cl, 'P'), Q = await device(cl, 'Q');
+      const writes = name => cl.log.filter(l => l === `${name} PUT ${MAIN}`).length, rounds = async n => { cl.log.length = 0; for (let i = 0; i < n; i++) { await front(P.page); await sleep(150); await front(Q.page); await sleep(150); } return writes('P') + writes('Q'); };
+      await start(P.page);
+      await st(P.page, s => s.update(d => { const t = Date.now() - 60000; d.gear.push({ id: 'g1', name: 'Lens', updatedAt: t }, { id: 'g2', name: 'Light', updatedAt: t }); d.crew.push({ id: 'c1', name: 'Sam', updatedAt: t }); d.venues.push({ id: 'v1', name: 'Hall', updatedAt: t }); d.kits.push({ id: 'k1', name: 'Kit', gear: ['g1', 'g2'], gearQty: { g1: 2 }, updatedAt: t }); d.shifts.push({ id: 's1', date: '2026-11-02', start: 1, end: 2, breaks: [], updatedAt: t }); d.logs.push({ id: 'tl9', title: 'Log', notes: [], updatedAt: t });
+        d.bookings.push({ id: 'x', title: 'Job', date: '2026-12-01', status: 'Confirmed', gear: ['g1', 'g2'], gearQty: { g1: 2 }, crew: ['c1'], kits: ['k1'], venueId: 'v1', updatedAt: t }); d.profile = { ...d.profile, name: 'Alex Example', updatedAt: t }; d.billing = { ...d.billing, dayRate: 500, updatedAt: t }; }));
+      await saved(P.page); await start(Q.page); await synced(Q.page);
+      // An item, a person and a venue deleted on one device and changed a moment later on the other, which had not heard
+      await st(Q.page, s => { s.remove('gear', 'g1'); s.remove('crew', 'c1'); s.remove('venues', 'v1'); }); await saved(Q.page);
+      await st(P.page, s => { s.upsert('gear', { ...s.byId('gear', 'g1'), notes: 'cleaned' }); s.upsert('crew', { ...s.byId('crew', 'c1'), phone: '555 0100' }); s.upsert('venues', { ...s.byId('venues', 'v1'), notes: 'ring first' }); });
+      await saved(P.page); await syncNow(Q.page); await syncNow(P.page);
+      const refs = page => st(page, s => { const b = s.byId('bookings', 'x'), k = s.byId('kits', 'k1'); return [`x gear ${b.gear.join('+')} crew ${(b.crew || []).join('+')} venue ${b.venueId || 'none'} qty ${Object.keys(b.gearQty || {}).join('+')}`, `k1 ${k.gear.join('+')}`, s.db.gear.map(g => g.id).sort().join('+')].join(' | '); });
+      const refsNow = [await refs(P.page), await refs(Q.page)], idle = await rounds(3);
+      ok('something deleted on one device and changed a moment later on another comes back off the bookings and kits, the same on both devices, and nothing is uploaded after that', refsNow[0] === 'x gear g2 crew  venue none qty  | k1 g2 | g1+g2' && refsNow[1] === refsNow[0] && idle === 0, JSON.stringify([...refsNow, idle]));
+      // A file that carries one list is not a whole backup: what it does not carry stays, here and on the other device
+      const kinds = page => st(page, s => [s.db.bookings.map(b => b.id).join('+'), s.db.crew.length, s.db.gear.map(g => g.id).join('+'), s.db.kits.length, s.db.venues.length, s.db.shifts.length, s.db.logs.length, s.db.profile.name, s.db.billing.dayRate].join(' / '));
+      P.page.said.length = 0;
+      await P.page.evaluate(text => import('./js/backup.js').then(m => m.importData(new File([text], 'items.json'))), JSON.stringify({ gear: [{ id: 'g9', name: 'The one item' }] }));
+      const partAsked = P.page.said.splice(0).join('|');
+      await saved(P.page); await syncNow(Q.page); await syncNow(P.page);
+      const part = [await kinds(P.page), await kinds(Q.page)];
+      ok('a file that carries only the equipment replaces only the equipment: bookings, people, venues, hours, logs and settings stay, on both devices', part[0] === 'x / 1 / g9 / 1 / 1 / 1 / 1 / Alex Example / 500' && part[1] === part[0], JSON.stringify(part));
+      ok('…and the question says what will be deleted and what the file does not carry', partAsked === 'Replace your current data with this file? It holds 1 item. What is here and not in the file will be deleted: 2 items. It does not carry bookings, people, kits, venues, days of hours or timecode logs: those stay as they are. Your other devices follow at their next sync.', partAsked);
+      // The example data on a linked device: the profile it fills in is the same on both, and nothing is uploaded for it afterwards
+      await st(P.page, s => s.loadSample()); await saved(P.page); await syncNow(Q.page); await syncNow(P.page);
+      const prof = await Promise.all([P, Q].map(d => st(d.page, s => [s.db.profile.name, s.db.profile.title].join('/')))), idle2 = await rounds(3);
+      ok('after Load sample data both devices hold the same profile and upload nothing more', prof[0] === 'Alex Example/Videographer / DOP' && prof[1] === prof[0] && idle2 === 0, JSON.stringify([...prof, idle2]));
+      // Switching the calendar feed on reads the cloud copy before it writes
+      await add(Q.page, 'q-late', 'Made on Q meanwhile'); await saved(Q.page); cl.log.length = 0;
+      await st(P.page, s => s.setFeed(true)); await sleep(300);
+      const feedLog = cl.log.filter(l => l.startsWith('P ')).join(' ; ');
+      ok('switching the calendar feed on reads the cloud copy first: what another device saved meanwhile stays in it, and the feed is written', /^P GET vdex-production-db\.json ; P PUT vdex-production-db\.json/.test(feedLog) && / PUT vdex-bookings\.ics/.test(feedLog) && cloudDb(cl).bookings.some(b => b.id === 'q-late') && (await held(P.page)).some(x => x.startsWith('q-late:')), feedLog);
+      // On a slow storage the menu says Saving… from the moment the save starts, not Synced while the change is on this device alone
+      await saved(P.page); cl.delay = 1200; await add(P.page, 'slow', 'Saved slowly'); await sleep(1500);
+      const during = { state: await P.page.locator('#cloudBtn').getAttribute('data-state'), there: cloudDb(cl).bookings.some(b => b.id === 'slow') };
+      cl.delay = 0; await sleep(2600); await synced(P.page);
+      ok('while a change is on its way to a slow storage Vdex says Saving…, and Synced once it is there', during.state === 'saving' && !during.there && cloudDb(cl).bookings.some(b => b.id === 'slow') && (await P.page.locator('#cloudBtn').getAttribute('data-state')) === 'synced', JSON.stringify(during));
+      await P.ctx.close(); await Q.ctx.close();
+    }
+
+    // A WebDAV link made under 1.4.0 with an accented letter in its password: that build sent one byte a letter, so the
+    // server that accepted it refuses the UTF-8 form. The link goes on working, and remembers which form was taken.
+    {
+      const want = 'Basic ' + Buffer.from('u:pässwörd-é1', 'latin1').toString('base64'), seen = { refused: 0, ok: 0 }, files = new Map();
+      const L = await device(null, 'L', { seed: { 'logi-webdav': JSON.stringify({ kind: 'webdav', url: 'https://dav.example/vdex', user: 'u', pass: 'pässwörd-é1' }) } });
+      await L.ctx.route('https://dav.example/**', async route => {
+        const r = route.request(), m = r.method(), file = decodeURIComponent(new URL(r.url()).pathname.split('/').pop());
+        if (m === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+        if ((r.headers().authorization || '') !== want) { seen.refused++; return route.fulfill({ status: 401, headers: CORS, body: '' }); }
+        seen.ok++;
+        if (m === 'GET') return files.has(file) ? route.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: files.get(file) }) : route.fulfill({ status: 404, headers: CORS, body: '' });
+        if (m === 'PUT') { files.set(file, r.postData() || ''); return route.fulfill({ status: 201, headers: CORS }); }
+        return route.fulfill({ status: 201, headers: CORS }); });
+      await start(L.page); await synced(L.page);
+      const first = { ...seen, status: (await state(L.page)).status, kept: await L.page.evaluate(() => JSON.parse(localStorage.getItem('logi-webdav')).latin1) };
+      await add(L.page, 'lat', 'Saved after the update'); await saved(L.page);
+      ok('a WebDAV link from before the update with ä, ö and é in its password still syncs: the form that server took is tried after one refusal, and kept', first.status === 'synced' && first.refused === 1 && first.kept === true && seen.refused === 1 && files.has(MAIN) && /Saved after the update/.test(files.get(MAIN)), JSON.stringify([first, seen]));
+      await L.ctx.close();
+    }
+
     // ---- two windows of Vdex on one device ----
     const W = await device(null, 'W', { linked: false }), w2 = await W.ctx.newPage(); w2.on('pageerror', e => scriptErrors.push('W2: ' + e.message));
     await start(W.page); await start(w2);
@@ -416,9 +498,13 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     const afterExport = await health();
     // Import backup… is a control the keyboard reaches and works
     const imp = page2.locator('.sheet .file-btn input[type=file]');
-    await page2.getByRole('button', { name: /Encrypted backup/ }).focus(); await page2.keyboard.press('Tab');
-    const reached = await imp.evaluate(el => ({ focused: document.activeElement === el, shown: getComputedStyle(el).display !== 'none', named: el.labels && el.labels[0] ? el.labels[0].textContent.trim() : '', ring: getComputedStyle(el.closest('.file-btn')).outlineStyle }));
-    let chooser = false; for (const key of ['Enter', ' ']) if (!chooser) chooser = await Promise.all([page2.waitForEvent('filechooser', { timeout: 3000 }).then(() => true, () => false), page2.keyboard.press(key)]).then(r => r[0]);
+    // (On a busy machine the sheet may still be drawing itself again after the export when the focus is put on it, and
+    // the chooser may take seconds to open: the step is tried again once the sheet is still, and the chooser is waited
+    // for, not a fixed time.)
+    let reached = null;
+    for (let i = 0; i < 4 && !(reached && reached.focused); i++) { if (i) await sleep(500); await page2.getByRole('button', { name: /Encrypted backup/ }).focus(); await page2.keyboard.press('Tab');
+      reached = await imp.evaluate(el => ({ focused: document.activeElement === el, shown: getComputedStyle(el).display !== 'none', named: el.labels && el.labels[0] ? el.labels[0].textContent.trim() : '', ring: getComputedStyle(el.closest('.file-btn')).outlineStyle })); }
+    let chooser = false; for (const key of ['Enter', ' ']) if (!chooser) chooser = await Promise.all([page2.waitForEvent('filechooser', { timeout: 12000 }).then(() => true, () => false), page2.keyboard.press(key)]).then(r => r[0]);
     ok('Import backup… takes the focus on Tab, shows it, is named by its label and opens the file chooser on Enter', reached.focused && reached.shown && reached.named === 'Import backup…' && reached.ring === 'solid' && chooser, JSON.stringify([reached, chooser]));
     // connect: a folder address without https://, and a password with a character outside Latin-1
     const mine2 = []; page2.on('request', q => { if (q.url().startsWith(BASE) && /dav\.example/.test(q.url())) mine2.push(q.method() + ' ' + q.url()); });

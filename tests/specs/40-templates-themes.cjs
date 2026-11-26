@@ -109,6 +109,18 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   }));
   ok('checklist lines in a non-Latin script, and lines that differ only in punctuation, each have a tick of their own', wfFix.unique && wfFix.done === '10010' && wfFix.n === 2, JSON.stringify(wfFix));
   ok('a line whose id was already its own keeps it, so the ticks on existing bookings stay', wfFix.latin === 'quoted:quote-estimate-sent' && wfFix.ids[3] === 'enquiry:call-sheet', wfFix.latin + ' ' + wfFix.ids[3]);
+  // Ticks made before lines had marks (1.4.0 kept one tick for all the lines that shared an id): a line ticked then is
+  // ticked now, and unticking one of them unticks that one alone
+  const oldTicks = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/workflow.js')]).then(([s, wf]) => {
+    s.update(d => { d.bookings.push({ id: 'wf-old', title: 'Ticked before', type: 'brand', date: '2026-12-01', status: 'Enquiry', checks: { 'enquiry:': 1, 'enquiry:call-sheet': 1 }, crew: [], gear: [], stakeholders: [] }, { id: 'wf-half', title: 'Half ticked before', type: 'brand', date: '2026-12-01', status: 'Enquiry', checks: { 'enquiry:call-sheet': 1 }, crew: [], gear: [], stakeholders: [] }); });
+    const get = id => s.byId('bookings', id), row = id => wf.itemsFor(get(id), 'Enquiry').map(x => (x.done ? 1 : 0)).join(''), out = { before: row('wf-old'), n: wf.progress(get('wf-old'), 'Enquiry').done, half: row('wf-half') };
+    const ids = wf.itemsFor(get('wf-old'), 'Enquiry').map(x => x.id);
+    wf.setCheck(get('wf-old'), ids[1], false); out.unticked = row('wf-old');
+    wf.setCheck(get('wf-old'), ids[3], false); out.first = row('wf-old'); // the line that owns the plain id: the one like it keeps its tick
+    wf.setCheck(get('wf-old'), ids[1], true); out.again = row('wf-old');
+    s.remove('bookings', 'wf-old'); s.remove('bookings', 'wf-half'); return out; }));
+  ok('lines ticked before the update are ticked after it, also the ones in another script and the second of two that read alike', oldTicks.before === '11111' && oldTicks.n === 5 && oldTicks.half === '00011', JSON.stringify(oldTicks));
+  ok('…and unticking one of them unticks that line alone, as does ticking it again', oldTicks.unticked === '10111' && oldTicks.first === '10101' && oldTicks.again === '11101', JSON.stringify(oldTicks));
   // A deleted project template hands its bookings the built-in type its checklists came from
   await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/workflow.js')]).then(([s, wf]) => { const bk = (id, title, type) => ({ id, title, type, date: '2026-12-02', start: '09:00', status: 'Confirmed', crew: [], gear: [], stakeholders: [] });
     s.update(d => { d.projectTemplates.push({ id: 'tpl-pod', name: 'Podcast episode', icon: '🎙', base: 'corporate', updatedAt: 1 }); d.bookings.push(bk('wf-pod', 'Episode 12', 'tpl-pod'), bk('wf-lost', 'Lost template', 'tpl-gone')); });

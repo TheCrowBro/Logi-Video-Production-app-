@@ -17,7 +17,7 @@ export const updateState = () => ({ version: VERSION, build: BUILD, built: BUILT
 // is a box whose text is kept only at a tap (data-draft: the timecode note being written). So it asks first.
 export function reloadNow() {
   const text = el => !el.readOnly && !el.disabled && !['checkbox', 'radio', 'file', 'button', 'submit', 'range', 'color', 'hidden'].includes(el.type) && !!el.value;
-  const typed = [...document.querySelectorAll('#page [data-draft], .sheet-back textarea, .sheet-back input')].some(text);
+  const typed = [...document.querySelectorAll('#page [data-draft], .sheet-back textarea, .sheet-back input')].some(text) || document.body.hasAttribute('data-draft-held'); // …or held while another section is in front (js/pages/tcnotes.js says so on the body)
   if ((typed || document.querySelector('.sheet-back form')) && !confirm('Reload now? Anything typed and not saved will be lost.')) return;
   location.reload();
 }
@@ -73,7 +73,12 @@ export function initUpdates() {
   // Registered once the page has loaded, so a first visit's own downloads are not competing with the offline copy.
   // A build being fetched is shown as such in Settings: the panel is drawn again when one is found and as it moves on.
   const register = () => navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => {
-    S.reg = reg; S.last = S.asked = Date.now(); emit(); if (reg.waiting) reg.waiting.postMessage('skip-waiting');
+    // A start is a check only if the server was reached: with a worker already in charge the page came from the offline
+    // copy, so the server is asked now, and the time is kept when it answers (a start with no connection says it could
+    // not check). A first visit has just fetched everything.
+    S.reg = reg; S.asked = Date.now();
+    if (reg.active) reg.update().then(() => { S.failed = false; S.last = Date.now(); emit(); }, () => { S.failed = true; emit(); }); else S.last = Date.now();
+    emit(); if (reg.waiting) reg.waiting.postMessage('skip-waiting');
     reg.addEventListener('updatefound', () => { emit(); if (reg.installing) reg.installing.addEventListener('statechange', emit); });
   }).catch(() => {});
   if (document.readyState === 'complete') register(); else window.addEventListener('load', register, { once: true });

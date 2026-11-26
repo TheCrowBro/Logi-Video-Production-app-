@@ -191,6 +191,9 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const again = await until(20000, async () => (await lacks('logi-test000')) === 0), left = await lacks('logi-test000');
   down = true;
   const cut4 = await opens(p5, () => p5.reload(), 'field', 'Field');
+  // A start with no connection (the page came from the offline copy) checked nothing: it does not say "checked" with the time of that start.
+  const offStart = await p5.evaluate(() => import('./js/update.js').then(async m => { for (let i = 0; i < 40 && !m.updateState().failed; i++) await new Promise(r => setTimeout(r, 100)); return { line: m.updatePanel().el.textContent, last: m.updateState().lastCheck }; }));
+  ok('a start with no connection says it could not check for updates, not “Up to date · checked” at the time of that start', /Could not check for updates \(no connection\)/.test(offStart.line) && !/Up to date/.test(offStart.line) && offStart.last === 0, JSON.stringify(offStart));
   // A check that cannot be made (the server cannot be reached) is not a check that found nothing.
   const cutOff = await p5.evaluate(() => import('./js/update.js').then(async m => { const before = m.updateState().lastCheck; await new Promise(r => setTimeout(r, 1100)); const r = await m.checkForUpdates(); return { status: r.status, kept: m.updateState().lastCheck === before, line: m.updatePanel().el.textContent }; }));
   down = false;

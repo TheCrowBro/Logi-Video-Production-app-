@@ -20,7 +20,9 @@ const hasContent = cs => !!(cs.generalCall || cs.lunch || cs.wrap || cs.schedule
 // A sent sheet has changed when it was edited since, when the stripboard it shows the scenes from was, or when what
 // it prints from the booking is no longer what went out (the date, the times, the address, the venue, the people and
 // their call times, the kit…): marking it sent keeps a short mark of all of that (sentPrint below) to compare with.
-export const sheetState = b => { const cs = sheetOf(b), boardAt = Number(b.board && b.board.updatedAt) || 0; return cs.sentAt ? (cs.editedAt > cs.sentAt || (cs.include.scenes !== false && boardAt > cs.sentAt) || (!!cs.sentHash && cs.sentHash !== sentPrint(b)) ? 'changed' : 'sent') : hasContent(cs) ? 'draft' : 'none'; };
+// (When the stripboard's scenes were last changed: a restore stamps the board as changed now for the merge and keeps
+// the time of the scenes beside it as editedAt; an edit on the stripboard writes the board anew, without one.)
+export const sheetState = b => { const cs = sheetOf(b), boardAt = Number(b.board && (b.board.editedAt || b.board.updatedAt)) || 0; return cs.sentAt ? (cs.editedAt > cs.sentAt || (cs.include.scenes !== false && boardAt > cs.sentAt) || (!!cs.sentHash && cs.sentHash !== sentPrint(b)) ? 'changed' : 'sent') : hasContent(cs) ? 'draft' : 'none'; };
 const STATE_LABEL = { none: 'Not started', draft: 'Draft', sent: 'Sent', changed: 'Changed since it was sent' };
 const dateLabel = (b, f = fmtLong) => (endOf(b) > b.date ? `${f(b.date)} → ${f(endOf(b))}` : f(b.date));
 const multiDay = b => endOf(b) > b.date;
@@ -51,10 +53,11 @@ export function callSheetData(b, cs = sheetOf(b), crewCall = b.crewCall || {}) {
   // The sun times are on this device's clock; at a venue on another clock they name their zone (sunClock).
   const clock = sun && atVenue ? sunClock(noon, loc.lon) : { far: false, zone: '', fmt: fmtTime };
   const address = (b.address || (v && v.address) || '').replace(/\n/g, ', ');
-  // A line belongs to the day it names while that day is one of the shoot's; a date from before the shoot was moved or
-  // shortened counts as the first day (a one-day shoot has no dates at all), so every line is printed, under a day
-  // the sheet's header names.
-  const multi = multiDay(b), last = endOf(b), dayOfLine = r => (!multi ? '' : r.date && r.date >= b.date && r.date <= last ? r.date : b.date);
+  // A line belongs to the day it names, also a day outside the shoot (a pre-light the evening before, a pick-up day
+  // after it: the editor's date box takes any day, and the sheet prints what that box shows; a sheet that went out
+  // with such a line goes on printing it there). A line with no date belongs to the first day, and on a one-day shoot
+  // no line has a date at all, so every line is printed. (Moving the shoot in its form moves the lines with it.)
+  const multi = multiDay(b), dayOfLine = r => (!multi ? '' : /^\d{4}-\d{2}-\d{2}$/.test(r.date || '') ? r.date : b.date);
   const schedule = cs.schedule.filter(r => r && (r.time || r.item)).map(r => ({ ...r, date: dayOfLine(r) })).sort((x, y) => `${x.date} ${x.time || ''}`.localeCompare(`${y.date} ${y.time || ''}`));
   const days = multi ? [...new Set([b.date, ...schedule.map(r => r.date)])].sort() : [b.date];
   const producer = [p.name, p.business].filter(Boolean).join(' · ') || 'Vdex';
@@ -120,7 +123,7 @@ export function renderDoc(b, { cs = sheetOf(b), crewCall = b.crewCall || {}, edi
   const d = callSheetData(b, cs, crewCall), { v, p } = d, inc = cs.include, multi = multiDay(b);
   const sec = (title, ...kids) => { const body = nodes(...kids); return body.length ? h('section', { class: 'cs-sec' }, h('h4', null, title), ...body) : null; };
   const kv = (k, val) => val && h('div', { class: 'cs-kv' }, h('span', null, k), h('b', null, val));
-  const table = (head, rows) => rows.length > 0 && h('table', null, h('thead', null, h('tr', null, ...head.map(x => h('th', null, x)))), h('tbody', null, ...rows.map(r => h('tr', null, ...r.map(x => h('td', null, x == null ? '' : x))))));
+  const table = (head, rows, free = []) => rows.length > 0 && h('table', null, h('thead', null, h('tr', null, ...head.map(x => h('th', null, x)))), h('tbody', null, ...rows.map(r => h('tr', null, ...r.map((x, i) => h('td', free.includes(i) ? { class: 'free' } : null, x == null ? '' : x)))))); // free: the columns whose cells may wrap inside a word (styles.css)
   const bind = (key, el) => { el.addEventListener('change', e => { cs[key] = e.target.value; edit.touch(); }); return el; };
   const input = (key, type, ph) => bind(key, h('input', { type, value: cs[key] || '', placeholder: ph, 'aria-label': ph, class: 'cs-in' }));
   const area = (key, ph, rows = 2) => bind(key, h('textarea', { rows, value: cs[key] || '', placeholder: ph, 'aria-label': ph, class: 'cs-in' }));
@@ -152,7 +155,7 @@ export function renderDoc(b, { cs = sheetOf(b), crewCall = b.crewCall || {}, edi
     edit ? sec('Schedule', scheduleEditor()) : d.schedule.length ? sec('Schedule', ...d.days.map(day => { const rows = scheduleRows(day); return rows.length > 0 && [multi && h('div', { class: 'cs-day' }, fmtLong(day)), table(['Time', 'What'], rows)]; })) : null,
     include('scenes') && (sd => sd.days.length ? sec('Scenes', ...sd.days.map(dd => [needsDayLabel(sd, multi) && h('div', { class: 'cs-day' }, sceneDayLabel(dd)), table(['Sc', 'I/E', 'Set', 'Time', 'Cast', 'Pages'], dd.scenes.map(x => sceneRow(x, sd.cast)))]),
       sd.castLine && kv('Cast', sd.castLine), edit && h('p', { class: 'cs-hint' }, 'From the stripboard: arrange the scenes there.')) : null)(sceneDays(b)),
-    sec('Crew', d.crew.length ? table(['Name', 'Role', 'Call', 'Phone', 'Email'], d.crew.map(c => [c.name, c.role || 'crew', crewCell(c), c.phone, c.email])) : h('p', null, 'No crew assigned yet. Add people on the booking and they appear here with their call times.'),
+    sec('Crew', d.crew.length ? table(['Name', 'Role', 'Call', 'Phone', 'Email'], d.crew.map(c => [c.name, c.role || 'crew', crewCell(c), c.phone, c.email]), [3, 4]) : h('p', null, 'No crew assigned yet. Add people on the booking and they appear here with their call times.'),
       edit && d.crew.length > 0 && h('p', { class: 'cs-hint' }, 'A blank call time means the general call.')),
     include('contacts') && sec('On set / contacts', (b.stakeholders || []).length > 0 && table(['Name', 'Role', 'Phone'], b.stakeholders.map(s => [s.name, s.role, s.phone])),
       edit ? h('div', { class: 'cs-kv' }, h('span', null, 'On set'), area('attendees', 'Who is coming from the client or talent, when, and who looks after them')) : cs.attendees && h('p', { class: 'cs-pre' }, cs.attendees),

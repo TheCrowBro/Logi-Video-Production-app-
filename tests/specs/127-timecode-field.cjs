@@ -58,6 +58,17 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   await page.locator('.tc-compose').press('Enter'); await sleep(300);
   ok('Enter adds the note at that stamp and empties the box', (await rows(page)).includes(stamp + ' | Boom dips into frame at the') && (await typed()).text === '', JSON.stringify(await rows(page)));
 
+  // ---- a note being written is kept while another section is in front, so a reload asked for there asks first ----
+  await page.locator('.tc-compose').fill('Take 3 is the keeper'); await sleep(100);
+  await page.evaluate(() => window.logiGo('bookings')); await sleep(400);
+  const asksBefore = await page.evaluate(() => { window.__asked = []; window.__confirm = window.confirm; window.confirm = m => { window.__asked.push(m); return false; }; return 0; });
+  await page.evaluate(() => import('./js/update.js').then(u => u.reloadNow())); await sleep(300);
+  const heldAsk = await page.evaluate(() => { const a = window.__asked; window.confirm = window.__confirm; return a; });
+  await page.evaluate(() => window.logiGo('tcnotes')); await page.waitForSelector('.tc-compose'); await sleep(300);
+  const keptDraft = await page.locator('.tc-compose').inputValue();
+  await page.locator('.tc-compose').fill(''); await sleep(100);
+  const noDraft = await page.evaluate(() => document.body.hasAttribute('data-draft-held'));
+  ok('Reload for the new version asks first when a half-typed timecode note is held on a section that is not in front', heldAsk.length === 1 && /Anything typed and not saved will be lost/.test(heldAsk[0]) && keptDraft === 'Take 3 is the keeper' && !noDraft && asksBefore === 0, JSON.stringify([heldAsk, keptDraft, noDraft]));
   // ---- a stamp taken in one log is not carried into the next note of another ----
   await page.locator('.tc-compose').fill('half a thought'); await sleep(100);
   const leftBehind = (await typed()).stamp;
@@ -159,8 +170,18 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const control = await paras.nth(3).evaluate(e => [e.getAttribute('role'), e.getAttribute('tabindex'), e.getAttribute('aria-pressed')]);
   await paras.nth(3).focus(); await page.keyboard.press('Enter');
   const byKey = [await sel(), await paras.nth(3).getAttribute('aria-pressed'), await markOff()];
-  await page.keyboard.press(' ');
-  ok('a script line takes the focus and is chosen with Enter or Space, so Mark is in reach of the keyboard', JSON.stringify(control) === '["button","0","false"]' && JSON.stringify(byKey) === '[[3],"true",false]' && (await sel()).length === 0, JSON.stringify([control, byKey, await sel()]));
+  const focusNow = () => page.evaluate(() => { const a = document.activeElement; return a && a !== document.body ? (a.classList.contains('sc-para') ? 'line ' + [...document.querySelectorAll('.sc-para')].indexOf(a) : a.textContent.trim()) : 'nothing'; });
+  const onMark = await focusNow();
+  await page.keyboard.press('Escape'); const letGo = [await sel(), await focusNow()];
+  ok('a script line takes the focus and is chosen with Enter or Space, which puts the focus on Mark; Escape there lets the line go and goes back to it', JSON.stringify(control) === '["button","0","false"]' && JSON.stringify(byKey) === '[[3],"true",false]' && /Mark$/.test(onMark) && JSON.stringify(letGo) === '[[],"line 3"]', JSON.stringify([control, byKey, onMark, letGo]));
+  // Mark by keyboard: the mark is made, the focus is back on the line, and the next line is one Tab on (not at the top of the page again)
+  const marksOn3 = () => paras.nth(3).locator('.sc-badge').count(), had = await marksOn3();
+  await page.keyboard.press(' '); await page.keyboard.press('Enter'); await sleep(350);
+  const marked = [await marksOn3() - had, await focusNow(), await paras.nth(3).getAttribute('aria-label')];
+  await page.keyboard.press('Tab'); if ((await focusNow()) !== 'line 4') await page.keyboard.press('Tab'); // (past the line's own mark, which is a button)
+  ok('Mark pressed from the keyboard marks the chosen line and gives it the focus back, and the line reads to a screen reader as its own words', marked[0] === 1 && marked[1] === 'line 3' && !!marked[2] && !/^Mark at/.test(marked[2]) && (await focusNow()) === 'line 4', JSON.stringify([marked, await focusNow()]));
+  const under = await page.evaluate(() => { const bar = document.querySelector('.sc-bar').getBoundingClientRect(); return [...document.querySelectorAll('.sc-para')].slice(0, 12).filter(p => { p.focus(); const r = p.getBoundingClientRect(); return r.bottom > bar.top + 1 && r.top < bar.bottom; }).length; });
+  ok('a line reached by the keyboard is scrolled clear of the Mark bar', under === 0, String(under));
 
   // ---- the Link sheet: closed with a code showing, it can be started again; unlinked, it says so ----
   await openLog(page, 'L1');
