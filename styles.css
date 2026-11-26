@@ -770,8 +770,7 @@ html[data-motion=off] .storage .twirl::details-content, html[data-motion=bar] .s
 /* Budget on a booking */
 .budget-amts { display: grid; justify-items: end; gap: 2px; text-align: right; white-space: nowrap; }
 #bk-budget .card.stack { grid-template-columns: minmax(0, 1fr); }
-#bk-budget .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr)); } /* three across where the figures fit, fewer where they do not */
-#bk-budget .stat b { font-size: clamp(.9rem, 3.8vw, 1.15rem); white-space: nowrap; overflow-wrap: normal; } /* an amount is never split inside the number */
+#bk-budget .stat b { font-size: clamp(.9rem, 3.8vw, 1.15rem); white-space: nowrap; } /* an amount is never split inside the number: the three tiles sit side by side where their figures fit, and go to a second row where they do not (.stats above) */
 .budget-cat > summary { grid-template-columns: minmax(0, 1fr) auto; } /* name and chevron: the chevron turns in place */
 .budget-cat .twirl-body { gap: 8px; }
 .crew-parts { display: grid; gap: 2px; }

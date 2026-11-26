@@ -214,6 +214,46 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   // ---- the money stays private elsewhere too ----
   const invoiceSnap = await page.evaluate(id => import('./js/money.js').then(m => m.shareLink(m.docOf ? { id } : { id }, 'quote')).then(u => import('./js/link-pack.js').then(p => p.unpack(new URL(u).hash))), seed.id);
   ok('the client’s quote link carries no budget', !JSON.stringify(invoiceSnap).includes('Van') && !('budget' in invoiceSnap));
+
+  // ---- repairs after 1.4.0: a restore, the sync, the budget ----
+  await page.setViewportSize({ width: 420, height: 900 });
+  const restore = await page.evaluate(() => import('./js/store.js').then(s => {
+    s.upsert('bookings', { id: 'rs-1', title: 'Deleted by mistake', date: '2026-12-01', status: 'Confirmed', crew: [], gear: [], stakeholders: [] });
+    const backup = JSON.parse(s.serialize()); backup.bookings.find(b => b.id === 'rs-1').updatedAt = Date.now() - 60000; // a backup saved a minute ago
+    s.remove('bookings', 'rs-1'); const cloud = JSON.parse(s.serialize()); // what the cloud copy and the other device now hold: the deletion mark
+    s.replaceAll(backup); // the backup file brought back on this device
+    const mine = () => JSON.parse(s.serialize()), has = db => db.bookings.some(b => b.id === 'rs-1');
+    return { here: has(mine()), afterSync: has(s.mergeDb(mine(), cloud)), onTheOther: has(s.mergeDb(cloud, mine())) };
+  }));
+  ok('a booking deleted by mistake and brought back from a backup stays after the next sync, here and on the other device', restore.here && restore.afterSync && restore.onTheOther, JSON.stringify(restore));
+  const docs = await page.evaluate(() => import('./js/store.js').then(s => { const now = Date.now(), copy = x => JSON.parse(JSON.stringify(x));
+    const inv = (at, payments) => ({ number: 'INV-0500', date: '2026-11-01', status: 'Sent', lines: [{ id: 'l', desc: 'Day', qty: 1, price: 1000 }], payments, updatedAt: at });
+    const bk = (notes, invoice, at) => ({ id: 'mg-inv', title: 'Synced', date: '2026-12-01', status: 'Delivered', notes, invoice, updatedAt: at });
+    const phone = copy(JSON.parse(s.serialize())), laptop = copy(phone);
+    phone.bookings.push(bk('', inv(now, [{ id: 'p1', date: '2026-11-20', amount: 400, method: 'Bank transfer' }]), now)); // a payment recorded on the phone
+    laptop.bookings.push(bk('changed on the laptop', inv(now - 864e5, []), now + 60000)); // the notes changed a minute later on the laptop, which had not synced yet
+    const pick = db => db.bookings.find(b => b.id === 'mg-inv'), a = pick(s.mergeDb(phone, laptop)), b = pick(s.mergeDb(laptop, phone));
+    const gone = copy(laptop), g = pick(gone); delete g.invoice; g.invoiceGoneAt = g.updatedAt = now + 120000; // deleted on the laptop later still
+    const c = pick(s.mergeDb(phone, gone)), d = pick(s.mergeDb(gone, phone));
+    const made = copy(phone), n = pick(made); n.invoice = inv(now + 180000, []); n.updatedAt = now + 180000; // and made anew on the phone after that
+    const e = pick(s.mergeDb(made, gone));
+    return { notes: a.notes + '|' + b.notes, paid: [a, b].map(x => (x.invoice.payments || []).length).join(), deleted: !c.invoice && !d.invoice && c.notes === 'changed on the laptop', anew: !!e.invoice && e.invoice.updatedAt === now + 180000 }; }));
+  ok('a payment recorded on one device survives a later change to the same booking on another: the newer invoice is kept with the newer booking', docs.notes === 'changed on the laptop|changed on the laptop' && docs.paid === '1,1', JSON.stringify(docs));
+  ok('an invoice deleted on one device stays deleted after the sync, and one made anew afterwards stays', docs.deleted && docs.anew, JSON.stringify(docs));
+  const costs = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => {
+    s.upsert('bookings', { id: 'bd-1', title: 'Budget probe', date: '2026-12-01', status: 'Confirmed', crew: [], gear: [], stakeholders: [], rentals: [{ id: 'r1', item: 'Monitor', cost: 85.125 }, { id: 'r2', item: 'Slider', cost: 1250.75 }], licences: [{ id: 'l1', kind: 'Music', title: 'Track', cost: 49.999 }],
+      budget: { lines: [{ id: 'b1', cat: 'Crew', desc: 'Gaffer', qty: 1, unit: 'day', rate: 12570.75, actual: '' }, { id: 'b2', cat: 'Travel & transport', desc: 'Van', qty: 1, unit: 'day', rate: 350, actual: 350 }] } });
+    m.fillBudget(s.byId('bookings', 'bd-1')); return s.byId('bookings', 'bd-1').budget.lines.filter(l => l.src).map(l => l.rate).join(); }));
+  ok('Fill from booking takes a cost with three decimals as it is, not a thousand times over', costs === '85.125,1250.75,49.999', costs);
+  await page.evaluate(() => window.logiGo('bookings')); await sleep(200);
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('bd-1'))); await sleep(300);
+  await page.locator('#bk-work').evaluate(d => { d.open = true; });
+  const tiles = {};
+  for (const w of [412, 390, 360]) { await page.setViewportSize({ width: w, height: 844 }); await sleep(500); // past the figures' pop-in
+    tiles[w] = await page.evaluate(() => [...document.querySelectorAll('#bk-budget .stat')].map(st => { const b = st.querySelector('b'), range = document.createRange(); range.selectNodeContents(b); const lines = range.getClientRects().length; // the lines the figure is drawn on
+      return (lines === 1 && b.getBoundingClientRect().right <= st.getBoundingClientRect().right + 0.5 ? 'ok' : `${b.textContent} on ${lines} lines`) + (document.documentElement.scrollWidth <= innerWidth ? '' : '+scroll'); }).join()); }
+  ok('on a phone the budget’s totals are never split inside the number (five-figure amounts at 412, 390 and 360 pixels)', Object.values(tiles).every(t => t === 'ok,ok,ok'), JSON.stringify(tiles));
+  await page.setViewportSize({ width: 420, height: 900 });
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

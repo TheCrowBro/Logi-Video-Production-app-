@@ -89,6 +89,33 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('Save as template pre-fills from the booking, with due dates as days after the shoot', /Coupe launch film template/.test(prefill.name) && prefill.start === '06:00' && prefill.rows === 2 && prefill.due === '14', JSON.stringify(prefill));
   await sf.locator('button[type=submit]').click(); await sleep(400);
   ok('second template stored', (await page.evaluate(() => import('./js/store.js').then(s => s.db.projectTemplates.length))) === 2);
+
+  // ---- repairs after 1.4.0: checklists and project templates ----
+  const wfFix = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/workflow.js')]).then(([s, wf]) => {
+    s.update(d => { d.templates = { ...(d.templates || {}), brand: { ...((d.templates || {}).brand || {}), Enquiry: ['Бриф получен', 'Бюджет известен', 'Даты согласованы', 'Call sheet?', 'Call sheet!'] }, updatedAt: Date.now() };
+      d.bookings.push({ id: 'wf-ru', title: 'Checklist', type: 'brand', date: '2026-12-01', status: 'Enquiry', checks: {}, crew: [], gear: [], stakeholders: [] }); });
+    const get = () => s.byId('bookings', 'wf-ru'), ids = wf.itemsFor(get(), 'Enquiry').map(x => x.id);
+    wf.setCheck(get(), ids[0], true); wf.setCheck(get(), ids[3], true);
+    return { ids, unique: new Set(ids).size === ids.length, done: wf.itemsFor(get(), 'Enquiry').map(x => (x.done ? 1 : 0)).join(''), n: wf.progress(get(), 'Enquiry').done, latin: wf.itemsFor(get(), 'Quoted')[0].id };
+  }));
+  ok('checklist lines in a non-Latin script, and lines that differ only in punctuation, each have a tick of their own', wfFix.unique && wfFix.done === '10010' && wfFix.n === 2, JSON.stringify(wfFix));
+  ok('a line whose id was already its own keeps it, so the ticks on existing bookings stay', wfFix.latin === 'quoted:quote-estimate-sent' && wfFix.ids[3] === 'enquiry:call-sheet', wfFix.latin + ' ' + wfFix.ids[3]);
+  // A deleted project template hands its bookings the built-in type its checklists came from
+  await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/workflow.js')]).then(([s, wf]) => { const bk = (id, title, type) => ({ id, title, type, date: '2026-12-02', start: '09:00', status: 'Confirmed', crew: [], gear: [], stakeholders: [] });
+    s.update(d => { d.projectTemplates.push({ id: 'tpl-pod', name: 'Podcast episode', icon: '🎙', base: 'corporate', updatedAt: 1 }); d.bookings.push(bk('wf-pod', 'Episode 12', 'tpl-pod'), bk('wf-lost', 'Lost template', 'tpl-gone')); });
+    wf.editProjectTemplate(s.byId('projectTemplates', 'tpl-pod')); }));
+  const tform = page.locator('.sheet form'); await tform.waitFor();
+  await tform.getByRole('button', { name: 'Delete' }).click(); await sleep(400);
+  const pod = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/workflow.js')]).then(([s, wf]) => { const b = s.byId('bookings', 'wf-pod'); return { type: b.type, label: wf.typeLabel(b.type), lines: wf.itemsFor(b, 'Prepped').some(x => x.t === 'Interview questions agreed'), gone: !s.byId('projectTemplates', 'tpl-pod') }; }));
+  ok('deleting a project template leaves its bookings on the built-in type its checklists started from', pod.gone && pod.type === 'corporate' && pod.label === 'Corporate / interview' && pod.lines, JSON.stringify(pod));
+  // …and a booking that still points at a template that is gone keeps its type when its form is saved
+  await page.evaluate(() => window.logiGo('bookings')); await sleep(300);
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('wf-lost'))); await sleep(300);
+  await page.locator('.bk-detail .page-head').getByRole('button', { name: 'Edit', exact: true }).click(); await tform.waitFor();
+  const typeShown = await tform.locator('select').first().inputValue();
+  await tform.locator('input[data-key="start"]').fill('10:00'); await tform.locator('button[type=submit]').click(); await sleep(400);
+  const lost = await page.evaluate(() => import('./js/store.js').then(s => { const b = s.byId('bookings', 'wf-lost'); return { type: b.type, start: b.start }; }));
+  ok('saving the form of a booking whose template is gone changes only what was changed: it never takes another template’s type by itself', typeShown === 'tpl-gone' && lost.type === 'tpl-gone' && lost.start === '10:00', typeShown + ' ' + JSON.stringify(lost));
   await page.screenshot({ path: S + '/templates.png' });
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();

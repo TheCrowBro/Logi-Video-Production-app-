@@ -114,6 +114,57 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('invoice CSV export', /INV-0001/.test(fs.readFileSync(await csv.path(), 'utf8')));
   await page.keyboard.press('Escape'); await sleep(200);
 
+  // ---- repairs after 1.4.0: quotes and invoices ----
+  const mform = page.locator('.sheet form'), mlines = () => page.evaluate(() => import('./js/store.js').then(s => (s.byId('bookings', 'mn-h').invoice.lines || []).map(l => [l.desc, l.qty, l.unit].join(' ')).join(' | ')));
+  await page.evaluate(() => import('./js/store.js').then(s => { const day = n => { const x = new Date(); x.setDate(x.getDate() - n); return x; }, iso = x => `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+    window.__shift = (id, n, kind, hours) => { const x = day(n), start = new Date(x.getFullYear(), x.getMonth(), x.getDate(), 8).getTime(); return { id, bookingId: 'mn-h', kind, date: iso(x), start, end: start + hours * 36e5, breaks: [], updatedAt: 1 }; };
+    s.update(d => { d.bookings.push({ id: 'mn-h', title: 'Probe shoot', client: 'Probe Client', date: iso(day(3)), status: 'Shot', crew: [], gear: [], stakeholders: [] }); d.shifts.push(window.__shift('mh1', 3, 'shoot', 8), window.__shift('mh2', 2, 'edit', 3)); }); }));
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.openBooking('mn-h', { view: 'money', kind: 'invoice' }))); await page.waitForSelector('.money-page');
+  await page.getByRole('button', { name: 'From hours logged' }).click(); await mform.waitFor(); await mform.locator('button[type=submit]').click(); await sleep(400);
+  const hours1 = await mlines();
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.shifts.push(window.__shift('mh3', 1, 'shoot', 8), window.__shift('mh4', 0, 'edit', 5)); }))); await sleep(200);
+  await page.getByRole('button', { name: 'Lines from hours logged' }).click(); await sleep(400);
+  const hours2 = await mlines();
+  ok('“Lines from hours logged” tapped again after more work brings the lines up to date: two shoot days once, eight editing hours', hours1 === 'Shoot day — Probe shoot 1 day | Editing 3 hour' && hours2 === 'Shoot days — Probe shoot 2 day | Editing 8 hour', hours1 + ' → ' + hours2);
+  await page.getByRole('button', { name: 'Lines from hours logged' }).click(); await sleep(300);
+  ok('a further tap adds and changes nothing', (await mlines()) === hours2, await mlines());
+  const merged = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => { if (!m.mergeSuggested) return null;
+    const c = s.db.crew[0], show = r => r.lines.map(l => [l.desc.split(' — ')[0], l.qty, l.unit].join(' ')).join(' | ') + ` (+${r.added} ~${r.updated})`;
+    const job = days => ({ id: 'mn-q', title: 'Grown job', date: '2026-12-01', endDate: days > 1 ? '2026-12-03' : '', crew: [c.id], gear: [], stakeholders: [] });
+    const grown = m.mergeSuggested(m.suggestLines(job(1), 'quote', 'booking'), m.suggestLines(job(3), 'quote', 'booking'), 'booking'); // the quote of a one-day job that grew to three
+    const old = m.mergeSuggested([{ id: 'a', desc: 'Shoot day — Probe shoot', qty: 1, unit: 'day', price: 600 }, { id: 'b', desc: 'Editing', qty: 3, unit: 'hour', price: 55 }, { id: 'c', desc: 'Travel', qty: 1, unit: 'each', price: 80 }], m.suggestLines(s.byId('bookings', 'mn-h'), 'invoice', 'hours'), 'hours'); // lines saved before lines carried their source
+    const quoted = m.mergeSuggested(s.byId('bookings', 'mn-h').invoice.lines, m.suggestLines({ id: 'x', date: '2026-12-01', quote: { lines: [{ id: 'q1', desc: 'Editing', qty: 1, unit: 'day', price: 400 }, { id: 'q2', desc: 'Travel', qty: 1, unit: 'each', price: 80 }] } }, 'invoice', 'quote'), 'quote'); // the price list's "Editing" by the day, on the quote
+    const again = m.mergeSuggested(quoted.lines, m.suggestLines({ id: 'x', date: '2026-12-01', quote: { lines: [{ id: 'q1', desc: 'Editing', qty: 2, unit: 'day', price: 400 }, { id: 'q2', desc: 'Travel', qty: 1, unit: 'each', price: 80 }] } }, 'invoice', 'quote'), 'quote');
+    return { grown: show(grown), price: grown.lines[0].price, old: show(old), quoted: show(quoted), again: show(again), leak: JSON.stringify(m.snapshot(s.byId('bookings', 'mn-h'), 'invoice')).includes('"src"') }; }));
+  ok('a quote made for one day, asked again once the job is three days, has three shoot days and three crew days, each once', !!merged && /^Shoot days 3 day \| Crew: [^|]+ 3 day \(\+0 ~2\)$/.test(merged.grown) && merged.price === 600, JSON.stringify(merged && merged.grown));
+  ok('lines saved before this repair are known by what they say, and a line typed by hand is left as it is', !!merged && merged.old === 'Shoot days 2 day | Editing 8 hour | Travel 1 each (+0 ~2)', JSON.stringify(merged && merged.old));
+  ok('“Lines from the quote” adds the quote’s Editing by the day beside the editing hours, once, and never changes a line', !!merged && merged.quoted === 'Shoot days 2 day | Editing 8 hour | Editing 1 day | Travel 1 each (+2 ~0)' && merged.again === 'Shoot days 2 day | Editing 8 hour | Editing 1 day | Travel 1 each (+0 ~0)' && !merged.leak, JSON.stringify(merged && [merged.quoted, merged.again, merged.leak]));
+  // The form: an emptied line goes; the document's own tax name can be changed
+  await page.evaluate(() => import('./js/money.js').then(m => m.setBilling({ taxLabel: 'Sales tax' }))); await sleep(200);
+  await page.locator('.money-page').getByRole('button', { name: 'Edit' }).click(); await mform.waitFor();
+  for (const box of await mform.locator('.field:has(label:has-text("Lines")) .row-edit').nth(1).locator('input').all()) await box.fill('');
+  const hasName = await mform.locator('input[data-key="taxLabel"]').count();
+  if (hasName) await mform.locator('input[data-key="taxLabel"]').fill('Sales tax');
+  await mform.locator('input[data-key="taxRate"]').fill('8'); await mform.locator('button[type=submit]').click(); await sleep(400);
+  const edited = await page.evaluate(() => import('./js/store.js').then(s => { const inv = s.byId('bookings', 'mn-h').invoice; return { lines: inv.lines.map(l => l.desc).join(' | '), doc: document.querySelector('.money-doc .money-totals').textContent }; }));
+  ok('a line emptied by hand in the form is dropped, not left as a blank line priced nothing', edited.lines === 'Shoot days — Probe shoot', edited.lines);
+  ok('the form has the invoice’s own tax name, and the document prints the name the form shows', hasName === 1 && /Sales tax 8%/.test(edited.doc) && !/VAT/.test(edited.doc), edited.doc);
+  // Invoices due in 0 days are due on receipt
+  const dueOn = await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/money.js')]).then(([s, m]) => { m.setBilling({ dueDays: 0 }); s.upsert('bookings', { id: 'mn-d', title: 'Due on receipt', date: '2026-12-01', status: 'Shot', crew: [], gear: [], stakeholders: [] }); m.editMoney(s.byId('bookings', 'mn-d'), 'invoice'); })).then(async () => { await mform.waitFor(); const v = [await mform.locator('input[data-key="date"]').inputValue(), await mform.locator('input[data-key="due"]').inputValue()]; await page.keyboard.press('Escape'); return v; });
+  ok('with “Invoices due in (days)” at 0 a new invoice is due on its own date', dueOn[0] === dueOn[1] && /^\d{4}-\d\d-\d\d$/.test(dueOn[1]), dueOn.join(' / '));
+  await page.evaluate(() => import('./js/money.js').then(m => m.setBilling({ dueDays: 14, taxLabel: 'VAT' }))); await sleep(200);
+  // The walkthrough's practice job is listed, but is not money: not in the totals, not in the accountant's file
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.showMonth())); await sleep(300);
+  const overview = async () => { await page.getByRole('button', { name: 'Money' }).click(); await page.waitForSelector('.sheet .stats'); const t = (await page.locator('.sheet .stats').innerText()).replace(/\s+/g, ' '); return t; };
+  const sumsBefore = await overview(); await page.keyboard.press('Escape'); await sleep(200);
+  await page.evaluate(() => import('./js/store.js').then(s => { const today = new Date().toISOString().slice(0, 10), doc = (number, status, more) => ({ number, date: today, lines: [{ id: number, desc: 'Practice day', qty: 1, unit: 'day', price: 720 }], taxRate: 0, taxLabel: 'VAT', status, ...more });
+    s.upsert('bookings', { id: 'practice-x', practice: true, title: 'Practice job (delete when done)', client: 'Sample client', date: today, status: 'Delivered', crew: [], gear: [], stakeholders: [], quote: doc('Q-PRACTICE', 'Accepted'), invoice: doc('INV-PRACTICE', 'Sent', { due: today, payments: [{ id: 'pp', date: today, amount: 360, method: 'Bank transfer' }] }) }); }));
+  const sumsAfter = await overview(), listed = await page.locator('.sheet .list').innerText();
+  const [pcsv] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /Invoices \(CSV\)/ }).click()]);
+  const pcsvText = fs.readFileSync(await pcsv.path(), 'utf8');
+  ok('the practice job of the money walkthrough is listed but left out of the Money totals and the accountant’s CSV', sumsAfter === sumsBefore && /Practice job/.test(listed) && !/PRACTICE/.test(pcsvText) && /INV-0001/.test(pcsvText), sumsBefore + ' → ' + sumsAfter);
+  await page.keyboard.press('Escape'); await sleep(200);
+  await page.evaluate(() => import('./js/store.js').then(s => { s.remove('bookings', 'practice-x'); s.remove('bookings', 'mn-d'); }));
   // ---- equipment service log ----
   await page.evaluate(() => window.logiGo('gear')); await sleep(300);
   await page.evaluate(() => import('./js/store.js').then(s => { const g = s.db.gear[0]; const past = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10); const soon = new Date(Date.now() + 20 * 864e5).toISOString().slice(0, 10); s.upsert('gear', { ...g, serviceEvery: 12, purchased: past, warranty: soon, firmware: '2.01' }); window.__g = g.id; }));

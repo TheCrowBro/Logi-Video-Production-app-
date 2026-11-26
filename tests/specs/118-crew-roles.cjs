@@ -65,7 +65,8 @@ const setup = async ctx => {
 
   // ---- the menu, from the crew form ----
   await page.evaluate(() => window.logiGo('crew')); await sleep(400);
-  const before = await store(() => import('./js/store.js').then(s => JSON.stringify(s.db.crew)));
+  // (without the time each record was last changed: the backup brought back further down stamps every record as changed then, so a restore outranks deletions made before it; spec 97)
+  const before = await store(() => import('./js/store.js').then(s => JSON.stringify(s.db.crew.map(({ updatedAt, ...c }) => c))));
   await addCrew('Ana Grip');
   ok('the form\'s Role box is a button with its label, saying nothing is chosen yet (no free-text box, no datalist)', (await roleBtn.count()) === 1 && (await roleBtn.getAttribute('aria-label')) === 'Role: none chosen' && (await roleBtn.getAttribute('aria-haspopup')) === 'dialog' && (await roleBtn.getAttribute('type')) === 'button'
     && (await page.locator('.sheet form label', { hasText: 'Role' }).getAttribute('for')) === (await roleBtn.getAttribute('id')) && (await roleBtn.innerText()).includes('Choose a role') && (await page.locator('.sheet form input[data-key="role"], .sheet form datalist').count()) === 0);
@@ -219,7 +220,7 @@ const setup = async ctx => {
   ok('while Vdex is read-only nothing is kept or forgotten', refused.kept === false && refused.gone === false && refused.names === 'Crane swinger,Jib assistant', JSON.stringify(refused));
 
   // ---- existing crew keep the roles they have ----
-  const sample = () => store(() => import('./js/store.js').then(s => JSON.stringify(s.db.crew.filter(c => ['Sam Rivera', 'Jo Chen', 'Mika Dahl', 'Priya Nair'].includes(c.name)))));
+  const sample = () => store(() => import('./js/store.js').then(s => JSON.stringify(s.db.crew.filter(c => ['Sam Rivera', 'Jo Chen', 'Mika Dahl', 'Priya Nair'].includes(c.name)).map(({ updatedAt, ...c }) => c))));
   ok('the crew that were there before are exactly as they were', (await sample()) === before && JSON.parse(before).map(c => c.role).join() === 'Sound Recordist,1st AC,Gaffer,Editor');
   await store(() => import('./js/store.js').then(s => { s.upsert('crew', { id: 'old-odd', name: 'Odd Role', role: 'Sound recordist / fixer', phone: '', email: '', link: '', rate: 300, rateUnit: 'day', notes: '' }); s.upsert('crew', { id: 'old-none', name: 'No Role Yet', role: '', phone: '', email: '', link: '', rate: '', notes: '' }); })); await sleep(400);
   await card('Odd Role').locator('button[aria-label="Edit Odd Role"]').click(); await page.waitForSelector('.sheet form');
