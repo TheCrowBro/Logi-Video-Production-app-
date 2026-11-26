@@ -40,23 +40,31 @@ export function migrateBooking(b) {
 // The same, in place, for a booking being edited inside update().
 export const splitHires = x => { const m = migrateBooking(x); if (m !== x) { x.hires = m.hires; x.rentals = m.rentals; } return x; };
 
+// A list holds records: things with an id. Anything else in one (a null, a word, a damaged entry in a file given to
+// Import backup…, or in a copy another device made from such a file) is left out here, on load, on import and for
+// every copy read from the cloud: one such entry would stop the pages that read the list, and every merge with it.
+const rec = x => !!x && typeof x === 'object' && !Array.isArray(x) && typeof x.id === 'string' && x.id !== '';
+const recs = v => (Array.isArray(v) ? v.filter(rec) : []);
+// A deletion mark is an id and a time. It is kept three years, so that a phone or tablet left in a drawer for most of
+// a year does not bring back, on every device, what was deleted while it was away.
+const MARKS_KEPT = 3 * 365 * 864e5;
 function normalise(raw) {
   const b = blank();
   return {
     ...b, ...raw,
     profile: { ...b.profile, ...(raw.profile || {}) },
-    bookings: (Array.isArray(raw.bookings) ? raw.bookings : []).map(migrateBooking),
-    crew: Array.isArray(raw.crew) ? raw.crew : [],
-    gear: Array.isArray(raw.gear) ? raw.gear : [],
-    insurance: Array.isArray(raw.insurance) ? raw.insurance : [],
-    kits: Array.isArray(raw.kits) ? raw.kits : [],
-    venues: Array.isArray(raw.venues) ? raw.venues : [],
-    shifts: Array.isArray(raw.shifts) ? raw.shifts.map(s => ({ ...s, breaks: Array.isArray(s.breaks) ? s.breaks : [] })) : [],
-    logs: Array.isArray(raw.logs) ? raw.logs.map(l => ({ ...l, notes: Array.isArray(l.notes) ? l.notes : [], scriptAt: Number(l.scriptAt) || (l.script ? Date.parse(l.script.imported) || 1 : 0) })) : [],
-    deleted: Object.fromEntries(Object.entries(raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {}).filter(([, t]) => Date.now() - t < 180 * 864e5)),
+    bookings: recs(raw.bookings).filter(x => typeof x.date === 'string').map(migrateBooking),
+    crew: recs(raw.crew),
+    gear: recs(raw.gear),
+    insurance: recs(raw.insurance),
+    kits: recs(raw.kits),
+    venues: recs(raw.venues),
+    shifts: recs(raw.shifts).map(s => ({ ...s, breaks: Array.isArray(s.breaks) ? s.breaks : [] })),
+    logs: recs(raw.logs).map(l => ({ ...l, notes: recs(l.notes), scriptAt: Number(l.scriptAt) || (l.script ? Date.parse(l.script.imported) || 1 : 0) })),
+    deleted: Object.fromEntries(Object.entries(raw.deleted && typeof raw.deleted === 'object' ? raw.deleted : {}).filter(([, t]) => Date.now() - t < MARKS_KEPT)),
     calSync: { ...b.calSync, ...(raw.calSync && typeof raw.calSync === 'object' ? raw.calSync : {}), events: raw.calSync?.events && typeof raw.calSync.events === 'object' ? raw.calSync.events : {} },
     templates: raw.templates && typeof raw.templates === 'object' ? raw.templates : {},
-    projectTemplates: Array.isArray(raw.projectTemplates) ? raw.projectTemplates : [],
+    projectTemplates: recs(raw.projectTemplates),
     billing: raw.billing && typeof raw.billing === 'object' ? raw.billing : { updatedAt: 0 },
     priceList: raw.priceList && typeof raw.priceList === 'object' ? raw.priceList : b.priceList,
     myRoles: (Array.isArray(raw.myRoles) ? raw.myRoles : []).filter(r => r && typeof r === 'object' && typeof r.id === 'string' && typeof r.name === 'string' && r.name.trim()),
@@ -193,22 +201,38 @@ export const gearClash = (booking, gearId) => {
 // A restore (a backup file, or a backup kept in the cloud) replaces what is on this device. Everything restored counts
 // as changed now: a record deleted by mistake and brought back this way must outrank the deletion mark the other
 // devices and the cloud copy still hold for it, or the next sync would take it away again without a word.
+// The same goes for the parts of a booking that keep a time of their own (budget, stripboard, quote, invoice). And what
+// this device held that the backup does not is marked deleted, so that the other devices let go of it too and do not
+// hand it back at the next sync: after a restore every device ends with what the backup holds.
 export function replaceAll(data) {
+  const was = db, now = Date.now();
   db = normalise(data);
-  const now = Date.now();
   for (const list of LISTS) db[list] = (db[list] || []).map(x => (x && typeof x === 'object' ? { ...x, updatedAt: now } : x));
+  db.bookings = db.bookings.map(b => {
+    const o = { ...b };
+    for (const k of ['budget', 'board']) if (o[k] && typeof o[k] === 'object') o[k] = { ...o[k], updatedAt: now };
+    for (const k of ['quote', 'invoice']) { if (o[k] && typeof o[k] === 'object') { o[k] = { ...o[k], updatedAt: now }; delete o[k + 'GoneAt']; } else o[k + 'GoneAt'] = now; }
+    return o;
+  });
   db.logs = db.logs.map(l => ({ ...l, updatedAt: now, notes: l.notes.map(n => (n && typeof n === 'object' ? { ...n, upd: now } : n)) }));
+  markGone(was, db, now);
   db.updatedAt = now;
   persistLocal();
   emit();
   schedulePush();
 }
 
+// Marks as deleted, in `now`, every record `was` held that `now` does not (a restore, the example data).
+function markGone(was, now, at) {
+  for (const list of [...LISTS, 'logs']) { const kept = new Set((now[list] || []).map(x => x.id)); for (const x of was[list] || []) if (x && x.id && !kept.has(x.id)) now.deleted[x.id] = at; }
+}
+
 export function exportJSON() { return JSON.stringify(db, null, 2); }
 
 // Wipe this device: unlink storage first so the cloud copy is left alone.
 export async function eraseAll() {
-  await unlinkCloud();
+  clearTimeout(timer);
+  await unlinkCloud(); // a sync that is reading at this moment finds its storage unlinked when the answer comes, and merges nothing (runSync)
   db = blank(); db.updatedAt = Date.now();
   sealed = false; dirty = false;
   persistLocal(); emit();
@@ -217,7 +241,7 @@ export async function eraseAll() {
   // location caches, the fingerprint or face key), except plain preferences and the terms already agreed to. The
   // licence sign-in stays: Sign out under About & Licence gives it up (terms section 17).
   try { dispatchEvent(new Event('vdex-erased')); } catch { /* ignore */ } // the lock lets go of its key first: no vault rewrite, no seal on the way out
-  const KEEP = new Set(['logi-terms', 'logi-prefs', 'logi-tour', 'logi-tour-at', 'logi-tab', 'logi-units', 'logi-stdday', 'logi-breakdefault', 'logi-notify', 'logi-hours-range', 'logi-eyeh', 'logi-decl', 'logi-lock-setup']);
+  const KEEP = new Set(['logi-terms', 'logi-prefs', 'logi-tour', 'logi-tour-at', 'logi-tab', 'logi-units', 'logi-wx-units', 'logi-stdday', 'logi-breakdefault', 'logi-notify', 'logi-hours-range', 'logi-eyeh', 'logi-decl', 'logi-lock-setup']);
   try { const keys = []; for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); keys.filter(k => k && (k.startsWith('logi-') || k.startsWith('msal.')) && !KEEP.has(k)).forEach(k => localStorage.removeItem(k)); } catch { /* blocked storage */ }
   try { await new Promise(res => { const r = indexedDB.deleteDatabase('logi'); r.onsuccess = r.onerror = r.onblocked = () => res(); }); } catch { /* ignore */ }
   setTimeout(() => location.reload(), 600);
@@ -228,6 +252,7 @@ export function loadSample() {
   const venueA = uid(), todayJob = uid(), past0 = uid(), past1 = uid(), past2 = uid(), past3 = uid();
   // worked days for the hours chart: [booking, days ago, start h, end h, break min]
   const shift = (bid, ago, sh, eh, bm) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ago, sh, 0); const start = x.getTime(); return { id: uid(), bookingId: bid, date: iso(-ago), start, end: start + (eh - sh) * 36e5, breaks: bm ? [{ start: start + 4 * 36e5, end: start + 4 * 36e5 + bm * 6e4 }] : [], updatedAt: start }; };
+  const was = db, now = Date.now();
   const g = (name, category, value, serial = '', qty = 1) => ({ id: uid(), name, category, value, serial, qty, notes: '' });
   const gear = [
     g('Sony FX6 body', 'Camera', 6000, 'FX6-120934'), g('Sony FE 24-70mm f/2.8 GM II', 'Lens', 2300),
@@ -270,7 +295,11 @@ export function loadSample() {
     ],
     profile: { ...db.profile, name: db.profile.name || 'Your Name', business: db.profile.business || 'Your Studio', title: 'Videographer / DOP', phone: db.profile.phone || '+1 555 0100', email: db.profile.email || 'you@example.com', website: db.profile.website || 'https://example.com' },
   });
-  db.updatedAt = Date.now();
+  // What the examples replace is marked deleted and the examples count as made now, so a linked device ends with the
+  // examples too, not with both (the shifts keep their own times: the hours chart reads them).
+  for (const list of ['bookings', 'crew', 'gear', 'kits', 'venues', 'insurance']) db[list] = db[list].map(x => ({ ...x, updatedAt: now }));
+  markGone(was, db, now);
+  db.updatedAt = now;
   persistLocal(); emit(); schedulePush();
 }
 
@@ -281,6 +310,8 @@ export const cloud = {
   supported: typeof window.showSaveFilePicker === 'function', // local-file linking
   adapter: null,
   auxName: '', feedUrl: '', feedError: '', // calendar feed (see calendar.js)
+  backupError: '', // why today's dated backup could not be written, if it could not
+  damaged: null, // the text of a cloud copy that could not be read as a Vdex database (null: none)
   status: 'off', // off | synced | saving | needs-permission | error
   error: '',
 };
@@ -436,8 +467,34 @@ export async function initCloud() {
     }
   } catch (e) { setStatus('error', e.message); }
   linkKnown();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden && cloud.adapter && cloud.status === 'synced') sync(); });
+  // After the start the cloud copy is read again whenever this device may have fallen behind another: when Vdex comes
+  // to the front, when its window is clicked into, when the connection comes back, and every five minutes while it
+  // stays in view (a desktop window left open never comes "to the front"). A sync that failed is tried again the same
+  // way; one that waits for a sign-in needs the person's tap. Two of these at once are one sync.
+  let asked = 0;
+  const again = quiet => () => {
+    if (document.hidden || !cloud.adapter || cloud.paused || !(cloud.status === 'synced' || cloud.status === 'error') || Date.now() - asked < 1000) return;
+    asked = Date.now(); sync({ quiet: quiet && cloud.status === 'synced', join: true });
+  };
+  document.addEventListener('visibilitychange', again(false));
+  window.addEventListener('focus', again(true)); window.addEventListener('online', again(true));
+  setInterval(again(true), 5 * 60e3);
 }
+
+// Another window of Vdex on this device saved: its copy is merged into this window's, record by record as a copy from
+// the cloud is, so the next save here does not write this window's older copy over what the other one just made.
+// What this window has that the other lacks is saved in turn. A sealed window (hidden or locked) reads the disk when
+// it is opened again.
+try {
+  window.addEventListener('storage', e => {
+    if (e.key !== KEY || !e.newValue || sealed) return;
+    let theirs; try { theirs = normalise(JSON.parse(e.newValue)); } catch { return; }
+    const merged = mergeDb(db, theirs);
+    if (JSON.stringify(merged) === JSON.stringify(db)) return;
+    db = merged; rev++; emit();
+    if (!sameCopy(merged, theirs)) persistLocal();
+  });
+} catch { /* no page */ }
 
 /* --------------------------------- merging --------------------------------- */
 const LISTS = ['bookings', 'crew', 'gear', 'insurance', 'kits', 'venues', 'shifts', 'projectTemplates', 'myRoles']; // merged record by record (the logs too, with their notes)
@@ -499,11 +556,13 @@ export function mergeDb(local, remote) {
   // the bookings and kits here as well, as remove() does on the device that deleted it (and never for a record that
   // is still on a list, such as one restored from a backup).
   { const gone = list => { const ids = new Set(out[list].map(x => x.id)); return id => !!dead[id] && !ids.has(id); };
-    const noGear = gone('gear'), noCrew = gone('crew'), noKit = gone('kits');
+    const noGear = gone('gear'), noCrew = gone('crew'), noKit = gone('kits'), noVenue = gone('venues'), noBooking = gone('bookings');
     const less = (o, k, test) => (Array.isArray(o[k]) && o[k].some(test) ? { ...o, [k]: o[k].filter(id => !test(id)) } : o);
     const lessQty = o => (o.gearQty && Object.keys(o.gearQty).some(noGear) ? { ...o, gearQty: Object.fromEntries(Object.entries(o.gearQty).filter(([id]) => !noGear(id))) } : o);
-    out.bookings = out.bookings.map(b => lessQty(less(less(less(b, 'gear', noGear), 'crew', noCrew), 'kits', noKit)));
-    out.kits = out.kits.map(k => lessQty(less(k, 'gear', noGear))); }
+    const lessKey = (o, k, test) => { if (o[k] == null || !test(o[k])) return o; const c = { ...o }; delete c[k]; return c; }; // a venue on a booking, a booking on a log
+    out.bookings = out.bookings.map(b => lessKey(lessQty(less(less(less(b, 'gear', noGear), 'crew', noCrew), 'kits', noKit)), 'venueId', noVenue));
+    out.kits = out.kits.map(k => lessQty(less(k, 'gear', noGear)));
+    out.logs = out.logs.map(l => lessKey(l, 'bookingId', noBooking)); }
   out.profile = ts(remote.profile) > ts(local.profile) ? remote.profile : local.profile;
   { // calendar link follows the newer copy; the booking -> event map is the union, newer entry per booking
     const a = local.calSync || {}, b = remote.calSync || {}, base = ts(b) > ts(a) ? b : a;
@@ -516,6 +575,19 @@ export function mergeDb(local, remote) {
   out.priceList = ts(remote.priceList) > ts(local.priceList) ? remote.priceList : local.priceList; // its own record: a change to the other billing settings never undoes it
   out.updatedAt = Math.max(local.updatedAt || 0, remote.updatedAt || 0);
   return out;
+}
+
+// Two copies that differ only in the order of the records in a list, or of the keys in a record, hold the same: the
+// pages sort the lists themselves, and each device keeps the order it met the records in. Without this, two devices
+// that each added something would upload the whole copy at every sync from then on, for the order alone.
+function sameCopy(x, y) {
+  const byId = (p, q) => (String(p && p.id) < String(q && q.id) ? -1 : 1);
+  const text = d => {
+    const o = { ...d }; for (const list of LISTS) if (Array.isArray(o[list])) o[list] = [...o[list]].sort(byId);
+    o.logs = [...(o.logs || [])].sort(byId).map(l => ({ ...l, notes: [...(l.notes || [])].sort(byId) }));
+    return JSON.stringify(o, (k, v) => (v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map(key => [key, v[key]])) : v));
+  };
+  return text(x) === text(y);
 }
 
 // Merge the remote copy in, then push if anything here isn't in it yet. `quiet` skips the "Saving…" flicker (background polls).
@@ -532,21 +604,50 @@ export async function sync(opts = {}) {
   syncing = runSync(opts);
   try { return await syncing; } finally { syncing = null; }
 }
+// A storage unlinked while its answer was on the way (Disconnect, Erase all data) gets nothing merged from it, and
+// says nothing about the state any more: `here` is false from then on.
 async function runSync({ ask = false, quiet = false } = {}) {
-  const a = cloud.adapter;
+  const a = cloud.adapter, here = () => cloud.adapter === a;
   try {
-    if (!(await a.ready(ask))) return setStatus('needs-permission');
+    if (!(await a.ready(ask))) { if (here()) setStatus('needs-permission'); return; }
+    if (!here()) return;
     if (sealed) { pendingSync = true; return; } // locked while the sign-in was open: nothing is copied until it is unlocked
     if (!quiet) setStatus('saving');
     const remote = await a.read();
+    if (!here()) return;
+    cloud.damaged = null;
     if (cloud.paused) return setStatus('paused'); // paused while reading: nothing is merged or written
     if (!remote) return await push();
-    const merged = mergeDb(db, normalise(remote));
+    const theirs = normalise(remote), merged = mergeDb(db, theirs);
     const localChanged = JSON.stringify(merged) !== JSON.stringify(db);
-    const remoteStale = JSON.stringify(merged) !== JSON.stringify(normalise(remote));
+    const remoteStale = !sameCopy(merged, theirs);
     if (localChanged) { db = merged; persistLocal(); emit(); }
-    if (remoteStale) await push(); else { lsSet('logi-sync-at', String(Date.now())); setStatus(cloud.paused ? 'paused' : 'synced'); }
-  } catch (e) { setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
+    if (remoteStale) await push();
+    else {
+      if (localChanged) await writeFeed(a); // what came in from another device goes into the calendar feed this device keeps
+      lsSet('logi-sync-at', String(Date.now())); if (here()) setStatus(cloud.paused ? 'paused' : 'synced');
+    }
+  } catch (e) {
+    if (!here()) return;
+    // A copy that cannot be read as what Vdex wrote (cut short while it was being saved): kept, to be put beside the new
+    // one, and the storage panel offers to replace it with this device's copy (replaceDamagedCopy).
+    cloud.damaged = e.name === 'DamagedCopy' ? e.text || '' : null;
+    setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message);
+  }
+}
+// The copy in the storage could not be read: this device's copy takes its place, and what was there is first kept
+// beside it (where the storage keeps files beside the database) in case something can be saved from it by hand.
+export async function replaceDamagedCopy() {
+  const a = cloud.adapter, text = cloud.damaged;
+  if (!a || cloud.paused || text == null) return;
+  if (text && a.writeExtra) try { await a.writeExtra('vdex-damaged-copy.json', text); } catch { /* the new copy matters more */ }
+  cloud.damaged = null;
+  await push();
+}
+// The calendar feed, where this storage keeps one and it is switched on.
+async function writeFeed(a) {
+  if (!(db.calSync?.feed && auxWriter && a.writeAux) || cloud.adapter !== a) return;
+  try { await a.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
 }
 
 let auxWriter = null;
@@ -564,9 +665,7 @@ async function pushNow() {
     lsSet('logi-sync-at', String(Date.now()));
     if (cloud.paused) { if (cloud.adapter === a) setStatus('paused'); return; } // paused meanwhile: no backup or feed after it
     await autoBackup(a);
-    if (db.calSync?.feed && auxWriter && a.writeAux) {
-      try { await a.writeAux(auxWriter()); cloud.feedError = ''; } catch (e) { cloud.feedError = e.message; }
-    }
+    await writeFeed(a);
     if (cloud.adapter === a) setStatus(cloud.paused ? 'paused' : 'synced');
   } catch (e) { if (cloud.adapter === a) setStatus(e.name === 'NotAllowedError' ? 'needs-permission' : 'error', e.message); }
 }
@@ -606,15 +705,17 @@ async function autoBackup(a = cloud.adapter) {
     for (const name of names) await a.writeExtra(name, text);
     lsSet('logi-backup-cloud', JSON.stringify({ day, month, at: Date.now(), name: names[0], provider: a.id }));
     cloud.backupError = '';
-  } catch (e) { cloud.backupError = e.message; }
+  } catch (e) { cloud.backupError = e.message || 'it could not be written'; } // shown where backups are spoken of (js/backup.js); the status that follows redraws them
 }
 
 let timer;
 function schedulePush() {
   if (sealed) { pendingSync = true; return; }
   if (!cloud.adapter || cloud.paused || cloud.status === 'needs-permission') return;
+  // Read, merge, then write (sync), never a blind write: another device may have saved since this one last read, and
+  // its work would be gone from the cloud copy, and for good if that device were lost before it synced again.
   clearTimeout(timer);
-  timer = setTimeout(push, 800);
+  timer = setTimeout(() => sync({ quiet: true }), 800);
 }
 
 export function reconnectNeeded(msg) { if (cloud.adapter) setStatus('needs-permission', msg || ''); }
@@ -671,7 +772,7 @@ export async function eraseCloudCopy() {
 }
 export async function unlinkCloud() {
   cloud.adapter?.signOut?.({ keepToken: db.calSync?.provider === 'microsoft' }); // the Outlook link shares the Microsoft sign-in
-  cloud.adapter = null; cloud.auxName = ''; cloud.feedUrl = ''; lsSet('logi-feed-url', null);
+  cloud.adapter = null; cloud.auxName = ''; cloud.feedUrl = ''; cloud.backupError = ''; cloud.damaged = null; lsSet('logi-feed-url', null);
   await kv('readwrite', s => s.delete('auxHandle'));
   lsSet('logi-provider', null);
   await kv('readwrite', s => s.delete('fileHandle'));

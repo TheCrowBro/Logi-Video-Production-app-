@@ -11,6 +11,7 @@ import { canChange } from './store.js';
 */
 export function openForm({ title, fields, values = {}, onSave, onDelete, saveLabel = 'Save', validate = null }) {
   const readers = [];
+  const checks = []; // each answers [box, message] for something the form cannot save as it stands, or nothing
   const saved = []; // run after a save went through
   const boxesByKey = {};
   const qtyByKey = {};
@@ -57,6 +58,8 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
             navigator.geolocation.getCurrentPosition(p => { set({ lat: +p.coords.latitude.toFixed(6), lon: +p.coords.longitude.toFixed(6) }); toast('Using your current location'); }, () => toast('Could not get your location'), { timeout: 10000 });
           } }, '📡 I’m here now')));
       readers.push(() => [f.key, lat.value !== '' && lon.value !== '' ? { lat: Number(lat.value), lon: Number(lon.value) } : null]);
+      // One of the two alone is no place: said, instead of saving the form without what was typed.
+      checks.push(() => ((lat.value === '') !== (lon.value === '') ? [lat.value === '' ? lat : lon, 'Enter both the latitude and the longitude, or neither'] : null));
     } else if (f.type === 'role') {
       // A crew role: a button that shows the role and opens the menu of roles by department (js/role-picker.js, loaded
       // on first use). A role the person typed themselves is kept under My roles once the form is saved.
@@ -167,6 +170,7 @@ export function openForm({ title, fields, values = {}, onSave, onDelete, saveLab
     // Spaces alone are not an answer: the browser lets them through "required", and they would be saved as nothing.
     const blank = [...form.querySelectorAll('input[required], textarea[required]')].find(el => !el.value.trim());
     if (blank) return refuse(blank, 'Fill this in');
+    for (const check of checks) { const no = check(); if (no) return refuse(no[0], no[1]); }
     const out = { ...values };
     readers.forEach(r => { const [k, v] = r(); out[k] = v; });
     const bad = validate && validate(out);

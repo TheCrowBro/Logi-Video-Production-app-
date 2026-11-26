@@ -50,7 +50,9 @@ const FILE = 'vdex-production-db.json';
 
 const parse = text => {
   if (!text || !text.trim()) return null;
-  const d = JSON.parse(text);
+  // Not readable at all (cut short while it was being saved, as a rule): said in words, and named, so the storage panel
+  // can offer to put this device's copy in its place (store.replaceDamagedCopy). The text goes along to be kept.
+  let d; try { d = JSON.parse(text); } catch { throw Object.assign(new Error('The copy in your storage is damaged: it may have been cut short while it was being saved'), { name: 'DamagedCopy', text }); }
   if (!d || typeof d !== 'object' || !('bookings' in d || 'gear' in d)) throw new Error('Not a Vdex database file');
   return d;
 };
@@ -134,9 +136,12 @@ async function dropboxToken() {
   let t; try { t = JSON.parse(LS.get('logi-dbx-token')); } catch { /* none */ }
   if (!t) throw new Error('Not signed in to Dropbox');
   if (t.exp > Date.now()) return t.access;
-  const r = await fetch('https://api.dropboxapi.com/oauth2/token', { method: 'POST', body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: t.refresh, client_id: t.client || dropboxClient() }) });
-  const n = await r.json();
-  if (!r.ok) { if (r.status === 400 || r.status === 401) LS.del('logi-dbx-token'); const e = new Error('Dropbox wants you to sign in again'); e.name = 'NotAllowedError'; throw e; } // revoked or expired: sign in again
+  const r = await fetch('https://api.dropboxapi.com/oauth2/token', { method: 'POST', body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: t.refresh, client_id: t.client || dropboxClient() }) }).catch(() => { throw new Error('Dropbox could not be reached; check the connection'); });
+  const n = await r.json().catch(() => ({})); // a busy answer may not be JSON at all
+  if (!r.ok) {
+    if (r.status === 400 || r.status === 401) { LS.del('logi-dbx-token'); const e = new Error('Dropbox wants you to sign in again'); e.name = 'NotAllowedError'; throw e; } // revoked or expired: sign in again
+    throw new Error(`Dropbox is not answering just now (${r.status})`); // busy (429, 503…): the sign-in is kept, and the next sync tries again
+  }
   t.access = n.access_token; t.exp = Date.now() + n.expires_in * 1000 - 60000;
   LS.set('logi-dbx-token', JSON.stringify(t));
   return t.access;
@@ -204,8 +209,12 @@ export const loadGIS = () => gisPromise || (gisPromise = new Promise((res, rej) 
 // and names the account (login_hint) so Google skips the account chooser and the window can close by itself.
 const grantedScopes = () => new Set((LS.get('logi-google-scopes') || '').split(' ').filter(Boolean));
 const liveToken = scopeStr => { // one token that covers every scope in the string, if there is one
-  const parts = scopeStr.split(' ').filter(Boolean), first = gTokens[parts[0]];
-  return first && first.exp > Date.now() && parts.every(p => gTokens[p] && gTokens[p].value === first.value) ? first.value : null;
+  const parts = scopeStr.split(' ').filter(Boolean);
+  const held = () => { const first = gTokens[parts[0]]; return first && first.exp > Date.now() && parts.every(p => gTokens[p] && gTokens[p].value === first.value) ? first.value : null; };
+  // With a PIN the saved tokens are sealed while Vdex is closed and put back at the unlock, which comes after this file
+  // has loaded (and read nothing): so the saved ones are looked at again whenever memory holds none that will do.
+  if (!held()) try { const now = Date.now(); for (const [k, t] of Object.entries(JSON.parse(LS.get('logi-google-tokens')) || {})) if (t && t.exp > now && !(gTokens[k] && gTokens[k].exp > now)) gTokens[k] = t; } catch { /* none saved */ }
+  return held();
 };
 export async function googleToken(scope, interactive) {
   const have = liveToken(scope);
@@ -286,6 +295,8 @@ export const gdriveAdapter = () => {
     if (fileId) LS.set('logi-gdrive-file', fileId);
     return fileId;
   };
+  // Why Google refused an upload: a full storage (shared with Gmail and Photos) is said in words a person can act on.
+  const refused = async (r, what) => { const j = await r.json().catch(() => ({})), e = j.error || {}; return new Error((e.errors || []).some(x => x && x.reason === 'storageQuotaExceeded') || /storage quota/i.test(e.message || '') ? 'Your Google storage is full. Free up some space in Google Drive, Gmail or Photos, or choose another way to keep a copy.' : `${what} (${r.status})`); };
   return {
     id: 'gdrive', label: 'Google Drive', where: 'a private Vdex area of your Google Drive',
     // Tokens last an hour and can't be refreshed silently by the browser, so ask on a user gesture when expired.
@@ -307,10 +318,11 @@ export const gdriveAdapter = () => {
         r = await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body });
         if (r.ok) { fileId = (await r.json()).id; LS.set('logi-gdrive-file', fileId); return; }
       }
-      if (!r.ok) throw new Error('Drive write failed (' + r.status + ')');
+      if (!r.ok) throw await refused(r, 'Drive write failed');
     },
     // The feed lives as a visible file in Drive (drive.file scope: only files this app made), shared read-only by link.
     enableFeed: async () => { await gdriveToken(true, DRIVE_FILE); LS.set('logi-feed-drive', '1'); }, // only once Google has said yes
+    feedReady: () => LS.get('logi-feed-drive') === '1', // Google's yes is given on each device: one that has not asked writes no feed
     writeExtra: async (name, text) => {
       const id = await findExtra(name);
       let r;
@@ -320,7 +332,7 @@ export const gdriveAdapter = () => {
         const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ name, parents: ['appDataFolder'] })}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${text}\r\n--${boundary}--`;
         r = await gfetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id', { method: 'POST', headers: { 'Content-Type': 'multipart/related; boundary=' + boundary }, body });
       }
-      if (!r.ok) throw new Error('Drive backup write failed (' + r.status + ')');
+      if (!r.ok) throw await refused(r, 'Drive backup write failed');
     },
     readExtra: async name => {
       const id = await findExtra(name); if (!id) return null;
@@ -380,13 +392,15 @@ const ckSignedOut = redirect => { const e = new Error('iCloud wants you to sign 
 // One request at a time: each answer carries the session for the next request. The newest session is saved at once
 // (and the lock told, so its sealed copy keeps up). If the lock cleared it while a request was out, the new one is
 // kept here and put back in place of the used one when the lock opens again; a sign-out in between drops it.
-let ckChain = Promise.resolve(), ckHeld = null, ckEpoch = 0, ckFullAddress = false;
-const ckSave = v => { LS.set(CK_SESSION, v); dispatchEvent(new Event('vdex-secrets')); };
+// ckLast is the newest session this page has saved or read: a request that goes out while the lock has the plain copy
+// away (a save that was under way when Vdex was put away) carries it, instead of going without one and being signed out.
+let ckChain = Promise.resolve(), ckHeld = null, ckLast = null, ckEpoch = 0, ckFullAddress = false;
+const ckSave = v => { ckLast = v; LS.set(CK_SESSION, v); dispatchEvent(new Event('vdex-secrets')); };
 function ckRequest(db, path, body) {
   const run = async () => {
     let session = LS.get(CK_SESSION);
-    if (ckHeld && session === ckHeld.used) { session = ckHeld.next; ckSave(session); }
-    ckHeld = null;
+    if (session != null) { if (ckHeld && session === ckHeld.used) { session = ckHeld.next; ckSave(session); } ckHeld = null; ckLast = session; }
+    else if (ckHeld || ckLast) { ckHeld = ckHeld || { used: ckLast, next: ckLast }; session = ckHeld.next; } // cleared by the lock: go on with the newest, and keep holding it
     const epoch = ckEpoch, q = new URLSearchParams({ ckAPIToken: ckToken() });
     if (session) q.set('ckWebAuthToken', session);
     let r;
@@ -394,9 +408,9 @@ function ckRequest(db, path, body) {
     try { r = await fetch(ckBase(db) + path + '?' + q, body === undefined ? { credentials: 'omit', ...ref } : { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body), credentials: 'omit', ...ref }); }
     catch { throw new Error('Could not reach iCloud. Check the connection and try again'); }
     const next = r.headers.get('x-apple-cloudkit-web-auth-token') || r.headers.get('x-apple-cloudkit-session');
-    if (next && session && epoch === ckEpoch) { const now = LS.get(CK_SESSION); if (now === session) ckSave(next); else if (now == null) ckHeld = { used: session, next }; }
+    if (next && session && epoch === ckEpoch) { const now = LS.get(CK_SESSION); if (now === session) ckSave(next); else if (now == null) ckHeld = { used: ckHeld ? ckHeld.used : session, next }; }
     let j = null; try { j = await r.json(); } catch { /* not JSON */ }
-    if (r.status === 421 || j?.serverErrorCode === 'AUTHENTICATION_REQUIRED') { if (session && LS.get(CK_SESSION) === (next || session)) LS.del(CK_SESSION); ckHeld = null; throw ckSignedOut(j?.redirectURL); }
+    if (r.status === 421 || j?.serverErrorCode === 'AUTHENTICATION_REQUIRED') { if (session && LS.get(CK_SESSION) === (next || session)) LS.del(CK_SESSION); ckHeld = null; ckLast = null; throw ckSignedOut(j?.redirectURL); }
     if (!r.ok) throw ckError(j, r.status);
     return j || {};
   };
@@ -512,7 +526,7 @@ export const icloudAdapter = () => ({
   // Removes everything Vdex keeps in iCloud by deleting its zone: the copy, its parts, the dated backups and any part
   // a broken save left behind (Apple asks apps to offer this). Waits for a save under way.
   erase: () => ckSerial(async () => { try { await ckZone('delete'); } catch (e) { if (!noZone(e)) throw e; } }), // nothing there is fine
-  signOut: () => { ckEpoch++; ckHeld = null; LS.del(CK_SESSION); setWho(''); },
+  signOut: () => { ckEpoch++; ckHeld = null; ckLast = null; LS.del(CK_SESSION); setWho(''); },
 });
 
 /* ------------------------------ Microsoft 365 ------------------------------ */
@@ -568,8 +582,10 @@ export async function microsoftToken(scopes, interactive, intent = 'onedrive') {
   if (t && t.refresh) {
     const r = await fetch(MS + 'token', { method: 'POST', body: new URLSearchParams({ client_id: t.client, grant_type: 'refresh_token', refresh_token: t.refresh, scope: ['offline_access', ...scopes].join(' ') }) }).catch(() => null);
     if (r && r.ok) { const j = await r.json(); msSave({ ...t, refresh: j.refresh_token || t.refresh, access: { ...(t.access || {}), [key]: { value: j.access_token, exp: Date.now() + j.expires_in * 1000 - 60000 } } }); return j.access_token; }
-    if (r && r.status >= 400 && r.status < 500) { const j = await r.json().catch(() => ({})); if (!/AADSTS65001|consent_required/.test(`${j.error} ${j.error_description}`)) msSave({ ...t, refresh: null, access: {} }); } // the 24 hours are up, or it was withdrawn; a missing consent keeps the rest
+    const busy = r && (r.status === 429 || r.status === 408 || r.status >= 500); // asked too often, or not well: the sign-in is kept
+    if (r && r.status >= 400 && r.status < 500 && !busy) { const j = await r.json().catch(() => ({})); if (!/AADSTS65001|consent_required/.test(`${j.error} ${j.error_description}`)) msSave({ ...t, refresh: null, access: {} }); } // the 24 hours are up, or it was withdrawn; a missing consent keeps the rest
     else if (!r) throw new Error('Microsoft could not be reached; check the connection');
+    else if (busy && !interactive) throw new Error(`Microsoft is not answering just now (${r.status})`); // a passing error: the next sync tries again
   }
   if (!interactive) { const e = new Error('Microsoft wants you to sign in again'); e.name = 'NotAllowedError'; throw e; }
   if ((await microsoftBegin(scopes, intent)) === 'browser') { const e = new Error('Carry on in your web browser: sign in to Microsoft there, then come back to Vdex.'); e.name = 'NotAllowedError'; e.handoff = true; throw e; }
@@ -619,7 +635,10 @@ export const onedriveAdapter = () => ({
 // For Nextcloud and ownCloud only the server's address is needed: the folder is files/<username>/Vdex, made on connect.
 export const webdavFolder = (cfg = settings.webdav()) => {
   const raw = String(cfg.url || '').trim().replace(/\/+$/, '');
-  if (cfg.kind !== 'nextcloud') return raw;
+  // A folder address typed without https:// would be read as a path on Vdex's own address, and the username, the
+  // password and the whole database would be sent there: so https:// is added, as for Nextcloud below, and what is
+  // still not an http(s) address is no address (Connect then asks for one).
+  if (cfg.kind !== 'nextcloud') { if (!raw) return ''; try { const u = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : 'https://' + raw); return /^https?:$/.test(u.protocol) && u.hostname ? u.href.replace(/\/+$/, '') : ''; } catch { return ''; } }
   let origin = raw; try { const u = new URL(/^https?:\/\//i.test(raw) ? raw : 'https://' + raw); origin = u.origin + u.pathname.replace(/\/(index\.php.*|remote\.php.*|apps\/.*)?$/, '').replace(/\/+$/, ''); } catch { return ''; }
   return `${origin}/remote.php/dav/files/${encodeURIComponent(cfg.user || '')}/Vdex`;
 };
@@ -627,22 +646,26 @@ export const webdavAdapter = () => {
   const cfg = settings.webdav();
   const base = webdavFolder(cfg);
   const url = name => base + '/' + encodeURIComponent(name);
-  const headers = extra => ({ Authorization: 'Basic ' + btoa(`${cfg.user || ''}:${cfg.pass || ''}`), ...extra });
+  // The username and password go as UTF-8 (RFC 7617): btoa alone refuses a character such as € and garbles an ä.
+  const basic = btoa(String.fromCharCode(...new TextEncoder().encode(`${cfg.user || ''}:${cfg.pass || ''}`)));
+  const headers = extra => ({ Authorization: 'Basic ' + basic, ...extra });
   let host = 'WebDAV'; try { host = new URL(base).host; } catch { /* label only */ }
-  const explain = r => r.status === 401 ? 'WebDAV: wrong username or password' : r.status === 403 ? 'WebDAV: no permission for that folder' : `WebDAV ${r.status}`;
+  const explain = r => r.status === 401 ? 'WebDAV: wrong username or password' : r.status === 403 ? 'WebDAV: no permission for that folder' : r.status === 507 ? 'WebDAV: the server has no room left' : `WebDAV ${r.status}`;
+  // Every request says the same when it gets no answer, never the browser's own "Failed to fetch".
+  const ask = (address, options) => fetch(address, options).catch(() => { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); });
   return {
     id: 'webdav', label: cfg.kind === 'nextcloud' ? `Nextcloud (${host})` : `WebDAV (${host})`, where: cfg.kind === 'nextcloud' ? 'the folder Vdex in your files' : 'the folder you gave',
     ready: async () => !!(base && cfg.user),
     // Make the folder if it is not there yet: 201 made, 405 already there. A server that refuses is told about on the first read.
     ensureFolder: async () => { try { await fetch(base + '/', { method: 'MKCOL', headers: headers({}) }); } catch { /* the read below explains */ } },
     read: async () => {
-      let r; try { r = await fetch(url(FILE), { headers: headers({}) }); } catch { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); }
+      const r = await ask(url(FILE), { headers: headers({}) });
       if (r.status === 404) return null; if (!r.ok) throw new Error(explain(r)); return parse(await r.text());
     },
-    write: async text => { const r = await fetch(url(FILE), { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: text }).catch(() => { throw new Error('WebDAV: the server did not answer or does not allow this site (CORS)'); }); if (!r.ok) throw new Error(explain(r)); },
-    writeExtra: async (name, text) => { const r = await fetch(url(name), { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: text }); if (!r.ok) throw new Error(explain(r)); },
-    readExtra: async name => { const r = await fetch(url(name), { headers: headers({}) }); if (r.status === 404) return null; if (!r.ok) throw new Error(explain(r)); return r.text(); },
-    writeAux: async ({ name, text }) => { const r = await fetch(url(name), { method: 'PUT', headers: headers({ 'Content-Type': 'text/calendar' }), body: text }); if (!r.ok) throw new Error(explain(r)); },
+    write: async text => { const r = await ask(url(FILE), { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: text }); if (!r.ok) throw new Error(explain(r)); },
+    writeExtra: async (name, text) => { const r = await ask(url(name), { method: 'PUT', headers: headers({ 'Content-Type': 'application/json' }), body: text }); if (!r.ok) throw new Error(explain(r)); },
+    readExtra: async name => { const r = await ask(url(name), { headers: headers({}) }); if (r.status === 404) return null; if (!r.ok) throw new Error(explain(r)); return r.text(); },
+    writeAux: async ({ name, text }) => { const r = await ask(url(name), { method: 'PUT', headers: headers({ 'Content-Type': 'text/calendar' }), body: text }); if (!r.ok) throw new Error(explain(r)); },
     signOut: () => settings.setWebdav(null),
   };
 };

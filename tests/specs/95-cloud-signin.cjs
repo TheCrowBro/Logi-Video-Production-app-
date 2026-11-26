@@ -2,7 +2,7 @@
 // trip, Google's and Microsoft's sign-in windows (stood in for), undo on a cancelled sign-in, a developer's own key,
 // Nextcloud's shortcut and folder creation, the calendar panel, and the "not switched on yet" state.
 const { chromium } = require('playwright');
-const { acceptTerms, menuClick } = require('../helpers.cjs');
+const { acceptTerms, menuClick, openMenu } = require('../helpers.cjs');
 const BASE = process.env.VDEX_URL || 'http://localhost:8123/';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -241,6 +241,275 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
     return { local: !!s.byId('bookings', 'from-other-device'), remoteKept: !!(written && written.bookings.some(b => b.id === 'from-other-device') && written.bookings.some(b => b.id === 'made-here')) };
   });
   ok('a copy that waited behind the lock is merged with the cloud copy, not written over it', merged.local && merged.remoteKept, JSON.stringify(merged));
+
+  /* ---------------------------- syncing, restoring and the storage sheet: repairs after 1.4.0 ---------------------------- */
+  // Two or more devices (browser contexts) share one stand-in WebDAV storage. Each device keeps its own list of script
+  // errors: a storage that does not answer or refuses is part of these cases, and the browser logs those by itself.
+  {
+    const MAIN = 'vdex-production-db.json', pad = n => String(n).padStart(2, '0');
+    const prev = new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1), OLD_BACKUP = `vdex-backup-${prev.getFullYear()}-${pad(prev.getMonth() + 1)}.json`; // last month's dated backup: today's saves never write it
+    const newCloud = () => ({ files: new Map(), log: [], auth: '', delay: 0, offline: false, fail: null });
+    const dav = (ctx, cloud, name) => ctx.route('https://dav.example/**', async route => {
+      const r = route.request(), m = r.method(), file = decodeURIComponent(new URL(r.url()).pathname.split('/').pop());
+      if (m === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+      cloud.log.push(`${name} ${m} ${file}`); cloud.auth = r.headers().authorization || '';
+      if (cloud.offline) return route.abort('internetdisconnected');
+      if (cloud.delay) await sleep(cloud.delay);
+      const refused = cloud.fail && cloud.fail(m, file); if (refused) return route.fulfill({ status: refused, headers: CORS, body: 'x' });
+      if (m === 'MKCOL') return route.fulfill({ status: 201, headers: CORS });
+      if (m === 'GET') return cloud.files.has(file) ? route.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: cloud.files.get(file) }) : route.fulfill({ status: 404, headers: CORS, body: '' });
+      if (m === 'PUT') { cloud.files.set(file, r.postData() || ''); return route.fulfill({ status: 201, headers: CORS }); }
+      return route.fulfill({ status: 405, headers: CORS });
+    });
+    const scriptErrors = [];
+    const device = async (cloud, name, { linked = true, width = 420, seed = null } = {}) => {
+      const ctx = await browser.newContext({ viewport: { width, height: 900 }, serviceWorkers: 'block', acceptDownloads: true });
+      await ctx.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+      await ctx.route('**/js/cloud-config.js', r => r.fulfill({ status: 200, contentType: 'text/javascript', body: `export const CLOUD_APPS = ${JSON.stringify(IDS)};` }));
+      await ctx.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); window.__toasts = []; addEventListener('DOMContentLoaded', () => new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true })); });
+      await ctx.addInitScript(acceptTerms());
+      // what a device holds before its first start: the link to the storage, and anything else the case gives it (once: a reload keeps what Vdex then wrote)
+      await ctx.addInitScript(([linked, seed]) => { if (localStorage.getItem('case-seeded')) return; localStorage.setItem('case-seeded', '1'); if (linked) { localStorage.setItem('logi-webdav', JSON.stringify({ kind: 'webdav', url: 'https://dav.example/vdex', user: 'u', pass: 'p' })); localStorage.setItem('logi-provider', 'webdav'); } for (const [k, v] of Object.entries(seed || {})) localStorage.setItem(k, v); }, [linked, seed]);
+      if (cloud) await dav(ctx, cloud, name);
+      const page = await ctx.newPage(); page.said = [];
+      page.on('pageerror', e => scriptErrors.push(`${name}: ${e.message}`)); page.on('dialog', d => { page.said.push(d.message()); d.accept(); });
+      return { ctx, page, name };
+    };
+    const start = async page => { await page.goto(BASE); await page.waitForSelector('#rolodex .drum-btn'); await sleep(300); };
+    const st = (page, fn, arg) => page.evaluate(`import('./js/store.js').then(s => (${fn})(s, ${JSON.stringify(arg === undefined ? null : arg)}))`);
+    const add = (page, id, title, more = {}) => st(page, (s, [id, title, more]) => { s.upsert('bookings', { id, title, date: '2026-12-01', status: 'Confirmed', crew: [], gear: [], ...more }); }, [id, title, more]);
+    const held = page => st(page, s => s.db.bookings.map(b => `${b.id}:${b.title}`).sort());
+    const saved = async page => { await sleep(1000); await synced(page); await sleep(200); }; // a change is copied 0.8 s after it is made
+    const syncNow = async page => { await st(page, s => s.sync()); await sleep(150); };
+    const cloudDb = cloud => JSON.parse(cloud.files.get(MAIN));
+    const front = async page => { await page.evaluate(() => { for (const hidden of [true, false]) { Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (hidden ? 'hidden' : 'visible') }); document.dispatchEvent(new Event('visibilitychange')); } }); await sleep(700); await synced(page); };
+    const toasts = page => page.evaluate(() => window.__toasts.splice(0));
+    const state = page => st(page, s => ({ status: s.cloud.status, error: s.cloud.error, linked: !!s.cloud.adapter }));
+    const sheetText = async page => (await page.locator('.sheet').last().innerText()).replace(/\s+/g, ' ');
+
+    // ---- a change is merged into the cloud copy, never written over it ----
+    const cloud = newCloud();
+    const A = await device(cloud, 'A'), B = await device(cloud, 'B');
+    await start(A.page); await add(A.page, 'keep', 'Keep me'); await add(A.page, 'edit', 'Right title'); await saved(A.page);
+    cloud.files.set(OLD_BACKUP, cloud.files.get(MAIN)); // the dated backup a restore goes back to, further down
+    await start(B.page); await synced(B.page);
+    await add(B.page, 'x', 'B made this'); await saved(B.page);
+    cloud.log.length = 0;
+    await add(A.page, 'y', 'A made this'); await saved(A.page); // A has not read the cloud copy since B saved
+    const mine = cloud.log.filter(l => l.startsWith('A ') && l.endsWith(MAIN));
+    ok('a change is saved by reading the cloud copy, merging and then writing: what another device saved meanwhile stays in it', mine.join() === `A GET ${MAIN},A PUT ${MAIN}` && cloudDb(cloud).bookings.map(b => b.id).sort().join() === 'edit,keep,x,y' && (await held(A.page)).length === 4, mine.join() + ' → ' + cloudDb(cloud).bookings.map(b => b.id).join());
+
+    // ---- two devices holding the same records in another order are in step ----
+    await syncNow(B.page); await syncNow(A.page); await syncNow(B.page); await sleep(300);
+    const orders = [await st(A.page, s => s.db.bookings.map(b => b.id).join()), await st(B.page, s => s.db.bookings.map(b => b.id).join())];
+    cloud.log.length = 0;
+    for (let i = 0; i < 2; i++) { await front(A.page); await sleep(1100); await front(B.page); await sleep(1100); }
+    const uploads = cloud.log.filter(l => / PUT /.test(l)), reads = cloud.log.filter(l => l.endsWith(`GET ${MAIN}`));
+    ok('with nothing changed, coming to the front reads the cloud copy and uploads nothing, though each device keeps its own order', orders[0] !== orders[1] && orders[0].split(',').sort().join() === orders[1].split(',').sort().join() && uploads.length === 0 && reads.length >= 4, JSON.stringify([orders, uploads, reads.length]));
+
+    // ---- a device that stays in view reads the cloud copy when its window is clicked into ----
+    await st(B.page, s => s.update(d => { const b = d.bookings.find(x => x.id === 'edit'); b.status = 'Delivered'; b.updatedAt = Date.now(); })); await saved(B.page);
+    cloud.log.length = 0;
+    await A.page.evaluate(() => window.dispatchEvent(new Event('focus'))); await sleep(900);
+    ok('a window that never left the screen takes in the other device’s change when it gets the focus', cloud.log.join() === `A GET ${MAIN}` && (await st(A.page, s => s.byId('bookings', 'edit').status)) === 'Delivered', cloud.log.join());
+
+    // ---- a sync that failed is tried again by itself ----
+    const C = await device(cloud, 'C');
+    cloud.offline = true; await start(C.page); await sleep(600);
+    const failedState = await state(C.page);
+    cloud.offline = false; cloud.log.length = 0;
+    await C.page.evaluate(() => window.dispatchEvent(new Event('online'))); await sleep(900); await synced(C.page);
+    ok('a device that started without a connection syncs by itself when the connection is back', failedState.status === 'error' && (await state(C.page)).status === 'synced' && (await held(C.page)).length === 4 && cloud.log.includes(`C GET ${MAIN}`), JSON.stringify([failedState, await state(C.page), cloud.log]));
+
+    // ---- deleting a venue on one device takes it off the booking on the other ----
+    await st(A.page, s => { s.upsert('venues', { id: 'v1', name: 'Dock Hall' }); s.update(d => { const b = d.bookings.find(x => x.id === 'keep'); b.venueId = 'v1'; b.updatedAt = Date.now(); }); }); await saved(A.page);
+    await syncNow(B.page); const hadVenue = await st(B.page, s => s.byId('bookings', 'keep').venueId);
+    await st(A.page, s => { s.remove('venues', 'v1'); }); await saved(A.page); await syncNow(B.page);
+    ok('a venue deleted on one device is no longer on the booking on the other', hadVenue === 'v1' && (await st(B.page, s => [s.db.venues.length, s.byId('bookings', 'keep').venueId === undefined].join())) === '0,true');
+
+    // ---- a restored backup stays restored, on every device ----
+    await st(A.page, s => { s.remove('bookings', 'keep'); s.update(d => { const b = d.bookings.find(x => x.id === 'edit'); b.title = 'WRONG title'; b.updatedAt = Date.now(); }); }); await saved(A.page); await syncNow(B.page);
+    const wrong = await held(B.page);
+    await menuClick(A.page, '#cloudBtn'); await A.page.waitForSelector('.sheet .storage'); await sleep(200);
+    await A.page.getByRole('button', { name: /Restore an automatic cloud backup/ }).click(); await A.page.locator('.sheet .card.tap', { hasText: OLD_BACKUP }).click(); await sleep(400);
+    const asked = A.page.said.splice(0).join('|'), now = await held(A.page);
+    await A.page.keyboard.press('Escape'); await sleep(200);
+    await saved(A.page); await syncNow(B.page); await syncNow(A.page); await syncNow(B.page);
+    const want = 'edit:Right title,keep:Keep me';
+    ok('a restore says the other devices follow', /Replace the data on this device with vdex-backup-.+\? Your other devices follow at their next sync\./.test(asked), asked);
+    ok('after a restore of a dated backup both devices end with what the backup holds: the deleted booking back, the old title, and nothing made since', wrong.join() === 'edit:WRONG title,x:B made this,y:A made this' && now.join() === want && (await held(A.page)).join() === want && (await held(B.page)).join() === want, JSON.stringify([wrong, now, await held(A.page), await held(B.page)]));
+
+    // ---- a damaged or foreign file given to Import backup… ----
+    const importFile = async (page, name, text) => { page.said.length = 0; await toasts(page); await page.locator('.sheet .file-btn input[type=file]').setInputFiles({ name, mimeType: 'application/json', buffer: Buffer.from(text) }); await sleep(500); return { toast: (await toasts(page)).join('|'), asked: page.said.splice(0).join('|') }; };
+    await menuClick(A.page, '#cloudBtn'); await A.page.waitForSelector('.sheet .storage'); await sleep(200);
+    const cut = await importFile(A.page, 'cut.json', JSON.stringify({ version: 1, bookings: [{ id: 'q', title: 'Cut off' }] }).slice(0, 40));
+    const foreign = await importFile(A.page, 'other.json', '{"gear":"none","name":"something else"}');
+    const csvFile = await importFile(A.page, 'register.csv', '"Item","Category"\r\n"Lens cloth",""');
+    const NOT = 'Import failed: this is not a Vdex backup file, or the file is incomplete.';
+    ok('a backup cut short, another app’s file and a spreadsheet are each refused in words a person can act on, and nothing is replaced', [cut, foreign, csvFile].every(r => r.toast === NOT && r.asked === '') && (await held(A.page)).join() === want, JSON.stringify([cut, foreign, csvFile]));
+    const mixed = await importFile(A.page, 'odd.json', JSON.stringify({ version: 1, bookings: [null, 'x', { title: 'No id', date: '2026-12-02' }, { id: 'ok', title: 'Fine', date: '2026-12-03', status: 'Confirmed' }], gear: [null], crew: [] }));
+    await A.page.keyboard.press('Escape'); await sleep(300);
+    await A.page.evaluate(() => window.logiGo('bookings')); await sleep(400);
+    ok('a backup with entries that are no records is imported without them, and the question says what the file holds', /It holds 1 booking, 0 people, 0 items\./.test(mixed.asked) && mixed.toast === 'Imported' && (await held(A.page)).join() === 'ok:Fine' && (await A.page.locator('#rolodex .drum-btn').count()) > 0 && (await st(A.page, s => s.db.gear.length)) === 0, JSON.stringify(mixed));
+    await saved(A.page); await syncNow(B.page);
+    ok('…and the other device follows it without a script error', (await held(B.page)).join() === 'ok:Fine' && (await state(B.page)).status === 'synced', JSON.stringify(await state(B.page)));
+
+    // ---- the example data replaces what was there, on every device ----
+    await st(A.page, s => { s.loadSample(); }); await saved(A.page); await syncNow(B.page); await syncNow(A.page);
+    const afterSample = [await st(A.page, s => [s.db.bookings.length, s.db.gear.length, !!s.byId('bookings', 'ok')].join()), await st(B.page, s => [s.db.bookings.length, s.db.gear.length, !!s.byId('bookings', 'ok')].join())];
+    ok('Load sample data replaces the data on a linked device too: both end with the examples only', afterSample[0] === '8,10,false' && afterSample[1] === '8,10,false', afterSample.join(' | '));
+
+    // ---- a device left unopened for most of a year does not bring back what was deleted meanwhile ----
+    const DAY = 864e5, db0 = cloudDb(cloud);
+    cloud.files.set(MAIN, JSON.stringify({ ...db0, deleted: { ...db0.deleted, old: Date.now() - 190 * DAY } }));
+    const local = { version: 1, updatedAt: Date.now() - 200 * DAY, bookings: [{ id: 'old', title: 'Deleted long ago', date: '2026-01-10', status: 'Confirmed', updatedAt: Date.now() - 200 * DAY }], deleted: {} };
+    const T = await device(cloud, 'T', { seed: { 'logi-db-v1': JSON.stringify(local) } });
+    await start(T.page); await synced(T.page); await sleep(300);
+    ok('a booking deleted 190 days ago stays deleted when a tablet last used 200 days ago is opened again', !(await held(T.page)).some(x => x.startsWith('old:')) && !cloudDb(cloud).bookings.some(b => b.id === 'old') && !!cloudDb(cloud).deleted.old, (await held(T.page)).length + ' bookings');
+    await T.ctx.close(); await C.ctx.close();
+
+    // ---- Disconnect, and Erase all data, while a sync is reading ----
+    await add(B.page, 'last', 'B saved last'); await saved(B.page); // the cloud copy is now B's own, word for word: the sync below finds nothing to do
+    cloud.delay = 450;
+    await st(B.page, s => { s.sync(); setTimeout(() => s.unlinkCloud(), 80); }); await sleep(1300);
+    ok('Disconnect while a sync is reading leaves “kept on this device only”, not “synced”', JSON.stringify(await state(B.page)) === '{"status":"off","error":"","linked":false}' && (await B.page.locator('#cloudBtn').getAttribute('data-state')) === 'off', JSON.stringify(await state(B.page)));
+    await Promise.all([A.page.waitForEvent('load'), st(A.page, s => { s.sync(); setTimeout(() => s.eraseAll(), 60); })]);
+    await A.page.waitForSelector('#rolodex .drum-btn'); await sleep(400);
+    cloud.delay = 0;
+    ok('Erase all data while a sync is reading leaves nothing on the device', (await st(A.page, s => [s.db.bookings.length, s.db.crew.length, s.db.gear.length, !!s.cloud.adapter].join())) === '0,0,0,false' && (await A.page.evaluate(() => JSON.parse(localStorage.getItem('logi-db-v1') || '{"bookings":[]}').bookings.length)) === 0);
+    await A.ctx.close(); await B.ctx.close();
+
+    // ---- two windows of Vdex on one device ----
+    const W = await device(null, 'W', { linked: false }), w2 = await W.ctx.newPage(); w2.on('pageerror', e => scriptErrors.push('W2: ' + e.message));
+    await start(W.page); await start(w2);
+    await add(W.page, 'one', 'Made in window 1'); await sleep(250); await add(w2, 'two', 'Made in window 2'); await sleep(350);
+    const onDisk = await w2.evaluate(() => JSON.parse(localStorage.getItem('logi-db-v1')).bookings.map(b => b.id).sort().join());
+    ok('a booking made in one window is not lost when another window saves: both windows and the disk hold both', onDisk === 'one,two' && (await held(W.page)).length === 2 && (await held(w2)).length === 2, onDisk + ' | ' + (await held(W.page)).join());
+    await w2.close();
+
+    // ---- the storage sheet follows what was just done in it ----
+    const page2 = W.page, cloud2 = newCloud(); await dav(W.ctx, cloud2, 'W');
+    await menuClick(page2, '#cloudBtn'); await page2.waitForSelector('.sheet .storage'); await sleep(200);
+    const health = () => page2.locator('.sheet .health-line').innerText(), restoreBtn = () => page2.locator('.sheet button', { hasText: 'Restore an automatic cloud backup' }).count();
+    const before = [await health(), await restoreBtn()];
+    await Promise.all([page2.waitForEvent('download'), page2.getByRole('button', { name: 'Export backup' }).click()]); await sleep(400);
+    const afterExport = await health();
+    // Import backup… is a control the keyboard reaches and works
+    const imp = page2.locator('.sheet .file-btn input[type=file]');
+    await page2.getByRole('button', { name: /Encrypted backup/ }).focus(); await page2.keyboard.press('Tab');
+    const reached = await imp.evaluate(el => ({ focused: document.activeElement === el, shown: getComputedStyle(el).display !== 'none', named: el.labels && el.labels[0] ? el.labels[0].textContent.trim() : '', ring: getComputedStyle(el.closest('.file-btn')).outlineStyle }));
+    let chooser = false; for (const key of ['Enter', ' ']) if (!chooser) chooser = await Promise.all([page2.waitForEvent('filechooser', { timeout: 3000 }).then(() => true, () => false), page2.keyboard.press(key)]).then(r => r[0]);
+    ok('Import backup… takes the focus on Tab, shows it, is named by its label and opens the file chooser on Enter', reached.focused && reached.shown && reached.named === 'Import backup…' && reached.ring === 'solid' && chooser, JSON.stringify([reached, chooser]));
+    // connect: a folder address without https://, and a password with a character outside Latin-1
+    const mine2 = []; page2.on('request', q => { if (q.url().startsWith(BASE) && /dav\.example/.test(q.url())) mine2.push(q.method() + ' ' + q.url()); });
+    await moreWays(page2);
+    await page2.locator('.sheet button[role=tab]:has-text("Other WebDAV")').click();
+    await page2.locator('.sheet input[aria-label="Folder address"]').fill('dav.example/vdex'); await page2.locator('.sheet input[aria-label="Username"]').fill('u'); await page2.locator('.sheet input[aria-label="App password"]').fill('pässwörd€1');
+    await toasts(page2);
+    await page2.locator('.sheet .card:has-text("Nextcloud") button:has-text("Connect")').click(); await synced(page2); await sleep(400);
+    const typed = Buffer.from((cloud2.auth || '').replace(/^Basic /, ''), 'base64').toString('utf8');
+    ok('a WebDAV folder address typed without https:// reaches that server, and nothing is sent to Vdex’s own address', (await state(page2)).status === 'synced' && cloud2.log.includes(`W PUT ${MAIN}`) && mine2.length === 0 && /^Connected to WebDAV \(dav\.example\)/.test((await toasts(page2)).join('|')), JSON.stringify([cloud2.log.slice(0, 4), mine2]));
+    ok('a password with ä, ö and € is sent as typed (UTF-8)', typed === 'u:pässwörd€1', typed);
+    const afterConnect = [await health(), await restoreBtn()];
+    ok('the Backups part follows: no copy anywhere at first, the backup file after Export backup, the cloud after connecting, with the Restore button', /No copy of your data exists anywhere but this device/.test(before[0]) && before[1] === 0 && /Last off-device copy: today \(backup file\)/.test(afterExport) && /Last off-device copy: today/.test(afterConnect[0]) && !/Link a cloud storage/.test(afterConnect[0]) && afterConnect[1] === 1, JSON.stringify([before, afterExport, afterConnect]));
+    // a long account address wraps inside the connected card
+    await page2.evaluate(() => { localStorage.setItem('logi-cloud-who', 'Test Person · alexandria.testington.longname@subdomain.example.com'); }); await page2.setViewportSize({ width: 360, height: 800 });
+    await page2.keyboard.press('Escape'); await sleep(200); await menuClick(page2, '#cloudBtn'); await page2.waitForSelector('.sheet .cloud-linked'); await sleep(200);
+    const edges = await page2.evaluate(() => { const card = document.querySelector('.sheet .cloud-linked .card').getBoundingClientRect(); return { card: Math.round(card.right), text: Math.round(Math.max(...[...document.querySelectorAll('.sheet .cloud-head strong, .sheet .cloud-head .small')].map(e => e.getBoundingClientRect().right))) }; });
+    ok('a long account address wraps inside the connected card (360 px)', edges.text <= edges.card, JSON.stringify(edges));
+    await page2.evaluate(() => localStorage.removeItem('logi-cloud-who')); await page2.setViewportSize({ width: 420, height: 900 });
+    // backups that cannot be listed are not “no backups”; a dated backup that cannot be written is said
+    cloud2.offline = true;
+    await page2.getByRole('button', { name: /Restore an automatic cloud backup/ }).click(); await sleep(900);
+    const unlisted = await sheetText(page2);
+    cloud2.offline = false;
+    await page2.locator('.sheet').last().getByRole('button', { name: 'Try again' }).click(); await sleep(900);
+    const listed = await sheetText(page2);
+    ok('Restore with the storage out of reach says it could not list the backups and offers Try again, which then lists them', /could not list the backups in WebDAV \(dav\.example\)/.test(unlisted) && !/No automatic backups yet/.test(unlisted) && /vdex-backup-/.test(listed), unlisted.slice(0, 200));
+    await page2.keyboard.press('Escape'); await sleep(200);
+    cloud2.fail = (m, file) => (m === 'PUT' && /^vdex-backup-/.test(file) ? 507 : 0);
+    await page2.evaluate(() => localStorage.removeItem('logi-backup-cloud')); // as on the next day: a dated backup is due again
+    await add(page2, 'three', 'Made later'); await saved(page2);
+    const trouble = await page2.locator('.sheet .backup-trouble').innerText().catch(() => '');
+    ok('a dated backup the storage refuses is said in the Backups part, while the copy itself is up to date', (await state(page2)).status === 'synced' && /Today’s automatic backup could not be written to WebDAV \(dav\.example\): WebDAV: the server has no room left\./.test(trouble), trouble);
+    cloud2.fail = null;
+    // a cloud copy that was cut short while it was being saved
+    const whole = cloud2.files.get(MAIN); cloud2.files.set(MAIN, whole.slice(0, Math.floor(whole.length * 0.6)));
+    await page2.locator('.sheet').getByRole('button', { name: 'Sync now' }).click(); await sleep(700);
+    const damaged = [await state(page2), await page2.locator('.sheet .cloud-linked').innerText().then(x => x.replace(/\s+/g, ' '))];
+    await page2.locator('.sheet').getByRole('button', { name: 'Replace it with this device’s copy' }).click(); await synced(page2); await sleep(400);
+    const mended = (() => { try { return cloudDb(cloud2).bookings.map(b => b.id).sort().join(); } catch { return 'still damaged'; } })();
+    ok('a damaged cloud copy is called damaged, and one tap puts this device’s copy in its place, the damaged one kept beside it', damaged[0].status === 'error' && /The copy in your storage is damaged/.test(damaged[1]) && !/Unterminated|JSON/.test(damaged[1]) && mended === 'one,three,two' && cloud2.files.get('vdex-damaged-copy.json') === whole.slice(0, Math.floor(whole.length * 0.6)) && (await state(page2)).status === 'synced', JSON.stringify([damaged, mended]));
+    // disconnecting takes the Restore button away again
+    await page2.locator('.sheet').getByRole('button', { name: 'Disconnect' }).click(); await sleep(500);
+    ok('…and after Disconnect the Restore button is gone', (await restoreBtn()) === 0 && (await state(page2)).linked === false);
+    await page2.keyboard.press('Escape'); await sleep(200);
+
+    // ---- a file in a synced folder needs permission again, not a sign-in ----
+    await st(page2, s => { s.cloud.adapter = { id: 'file', label: 'vdex-production-db.json', ready: async ask => { if (ask && window.__allow) window.__granted = true; return !!window.__granted; }, read: async () => null, write: async () => {} }; return s.sync(); }); await sleep(300); // allowed once the person says so at a tap, as the browser does it
+    await openMenu(page2);
+    const menuSays = await page2.evaluate(() => [document.getElementById('cloudLabel').textContent, document.getElementById('menuStatusTitle').textContent, document.getElementById('menuStatusText').textContent, document.getElementById('menuBtn').getAttribute('aria-label')]);
+    await page2.locator('#cloudBtn').click(); await page2.waitForSelector('.sheet .cloud-linked'); await sleep(200);
+    const fileCard = (await page2.locator('.sheet .cloud-linked .card').innerText()).replace(/\s+/g, ' ');
+    await toasts(page2); await page2.evaluate(() => { window.__allow = true; });
+    await page2.locator('.sheet').getByRole('button', { name: 'Allow access again' }).click(); await synced(page2); await sleep(300);
+    const allowed = (await toasts(page2)).join('|');
+    ok('a file in a synced folder that the browser no longer lets Vdex use asks for permission, with no word of signing in', menuSays[0] === 'Allow access' && menuSays[1] === 'Vdex needs your permission to use vdex-production-db.json again' && /Allow access again/.test(menuSays[2]) && !/[Ss]ign/.test(menuSays.join(' ') + fileCard) && /Needs your permission again/.test(fileCard) && allowed === 'Access allowed. Up to date.', JSON.stringify([menuSays, fileCard, allowed]));
+    await page2.keyboard.press('Escape'); await sleep(200);
+
+    // ---- the calendar feed: what came in from another device reaches it; a device not yet allowed to write it says so ----
+    const feed = await page2.evaluate(async () => {
+      const s = await import('./js/store.js'); await import('./js/calendar.js');
+      const remote = { ...JSON.parse(s.serialize()), bookings: [...s.db.bookings, { id: 'phone', title: 'Made on the phone', date: '2026-12-05', status: 'Confirmed', updatedAt: Date.now() }] };
+      let writes = 0; const aux = []; window.__feedOk = false; window.__refuse = false; // the storage below answers as one another device saved to last
+      s.update(d => { d.calSync = { ...d.calSync, feed: true, updatedAt: Date.now() }; });
+      s.cloud.adapter = { id: 'fake', label: 'Fake Drive', ready: async () => true, read: async () => JSON.parse(JSON.stringify({ ...remote, calSync: s.db.calSync, updatedAt: Date.now() + 1000 })), write: async () => { writes++; }, writeAux: async x => { aux.push(x.text); },
+        feedReady: () => window.__feedOk, enableFeed: async () => { if (window.__refuse) throw new Error('Google sign-in was cancelled'); window.__feedOk = true; }, shareLink: async () => 'https://feed.example/x' };
+      await s.sync(); await new Promise(r => setTimeout(r, 200));
+      return { writes, aux: aux.length, holds: aux.some(x => /Made on the phone/.test(x)), has: !!s.byId('bookings', 'phone') };
+    });
+    ok('a booking that arrives from another device is written into the calendar feed, though nothing is uploaded', feed.has && feed.writes === 0 && feed.aux === 1 && feed.holds, JSON.stringify(feed));
+    await page2.evaluate(() => import('./js/calendar.js').then(m => m.openCalendarSheet())); await page2.waitForSelector('.sheet .feed-allow'); await sleep(200);
+    const notYet = await sheetText(page2);
+    await toasts(page2); await page2.locator('.sheet').getByRole('button', { name: 'Let this device update the feed' }).click(); await sleep(500);
+    ok('a device where the feed was switched on elsewhere says it may not update the feed yet, and one tap allows it', /has not been allowed to update the feed file on Fake Drive yet/.test(notYet) && !/Get the subscription link/.test(notYet) && (await toasts(page2)).join('|') === 'This device now updates the feed' && (await page2.locator('.sheet .feed-allow').count()) === 0 && /Get the subscription link/.test(await sheetText(page2)), notYet.slice(-260));
+    const box = page2.locator('.sheet label.check input[type=checkbox]');
+    await box.uncheck(); await sleep(400); await page2.evaluate(() => { window.__feedOk = false; window.__refuse = true; });
+    await toasts(page2); await box.click(); await sleep(500);
+    const refusedFeed = [await box.isChecked(), (await toasts(page2)).join('|'), await st(page2, s => s.db.calSync.feed)];
+    ok('a feed that could not be switched on leaves its box unticked and says why', JSON.stringify(refusedFeed) === '[false,"The feed was not switched on: Google sign-in was cancelled.",false]', JSON.stringify(refusedFeed));
+    await page2.keyboard.press('Escape'); await sleep(200);
+    await st(page2, s => { s.cloud.adapter = null; });
+
+    // ---- Google: tokens the lock put back after Vdex had loaded; a full storage ----
+    await W.ctx.route('https://www.googleapis.com/**', route => { if (preflight(route)) return; const u = route.request().url(); if (/upload\/drive/.test(u)) return json(route, 403, { error: { code: 403, message: 'The user’s Drive storage quota has been exceeded.', errors: [{ domain: 'usageLimits', reason: 'storageQuotaExceeded' }] } }); return json(route, 200, { files: [] }); });
+    const google = await page2.evaluate(async () => {
+      const p = await import('./js/providers.js'), scope = 'https://www.googleapis.com/auth/drive.appdata';
+      const nothing = await p.googleToken(scope, false).then(() => 'a token', e => e.name);
+      localStorage.setItem('logi-google-tokens', JSON.stringify({ [scope]: { value: 'kept-for-its-hour', exp: Date.now() + 50 * 60e3 } })); // as the lock does at the unlock
+      const afterUnlock = await p.googleToken(scope, false).then(t => t, e => e.name);
+      const full = await p.gdriveAdapter().write('{}').then(() => 'written', e => e.message);
+      return { nothing, afterUnlock, full };
+    });
+    ok('Google tokens saved for their hour and put back by the lock after Vdex loaded are used: no sign-in is asked for', google.nothing === 'NotAllowedError' && google.afterUnlock === 'kept-for-its-hour', JSON.stringify(google));
+    ok('a full Google storage says so, in words a person can act on', /^Your Google storage is full\. Free up some space in Google Drive, Gmail or Photos/.test(google.full), google.full);
+    await W.ctx.close();
+
+    // ---- Dropbox: a busy answer when the token is renewed is a passing error, not a lost sign-in ----
+    for (const mode of ['503 with a page of text', '429']) {
+      const D = await device(null, 'D', { linked: false, seed: { 'logi-provider': 'dropbox', 'logi-dbx-token': JSON.stringify({ refresh: 'r1', access: 'old', exp: 1, client: IDS.dropbox }) } });
+      const box = { busy: true, tokens: 0, uploads: 0, file: '' };
+      await D.ctx.route('https://api.dropboxapi.com/oauth2/token', route => { if (preflight(route)) return; box.tokens++; if (!box.busy) return json(route, 200, { access_token: 'new', expires_in: 14400 }); return mode === '429' ? json(route, 429, { error: 'too_many_requests' }) : route.fulfill({ status: 503, headers: { ...CORS, 'content-type': 'text/html' }, body: '<html>Service Unavailable</html>' }); });
+      await D.ctx.route('https://content.dropboxapi.com/2/files/**', route => { if (preflight(route)) return; if (/upload/.test(route.request().url())) { box.uploads++; box.file = route.request().postData(); return json(route, 200, {}); } return box.file ? route.fulfill({ status: 200, headers: CORS, body: box.file }) : json(route, 409, { error_summary: 'path/not_found/' }); });
+      await D.ctx.route('https://api.dropboxapi.com/2/**', route => (preflight(route) ? null : json(route, 200, {})));
+      await start(D.page); await sleep(500);
+      const busy = [await state(D.page), await D.page.evaluate(() => !!localStorage.getItem('logi-dbx-token'))];
+      box.busy = false; await D.page.evaluate(() => window.dispatchEvent(new Event('online'))); await sleep(900); await synced(D.page);
+      ok(`Dropbox answering ${mode} when the token is renewed: a passing error, the sign-in kept, and the next sync goes through`, busy[0].status === 'error' && new RegExp(`^Dropbox is not answering just now \\(${mode.slice(0, 3)}\\)$`).test(busy[0].error) && busy[1] === true && (await state(D.page)).status === 'synced' && box.uploads >= 1, JSON.stringify([busy, await state(D.page), box.uploads]));
+      await D.ctx.close();
+    }
+    ok('the syncing and storage repairs: no script errors', scriptErrors.length === 0, scriptErrors.slice(0, 3).join(' | '));
+  }
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

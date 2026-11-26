@@ -201,9 +201,11 @@ const SYNC = {
   paused: ['Paused', 'amber', n => `Sync with ${n} is paused`, () => 'Nothing is copied until this device has a licence. Your changes are safe on this device.'],
   'needs-permission': ['Sign in', 'amber', n => `${n} needs you to sign in again`, () => 'Tap here to open Storage, sync & backups, then tap Sign in again. Your changes are safe on this device.'],
   error: ['Sync error', 'red', n => `Could not sync with ${n}`, c => [c.error, 'Your changes are safe on this device.'].filter(Boolean).join(' · ')],
+  // A file in a synced folder has no sign-in: after a restart the browser wants the person to allow Vdex the file again.
+  'file-permission': ['Allow access', 'amber', n => `Vdex needs your permission to use ${n} again`, () => 'Tap here to open Storage, sync & backups, then tap Allow access again. Your changes are safe on this device.'],
 };
 function paintCloud() {
-  const c = store.cloud, s = c.status, [word, dot, title, text] = SYNC[s] || SYNC.off;
+  const c = store.cloud, s = c.status, [word, dot, title, text] = SYNC[s === 'needs-permission' && c.adapter && c.adapter.id === 'file' ? 'file-permission' : s] || SYNC.off;
   const where = c.adapter ? c.adapter.label : 'your storage', headline = title(where);
   cloudLabel.textContent = word;
   cloudBtn.dataset.state = s;

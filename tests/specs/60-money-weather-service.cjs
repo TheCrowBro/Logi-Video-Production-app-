@@ -202,6 +202,92 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const [csv3] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Asset register' }).click()]);
   const reg = fs.readFileSync(await csv3.path(), 'utf8');
   ok('the asset register has a Where column with the place', /"Where"/.test(reg) && new RegExp(`"${gName}".*"Van"`).test(reg));
+
+  // ---- the Equipment page, the service log, kits, the register, insurance and the forecast: repairs after 1.4.0 ----
+  {
+    const c2 = await browser.newContext({ viewport: { width: 390, height: 780 }, acceptDownloads: true });
+    const asked2 = []; let answer = { daily: { time: [] } };
+    await c2.route('https://api.open-meteo.com/**', route => { asked2.push(route.request().url()); return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(answer) }); });
+    await c2.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await c2.addInitScript(acceptTerms());
+    const p = await c2.newPage(); p.on('pageerror', e => errors.push(e.message)); p.on('dialog', d => d.accept());
+    await p.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await p.waitForSelector('#rolodex .drum-btn');
+    const LINK = 'https://www.dropbox.example/scl/fi/a1b2c3d4e5f6g7h8i9j0/Showreel_2026_final_v3.mp4?rlkey=abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz&dl=0';
+    const day = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+    const go = async id => { await p.evaluate(i => window.logiGo(i), id); await sleep(350); };
+    const names = () => p.locator('.gear-card strong').allInnerTexts(), noMatch = () => p.locator('.empty', { hasText: 'No matches.' }).count();
+    const save = async () => { await p.locator('.sheet form button[type=submit]').click(); await sleep(350); };
+    await p.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.gear.push({ id: 'g-cam', name: 'Sony FX6 body', category: 'Camera', qty: 1, value: 6000, notes: '' }, { id: 'g-lens', name: 'Sigma 24-70', category: 'Lens', qty: 1, value: 800, location: 'Van', notes: '' }); })));
+    await go('gear');
+    // a filter whose chip, place or search box goes away with the change just made is let go
+    await p.locator('.chips:not(.loc-chips) .chip', { hasText: 'Camera' }).click(); await sleep(200);
+    await p.locator('.gear-card button[aria-label="Edit Sony FX6 body"]').click(); await p.waitForSelector('.sheet form');
+    await p.locator('.sheet form input[data-key="category"]').fill('lenses'); await save();
+    const cat = await p.evaluate(() => import('./js/store.js').then(s => s.byId('gear', 'g-cam').category));
+    ok('an item moved out of the category the list is filtered by leaves the whole list, not “No matches.”', (await names()).length === 2 && (await noMatch()) === 0, (await names()).join());
+    ok('a category typed as “lenses” is filed as Lens', cat === 'Lens', cat);
+    await p.locator('.loc-chips .chip', { hasText: 'Van' }).click(); await sleep(200);
+    await p.locator('.gear-card .loc-chip').click(); await p.waitForSelector('.sheet form');
+    await p.locator('.sheet form input[data-key="location"]').fill(''); await save();
+    ok('…and so does the last item of a place when its place is emptied', (await names()).length === 2 && (await noMatch()) === 0, (await names()).join());
+    await p.evaluate(() => import('./js/store.js').then(s => s.update(d => { for (const [id, name, category] of [['g3', 'Zoom F6', 'Audio'], ['g4', 'Rode NTG5', 'audio'], ['g5', 'Tilta cage', 'Support'], ['g6', 'Aputure 300d', 'Lighting']]) d.gear.push({ id, name, category, qty: 1, value: 100, notes: '' }); }))); await sleep(300);
+    const heads = (await p.locator('section.block h3').allInnerTexts()).map(x => x.toLowerCase());
+    ok('“Audio” and “audio” are one section of the list', heads.filter(x => x === 'audio').length === 1 && new Set(heads).size === heads.length, heads.join());
+    await p.locator('.search').fill('zoom'); await sleep(250);
+    const found = await names();
+    await p.locator('.gear-card button[aria-label="Edit Zoom F6"]').click(); await p.waitForSelector('.sheet form');
+    await p.locator('.sheet form .btn.danger').click(); await sleep(400);
+    ok('…and a search whose one match is deleted, in a list now too short for the search box', found.join() === 'Zoom F6' && (await names()).length === 5 && (await noMatch()) === 0 && (await p.locator('.search').count()) === 0, found.join() + ' → ' + (await names()).length);
+    // the service log takes a cost with pennies, and a month's step from the 31st lands in the next month
+    await p.locator('.gear-card button[aria-label="Service log for Tilta cage"]').click(); await p.waitForSelector('.sheet');
+    await p.getByRole('button', { name: '+ Log an entry' }).click(); await p.waitForSelector('.sheet form');
+    await p.locator('.sheet form input[data-key="cost"]').fill('49.50'); await save();
+    const entry = await p.evaluate(() => import('./js/store.js').then(s => (s.byId('gear', 'g5').log || [])[0]));
+    ok('a service entry with a cost of 49.50 is saved', !!entry && entry.cost === 49.5, JSON.stringify(entry));
+    await p.keyboard.press('Escape'); await sleep(250);
+    const due = await p.evaluate(() => import('./js/pages/gear.js').then(g => [g.monthsLater('2027-01-31', 1), g.monthsLater('2025-08-31', 6), g.monthsLater('2024-01-31', 1), g.monthsLater('2026-03-15', 2), g.monthsLater('2026-11-30', 3), g.serviceDue({ purchased: '2027-01-31', serviceEvery: 1 })]));
+    ok('a service due a month after 31 January is due on the last day of February, never in March', due.join() === '2027-02-28,2026-02-28,2024-02-29,2026-05-15,2027-02-28,2027-02-28', due.join());
+    // a kit counts no more of an item than are owned now
+    await p.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.gear.push({ id: 'g-tube', name: 'Tube light', category: 'Lighting', qty: 4, value: 100, notes: 'Line one\nLine two' }); d.kits.push({ id: 'k-tube', name: 'Tube kit', gear: ['g-tube'], gearQty: { 'g-tube': 4 }, notes: '' }); })));
+    await p.evaluate(() => import('./js/store.js').then(s => s.upsert('gear', { ...s.byId('gear', 'g-tube'), qty: 1 })));
+    await p.getByRole('tab', { name: /^Kits/ }).click(); await sleep(250);
+    const kit = (await p.locator('.kit-card[data-id="k-tube"]').innerText()).replace(/\s+/g, ' ');
+    ok('a kit of four lights reads one light once only one is owned', /1 item · \$100/.test(kit) && !/×4/.test(kit), kit);
+    await p.getByRole('tab', { name: /^Items/ }).click(); await sleep(250);
+    // the asset register keeps the line breaks of a note, and Vdex reads them back
+    const [reg2] = await Promise.all([p.waitForEvent('download'), p.getByRole('button', { name: 'Asset register (CSV)' }).click()]);
+    const regText = fs.readFileSync(await reg2.path(), 'utf8');
+    const back = await p.evaluate(text => import('./js/table-read.js').then(async T => (await T.readTableText(text)).sheets[0].rows.some(r => r.cells.includes('Line one\nLine two'))), regText);
+    ok('a note of two lines is two lines in the asset register, and read back as two', /"Line one\r?\nLine two"/.test(regText) && back, String(back));
+    // insurance: one day is one day
+    await p.evaluate(([one, two]) => import('./js/store.js').then(s => s.update(d => { d.insurance.push({ id: 'p1', type: 'Equipment', provider: 'Tomorrow Mutual', renewal: one, notes: '' }, { id: 'p2', type: 'Public Liability', provider: 'Later Mutual', renewal: two, notes: '' }); })), [day(1), day(2)]);
+    await go('insurance');
+    const pills = [await p.locator('.policy-card[data-id="p1"] .pill').innerText(), await p.locator('.policy-card[data-id="p2"] .pill').innerText()];
+    ok('a policy that expires tomorrow has 1 day left, not “1 days”', pills.join() === '1 day left,2 days left', pills.join());
+    // a long unbroken note (a pasted link) wraps inside its card on a phone
+    await p.evaluate(link => import('./js/store.js').then(s => s.update(d => { const note = 'Reel: ' + link;
+      d.crew.push({ id: 'c-long', name: 'Long Note', role: 'Editor', notes: note }); d.gear[0].notes = note; d.kits[0].notes = note; d.insurance[0].notes = note;
+      d.venues.push({ id: 'v-long', name: 'Long Hall', address: '1 Example Road', rules: note, permit: 'Required', permitNotes: note, access: link, parking: link, power: link, hospital: link, notes: note }); })), LINK);
+    const wide = {}, over = () => p.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+    for (const id of ['crew', 'gear', 'insurance']) { await go(id); wide[id] = await over(); }
+    await go('gear'); await p.getByRole('tab', { name: /^Kits/ }).click(); await sleep(250); wide.kits = await over(); await p.getByRole('tab', { name: /^Items/ }).click();
+    await p.evaluate(() => import('./js/pages/venues.js').then(v => v.openVenue('v-long'))); await sleep(400); wide.venue = await over();
+    ok('a pasted link in a note wraps inside its card on Crew, Equipment, Kits, Insurance and a venue’s page (390 px)', Object.values(wide).every(n => n <= 0), JSON.stringify(wide));
+    // the forecast: a day the service has no values for yet is no forecast, and nothing is kept of it
+    const lone = day(14);
+    answer = { daily: { time: [lone], weather_code: [null], temperature_2m_max: [null], temperature_2m_min: [null], precipitation_probability_max: [null], wind_speed_10m_max: [null], wind_gusts_10m_max: [null] } };
+    const none = await p.evaluate(async iso => { const w = await import('./js/weather.js'), got = await w.forecast(51.5, -0.12, iso), card = w.forecastCard({ lat: 51.5, lon: -0.12 }, iso), line = w.forecastLine({ lat: 51.5, lon: -0.12 }, iso, { onUse: () => {} }); document.body.append(card, line); await new Promise(r => setTimeout(r, 500)); const out = { got, card: card.innerText, line: line.isConnected, kept: Object.keys(JSON.parse(localStorage.getItem('logi-wx') || '{}')).length }; card.remove(); line.remove(); return out; }, lone);
+    ok('a day the forecast service has no values for yet reads “No forecast for this day yet.”, not 0–0°C, and no line is offered for the call sheet', none.got === null && /No forecast for this day yet/.test(none.card) && !/0–0/.test(none.card) && none.line === false && none.kept === 0, JSON.stringify(none));
+    // feet for distances and Celsius for the forecast can be had together
+    answer = { daily: { time: ['x'], weather_code: [3], temperature_2m_max: [10], temperature_2m_min: [5], precipitation_probability_max: [20], wind_speed_10m_max: [12], wind_gusts_10m_max: [20] } };
+    const wx = iso => p.evaluate(iso => import('./js/weather.js').then(w => w.forecast(51.5, -0.12, iso)).then(v => v.tUnit + ' ' + v.wUnit), iso);
+    await p.evaluate(() => localStorage.setItem('logi-units', 'ft'));
+    const inFeet = [await wx(day(2)), /temperature_unit=fahrenheit&wind_speed_unit=mph/.test(asked2[asked2.length - 1])];
+    await go('settings'); await openSetting(p, 'Field tool defaults'); await sleep(200);
+    await p.locator('.wx-units button', { hasText: '°C, km/h' }).click(); await sleep(150);
+    const own = [await wx(day(3)), /fahrenheit|mph/.test(asked2[asked2.length - 1]), await p.evaluate(() => [localStorage.getItem('logi-units'), localStorage.getItem('logi-wx-units')].join())];
+    ok('with feet chosen the forecast is in °F and mph until Settings gives it units of its own; then °C and km/h, and distances stay in feet', inFeet.join() === '°F mph,true' && own.join() === '°C km/h,false,ft,c', JSON.stringify([inFeet, own]));
+    await c2.close();
+  }
   await page.screenshot({ path: S + '/features.png' });
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));
   await browser.close();

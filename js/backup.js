@@ -28,14 +28,17 @@ export function health() {
   const when = days === 0 ? 'today' : days === 1 ? 'yesterday' : `${days} days ago`;
   return { level: days > 7 ? 'warn' : 'ok', at, via, days, when, text: `Last off-device copy: ${when} (${via}).` };
 }
-// Kept up to date by itself when the licence changes (a sign-in), without redrawing the page around it.
+// Kept up to date by itself, without redrawing the page around it: when the licence changes (a sign-in), when a
+// storage is linked or unlinked, after a backup file is saved and after every sync.
 export function healthLine() {
   const el = h('div', { class: 'health-line' });
-  const draw = () => el.replaceChildren(healthText());
+  const draw = () => el.replaceChildren(...nodes(healthText(), backupTrouble()));
   draw();
-  const un = store.subscribe(reason => { if (!el.isConnected && el.dataset.drawn) return un(); el.dataset.drawn = '1'; if (reason === 'licence') draw(); });
+  const un = store.subscribe(() => { if (!el.isConnected && el.dataset.drawn) return un(); el.dataset.drawn = '1'; draw(); });
   return el;
 }
+// The dated backup of the day could not be written (no room in the storage, as a rule): said where backups are spoken of.
+const backupTrouble = () => { const c = store.cloud; return c.adapter && c.backupError ? h('p', { class: 'warn small backup-trouble' }, `Today’s automatic backup could not be written to ${c.adapter.label}: ${c.backupError.replace(/\.$/, '')}. Vdex tries again with the next change.`) : null; };
 function healthText() {
   // A licence stopped covering this device less than 30 days ago: backup files still work, until a date.
   // A licence not confirmed online for 90 days: backup files still work, until it is confirmed again.
@@ -94,16 +97,22 @@ export async function importFromPicker() {
 }
 export async function importData(f) {
   if (!store.canChange()) return; // read-only: replacing everything is a change too
+  const NOT_ONE = 'this is not a Vdex backup file, or the file is incomplete';
   try {
-    let data = JSON.parse(await f.text());
+    let data; try { data = JSON.parse(await f.text()); } catch { throw new Error(NOT_ONE); } // cut short, empty, or another kind of file: not the parser's own words
     if (data && data.vdex === 'encrypted-backup') {
       const pass = await askSecret({ title: 'Passphrase for this backup', numeric: false, minLength: 1 }); if (!pass) return;
       try { data = JSON.parse(await C.decryptText(await C.pbkdf2Key(pass, C.fromB64(data.kdf.salt), data.kdf.iter), data)); } catch { throw new Error('wrong passphrase'); }
     }
-    if (!data || typeof data !== 'object' || !('bookings' in data || 'gear' in data)) throw new Error('Not a Vdex database file');
-    if (confirm('Replace your current data with this file?')) { store.replaceAll(data); toast('Imported'); }
-  } catch (err) { toast('Import failed: ' + err.message); }
+    if (!data || typeof data !== 'object' || !(Array.isArray(data.bookings) || Array.isArray(data.gear))) throw new Error(NOT_ONE);
+    if (confirm(`Replace your current data with this file? It holds ${holds(data)}.${others()}`)) { store.replaceAll(data); toast('Imported'); }
+  } catch (err) { toast('Import failed: ' + err.message + '.'); }
 }
+
+// What a backup holds, counted as the app will read it (js/store.js leaves out what is not a record).
+const holds = data => { const n = k => (Array.isArray(data[k]) ? data[k].filter(x => x && typeof x === 'object' && typeof x.id === 'string').length : 0), say = (k, one, many) => `${n(k)} ${n(k) === 1 ? one : many}`; return [say('bookings', 'booking', 'bookings'), say('crew', 'person', 'people'), say('gear', 'item', 'items')].join(', '); };
+// A restore replaces what is here, and through the linked storage what is on the other devices too.
+const others = () => (store.cloud.adapter && !store.cloud.paused ? ' Your other devices follow at their next sync.' : '');
 
 export async function restoreFromCloud() {
   if (!store.requirePaid('cloud')) return;
@@ -111,20 +120,23 @@ export async function restoreFromCloud() {
   if (!a || !a.readExtra) return toast('Link a cloud storage first, such as Google Drive or iCloud');
   const list = h('div', { class: 'stack' }, h('p', { class: 'small muted' }, 'Looking for backups…'));
   const { close } = sheet('Restore a cloud backup', list);
-  const found = [];
+  const found = []; let unreached = '';
   for (const name of backupNames()) {
-    try { const text = await a.readExtra(name); if (text) { const d = JSON.parse(text); found.push({ name, text, at: Number(d.updatedAt) || 0, n: (d.bookings || []).length }); } }
+    let text = null;
+    try { text = await a.readExtra(name); }
     catch (e) { // a sign-in that ran out is not "no backups": say so, and stop asking
       if (e.name === 'NotAllowedError') { close(); store.reconnectNeeded(e.message); return toast(`${a.label} wants you to sign in again before backups can be listed: open Storage, sync & backups in the menu, then tap Sign in again.`); }
-      /* an unreadable one is skipped */
+      unreached = e.message || 'no answer'; // nor is a storage that did not answer
     }
+    if (text) try { const d = JSON.parse(text); found.push({ name, text, at: Number(d.updatedAt) || 0, n: (d.bookings || []).length }); } catch { /* an unreadable one is skipped */ }
   }
   found.sort((x, y) => y.at - x.at);
   list.replaceChildren(...nodes(
     found.length
-      ? found.map(f => h('button', { class: 'card tap', type: 'button', onclick: () => { if (confirm(`Replace the data on this device with ${f.name}?`)) { store.replaceAll(JSON.parse(f.text)); close(); toast('Restored'); } } },
+      ? found.map(f => h('button', { class: 'card tap', type: 'button', onclick: () => { if (confirm(`Replace the data on this device with ${f.name}?${others()}`)) { store.replaceAll(JSON.parse(f.text)); close(); toast('Restored'); } } },
         h('strong', null, f.name), h('div', { class: 'muted small' }, `${f.n} bookings · saved ${f.at ? new Date(f.at).toLocaleString() : 'unknown'}`)))
-      : h('p', { class: 'muted small' }, 'No automatic backups yet. They are written once a day after a change, next to the database in your storage.'),
+      : unreached ? [h('p', { class: 'warn small' }, `Vdex could not list the backups in ${a.label}: ${unreached.replace(/\.$/, '')}. Check the connection and try again.`), h('button', { class: 'btn ghost', onclick: () => { close(); restoreFromCloud(); } }, 'Try again')]
+      : [h('p', { class: 'muted small' }, 'No automatic backups yet. They are written once a day after a change, next to the database in your storage.'), backupTrouble()],
     h('p', { class: 'small muted' }, 'Vdex keeps one backup per weekday and one per month, so a mistake can be undone for about a week, or a month.')));
 }
 
@@ -147,7 +159,7 @@ export async function exportAssetRegister() {
   const gear = [...store.db.gear].sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.name || '').localeCompare(b.name || ''));
   for (const g of gear) {
     const qty = store.qtyOf(g), each = store.unitValue(g); total += each * qty;
-    rows.push([g.name, g.category || '', g.serial || '', g.location || '', qty, each || '', each * qty || '', g.purchased || '', g.warranty || '', g.firmware || '', lastService(g), (g.notes || '').replace(/\r?\n/g, ' ')].map(q).join(','));
+    rows.push([g.name, g.category || '', g.serial || '', g.location || '', qty, each || '', each * qty || '', g.purchased || '', g.warranty || '', g.firmware || '', lastService(g), g.notes || ''].map(q).join(',')); // a note keeps its line breaks: the cell is quoted, and the import reads them back
   }
   rows.push(['', '', '', '', '', 'Total', total, '', '', '', '', `Vdex asset register, ${new Date().toLocaleDateString()}${store.db.profile.business ? ', ' + store.db.profile.business : ''}`].map(q).join(','));
   if (await saveOrShare('﻿' + rows.join('\r\n'), `vdex-asset-register-${todayISO()}.csv`, 'text/csv')) toast('Asset register saved');

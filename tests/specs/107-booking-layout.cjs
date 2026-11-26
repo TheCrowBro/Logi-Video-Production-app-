@@ -336,6 +336,54 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
     worked.push(await np.evaluate(id => import('./js/store.js').then(s => { const x = s.db.shifts.find(y => y.bookingId === id); return x ? [(x.end - x.start) / 36e5, new Date(x.end).getHours()].join('h to ') : 'none'; }), id)); }
   ok('hours added by hand from 22:00 to 04:00 end at 04:00: seven hours when the clocks go back, five when they go forward, six on any other night', worked.join() === '7h to 4,5h to 4,6h to 4', worked.join());
   await ny.close();
+
+  // ---- venues: repairs after 1.4.0 ----
+  { // Today is the day here, not in Greenwich: at 6 pm in Los Angeles (2 am the next day in UTC) today's shoot is still listed.
+    const at = new Date(); at.setUTCHours(2, 0, 0, 0);
+    const local = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+    const la = await browser.newContext({ viewport: { width: 420, height: 900 }, timezoneId: 'America/Los_Angeles' });
+    await la.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+    let lookups = 0; await la.route('https://nominatim.openstreetmap.org/**', r => { lookups++; return r.abort('internetdisconnected'); });
+    await la.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); window.__toasts = []; addEventListener('DOMContentLoaded', () => new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true })); });
+    await la.addInitScript(acceptTerms());
+    const vp = await la.newPage(); vp.on('pageerror', e => errors.push(e.message)); vp.on('dialog', d => d.accept());
+    await vp.clock.install({ time: at });
+    await vp.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await vp.waitForSelector('#rolodex .drum-btn');
+    await vp.evaluate(date => import('./js/store.js').then(s => s.update(d => {
+      d.venues.push({ id: 'v-today', name: 'Probe Studio', address: '1 Example Road', hospital: 'Example General, 2 miles', perms: { drones: 'ask', lighting: 'no' } }, ...['Alpha Studio', 'Beta Hall', 'Delta Loft', 'Zeta Yard'].map((name, i) => ({ id: 'v' + i, name, address: '' })));
+      d.bookings.push({ id: 'b-today', title: 'Evening shoot', date, start: '17:00', end: '22:00', status: 'Confirmed', venueId: 'v-today', crew: [], gear: [] }); })), local);
+    const openVenue = async id => { await vp.evaluate(id => import('./js/pages/venues.js').then(v => v.openVenue(id)), id); await sleep(400); };
+    await openVenue('v-today');
+    const pageText = (await vp.locator('main, #app').first().innerText()).replace(/\s+/g, ' ');
+    ok('at 6 pm in Los Angeles a venue still lists today’s shoot under Upcoming shoots here', /Upcoming shoots here Evening shoot/i.test(pageText) && !/None booked/.test(pageText), pageText.slice(-140));
+    ok('a venue with only its hospital recorded does not also say “Nothing recorded yet.”', /Example General, 2 miles/.test(pageText) && !/Nothing recorded yet/.test(pageText));
+    // a search left in the box when the list becomes too short for the box
+    await vp.locator('.page-head button', { hasText: 'Venues' }).click(); await sleep(250);
+    await vp.locator('.search').fill('zeta'); await sleep(250);
+    await vp.locator('.venue-card .card-main').click(); await sleep(250);
+    await vp.locator('.page-head button', { hasText: 'Edit' }).click(); await vp.waitForSelector('.sheet form');
+    await vp.locator('.sheet form .btn.danger').click(); await sleep(400);
+    ok('deleting the one venue a search found, in a list then too short for the search box, shows the venues that are left', (await vp.locator('.venue-card').count()) === 4 && (await vp.locator('.empty', { hasText: 'No matches.' }).count()) === 0 && (await vp.locator('.search').count()) === 0, (await vp.locator('.venue-card').count()) + ' cards');
+    // the venue form's map location
+    await vp.locator('.page-head button.primary').click(); await vp.waitForSelector('.sheet form');
+    const lat = vp.locator('.sheet form input[aria-label="Latitude"]'), lon = vp.locator('.sheet form input[aria-label="Longitude"]'), link = vp.locator('.sheet form input[aria-label="Map link to read coordinates from"]');
+    await vp.locator('.sheet form input[data-key="name"]').fill('Map Hall'); await vp.locator('.sheet form textarea[data-key="address"]').fill('1 Example Road, Portside');
+    await vp.evaluate(() => window.__toasts.splice(0));
+    await vp.getByRole('button', { name: /Find from address/ }).click(); await sleep(500);
+    const offline = await vp.evaluate(() => window.__toasts.splice(0));
+    ok('Find from address with no connection says “Lookup failed. Are you online?”, not the browser’s own words', lookups === 1 && offline.join('|') === 'Lookup failed. Are you online?', offline.join('|'));
+    await link.fill('https://www.google.com/maps/search/100%+coffee/@51.5007,-0.1246,17z'); await link.press('Tab'); await sleep(250);
+    ok('a map link with a stray % sign is still read', (await lat.inputValue()) === '51.5007' && (await lon.inputValue()) === '-0.1246' && /Location read from link/.test((await vp.evaluate(() => window.__toasts.splice(0))).join('|')), await lat.inputValue());
+    await lon.fill(''); await vp.locator('.sheet form button[type=submit]').click(); await sleep(300);
+    const half = [await vp.locator('.sheet form').count(), await lon.evaluate(e => e.validationMessage), await vp.evaluate(() => import('./js/store.js').then(s => s.db.venues.filter(v => v.name === 'Map Hall').length))];
+    await lon.fill('-0.1246'); await vp.locator('.sheet form button[type=submit]').click(); await sleep(350);
+    const whole = await vp.evaluate(() => import('./js/store.js').then(s => s.db.venues.find(v => v.name === 'Map Hall')));
+    ok('a latitude without a longitude is refused with a word on the empty box, and saved once both are there', half[0] === 1 && /both/.test(half[1]) && half[2] === 0 && !!whole && whole.geo && whole.geo.lat === 51.5007 && whole.geo.lon === -0.1246, JSON.stringify([half, whole && whole.geo]));
+    // a venue's rules go by what kind of thing an item is, however its category was typed
+    const warned = await vp.evaluate(() => Promise.all([import('./js/pages/venues.js'), import('./js/store.js')]).then(([v, s]) => ['Drone', 'Drones', 'drone', ' DRONES ', 'Lighting', 'lighting', 'Camera'].map(category => v.venueWarnings(s.byId('venues', 'v-today'), [{ category }]).length)));
+    ok('“drone”, “Drones” and “Drone” all bring the venue’s drone rule to a booking', warned.join() === '1,1,1,1,1,1,0', warned.join());
+    await la.close();
+  }
   await page.screenshot({ path: S + '/booking-layout.png', fullPage: true });
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();

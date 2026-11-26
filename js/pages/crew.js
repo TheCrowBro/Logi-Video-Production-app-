@@ -52,6 +52,7 @@ export const crew = {
       if (!groups.includes(S.role)) S.role = '';
       const roles = S.role && S.role !== NO_ROLE ? [...new Map(db.crew.filter(c => where.get(c) === S.role).map(c => [roleKey(c), roleOf(c)]))].sort((a, b) => a[1].localeCompare(b[1])) : [];
       if (!roles.some(([key]) => key === S.only)) S.only = '';
+      if (db.crew.length <= 3) S.q = ''; // too few people for the search box: a search left in it could not be cleared
       const q = S.q.toLowerCase();
       const list = db.crew.filter(c => (!S.role || where.get(c) === S.role) && (!S.only || roleKey(c) === S.only) && (!q || `${c.name} ${c.role} ${c.notes} ${roleWords(c.role)}`.toLowerCase().includes(q)))
         .sort((a, b) => rank(a) - rank(b) || roleOf(a).localeCompare(roleOf(b)) || a.name.localeCompare(b.name));
@@ -84,7 +85,7 @@ function card(c) {
   const next = crewBookings(c.id).filter(b => endOf(b) >= todayISO()).slice(0, 2);
   return h('div', { class: 'card crew-card', 'data-id': c.id },
     h('div', { class: 'card-row' },
-      h('div', { class: 'avatar', 'aria-hidden': 'true' }, (c.name || '?').split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()),
+      h('div', { class: 'avatar', 'aria-hidden': 'true' }, (c.name || '?').split(/\s+/).map(w => [...w][0]).slice(0, 2).join('').toUpperCase()),
       h('div', { class: 'grow' }, h('strong', null, c.name), h('div', { class: 'muted' }, [c.role, rateText(c, db.profile.currency || '$')].filter(Boolean).join(' · '))),
       h('button', { class: 'icon-btn', 'aria-label': 'Edit ' + c.name, onclick: () => edit(c) }, '✎')),
     h('div', { class: 'actions' },

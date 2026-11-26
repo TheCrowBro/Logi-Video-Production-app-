@@ -336,5 +336,28 @@ const setup = async ctx => {
     ok(`${w} px: no page errors`, errs.length === 0, errs.join(' | '));
     await c2.close();
   }
+  // ---- the Crew page: repairs after 1.4.0 ----
+  {
+    const c3 = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    await c3.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await c3.addInitScript(acceptTerms());
+    const cp = await c3.newPage(); const errs3 = []; cp.on('pageerror', e => errs3.push(e.message)); cp.on('dialog', d => d.accept());
+    await cp.goto(URL); await cp.waitForSelector('#rolodex .drum-btn');
+    await cp.evaluate(() => import('./js/store.js').then(s => s.update(d => { for (const [id, name, role] of [['c1', 'Sam Rivera', 'Sound Recordist'], ['c2', 'Jo Chen', '1st AC'], ['c3', 'Mika Dahl', 'Gaffer'], ['c4', 'Priya Nair', 'Editor']]) d.crew.push({ id, name, role, notes: '' }); })));
+    await cp.evaluate(() => window.logiGo('crew')); await sleep(350);
+    const people = () => cp.locator('.crew-card strong').allInnerTexts();
+    await cp.locator('.search').fill('priya'); await sleep(250);
+    const found = await people();
+    await cp.locator('.crew-card button[aria-label="Edit Priya Nair"]').click(); await cp.waitForSelector('.sheet form');
+    await cp.locator('.sheet form .btn.danger').click(); await sleep(400);
+    ok('deleting the one person a search found, in a list then too short for the search box, shows the people who are left', found.join() === 'Priya Nair' && (await people()).length === 3 && (await cp.locator('.empty', { hasText: 'No matches.' }).count()) === 0 && (await cp.locator('.search').count()) === 0, (await people()).join());
+    await cp.locator('.page-head button.primary').click(); await cp.waitForSelector('.sheet form');
+    await cp.locator('.sheet form input[data-key="name"]').fill('   '); await cp.locator('.sheet form button[type=submit]').click(); await sleep(300);
+    ok('a name made of spaces is refused: the form stays, and nobody without a name is added', (await cp.locator('.sheet form').count()) === 1 && (await cp.evaluate(() => import('./js/store.js').then(s => s.db.crew.length))) === 3);
+    await cp.locator('.sheet form input[data-key="name"]').fill('😀 Sam'); await cp.locator('.sheet form button[type=submit]').click(); await sleep(350);
+    const initials = await cp.locator('.crew-card', { hasText: '😀 Sam' }).locator('.avatar').innerText();
+    ok('the initials of a name that starts with an emoji are whole characters', initials === '😀S', JSON.stringify(initials));
+    ok('the Crew page repairs: no page errors', errs3.length === 0, errs3.join(' | '));
+    await c3.close();
+  }
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + (e.stack || e.message)); process.exit(1); });

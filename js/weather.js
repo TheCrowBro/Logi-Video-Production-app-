@@ -7,7 +7,9 @@ import { byId } from './store.js';
 
 const CODES = { 0: ['☀️', 'Clear'], 1: ['🌤', 'Mostly clear'], 2: ['⛅', 'Partly cloudy'], 3: ['☁️', 'Overcast'], 45: ['🌫', 'Fog'], 48: ['🌫', 'Freezing fog'], 51: ['🌦', 'Light drizzle'], 53: ['🌦', 'Drizzle'], 55: ['🌧', 'Heavy drizzle'], 56: ['🌧', 'Freezing drizzle'], 57: ['🌧', 'Freezing drizzle'], 61: ['🌧', 'Light rain'], 63: ['🌧', 'Rain'], 65: ['🌧', 'Heavy rain'], 66: ['🌧', 'Freezing rain'], 67: ['🌧', 'Freezing rain'], 71: ['🌨', 'Light snow'], 73: ['🌨', 'Snow'], 75: ['❄️', 'Heavy snow'], 77: ['🌨', 'Snow grains'], 80: ['🌦', 'Showers'], 81: ['🌧', 'Showers'], 82: ['⛈', 'Heavy showers'], 85: ['🌨', 'Snow showers'], 86: ['🌨', 'Heavy snow showers'], 95: ['⛈', 'Thunderstorm'], 96: ['⛈', 'Thunderstorm with hail'], 99: ['⛈', 'Thunderstorm with hail'] };
 const KEY = 'logi-wx';
-const imperial = () => { try { return localStorage.getItem('logi-units') === 'ft'; } catch { return false; } };
+// °C and km/h, or °F and mph: as chosen under Settings → Field tool defaults (logi-wx-units, 'c' or 'f'); until someone
+// has chosen, the forecast follows the distance units, as it always did.
+const imperial = () => { try { const own = localStorage.getItem('logi-wx-units'); return own === 'c' || own === 'f' ? own === 'f' : localStorage.getItem('logi-units') === 'ft'; } catch { return false; } };
 export const canForecast = iso => { const d = (parseISO(iso) - new Date()) / 864e5; return d > -1 && d < 16; };
 export function locationFor(b) {
   const v = b && b.venueId ? byId('venues', b.venueId) : null;
@@ -28,6 +30,8 @@ export async function forecast(lat, lon, iso) {
   if (!r.ok) throw new Error('forecast unavailable');
   const j = await r.json(), d = j.daily || {};
   if (!d.time || !d.time.length) return null;
+  // Near the end of its reach the service answers for the day with no values yet: that is no forecast, and nothing to keep.
+  if (d.weather_code?.[0] == null || d.temperature_2m_max?.[0] == null || d.temperature_2m_min?.[0] == null) return null;
   const [emoji, text] = CODES[d.weather_code[0]] || ['🌡', 'Weather'];
   const v = { emoji, text, tmin: Math.round(d.temperature_2m_min[0]), tmax: Math.round(d.temperature_2m_max[0]), rain: d.precipitation_probability_max ? d.precipitation_probability_max[0] : null, wind: Math.round(d.wind_speed_10m_max[0]), gust: Math.round(d.wind_gusts_10m_max[0]), tUnit: imperial() ? '°F' : '°C', wUnit: imperial() ? 'mph' : 'km/h' };
   for (const k of Object.keys(cache)) if (Date.now() - cache[k].at > 3 * 3600e3) delete cache[k];

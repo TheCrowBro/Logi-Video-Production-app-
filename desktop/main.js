@@ -165,11 +165,15 @@ function handler(req, res) {
   if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405); return res.end(); }
   let pathname;
   try { pathname = decodeURIComponent(u.pathname); } catch { res.writeHead(400); return res.end(); }
+  if (pathname.includes('\0')) { res.writeHead(400); return res.end(); } // no file has such a name, and opening one throws
   if (pathname === '/' || pathname === '') pathname = '/index.html';
   let file = path.normalize(path.join(ROOT, pathname));
   if (!file.startsWith(ROOT + path.sep)) { res.writeHead(403); return res.end(); }
   if (!path.extname(file)) file = path.join(ROOT, 'index.html'); // the sign-in return address and share links land on the app shell
-  const stream = fs.createReadStream(file);
+  // Any page in the person's web browser can ask this server for any address: no request may throw in the main
+  // process (Electron would show its error box), so a path that cannot even be opened is simply not found.
+  let stream;
+  try { stream = fs.createReadStream(file); } catch { res.writeHead(404, { 'Content-Type': 'text/plain' }); return res.end('Not found'); }
   stream.on('open', () => {
     res.writeHead(200, { 'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream', 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff' });
     if (req.method === 'HEAD') { stream.destroy(); res.end(); } else stream.pipe(res);
@@ -210,7 +214,9 @@ function policeWindowOpen(contents) {
     external(url);
     return { action: 'deny' };
   });
-  contents.on('did-create-window', child => policeWindowOpen(child.webContents));
+  // A window of Vdex's own pages (the privacy policy, the terms, the print window) has no address bar and no Back: a
+  // link in it to another website opens in the web browser, as in the main window, and the window stays on its page.
+  contents.on('did-create-window', child => { policeWindowOpen(child.webContents); child.webContents.on('will-navigate', (e, url) => { if (isOurs(url)) return; e.preventDefault(); external(url); }); });
 }
 
 function createWindow() {

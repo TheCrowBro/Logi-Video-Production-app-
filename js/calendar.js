@@ -387,11 +387,16 @@ export function calendarPanel() {
         !a ? h('p', { class: 'note' }, 'Link a cloud storage first (the menu ☰ at the top, then Storage, sync & backups).')
           : cloud.paused ? h('p', { class: 'note' }, `${a.label} is paused: cloud storage comes with a licence, so the feed is not updated until then.`)
           : !a.writeAux ? h('p', { class: 'note' }, `${a.label} keeps Vdex’s copy private, so it can’t give your calendar a link to follow. Use Two-way sync below, or Export once.`)
-          : [h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cs.feed, onchange: async e => { await store.setFeed(e.target.checked); draw(); } }), h('span', null, `Publish the feed to ${a.label}`)),
+          : [h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!cs.feed, onchange: async e => { try { await store.setFeed(e.target.checked); } catch (err) { if (err.name !== 'AbortError') toast(`The feed was not switched ${e.target.checked ? 'on' : 'off'}: ${err.message}.`); } draw(); } }), h('span', null, `Publish the feed to ${a.label}`)),
+            // The storage's permission to write the feed file is given on each device (Google Drive). Without it this
+            // device changes bookings and the feed never hears of them: said here, with the one tap that puts it right.
+            cs.feed && a.feedReady && !a.feedReady() && h('div', { class: 'stack feed-allow' },
+              h('p', { class: 'warn small' }, `The feed was switched on from another device. This one has not been allowed to update the feed file on ${a.label} yet, so bookings made here do not reach it.`),
+              h('button', { class: 'btn primary', onclick: async () => { try { await store.setFeed(true); toast('This device now updates the feed'); } catch (err) { if (err.name !== 'AbortError') toast(`The feed was not switched on here: ${err.message}.`); } draw(); } }, 'Let this device update the feed')),
             cs.feed && a.id === 'file' && h('div', { class: 'stack' },
               cloud.auxName ? h('p', { class: 'small' }, `Feed file: ${cloud.auxName}. Share that file from your Dropbox / Drive / OneDrive app and use the link’s direct-download form (Dropbox: dl=1, OneDrive: ?download=1, Google Drive: drive.google.com/uc?export=download&id=…).`) : h('button', { class: 'btn ghost', onclick: async () => { try { await store.createFeedFile(); draw(); } catch (e) { if (e.name !== 'AbortError') toast(e.message); } } }, 'Choose where to save vdex-bookings.ics…')),
             cs.feed && a.id !== 'file' && !a.shareLink && h('p', { class: 'small' }, `Vdex keeps vdex-bookings.ics up to date in its folder on ${a.label}. Share that file from your server (Nextcloud: Share → Share link) and subscribe to that link.`),
-            cs.feed && a.id !== 'file' && a.shareLink && h('div', { class: 'stack' },
+            cs.feed && a.id !== 'file' && a.shareLink && !(a.feedReady && !a.feedReady()) && h('div', { class: 'stack' },
               cloud.feedUrl ? [h('div', { class: 'link-text' }, cloud.feedUrl), h('button', { class: 'btn ghost small', onclick: copy(cloud.feedUrl) }, 'Copy subscription link')]
                 : h('button', { class: 'btn ghost', onclick: async () => { try { await store.feedLink(); draw(); } catch (e) { toast(e.message); } } }, 'Get the subscription link'),
               cloud.feedError && h('div', { class: 'warn small' }, cloud.feedError)),

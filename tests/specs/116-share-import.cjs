@@ -665,11 +665,12 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const synced = await M.page.evaluate(async ([one, two]) => {
     const s = await import('./js/store.js'), sd = await import('./js/share-data.js'), si = await import('./js/share-import.js');
     const read = l => sd.readShared('#' + l), mine = d => d.bookings.find(b => b.shared && b.shared.ref === 'REF-M1'), wait = () => new Promise(r => setTimeout(r, 25));
+    const put = copy => s.update(d => { for (const k of Object.keys(d)) delete d[k]; Object.assign(d, JSON.parse(JSON.stringify(copy))); }); // this device's data set to another device's, as it is (a restore would stamp it and mark what is missing as deleted)
     si.applyBooking(await read(one));
     const before = s.serialize(); // both devices hold the booking with scenes 1 and 2
     await wait(); si.applyBooking(await read(two)); // device A takes the producer's new link: scene 3 comes in
     const a = JSON.parse(s.serialize());
-    s.replaceAll(JSON.parse(before)); // device B, still open and not synced, ticks a checklist line a moment later
+    put(JSON.parse(before)); // device B, still open and not synced, ticks a checklist line a moment later
     s.update(d => { const x = mine(d); x.checks = { 'x:t': 1 }; x.updatedAt = Date.now() + 5000; });
     const b = JSON.parse(s.serialize()), out = {};
     for (const [k, m] of [['ba', s.mergeDb(b, a)], ['ab', s.mergeDb(a, b)]]) { const x = mine(m), sc = x.board.list.filter(y => y.type === 'scene'); out[k] = { scenes: sc.map(y => y.scene).join(), strips: x.shared.rows.strips.length, ticked: !!(x.checks && x.checks['x:t']), listed: sc.every(y => x.shared.rows.strips.includes(y.id)) }; }
@@ -683,12 +684,12 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
       const old = JSON.parse(JSON.stringify(b)), x = mine(old); x.board = JSON.parse(JSON.stringify(mine(a).board));
       if (edited) { x.board.list.unshift(x.board.list.splice(1, 1)[0]); x.board.updatedAt = Date.now() + 6000; x.updatedAt = Date.now() + 6000; }
       const handed = { listed: x.shared.rows.strips.length, scenes: scenes(old) };
-      s.replaceAll(s.mergeDb(a, old));
+      put(s.mergeDb(a, old));
       const listed = mine(s.db).shared.rows.strips.length, own = si.planBooking(await read(two)).ownStrips;
       await wait(); si.applyBooking(await read(two));
       out.old.push({ handed, listed, own, after: scenes(s.db).split(',').sort().join(), strips: mine(s.db).shared.rows.strips.length, ticked: !!(mine(s.db).checks && mine(s.db).checks['x:t']) });
     }
-    s.replaceAll(s.mergeDb(b, a));
+    put(s.mergeDb(b, a));
     out.own = si.planBooking(await read(two)).ownStrips;
     return out;
   }, [linkOne, linkTwo]);
@@ -712,6 +713,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
   const twice = await M.page.evaluate(async ([bk, gear, odd]) => {
     const s = await import('./js/store.js'), sd = await import('./js/share-data.js'), si = await import('./js/share-import.js'), gi = await import('./js/gear-import.js');
     const read = l => sd.readShared('#' + l), g = await read(gear), wait = () => new Promise(r => setTimeout(r, 25));
+    const put = copy => s.update(d => { for (const k of Object.keys(d)) delete d[k]; Object.assign(d, JSON.parse(JSON.stringify(copy))); }); // this device's data set to another device's, as it is (a restore would stamp it and mark what is missing as deleted)
     const addBoth = async () => { si.applyBooking(await read(bk)); return gi.applyGearImport(gi.planGearImport(g.items), { kits: g.kits, from: 'Pat Producer' }); };
     const from = x => !!x.shared && /^(REF-X1|gx\d|kx\d)$/.test(x.shared.ref || '');
     const count = d => ({ bookings: d.bookings.filter(from).length, venues: d.venues.filter(from).length, gear: d.gear.filter(from).length, kits: d.kits.filter(from).length });
@@ -723,7 +725,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
     // the phone's work, still whole in a copy of the database
     const kept = d => { const b = d.bookings.find(x => mine.has(x.id)); return !!b && !!b.invoice && b.invoice.number === 'INV-0007' && b.gear.length === 2 && b.gear.every(id => d.gear.some(x => x.id === id)) && d.venues.some(x => x.id === b.venueId) && d.gear.some(x => mine.has(x.id) && x.location === 'Flight case 1') && d.kits.some(x => mine.has(x.id) && x.name === 'My interview set' && x.gear.length === 2); };
     // the computer, from the same start and with no way to read the cloud copy, adds them too, a moment later
-    s.replaceAll(JSON.parse(start)); await wait();
+    put(JSON.parse(start)); await wait();
     const doneB = await addBoth(), b1 = JSON.parse(s.serialize());
     out.each = [count(a), count(b1)];
     out.apart = [...b1.bookings, ...b1.venues, ...b1.gear, ...b1.kits].filter(from).every(x => !mine.has(x.id));
@@ -733,7 +735,7 @@ const hashOf = u => u.slice(u.indexOf('#') + 1);
     const b2 = JSON.parse(s.serialize());
     out.undone = [s.mergeDb(b2, a), s.mergeDb(a, b2)].map(d => ({ ...count(d), kept: kept(d) }));
     // the list that borrows the booking's and the venue's references, added on the phone and undone
-    s.replaceAll(JSON.parse(JSON.stringify(a))); await wait();
+    put(a); await wait();
     const o = await read(odd), doneO = gi.applyGearImport(gi.planGearImport(o.items), { kits: o.kits, from: 'Sam Sender' });
     out.oddAdded = doneO.added.length; await wait(); gi.undoGearImport(doneO);
     const after = s.mergeDb(JSON.parse(s.serialize()), a);

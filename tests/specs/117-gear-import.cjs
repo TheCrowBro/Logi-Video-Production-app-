@@ -1034,6 +1034,28 @@ const ODD_XLSX = zip({
     ok('360 px: the same card keeps its one row, the booked mark and the buttons at the right of the name', g.wide <= 0 && g.beside && g.right, JSON.stringify(g));
     await M.ctx.close(); }
 
+  // ---- a total by another name is no item; two rows of one name go to two owned items of that name ----
+  { const M = await open({ width: 420, height: 800 });
+  const sums = await M.page.evaluate(async () => {
+    const T = await import('./js/table-read.js'), G = await import('./js/gear-columns.js'), M = await import('./js/gear-import.js');
+    const read = async text => { const t = await T.readTableText(text), L = G.layout(t.sheets[0].rows), b = G.buildItems(L, G.guessColumns(L)); return { names: b.items.map(x => x.name).join(' | '), totals: b.left.totals }; };
+    const own = [{ id: 'mc-van', name: 'Aputure MC', category: 'Lighting', location: 'Van', qty: 4, value: 125 }, { id: 'mc-shelf', name: 'Aputure MC', category: 'Lighting', location: 'Shelf', qty: 2, value: 99 }, { id: 'ser', name: 'Sony FX6', category: 'Camera', serial: 'FX6-1' }];
+    const row = (location, qty, value) => ({ name: 'Aputure MC', category: 'Lighting', location, qty, value });
+    const plan = rows => M.planGearImport(rows, { existing: own, matchNames: true, onName: 'update' }).rows.map(r => (r.match ? r.match.id : 'none') + ':' + r.action).join();
+    return {
+      german: await read('Pos;Menge;Artikel;Seriennummer;Wert\n1;2;ARRI SkyPanel S60-C;SN12345;4.299,00 €\n2;1;Sachtler Video 18;;1.250 €\n3;4;Akku V-Mount;;89,90 €\n;;Summe;;10.207,60 €\n'),
+      english: await read('Item,Serial,Price\nSony FX6,FX6-1,6000\nSigma 24-70,SIG-2,800\nSubtotal,,6800\nVAT @ 20%,,1360\nTotal inc VAT,,8160\n'),
+      kept: await read('Item,Qty,Value\nTotal station,1,900\nSumme,2,40\nTax disc holder,1,5\n'), // only the start of a name, or a row with a quantity: items
+      inOrder: plan([row('Van', 4, 125), row('Shelf', 2, 99)]), swapped: plan([row('Shelf', 2, 99), row('Van', 4, 125)]), third: plan([row('Van', 4, 125), row('Shelf', 2, 99), row('Loft', 1, 50)]),
+      serial: plan([{ name: 'Sony FX6 body', serial: 'fx6-1' }, { name: 'FX6', serial: 'FX6-1' }]),
+    };
+  });
+  ok('a total line labelled “Summe”, and “Subtotal”, “VAT @ 20%” and “Total inc VAT”, are passed over as sums, not added as items', sums.german.names === 'ARRI SkyPanel S60-C | Sachtler Video 18 | Akku V-Mount' && sums.german.totals === 1 && sums.english.names === 'Sony FX6 | Sigma 24-70' && sums.english.totals === 3, JSON.stringify([sums.german, sums.english]));
+  ok('…while a name that only begins like a total, or a row with a quantity, stays an item', sums.kept.names === 'Total station | Summe | Tax disc holder' && sums.kept.totals === 0, JSON.stringify(sums.kept));
+  ok('two rows of one name update the two owned items of that name, each its own (the one in the same place), and a third is an add', sums.inOrder === 'mc-van:update,mc-shelf:update' && sums.swapped === 'mc-shelf:update,mc-van:update' && sums.third === 'mc-van:update,mc-shelf:update,none:add', JSON.stringify([sums.inOrder, sums.swapped, sums.third]));
+  ok('…and two rows with one serial number are still the one item that has it', sums.serial === 'ser:skip,ser:skip', sums.serial);
+  await M.ctx.close(); }
+
   /* ============================== nothing leaves the device ============================== */
   const away = requests.filter(q => !q.startsWith('GET ' + BASE) && !q.startsWith('GET https://api.open-meteo.com/') && !q.startsWith('GET blob:') && !q.startsWith('GET data:'));
   ok('through all of this nothing was sent anywhere: every request was a GET for one of the app’s own files', away.length === 0 && requests.length > 0, away.slice(0, 5).join(' | '));
