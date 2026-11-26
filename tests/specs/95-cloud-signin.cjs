@@ -617,6 +617,28 @@ const preflight = route => route.request().method() === 'OPTIONS' && (route.fulf
       const whole = await M.page.evaluate(() => JSON.parse(localStorage.getItem('logi-webdav') || '{}'));
       ok('…and with Vdex put away while it is tried again, nothing is written in place of the link’s settings: the link is whole afterwards and syncs', away && left === null && then === 'synced' && whole.url === 'https://dav.example/vdex' && whole.pass === 'pässwörd-é1' && whole.latin1 === true && (await state(M.page)).status === 'synced', JSON.stringify([left, then, whole, await state(M.page)]));
       await M.ctx.close();
+      // …and with that password wrong (changed on the server), each sync asks the server once, as 1.4.0 did, not once in
+      // each form: a server that blocks after a number of failed sign-ins is not asked twice as often. Once the password
+      // is right again, the form that server takes is found and kept.
+      let right = false; const auths = [];
+      const N = await device(null, 'N', { seed: { 'logi-webdav': link } });
+      await N.ctx.route('https://dav.example/**', async route => {
+        const r = route.request(), m = r.method(), file = decodeURIComponent(new URL(r.url()).pathname.split('/').pop());
+        if (m === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+        auths.push(r.headers().authorization || '');
+        if (!right || (r.headers().authorization || '') !== want) return route.fulfill({ status: 401, headers: CORS, body: '' });
+        if (m === 'GET') return files.has(file) ? route.fulfill({ status: 200, headers: { ...CORS, 'content-type': 'application/json' }, body: files.get(file) }) : route.fulfill({ status: 404, headers: CORS, body: '' });
+        if (m === 'PUT') { files.set(file, r.postData() || ''); return route.fulfill({ status: 201, headers: CORS }); }
+        return route.fulfill({ status: 201, headers: CORS }); });
+      await start(N.page); await sleep(1200);
+      const atStart = auths.length;
+      for (let i = 0; i < 4; i++) await syncNow(N.page);
+      const wrong = [atStart, auths.length - atStart, new Set(auths).size, (await state(N.page)).status];
+      right = true;
+      for (let i = 0; i < 2; i++) await syncNow(N.page);
+      const mended = [(await state(N.page)).status, await N.page.evaluate(() => JSON.parse(localStorage.getItem('logi-webdav') || '{}').latin1)];
+      ok('with a WebDAV password that is wrong, each sync asks the server once (the two forms are each tried once only), and once it is right again the form the server takes is found and kept', wrong.join() === '2,4,2,error' && mended.join() === 'synced,true', JSON.stringify([wrong, mended]));
+      await N.ctx.close();
     }
 
     // ---- two windows of Vdex on one device ----

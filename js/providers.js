@@ -663,14 +663,23 @@ export const webdavAdapter = () => {
   // while the lock has taken the settings off the disk because Vdex was put away meanwhile, where a bare "latin1"
   // written in their place would be all that is left of the address, the username and the password. It then stays in
   // memory for this run and is found again, and kept, at the next start.)
-  const ask = async (address, options = {}) => {
-    const sent = basic, r = await send(address, options, sent);
-    if (r.status !== 401 || !older) return r;
-    const other = sent === older ? utf8 : older, again = await send(address, options, other);
-    if (again.status === 401) return r;
-    basic = other;
+  // Once both forms have been refused (a wrong password, or one changed on the server), each request sends one form
+  // only, as 1.4.0 did, the two in turn: a server that blocks after a number of failed sign-ins is not asked twice as
+  // often, and the form it takes is still found once the password is right again. A request that gets in ends it.
+  let refused = false;
+  const keep = () => {
     const kept = settings.webdav();
     if (['kind', 'url', 'user', 'pass'].every(k => kept[k] === cfg[k]) && !!kept.latin1 !== (basic === older)) { settings.setWebdav({ ...kept, latin1: basic === older }); try { dispatchEvent(new Event('vdex-secrets')); } catch { /* no page */ } }
+  };
+  const ask = async (address, options = {}) => {
+    const sent = basic, r = await send(address, options, sent);
+    if (r.status !== 401) { if (refused) { refused = false; if (older) keep(); } return r; }
+    if (!older) return r;
+    const other = sent === older ? utf8 : older;
+    if (refused) { basic = other; return r; }
+    const again = await send(address, options, other);
+    if (again.status === 401) { refused = true; return r; }
+    basic = other; keep();
     return again;
   };
   const headers = extra => extra;
