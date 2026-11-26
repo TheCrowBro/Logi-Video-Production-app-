@@ -5,9 +5,12 @@
 //
 // The speed is in words a minute: the height a word takes up is measured from the lines that are read aloud, so a
 // speed means the same at any text size and on any screen. The reading line sits at a fixed height on the screen; the
-// line under it is the current line. Mirror and upside down turn the stage (the text, the reading line, the countdown
-// and the time left, which the talent reads through the glass of a rig) and never the buttons around it. These
-// settings belong to the screen, so they are kept on the device; which speaker's lines are read belongs to the script.
+// line under it is the current line; its arrow drags it up or down (the line being read stays under it), and it can be
+// a band, the arrow alone, a thin line or hidden, in a colour and a strength, and locked. A mouse wheel or a trackpad
+// scrolls the text as on a web page (and while it runs, the scroll holds while it does and carries on from there), unless
+// that is switched off. Mirror and upside down turn the stage (the text, the reading line, the countdown and the time
+// left, which the talent reads through the glass of a rig) and never the buttons around it. These settings belong to
+// the screen, so they are kept on the device; which speaker's lines are read belongs to the script.
 import { h, hold, wasHeld } from './util.js';
 
 /* -------------------------------- settings -------------------------------- */
@@ -16,10 +19,15 @@ const KEY = 'logi-prompter';
 export const SIZES = [52, 44, 38, 33, 29, 25, 22, 19, 16, 13];
 export const COLS = [['narrow', 'Narrow', 0.62], ['medium', 'Medium', 0.8], ['full', 'Full width', 0.95]];
 export const MARKS = [[0.2, 'Near the top'], [0.33, 'A third down'], [0.5, 'The middle']];
+export const MARK_RANGE = [0.1, 0.75]; // where the reading line can be dragged: from near the top to three quarters down
+export const LOOKS = [['band', 'Arrow and band'], ['arrow', 'Arrow only'], ['thin', 'A thin line'], ['hidden', 'Hidden']];
+export const LINE_COLOURS = [['yellow', 'Yellow'], ['white', 'White'], ['red', 'Red'], ['green', 'Green']];
+export const STRENGTHS = [['faint', 'Faint'], ['normal', 'Normal'], ['bold', 'Bold']];
+export const LINE_DEF = { mark: 0.33, lineLook: 'band', lineColour: 'yellow', lineStrength: 'normal', lineLock: false }; // what Reset puts back
 export const SPACINGS = [[1.15, 'Tight'], [1.32, 'Normal'], [1.6, 'Loose']];
 export const COUNT_LENGTHS = [3, 5, 10]; // seconds of countdown before a take, when it is on (count 0 is off)
 export const DIRS = [['dim', 'Dimmed'], ['hide', 'Hidden'], ['read', 'Like the rest']];
-const DEF = { size: 5, wpm: 140, mark: 0.33, col: 'medium', spacing: 1.32, mirror: false, flip: false, count: 3, countLen: 3, dirs: 'dim', names: true, voice: false };
+const DEF = { size: 5, wpm: 140, ...LINE_DEF, col: 'medium', spacing: 1.32, mirror: false, flip: false, count: 3, countLen: 3, dirs: 'dim', names: true, voice: false, wheel: true };
 const WPM_MIN = 60, WPM_MAX = 300;
 const read = () => { try { return { ...DEF, ...JSON.parse(localStorage.getItem(KEY)) }; } catch { return { ...DEF }; } };
 export const P = read();
@@ -28,7 +36,10 @@ export const save = () => { try { localStorage.setItem(KEY, JSON.stringify(P)); 
 export const reload = () => Object.assign(P, read());
 export const clampSize = n => Math.max(0, Math.min(SIZES.length - 1, n));
 export const clampWpm = n => Math.max(WPM_MIN, Math.min(WPM_MAX, n));
-const SETTABLE = { size: v => clampSize(Number(v)), wpm: v => clampWpm(Number(v)), mark: v => (MARKS.some(m => m[0] === v) ? v : P.mark), col: v => (COLS.some(c => c[0] === v) ? v : P.col), spacing: v => (SPACINGS.some(s => s[0] === v) ? v : P.spacing), mirror: v => !!v, flip: v => !!v, count: v => ([0, ...COUNT_LENGTHS].includes(Number(v)) ? Number(v) : P.count), countLen: v => (COUNT_LENGTHS.includes(Number(v)) ? Number(v) : P.countLen), dirs: v => (DIRS.some(d => d[0] === v) ? v : P.dirs), names: v => !!v, voice: v => !!v };
+export const clampMark = n => Math.max(MARK_RANGE[0], Math.min(MARK_RANGE[1], Math.round(n * 1000) / 1000));
+const markOf = v => { const n = typeof v === 'number' ? v : parseFloat(v); return Number.isFinite(n) ? clampMark(n) : P.mark; };
+const oneOf = (list, v, was) => (list.some(x => x[0] === v) ? v : was);
+const SETTABLE = { size: v => clampSize(Number(v)), wpm: v => clampWpm(Number(v)), mark: markOf, lineLook: v => oneOf(LOOKS, v, P.lineLook), lineColour: v => oneOf(LINE_COLOURS, v, P.lineColour), lineStrength: v => oneOf(STRENGTHS, v, P.lineStrength), lineLock: v => !!v, wheel: v => !!v, col: v => (COLS.some(c => c[0] === v) ? v : P.col), spacing: v => (SPACINGS.some(s => s[0] === v) ? v : P.spacing), mirror: v => !!v, flip: v => !!v, count: v => ([0, ...COUNT_LENGTHS].includes(Number(v)) ? Number(v) : P.count), countLen: v => (COUNT_LENGTHS.includes(Number(v)) ? Number(v) : P.countLen), dirs: v => (DIRS.some(d => d[0] === v) ? v : P.dirs), names: v => !!v, voice: v => !!v };
 export const setSetting = (k, v) => { if (!SETTABLE[k]) return false; P[k] = SETTABLE[k](v); save(); return true; };
 
 /* --------------------------------- script --------------------------------- */
@@ -88,16 +99,21 @@ export const quote = t => { const s = String(t).replace(/\s+/g, ' ').trim(); ret
 /* --------------------------------- the stage --------------------------------- */
 // The stage: el is its element; load() gives it a script ({ script, focus, from }); update() a changed one; cmd()
 // drives it; state() says where it is: { playing, counting, line, wpm, size, left (seconds), end }. onState hears every
-// change of state (and its place, four times a second, while it runs); onTap and onHold hear a tap and a held line.
-export function makeStage({ onState = () => {}, onTap = null, onHold = null } = {}) {
+// change of state (and its place, four times a second, while it runs); onTap and onHold hear a tap and a held line (a
+// right-click on a line, too); onLine hears the reading line's arrow tapped, held or right-clicked ('menu'), or dragged
+// while it is locked ('locked').
+export function makeStage({ onState = () => {}, onTap = null, onHold = null, onLine = () => {} } = {}) {
   let A = [], els = [], lines = [], pos = 0, maxPos = 0, markY = 0, pxWord = 10, rowH = 40;
   let playing = false, raf = 0, last = 0, counting = 0, cur = -1, drag = null, key = '', data = null, beat = 0, ro = null;
   let follow = false, aimPos = null; // voice-follow: run to where the talent is (aim), not at a speed
+  let glide = 0, glideRaf = 0, glideLast = 0, scrollHold = 0, lineDrag = null, lastTouch = 0; // the wheel's glide, the reading line's drag
 
   const col = h('div', { class: 'pr-col' });
   const padTop = h('div', { class: 'pr-pad' }), padBottom = h('div', { class: 'pr-pad' });
   const track = h('div', { class: 'pr-track' }, padTop, col, padBottom);
-  const marker = h('div', { class: 'pr-marker', 'aria-hidden': 'true' });
+  // The reading line; its arrow is a handle (a drag moves the line; a tap, a hold or a right-click asks for its menu).
+  const handle = h('button', { class: 'pr-handle', type: 'button', 'aria-label': 'The reading line: drag it up or down, or open its menu' });
+  const marker = h('div', { class: 'pr-marker' }, handle);
   const count = h('div', { class: 'pr-count', 'aria-hidden': 'true', hidden: true });
   const left = h('div', { class: 'pr-left', 'aria-hidden': 'true' });
   const rec = h('div', { class: 'pr-rec', 'aria-hidden': 'true', hidden: true }, '● REC');
@@ -156,7 +172,7 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null } = 
   const frame = t => {
     if (!playing) return;
     const dt = last ? Math.min(0.1, (t - last) / 1000) : 0; last = t;
-    if (!(drag && drag.moved)) pos = follow ? (aimPos == null ? pos : clampPos(pos + (aimPos - pos) * Math.min(1, dt * 3))) : clampPos(pos + pxPerSec() * dt);
+    if (!(drag && drag.moved) && t >= scrollHold) pos = follow ? (aimPos == null ? pos : clampPos(pos + (aimPos - pos) * Math.min(1, dt * 3))) : clampPos(pos + pxPerSec() * dt);
     apply();
     if (pos >= maxPos && !follow) { pause(); return; }
     raf = requestAnimationFrame(frame);
@@ -200,20 +216,73 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null } = 
   const sayFrom = i => { for (let k = Math.max(0, i); k < A.length; k++) if (A[k].role === 'say' && lines[k] && lines[k].h) return k; return -1; };
 
   /* under a finger: tap plays and pauses (or onTap), a drag moves the text, holding a line offers it (onHold) */
-  el.addEventListener('pointerdown', e => { if (e.button !== 0) return; drag = { y: e.clientY, pos, moved: false }; });
+  // A drag with a mouse is scrolling with a mouse, so it is under the same switch as the wheel; a finger always drags.
+  el.addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') lastTouch = Date.now(); if (e.button !== 0) return; drag = { y: e.clientY, pos, moved: false, fixed: e.pointerType === 'mouse' && !P.wheel }; });
   el.addEventListener('pointermove', e => {
     if (!drag) return;
     const dy = e.clientY - drag.y;
     if (!drag.moved && Math.abs(dy) > 8) { drag.moved = true; try { el.setPointerCapture(e.pointerId); } catch { /* fine */ } }
-    if (drag.moved) { pos = clampPos(drag.pos - (P.flip ? -dy : dy)); apply(); drawLeft(); }
+    if (drag.moved && !drag.fixed) { pos = clampPos(drag.pos - (P.flip ? -dy : dy)); apply(); drawLeft(); }
   });
   el.addEventListener('pointerup', () => { const d = drag; drag = null; if (!d || d.moved || wasHeld(el)) { if (d && d.moved) emit(); return; } if (onTap) onTap(); else toggle(); });
   el.addEventListener('pointercancel', () => { drag = null; });
-  el.addEventListener('wheel', e => { e.preventDefault(); pos = clampPos(pos + (P.flip ? -e.deltaY : e.deltaY)); apply(); drawLeft(); }, { passive: false });
+  // A mouse wheel or a trackpad, as on a web page: a trackpad's small steps follow the fingers as they come (with its
+  // own glide after), a wheel's click glides over a moment instead of jumping, and lines or pages are counted in pixels
+  // the same in every browser. While it runs, the scroll holds as long as the text is being scrolled.
+  const wheelPx = e => (e.deltaMode === 1 ? e.deltaY * rowH : e.deltaMode === 2 ? e.deltaY * el.clientHeight * 0.9 : e.deltaY);
+  const glideFrame = t => {
+    const dt = glideLast ? Math.min(0.05, (t - glideLast) / 1000) : 1 / 60; glideLast = t;
+    const step = Math.abs(glide) < 0.5 ? glide : glide * (1 - Math.exp(-dt / 0.07));
+    glide -= step; pos = clampPos(pos + step); apply(); drawLeft();
+    if (pos <= 0 || pos >= maxPos) glide = 0;
+    glideRaf = glide ? requestAnimationFrame(glideFrame) : 0;
+  };
+  el.addEventListener('wheel', e => {
+    e.preventDefault(); if (!P.wheel || !data) return;
+    const d = wheelPx(e) * (P.flip ? -1 : 1);
+    scrollHold = performance.now() + 250;
+    if (e.deltaMode === 0 && Math.abs(e.deltaY) < 40 && !glide) { pos = clampPos(pos + d); apply(); drawLeft(); return; }
+    glide += d; if (!glideRaf) { glideLast = 0; glideRaf = requestAnimationFrame(glideFrame); }
+  }, { passive: false });
   if (onHold) hold(el, 550, e => { const x = document.elementFromPoint(e.clientX, e.clientY)?.closest('.pr-line'); if (x && drag && !drag.moved) { drag = null; onHold(x.dataset.id); } });
+  // A right-click (a two-finger click, Ctrl-click on a Mac) on the reading line is its menu; on another line, that
+  // line's, as holding it is. A finger's long press is the hold's, so the browser's own menu never comes up here.
+  el.addEventListener('contextmenu', e => {
+    e.preventDefault();
+    if (Date.now() - lastTouch < 1500) return;
+    const r = marker.getBoundingClientRect();
+    if (e.clientY >= r.top - 4 && e.clientY <= r.bottom + 4) { onLine('menu'); return; }
+    const x = document.elementFromPoint(e.clientX, e.clientY)?.closest('.pr-line');
+    if (x && onHold) onHold(x.dataset.id);
+  });
+
+  /* the reading line's arrow: dragged up or down it moves the line (snapping to the three heights), live while it runs */
+  const snapMark = (n, H) => { const m = clampMark(n), near = MARKS.find(([v]) => Math.abs(v - m) * H <= 10); return near ? near[0] : m; };
+  handle.addEventListener('pointerdown', e => {
+    e.stopPropagation(); if (e.pointerType !== 'mouse') lastTouch = Date.now(); if (e.button !== 0) return;
+    lineDrag = { y: e.clientY, mark: P.mark, moved: false };
+    try { handle.setPointerCapture(e.pointerId); } catch { /* fine */ }
+  });
+  handle.addEventListener('pointermove', e => {
+    if (!lineDrag) return; e.stopPropagation();
+    let dy = e.clientY - lineDrag.y; if (P.flip) dy = -dy;
+    if (!lineDrag.moved && Math.abs(dy) < 6) return;
+    if (P.lineLock) { if (!lineDrag.moved) { lineDrag.moved = true; onLine('locked'); } return; }
+    lineDrag.moved = true;
+    const next = snapMark(lineDrag.mark + dy / el.clientHeight, el.clientHeight);
+    if (next !== P.mark) { P.mark = next; measure(); }
+  });
+  handle.addEventListener('pointerup', e => { e.stopPropagation(); const d = lineDrag; lineDrag = null; if (!d) return; if (d.moved) { if (!P.lineLock) { save(); emit(); } return; } onLine('menu'); });
+  handle.addEventListener('pointercancel', () => { if (lineDrag && lineDrag.moved && !P.lineLock) save(); lineDrag = null; });
+  handle.addEventListener('click', e => { e.stopPropagation(); if (e.detail === 0) onLine('menu'); }); // Enter or Space on it
+  handle.addEventListener('contextmenu', e => { e.preventDefault(); e.stopPropagation(); lineDrag = null; onLine('menu'); });
 
   /* driving it */
-  const look = () => { el.classList.toggle('mirror', !!P.mirror); el.classList.toggle('flip', !!P.flip); };
+  const look = () => {
+    el.classList.toggle('mirror', !!P.mirror); el.classList.toggle('flip', !!P.flip);
+    marker.dataset.look = P.lineLook; marker.dataset.colour = P.lineColour; marker.dataset.strength = P.lineStrength; marker.classList.toggle('locked', !!P.lineLock);
+    handle.title = P.lineLock ? 'The reading line is locked · tap or right-click for its menu' : 'Drag to move the reading line · tap or right-click for its menu';
+  };
   const refresh = () => { look(); if (data && keyOf(data) !== key) { const at = anchor(); render(); measure(at); } else measure(); };
   const cmd = (name, arg) => {
     switch (name) {
@@ -243,6 +312,6 @@ export function makeStage({ onState = () => {}, onTap = null, onHold = null } = 
     attach: () => { ro = new ResizeObserver(() => measure()); ro.observe(el); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if (el.isConnected) measure(); }); },
     setRec: on => { rec.hidden = !on; },
     lines: () => A, current: () => cur, sayFrom, firstSay: () => sayFrom(0),
-    destroy: () => { playing = false; cancelAnimationFrame(raf); clearInterval(beat); clearInterval(counting); counting = 0; if (ro) ro.disconnect(); },
+    destroy: () => { playing = false; cancelAnimationFrame(raf); cancelAnimationFrame(glideRaf); glide = 0; clearInterval(beat); clearInterval(counting); counting = 0; if (ro) ro.disconnect(); },
   };
 }

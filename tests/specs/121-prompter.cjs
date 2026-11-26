@@ -2,6 +2,9 @@
 // speed in words a minute, takes rolled and cut from it in free run and in record run (which runs the log's clock),
 // ratings, pickups, ⚑ marks, lines edited on set (their marks stay on them), the settings kept on the device, the
 // licence (free in the trial, then with a licence), the quick start on the logs page, its tutorial, and a wide screen.
+// Its settings sit under three icons with twirl-downs; the reading line drags and has its own menu; a mouse wheel or a
+// trackpad scrolls it (unless switched off); ← → change the speed; the pointer and the buttons keep out of sight while
+// it runs, with the speed in a corner for a finger.
 const { chromium } = require('playwright');
 const { acceptTerms } = require('../helpers.cjs');
 const S = process.env.S;
@@ -25,6 +28,11 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   const now = page => page.evaluate(() => document.querySelector('.pr-line.now')?.textContent || '');
   const logOf = (page, pick = 'practice') => page.evaluate(p => import('./js/store.js').then(s => JSON.parse(JSON.stringify(p === 'practice' ? s.db.logs.find(l => l.practice) : s.db.logs.find(l => l.id === p)))), pick);
   const tc = () => import('./js/pages/tcnotes.js');
+  // A setting is under one of three icons, in one of its twirl-downs: choose the icon, open the twirl-down.
+  const settings = async (page, scope, tab, twirl) => {
+    await page.locator(`${scope} .pr-tab[data-tab="${tab}"]`).click(); await sleep(120);
+    if (twirl && !(await page.locator(`${scope} [data-twirl="${twirl}"]`).evaluate(d => d.open))) { await page.locator(`${scope} [data-twirl="${twirl}"] > summary`).click(); await sleep(150); }
+  };
 
   /* ---------------- a phone, upright, with no countdown so the runs below are quick ---------------- */
   let { ctx, page } = await boot({ width: 420, height: 880 }, { count: 0 });
@@ -33,21 +41,28 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   await page.locator('.tc-views button', { hasText: 'Prompter' }).click(); await sleep(600);
   const sum = await page.locator('.pr-sum').innerText();
   ok('the Prompter view says how much is read and how long it takes (the sample: 32 words of dialogue)', /32 words to read/.test(sum) && /about 0:1\d at 140 words a minute/.test(sum), sum);
-  ok('…with the settings for this screen and the speakers to choose from', (await page.locator('.pr-prefs .pref[aria-label="Mirror"]').count()) === 1 && JSON.stringify(await page.locator('.pr-prefs .pref[aria-label="Lines to read"] button').allInnerTexts()) === '["Everyone","ANA","TOM"]');
+  ok('…with the settings for this screen under three icons, Script, Format and Other: Format the first time', JSON.stringify(await page.locator('.pr-setup .pr-tab').allInnerTexts()) === '["Script","Format","Other"]' && (await page.locator('.pr-setup .pr-tab.on').innerText()) === 'Format' && JSON.stringify(await page.locator('.pr-setup .pr-twirl .twirl-name').allInnerTexts()) === '["Text","Reading line","Rig"]');
+  ok('…each twirl-down saying what it is set to, the first one open', JSON.stringify(await page.locator('.pr-setup .pr-twirl .twirl-sub').allInnerTexts()) === '["about 25 letters a line · normal spacing · medium column","a third down · arrow and band · yellow","not mirrored · upright"]' && JSON.stringify(await page.locator('.pr-setup .pr-twirl').evaluateAll(ds => ds.map(d => d.open))) === '[true,false,false]', JSON.stringify(await page.locator('.pr-setup .pr-twirl .twirl-sub').allInnerTexts()));
+  await settings(page, '.pr-setup', 'script', 'show');
+  ok('…Script: how it shows (with the speakers to choose from), Import or replace, Jump to a scene, Find a line', JSON.stringify(await page.locator('.pr-setup .pr-twirl .twirl-name').allInnerTexts()) === '["How it shows","Import or replace","Jump to a scene","Find a line"]' && JSON.stringify(await page.locator('.pr-setup .pref[aria-label="Lines to read"] button').allInnerTexts()) === '["Everyone","ANA","TOM"]');
+  await settings(page, '.pr-setup', 'other');
+  ok('…Other: the countdown, the speed, scrolling and the keys', JSON.stringify(await page.locator('.pr-setup .pr-twirl .twirl-name').allInnerTexts()) === '["Countdown","Speed","Scrolling","Keys and clickers"]' && /← → and ↑ ↓ change the speed/.test(await page.locator('.pr-setup .pr-keys-help').textContent()));
+  await settings(page, '.pr-setup', 'script');
   await page.screenshot({ path: S + '/prompter-view.png' });
   await page.locator('.pr-open').click(); await page.waitForSelector('.prompter');
   ok('Open the prompter puts it over the page, the page out of reach', (await page.evaluate(() => document.getElementById('app').inert)) && (await page.locator('.prompter[role=dialog]').count()) === 1);
   ok('it opens on the first line, at the reading line', /INT\. HARBOUR/.test(await now(page)) && (await pos(page)) > 0);
-  ok('its controls slide out as it opens, the countdown switch first', (await page.locator('.prompter .pr-panel.open').count()) === 1 && (await page.locator('.pr-panel .pref-label').first().innerText()) === 'Countdown before a take' && (await page.locator('.pr-settings').getAttribute('aria-expanded')) === 'true');
+  ok('its controls slide out as it opens, on the icon used last (Script)', (await page.locator('.prompter .pr-panel.open').count()) === 1 && (await page.locator('.pr-panel .pr-tab.on').innerText()) === 'Script' && (await page.locator('.pr-settings').getAttribute('aria-expanded')) === 'true');
   // On an upright phone the script is lifted above the drawer, and a change to the reading line shows there too.
   await sleep(400);
   const lifted = () => page.evaluate(() => { const r = document.querySelector('.pr-marker').getBoundingClientRect(), t = document.querySelector('.pr-top').getBoundingClientRect(), p = document.querySelector('.pr-panel').getBoundingClientRect(); return { line: Math.round(r.top), end: Math.round(r.bottom), bar: Math.round(t.bottom), drawer: Math.round(p.top) }; });
   const l1 = await lifted();
   ok('on an upright phone the script is lifted above the drawer, the reading line in sight', l1.line >= l1.bar && l1.end <= l1.drawer, JSON.stringify(l1));
-  await page.locator('.pr-panel .pref[aria-label="Reading line"] button', { hasText: 'The middle' }).click(); await sleep(400);
+  await settings(page, '.pr-panel', 'format', 'line');
+  await page.locator('.pr-panel .pref[aria-label="Where it sits"] button', { hasText: 'The middle' }).click(); await sleep(400);
   const l2 = await lifted();
   ok('…and moving the reading line shows there too', l2.line > l1.line + 10 && l2.end <= l2.drawer, JSON.stringify(l2));
-  await page.locator('.pr-panel .pref[aria-label="Reading line"] button', { hasText: 'A third down' }).click(); await sleep(300);
+  await page.locator('.pr-panel .pref[aria-label="Where it sits"] button', { hasText: 'A third down' }).click(); await sleep(300);
   ok('the stage reads the script as a screenplay: names, directions dimmed, dialogue read', (await page.locator('.pr-line.r-cue').count()) === 3 && (await page.locator('.pr-line.r-say').count()) === 3 && (await page.locator('.pr-line.r-dir').count()) >= 4);
   await page.keyboard.press('PageDown'); await sleep(100);
   ok('Page Down (a clicker’s next) goes to the next line read aloud, past the names and directions', /^Every batch starts before sunrise/.test(await now(page)), await now(page));
@@ -58,6 +73,11 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   const runFor = async ms => { await page.keyboard.press('Home'); await sleep(80); const a = await pos(page); await page.keyboard.press('Space'); await sleep(ms); await page.keyboard.press('Space'); await sleep(80); return (await pos(page)) - a; };
   for (let i = 0; i < 8; i++) await page.keyboard.press('ArrowUp');
   ok('↑ slows down by 5 words a minute a press', (await page.locator('.pr-wpm').innerText()) === '100 wpm', await page.locator('.pr-wpm').innerText());
+  const onLine = await now(page);
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await sleep(100);
+  const sped = await page.locator('.pr-wpm').innerText();
+  await page.keyboard.press('ArrowLeft'); await page.keyboard.press('ArrowLeft'); await sleep(100);
+  ok('← and → change the speed too, and no longer move a line (Page Up and Down do)', sped === '110 wpm' && (await page.locator('.pr-wpm').innerText()) === '100 wpm' && (await now(page)) === onLine, sped);
   const slow = await runFor(1500);
   ok('prompting puts the controls away', (await page.locator('.prompter .pr-panel.open').count()) === 0 && (await page.locator('.pr-settings').getAttribute('aria-expanded')) === 'false');
   ok('…and the script goes back down to its reading line', await page.evaluate(() => !document.querySelector('.pr-stage').style.translate));
@@ -111,6 +131,8 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   // Settings for the screen: mirrored for a rig, kept on this device; bigger text.
   await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
   ok('⚙ brings the controls back', (await page.locator('.pr-settings').getAttribute('aria-expanded')) === 'true');
+  ok('…on the icon left chosen, with its twirl-downs as they were left', (await page.locator('.pr-panel .pr-tab.on').innerText()) === 'Format' && (await page.locator('.pr-panel [data-twirl="line"]').evaluate(d => d.open)));
+  await settings(page, '.pr-panel', 'format', 'rig');
   await page.locator('.pr-panel .pref[aria-label="Mirror"] button', { hasText: 'Mirrored' }).click(); await sleep(150);
   const fs0 = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pr-stage')).getPropertyValue('--pr-fs')));
   await page.locator('.pr-panel .pr-set-size button[aria-label="Bigger text"]').click(); await sleep(150);
@@ -137,8 +159,8 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
     await page.locator('.tour-card .btn.primary').click(); if (label === 'Done') { await sleep(420); break; }
     await page.waitForFunction(w => document.querySelector('.tour-card .tour-step')?.innerText !== w, where, { timeout: 5000 }).catch(() => {}); await sleep(150);
   }
-  ok(`the prompter’s ? walks through it: ${cards} steps, ${spots} highlighted, and it is still open after`, cards >= 13 && spots >= 12 && (await page.locator('.tour').count()) === 0 && (await page.locator('.prompter').count()) === 1);
-  ok('…its steps open the controls to show them and the countdown, and put them away for the rest', lit['The controls'] === true && lit['The countdown'] === true && lit['The script, full screen'] === false && (await page.locator('.prompter .pr-panel.open').count()) === 0, JSON.stringify(lit));
+  ok(`the prompter’s ? walks through it: ${cards} steps, ${spots} highlighted, and it is still open after`, cards >= 15 && spots >= 14 && (await page.locator('.tour').count()) === 0 && (await page.locator('.prompter').count()) === 1);
+  ok('…its steps open the controls (on the icon and twirl-down they point to) and put them away for the rest', lit['The controls'] === true && lit['Script, Format and Other'] === true && lit['Jump to a scene'] === true && lit['The countdown'] === true && lit['Scrolling'] === true && lit['The script, full screen'] === false && (await page.locator('.prompter .pr-panel.open').count()) === 0, JSON.stringify(lit));
 
   // A take left rolling in free run ends with the prompter.
   await page.keyboard.press('r'); await sleep(400); await page.keyboard.press('Escape'); await sleep(300);
@@ -174,6 +196,7 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   // Record run with a sync: Roll and Cut in the prompter run the log's clock.
   const rid = await page.evaluate(async () => { const s = await import('./js/store.js'), d = await import('./js/docx.js'); const id = 'log-rec'; s.upsert('logs', { id, title: 'B cam, record run', created: '2026-11-25', rate: '25', mode: 'record', notes: [], take: 0, autoTakes: true, sync: { frames: 90000, ms: Date.now() - 5000, how: 'typed', rolling: false, dev: 'x' }, script: d.buildScript('Two hander', d.textToLines('PRESENTER: Welcome to the brewery.\n[Walk to the tanks]\nGUEST: Thanks for having me.\nPRESENTER: Let us start at five in the morning.')), scriptAt: Date.now() }); return id; });
   await page.evaluate(id => import('./js/pages/tcnotes.js').then(m => m.openLog(id, 'prompter')), rid); await sleep(500);
+  await settings(page, '.pr-setup', 'script', 'show');
   ok('a plain script with “NAME:” lines has its speakers to choose from', JSON.stringify(await page.locator('.pr-prefs .pref[aria-label="Lines to read"] button').allInnerTexts()) === '["Everyone","PRESENTER","GUEST"]');
   await page.locator('.pr-prefs .pref[aria-label="Lines to read"] button', { hasText: 'PRESENTER' }).click(); await sleep(300);
   ok('choosing a speaker counts only their words, and is kept on the log', /12 words to read/.test(await page.locator('.pr-sum').innerText()) && (await logOf(page, rid)).prompt.focus === 'PRESENTER', await page.locator('.pr-sum').innerText());
@@ -210,13 +233,18 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   await page.locator('.pr-open').click(); await page.waitForSelector('.prompter');
   await page.locator('.pr-play').click(); await sleep(300);
   ok('from the top, Play counts down first', (await page.evaluate(() => document.querySelector('.prompter').dataset.state)) === 'count' && (await page.locator('.pr-count').innerText()) === '3' && (await page.locator('.pr-play').innerText()) === '❚❚ Pause');
+  ok('…and the mouse pointer goes as soon as it starts', await page.evaluate(() => document.querySelector('.prompter').classList.contains('cursor-off')));
   await page.screenshot({ path: S + '/prompter-countdown.png' });
   await sleep(3300);
   ok('…then runs', (await page.evaluate(() => document.querySelector('.prompter').dataset.state)) === 'running');
   await sleep(2800);
   ok('while it runs the buttons step out of the way', await page.evaluate(() => document.querySelector('.prompter').classList.contains('hud-off')));
   await page.screenshot({ path: S + '/prompter-running.png' });
+  ok('…and the speed waits in the bottom-left corner, faint', (await page.locator('.pr-live').isVisible()) && Number(await page.locator('.pr-live').evaluate(el => getComputedStyle(el).opacity)) < 0.6 && (await page.locator('.pr-live-val').innerText()) === '140 wpm');
+  await page.locator('.pr-live-btn[aria-label="Faster"]').click(); await sleep(250);
+  ok('a tap on its + speeds it up without stopping it or bringing the buttons back', (await page.evaluate(() => document.querySelector('.prompter').dataset.state)) === 'running' && (await page.locator('.pr-live-val').innerText()) === '145 wpm' && (await page.evaluate(() => document.querySelector('.prompter').classList.contains('hud-off'))), await page.locator('.pr-live-val').innerText());
   await page.keyboard.press('Space'); await sleep(200); await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
+  await settings(page, '.pr-panel', 'other', 'count');
   await page.locator('.pr-panel .pr-count-switch button', { hasText: 'Off' }).click(); await sleep(150);
   ok('the countdown switches off, its lengths put away', (await page.locator('.pr-panel .pr-count-len').count()) === 0 && JSON.parse(await page.evaluate(() => localStorage.getItem('logi-prompter'))).count === 0);
   await page.keyboard.press('Home'); await page.locator('.pr-play').click(); await sleep(300);
@@ -230,14 +258,117 @@ const URL = process.env.VDEX_URL || 'http://localhost:8123/';
   ok('no errors in landscape', page.errors.length === 0, page.errors.join(' | '));
   await ctx.close();
 
-  /* ---------------- a wide screen ---------------- */
-  ({ ctx, page } = await boot({ width: 1280, height: 800 }));
+  /* ---------------- a wide screen, with a mouse ---------------- */
+  ({ ctx, page } = await boot({ width: 1280, height: 800 }, { count: 0 }));
   await page.evaluate(() => import('./js/pages/tcnotes.js').then(m => m.openPracticeLog())); await sleep(600);
   ok('a wide screen keeps notes and script side by side, with the prompter beside them', JSON.stringify(await page.locator('.tc-modes button').allInnerTexts()) === '["Notes & script","Prompter"]' && (await page.locator('.tc-split').count()) === 1);
   await page.locator('.tc-modes button', { hasText: 'Prompter' }).click(); await sleep(400);
   ok('…and its Prompter view', (await page.locator('.pr-open').count()) === 1 && (await page.locator('.tc-split').count()) === 0);
   await page.locator('.pr-open').click(); await page.waitForSelector('.prompter'); await sleep(300);
   await page.screenshot({ path: S + '/prompter-wide.png' });
+  await page.keyboard.press('Escape'); await sleep(400); // the controls away
+
+  // The reading line: its arrow drags it (snapping to the three heights), and the line being read stays under it.
+  const mark = () => page.evaluate(() => JSON.parse(localStorage.getItem('logi-prompter') || '{}').mark);
+  const markerTop = () => page.evaluate(() => Math.round(document.querySelector('.pr-marker').getBoundingClientRect().top));
+  const dragArrow = async dy => { const b = await page.locator('.pr-handle').boundingBox(); await page.mouse.move(b.x + 20, b.y + b.height / 2); await page.mouse.down(); await page.mouse.move(b.x + 20, b.y + b.height / 2 + dy, { steps: 8 }); await page.mouse.up(); await sleep(250); };
+  const first = { now: await now(page), top: await markerTop() };
+  await dragArrow(120);
+  const m1 = await mark();
+  ok('dragging the reading line’s arrow moves the line, and the line being read stays under it', m1 > 0.45 && m1 < 0.5 && (await markerTop()) > first.top + 100 && (await now(page)) === first.now, `${m1} · ${first.top} → ${await markerTop()}`);
+  await dragArrow(14);
+  ok('…and it snaps to the middle as it comes near', (await mark()) === 0.5, String(await mark()));
+  const mb = await page.locator('.pr-marker').boundingBox();
+  await page.mouse.click(mb.x + 520, mb.y + mb.height / 2, { button: 'right' }); await page.waitForSelector('.sheet[aria-label="The reading line"]');
+  ok('a right-click on the reading line opens its own menu: how it looks, its colour and strength, a lock and Reset', JSON.stringify(await page.locator('.sheet .pref-label').allInnerTexts()) === '["How it looks","Colour","Strength","Lock it in place"]' && (await page.locator('.sheet .pr-line-reset').count()) === 1, JSON.stringify(await page.locator('.sheet .pref-label').allInnerTexts()));
+  await page.locator('.sheet .pref[aria-label="How it looks"] button', { hasText: 'A thin line' }).click(); await sleep(80);
+  await page.locator('.sheet .pref[aria-label="Colour"] button', { hasText: 'Green' }).click(); await sleep(80);
+  await page.locator('.sheet .pref[aria-label="Strength"] button', { hasText: 'Bold' }).click(); await sleep(150);
+  const lk = await page.evaluate(() => { const m = document.querySelector('.pr-marker'); return { look: m.dataset.look, colour: m.dataset.colour, strength: m.dataset.strength, line: getComputedStyle(m).getPropertyValue('--pr-line').trim(), band: getComputedStyle(m).backgroundImage, saved: JSON.parse(localStorage.getItem('logi-prompter')) }; });
+  ok('…a thin green line, bold: on the stage at once, and kept on this device', lk.look === 'thin' && lk.colour === 'green' && lk.strength === 'bold' && lk.line === '#5fd68a' && lk.band === 'none' && lk.saved.lineLook === 'thin' && lk.saved.lineColour === 'green' && lk.saved.lineStrength === 'bold', JSON.stringify({ ...lk, saved: undefined }));
+  await page.locator('.sheet .pref[aria-label="Lock it in place"] button', { hasText: /^Locked$/ }).click(); await sleep(100);
+  await page.keyboard.press('Escape'); await sleep(300);
+  const m2 = await mark();
+  await dragArrow(-150);
+  ok('locked, a drag leaves it where it is, and says so', (await mark()) === m2 && /locked/i.test(await page.locator('.pr-hint').innerText()), await page.locator('.pr-hint').innerText());
+  await page.locator('.pr-handle').click(); await page.waitForSelector('.sheet[aria-label="The reading line"]');
+  await page.locator('.sheet .pr-line-reset').click(); await sleep(150);
+  const rs = await page.evaluate(() => JSON.parse(localStorage.getItem('logi-prompter')));
+  ok('a click on its arrow opens the menu too, and Reset puts it back: a third down, arrow and band, yellow, normal, unlocked', rs.mark === 0.33 && rs.lineLook === 'band' && rs.lineColour === 'yellow' && rs.lineStrength === 'normal' && rs.lineLock === false, JSON.stringify(rs));
+  await page.locator('.sheet .pref[aria-label="How it looks"] button', { hasText: 'Hidden' }).click(); await sleep(150);
+  await page.keyboard.press('Escape'); await sleep(300);
+  const hid = await page.evaluate(() => ({ arrow: getComputedStyle(document.querySelector('.pr-handle'), '::before').opacity, band: getComputedStyle(document.querySelector('.pr-marker')).backgroundImage }));
+  ok('hidden, the talent sees no line, and a faint arrow is there to grab while it is paused', hid.arrow === '0.3' && hid.band === 'none', JSON.stringify(hid));
+  await page.locator('.pr-handle').click(); await page.waitForSelector('.sheet[aria-label="The reading line"]');
+  await page.locator('.sheet .pref[aria-label="How it looks"] button', { hasText: 'Arrow and band' }).click(); await sleep(100);
+  await page.keyboard.press('Escape'); await sleep(300);
+  const spot = await page.evaluate(() => { const m = document.querySelector('.pr-marker').getBoundingClientRect(), bar = document.querySelector('.pr-bottom').getBoundingClientRect().top; const l = [...document.querySelectorAll('.pr-line')].find(x => { const r = x.getBoundingClientRect(); return r.height > 0 && r.top > m.bottom + 10 && r.bottom < bar - 10; }); if (!l) return null; const r = l.getBoundingClientRect(); return { x: r.left + 30, y: r.top + r.height / 2 }; });
+  await page.mouse.click(spot.x, spot.y, { button: 'right' }); await page.waitForSelector('.sheet[aria-label="This line"]');
+  ok('a right-click on another line opens that line’s menu, as holding it does', (await page.locator('.sheet .btn', { hasText: 'Start from here' }).count()) === 1);
+  await page.keyboard.press('Escape'); await sleep(250);
+
+  // A mouse wheel or a trackpad scrolls it as a web page does: a wheel's click glides there rather than jumping.
+  await page.keyboard.press('Home'); await sleep(150);
+  const w0 = await pos(page);
+  await page.mouse.move(640, 420); await page.mouse.wheel(0, 100); await sleep(40);
+  const w1 = await pos(page); await sleep(500); const w2 = await pos(page);
+  ok('a wheel’s click scrolls the script on, gliding there rather than jumping', w1 > w0 && w1 < w0 + 99 && Math.abs(w2 - (w0 + 100)) <= 1, `${w0} → ${w1} → ${w2}`);
+  const w3 = await pos(page);
+  await page.evaluate(() => document.querySelector('.pr-stage').dispatchEvent(new WheelEvent('wheel', { deltaY: 3, deltaMode: 1, bubbles: true, cancelable: true }))); await sleep(500);
+  const row = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('.pr-stage')).getPropertyValue('--pr-fs')) * parseFloat(document.querySelector('.pr-col').style.lineHeight));
+  ok('…a wheel that counts in lines moves that many lines, the same in every browser', Math.abs((await pos(page)) - w3 - 3 * row) <= 2, `${((await pos(page)) - w3).toFixed(1)} for ${(3 * row).toFixed(1)}`);
+  await page.keyboard.press('Home'); await sleep(100); await page.keyboard.press('Space'); await sleep(400);
+  const r0 = await pos(page);
+  for (let i = 0; i < 12; i++) { await page.evaluate(() => document.querySelector('.pr-stage').dispatchEvent(new WheelEvent('wheel', { deltaY: 0.5, deltaMode: 0, bubbles: true, cancelable: true }))); await sleep(50); }
+  const r1 = await pos(page); await sleep(900); const r2 = await pos(page);
+  await page.keyboard.press('Space'); await sleep(150);
+  ok('while it runs, the scroll holds while the wheel scrolls it, then carries on from there', r1 - r0 < 10 && r2 - r1 > 10, `${(r1 - r0).toFixed(1)} px while scrolling, then ${(r2 - r1).toFixed(1)} px`);
+  await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
+  await settings(page, '.pr-panel', 'other', 'scroll');
+  await page.locator('.pr-panel .pref[aria-label="Scroll with mouse or trackpad"] button', { hasText: 'Off' }).click(); await sleep(100);
+  await page.keyboard.press('Escape'); await sleep(400);
+  const q0 = await pos(page);
+  await page.mouse.move(640, 420); await page.mouse.wheel(0, 200); await sleep(400);
+  await page.mouse.move(640, 520); await page.mouse.down(); await page.mouse.move(640, 320, { steps: 6 }); await page.mouse.up(); await sleep(250);
+  ok('Scrolling off: the wheel and a mouse drag leave the script where it is, and it is kept', (await pos(page)) === q0 && JSON.parse(await page.evaluate(() => localStorage.getItem('logi-prompter'))).wheel === false && (await page.evaluate(() => document.querySelector('.prompter').dataset.state)) === 'paused', `${q0} → ${await pos(page)}`);
+  await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
+  await page.locator('.pr-panel .pref[aria-label="Scroll with mouse or trackpad"] button', { hasText: 'On' }).click(); await sleep(100);
+  await page.keyboard.press('Escape'); await sleep(400);
+
+  // The mouse pointer while it runs: gone at once, back with a real move (not a nudge), gone again 2 seconds still.
+  const cls = () => page.evaluate(() => document.querySelector('.prompter').className);
+  await page.keyboard.press('Home'); await page.keyboard.press('Space'); await sleep(200);
+  ok('as it starts, the mouse pointer goes at once (the buttons a little later)', /cursor-off/.test(await cls()) && !/hud-off/.test(await cls()), await cls());
+  await page.mouse.move(402, 421); await sleep(30); await page.mouse.move(405, 423); await sleep(100);
+  ok('…a nudge of the mouse leaves it out of sight', /cursor-off/.test(await cls()), await cls());
+  await page.mouse.move(520, 470, { steps: 6 }); await sleep(100);
+  ok('…a real move brings it back, with the buttons', !/cursor-off|hud-off/.test(await cls()), await cls());
+  await sleep(2400);
+  ok('…and after 2 seconds still, both go again', /cursor-off/.test(await cls()) && /hud-off/.test(await cls()), await cls());
+  await page.keyboard.press('Space'); await sleep(150);
+  ok('paused, the pointer is back', !/cursor-off/.test(await cls()), await cls());
+
+  // Script: jump to a scene, find a line (typing there is not the prompter's keys), import or replace the script.
+  await page.locator('.pr-settings').click(); await page.waitForSelector('.prompter .pr-panel.open');
+  await settings(page, '.pr-panel', 'script', 'scenes');
+  ok('Jump to a scene lists the top of the script and its scene headings', JSON.stringify(await page.locator('.pr-panel [data-twirl="scenes"] .pr-jump-item').allInnerTexts()) === '["↑ The top of the script","INT. HARBOUR BREWING TAPROOM — MORNING","EXT. LOADING BAY — CONTINUOUS"]', JSON.stringify(await page.locator('.pr-panel [data-twirl="scenes"] .pr-jump-item').allInnerTexts()));
+  await page.locator('.pr-panel [data-twirl="scenes"] .pr-jump-item', { hasText: 'LOADING BAY' }).click(); await sleep(300);
+  ok('…and one takes the prompter there', /^EXT\. LOADING BAY/.test(await now(page)), await now(page));
+  await settings(page, '.pr-panel', 'script', 'find');
+  await page.locator('.pr-panel .pr-find').fill('six weeks'); await sleep(150);
+  ok('Find a line finds a few words, marked in the line', (await page.locator('.pr-panel .pr-found .pr-jump-item').count()) === 1 && (await page.locator('.pr-panel .pr-found mark').innerText()) === 'six weeks');
+  await page.locator('.pr-panel .pr-find').press('r'); await sleep(150);
+  ok('…typing there is not the prompter’s keys (R rolled no take)', (await page.locator('.pr-roll').innerText()) === '● Roll' && (await page.locator('.pr-panel .pr-find').inputValue()) === 'six weeksr');
+  await page.locator('.pr-panel .pr-find').press('Backspace'); await sleep(150);
+  await page.locator('.pr-panel .pr-found .pr-jump-item').click(); await sleep(300);
+  ok('…and a tap goes to that line', /^That colour is six weeks/.test(await now(page)), await now(page));
+  await settings(page, '.pr-panel', 'script', 'replace');
+  await page.locator('.pr-panel .pr-replace').click(); await page.waitForSelector('.sheet[aria-label="Replace script"]');
+  ok('Import or replace opens the Add script sheet over the prompter', (await page.locator('.prompter').count()) === 1 && (await page.locator('.sheet .imp-word').count()) === 1);
+  await page.locator('.sheet textarea').fill('HOST: Welcome to the brewery.\nHOST: This is where it all begins.');
+  await page.locator('.sheet button', { hasText: 'Use pasted text' }).click(); await sleep(150);
+  await page.locator('.sheet .btn.primary', { hasText: 'Replace script' }).click(); await sleep(700);
+  ok('…and the new script is on the stage from its top, the prompter still open', (await page.locator('.prompter').count()) === 1 && (await page.locator('.pr-line').count()) === 2 && /Welcome to the brewery/.test(await now(page)) && /2 lines/.test(await page.locator('.pr-panel [data-twirl="replace"] .twirl-sub').innerText()), await now(page));
   ok('no errors on a wide screen', page.errors.length === 0, page.errors.join(' | '));
   await ctx.close();
   await browser.close();

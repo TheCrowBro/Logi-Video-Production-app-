@@ -958,8 +958,23 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-dir { color: #8f8f8f; font-style: italic; font-weight: 500; font-size: .8em; }
 .em-b { font-weight: 800; } .em-i { font-style: italic; } .em-u { text-decoration: underline; text-decoration-thickness: .07em; text-underline-offset: .14em; } /* the stress the script's file gave a word */
 .pr-who { display: block; color: var(--spk, #ffd166); font-size: .5em; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
-.pr-marker { position: absolute; left: 0; right: 0; pointer-events: none; background: linear-gradient(90deg, #ffd16638, #ffd16612 45%, transparent 80%); border-top: 1px solid #ffd16650; }
-.pr-marker::before { content: ''; position: absolute; left: 4px; top: 50%; transform: translateY(-50%); border-style: solid; border-width: .45em 0 .45em .7em; border-color: transparent transparent transparent #ffd166; font-size: max(14px, calc(var(--pr-fs) * .55)); }
+/* The reading line: a band with its arrow, the arrow alone, a thin line, or hidden; yellow, white, red or green; faint,
+   normal or bold. Its arrow is a handle to drag it by (and to tap for its menu), with room for a finger. */
+.pr-marker { --pr-line: #ffd166; --pr-a: 22%; --pr-b: 7%; --pr-edge: 31%; --pr-thin: 65%; --pr-rule: 1px; position: absolute; left: 0; right: 0; pointer-events: none;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--pr-line) var(--pr-a), transparent), color-mix(in srgb, var(--pr-line) var(--pr-b), transparent) 45%, transparent 80%);
+  border-top: var(--pr-rule) solid color-mix(in srgb, var(--pr-line) var(--pr-edge), transparent); }
+.pr-marker[data-colour=white] { --pr-line: #ffffff; } .pr-marker[data-colour=red] { --pr-line: #ff5a4e; } .pr-marker[data-colour=green] { --pr-line: #5fd68a; }
+.pr-marker[data-strength=faint] { --pr-a: 11%; --pr-b: 4%; --pr-edge: 16%; --pr-thin: 38%; } .pr-marker[data-strength=bold] { --pr-a: 38%; --pr-b: 14%; --pr-edge: 65%; --pr-thin: 100%; --pr-rule: 2px; }
+.pr-marker[data-look=arrow], .pr-marker[data-look=hidden] { background: none; border-top-color: transparent; }
+.pr-marker[data-look=thin] { background: none; border-top-color: color-mix(in srgb, var(--pr-line) var(--pr-thin), transparent); }
+.pr-handle { all: unset; position: absolute; left: 0; top: 50%; width: 46px; height: 46px; transform: translateY(-50%); cursor: ns-resize; pointer-events: auto; touch-action: none; -webkit-tap-highlight-color: transparent; font-size: max(14px, calc(var(--pr-fs) * .55)); }
+.pr-handle::before { content: ''; position: absolute; left: 4px; top: 50%; transform: translateY(-50%); border-style: solid; border-width: .45em 0 .45em .7em; border-color: transparent transparent transparent var(--pr-line); }
+.pr-marker[data-strength=faint] .pr-handle::before { opacity: .55; } .pr-marker[data-strength=bold] .pr-handle::before { border-width: .55em 0 .55em .85em; }
+.pr-marker.locked .pr-handle { cursor: pointer; }
+.pr-handle:focus-visible { outline: 3px solid #ffd166; outline-offset: -3px; border-radius: 8px; }
+.pr-marker[data-look=hidden] .pr-handle::before { opacity: 0; }
+.prompter[data-state=paused] .pr-marker[data-look=hidden] .pr-handle::before { opacity: .3; } /* hidden from the talent; there to grab while it is paused */
+.prompter:is([data-state=running], [data-state=count]) .pr-marker[data-look=hidden] .pr-handle { pointer-events: none; } /* a tap there starts and stops it, as anywhere */
 .pr-count { position: absolute; inset: 0; display: grid; place-items: center; font: 800 min(42vw, 42vh)/1 system-ui, sans-serif; color: #fff; background: #000b; pointer-events: none; }
 .pr-count[hidden], .pr-rec[hidden], .pr-ratebox[hidden] { display: none; }
 .pr-left { position: absolute; right: 14px; bottom: 10px; font: 600 15px/1.2 ui-monospace, Menlo, Consolas, monospace; color: #8a8a8a; pointer-events: none; }
@@ -968,7 +983,15 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-hud { position: absolute; left: 0; right: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px max(10px, env(safe-area-inset-right)) 8px max(10px, env(safe-area-inset-left)); background: #000000e0; color: #fff; transition: opacity .25s; }
 .pr-top { top: 0; padding-top: max(8px, env(safe-area-inset-top)); border-bottom: 1px solid #2c2c2e; }
 .pr-bottom { bottom: 0; padding-bottom: max(8px, env(safe-area-inset-bottom)); border-top: 1px solid #2c2c2e; justify-content: center; }
-.prompter.hud-off .pr-hud { opacity: 0; pointer-events: none; } .prompter.hud-off { cursor: none; }
+.prompter.hud-off .pr-hud { opacity: 0; pointer-events: none; }
+.prompter.cursor-off, .prompter.cursor-off * { cursor: none !important; } /* the mouse pointer, while it runs (js/prompter.js says when) */
+/* The speed while it runs with the buttons away, in a corner: faint until a finger uses it; not there with voice-follow */
+.pr-live { position: absolute; z-index: 2; left: max(10px, env(safe-area-inset-left)); bottom: max(10px, env(safe-area-inset-bottom)); display: none; align-items: center; gap: 2px; padding: 3px; border-radius: 999px; background: #000c; border: 1px solid #2c2c2e; opacity: .45; transition: opacity .2s; }
+.prompter.hud-off:not(.following) .pr-live { display: flex; }
+.pr-live.used, .pr-live:active, .pr-live:focus-within { opacity: 1; }
+.pr-live-btn { all: unset; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: #fff; font: 700 1.3rem/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.pr-live-btn:active { background: #2c2c2e; } .pr-live-btn:focus-visible { outline: 3px solid #ffd166; }
+.pr-live-val { min-width: 4.4rem; text-align: center; font: 600 14px/1 ui-monospace, Menlo, Consolas, monospace; color: #ddd; font-variant-numeric: tabular-nums; }
 .pr-title { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .95rem; }
 .pr-tc { color: #ffd166; font-weight: 700; font-size: 1rem; }
 .prompter .icon-btn { color: #ddd; } .prompter .icon-btn:hover { background: #1d1d1f; color: #fff; }
@@ -989,8 +1012,8 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
 .pr-stage { transition: translate .25s ease; }
 .prompter:has(.pr-panel.open) .pr-hud { background: #000; } /* solid while the lifted script runs under the top bar */
 .pr-panel { --bg: #0e0e10; --bg2: #1c1c1e; --card: #161618; --line: #3a3a3c; --text: #f2f2f2; --muted: #a1a1a6; --accent: #ffd166; --accent-ink: #1a1305;
-  position: absolute; z-index: 1; top: var(--pr-top, 56px); bottom: var(--pr-bot, 64px); right: 0; width: min(380px, 46vw); overflow: auto; overscroll-behavior: contain;
-  background: #0e0e10; color: var(--text); border-left: 1px solid #2c2c2e; box-shadow: -12px 0 30px #0009; padding: 0 14px 16px;
+  position: absolute; z-index: 1; top: var(--pr-top, 56px); bottom: var(--pr-bot, 64px); right: 0; width: min(380px, 46vw); overflow: hidden; display: flex; flex-direction: column;
+  background: #0e0e10; color: var(--text); border-left: 1px solid #2c2c2e; box-shadow: -12px 0 30px #0009; padding: 0 14px;
   transform: translateX(105%); visibility: hidden; transition: transform .25s ease, visibility 0s linear .25s; }
 .pr-panel.open { transform: none; visibility: visible; transition: transform .25s ease; }
 @media (orientation: portrait) {
@@ -998,14 +1021,36 @@ body:has(.sheet-back) .undo-bar, body.menu-open .undo-bar, body.search-open .und
   .pr-panel.open { transform: none; }
 }
 :root[data-motion=off] .pr-panel, :root[data-motion=off] .pr-panel.open, :root[data-motion=off] .pr-stage { transition: none; }
-.pr-panel-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 6px; background: #0e0e10; }
+.pr-panel-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 10px 0 6px; background: #0e0e10; }
 .pr-panel-head h2 { margin: 0; font-size: 1rem; }
-.pr-panel .pr-prefs { gap: 10px; } .pr-panel .pref-label { color: var(--text); }
+/* in the panel, the icons stay where they are and the twirl-downs under them scroll */
+.pr-panel .pr-prefs { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; } .pr-panel .pref-label { color: var(--text); }
+.pr-panel .pr-tabs, .pr-panel .pr-panel-hint { flex: none; }
+.pr-panel .pr-tabbody { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; padding-bottom: 16px; align-content: start; }
 .pr-panel .seg button { color: var(--text); } .pr-panel .seg button.on { color: var(--accent-ink); }
 .pr-panel .btn.ghost { background: var(--bg2); color: var(--text); border-color: var(--line); }
-.pr-panel .muted, .pr-panel-keys { color: var(--muted); }
+.pr-panel .muted { color: var(--muted); }
 .pr-count-len { margin-top: 6px; }
-.pr-panel-hint { margin: 0 0 10px; color: var(--muted); }
+.pr-panel-hint { margin: 0; color: var(--muted); }
+/* The prompter's settings, wherever they are: three icons (Script, Format, Other), each with its twirl-downs */
+.pr-prefs { display: grid; gap: 10px; }
+.pr-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.pr-tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 62px; padding: 8px 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg2); color: var(--text); font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.pr-tab.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pr-tab:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.pr-tab-ico { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.pr-twirl { margin-bottom: 0; } .pr-twirl > summary { grid-template-columns: minmax(0, 1fr) auto; } .pr-twirl .twirl-body { gap: 10px; }
+.pr-twirl .twirl-body > p { margin: 0; }
+.pr-jump, .pr-found { display: grid; gap: 2px; } .pr-jump { max-height: 40vh; overflow: auto; overscroll-behavior: contain; }
+.pr-jump-item { all: unset; display: block; box-sizing: border-box; width: 100%; padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--text); line-height: 1.35; overflow-wrap: anywhere; }
+.pr-jump-item:hover { background: var(--card); } .pr-jump-item:focus-visible { outline: 3px solid var(--focus); }
+.pr-jump-top { color: var(--accent); font-weight: 700; }
+.pr-found mark { background: var(--accent); color: var(--accent-ink); border-radius: 3px; padding: 0 2px; }
+.pr-find { width: 100%; box-sizing: border-box; }
+.pr-colours button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.pr-swatch { width: 12px; height: 12px; border-radius: 50%; display: inline-block; border: 1px solid #0007; flex: none; }
+.pr-swatch[data-colour=yellow] { background: #ffd166; } .pr-swatch[data-colour=white] { background: #fff; } .pr-swatch[data-colour=red] { background: #ff5a4e; } .pr-swatch[data-colour=green] { background: #5fd68a; }
+.pr-line-reset { justify-self: start; }
 /* A message while the controls are out goes where the script is still in sight: above them, or beside them. */
 .prompter:has(.pr-panel.open) .pr-hint { top: calc(var(--pr-top, 56px) + 24px); transform: translateX(-50%); }
 @media (orientation: landscape) { .prompter:has(.pr-panel.open) .pr-hint { left: calc((100% - min(380px, 46vw)) / 2); max-width: calc((100% - min(380px, 46vw)) - 24px); } }
@@ -1045,5 +1090,4 @@ body:has(.prompter) .update-bar, body:has(.prompter) .licence-bar, body:has(.pro
 .pr-screen-page { margin: 0; background: #000; }
 .pr-window .pr-fill { position: absolute; right: 14px; top: 12px; z-index: 3; background: #1c1c1e; color: #fff; border-color: #3a3a3c; }
 .prompter.pr-window[data-state=running] .pr-fill, .pr-fill[hidden] { display: none; }
-.prompter.pr-window[data-state=running] { cursor: none; }
 .pr-wait { position: absolute; inset: 0; display: grid; place-items: center; padding: 24px; color: #bbb; text-align: center; font-size: 1.1rem; } .pr-wait[hidden] { display: none; }

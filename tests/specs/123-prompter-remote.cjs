@@ -7,6 +7,11 @@ const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
 const APP = process.env.VDEX_URL || 'http://localhost:8123/';
+// A setting is under one of three icons, in one of its twirl-downs: choose the icon, open the twirl-down.
+const settings = async (page, scope, tab, twirl) => {
+  await page.locator(`${scope} .pr-tab[data-tab="${tab}"]`).click(); await sleep(120);
+  if (twirl && !(await page.locator(`${scope} [data-twirl="${twirl}"]`).evaluate(d => d.open))) { await page.locator(`${scope} [data-twirl="${twirl}"] > summary`).click(); await sleep(150); }
+};
 (async () => {
   // Host candidates as plain addresses, so two contexts of one browser can reach each other without mDNS.
   const browser = await chromium.launch({ args: ['--disable-features=WebRtcHideLocalIpsWithMdns'] });
@@ -53,9 +58,14 @@ const APP = process.env.VDEX_URL || 'http://localhost:8123/';
   await A.keyboard.press('g'); await sleep(900);
   const tb = await takes(B);
   ok('the take, its length and its rating reach the other device with the log', tb.length === 1 && tb[0].text === '▶ Take 1 (pickup)' && /^0:0\d$/.test(tb[0].dur) && tb[0].rate === 'good', JSON.stringify(tb));
-  await A.locator('.pr-remote .pr-settings').click(); await A.waitForSelector('.sheet .pref[aria-label="Mirror"]');
+  await A.locator('.pr-remote .pr-settings').click(); await A.waitForSelector('.sheet .pr-tabs');
+  ok('the remote’s ⚙ has the other screen’s settings under Script, Format and Other', JSON.stringify(await A.locator('.sheet .pr-tab').allInnerTexts()) === '["Script","Format","Other"]');
+  await settings(A, '.sheet', 'format', 'rig');
   await A.locator('.sheet .pref[aria-label="Mirror"] button', { hasText: 'Mirrored' }).click(); await sleep(500);
-  ok('the remote’s ⚙ changes the other screen’s settings (mirrored for its rig)', await B.evaluate(() => document.querySelector('.pr-stage').classList.contains('mirror')));
+  ok('…which change the other screen’s (mirrored for its rig)', await B.evaluate(() => document.querySelector('.pr-stage').classList.contains('mirror')));
+  await settings(A, '.sheet', 'script', 'scenes');
+  await A.locator('.sheet [data-twirl="scenes"] .pr-jump-item', { hasText: 'LOADING BAY' }).click(); await sleep(700);
+  ok('…and Jump to a scene there sends the other screen to it', /^EXT\. LOADING BAY/.test(await B.evaluate(() => document.querySelector('.pr-line.now')?.textContent || '')), await B.evaluate(() => document.querySelector('.pr-line.now')?.textContent || ''));
   await A.keyboard.press('Escape'); await sleep(200);
   await A.locator('.pr-remote .pr-close').click(); await sleep(700);
   ok('closing the remote closes the prompter there', (await B.locator('.prompter').count()) === 0 && (await A.locator('.pr-remote').count()) === 0 && !(await A.evaluate(() => document.getElementById('app').inert)));
@@ -72,13 +82,22 @@ const APP = process.env.VDEX_URL || 'http://localhost:8123/';
   ok('…the window holds no data of its own: it has no app, no lock, only the stage', (await win.locator('#app, .lock').count()) === 0 && (await win.locator('.pr-stage').count()) === 1);
   await page.locator('.pr-remote .pr-play').click(); await sleep(900);
   ok('Play on the remote runs the window', (await state(win)) === 'running');
+  ok('…and the window keeps the mouse pointer out of sight while it runs', await win.evaluate(() => document.querySelector('.prompter').classList.contains('cursor-off')));
+  await win.mouse.move(300, 300); await sleep(30); await win.mouse.move(304, 302); await sleep(80);
+  const nudged = await win.evaluate(() => document.querySelector('.prompter').classList.contains('cursor-off'));
+  await win.mouse.move(420, 380, { steps: 6 }); await sleep(80);
+  ok('…a nudge leaves it hidden, a real move brings it back', nudged && !(await win.evaluate(() => document.querySelector('.prompter').classList.contains('cursor-off'))));
+  await win.keyboard.press('ArrowRight'); await sleep(500);
+  ok('→ pressed in the window speeds it up, and the remote follows', (await page.locator('.pr-remote .pr-wpm').innerText()) === '145 wpm', await page.locator('.pr-remote .pr-wpm').innerText());
+  await win.keyboard.press('ArrowLeft'); await sleep(300);
   await win.keyboard.press('Space'); await sleep(400);
   ok('Space pressed in the window pauses it, and the remote follows', (await state(win)) === 'paused' && (await page.locator('.pr-remote .pr-play').innerText()) === '▶ Play');
   await win.keyboard.press('r'); await sleep(900);
   ok('R pressed in the window rolls a take on the log in the main window', (await takes(page)).length === 1 && (await state(win)) === 'running');
   await win.keyboard.press('r'); await sleep(500); await win.keyboard.press('n'); await sleep(300);
   ok('…R cuts, and N rates it', (await takes(page))[0].rate === 'ng');
-  await page.locator('.pr-remote .pr-settings').click(); await page.waitForSelector('.sheet .pref[aria-label="Line spacing"]');
+  await page.locator('.pr-remote .pr-settings').click(); await page.waitForSelector('.sheet .pr-tabs');
+  await settings(page, '.sheet', 'format', 'text');
   await page.locator('.sheet .pref[aria-label="Line spacing"] button', { hasText: 'Loose' }).click(); await sleep(400);
   ok('the remote’s ⚙ sets the window’s line spacing', (await win.evaluate(() => document.querySelector('.pr-col').style.lineHeight)) === '1.6');
   await page.keyboard.press('Escape'); await sleep(200);
