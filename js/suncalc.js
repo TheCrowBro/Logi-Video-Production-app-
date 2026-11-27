@@ -73,4 +73,12 @@ export function polarisPosition(date, lat, lon) {
   };
 }
 
+// Sun times are shown on this device's clock. Where the place is plainly on another clock (its longitude puts the sun
+// more than an hour and a half from this device's zone that day: a venue abroad, a shoot planned from home), each
+// time carries the zone's name, so nobody reads it as the place's own local time beside a call time that is.
+export function sunClock(date, lon) {
+  const off = -date.getTimezoneOffset() / 60, apart = Math.abs((((lon / 15 - off) % 24) + 36) % 24 - 12), far = Number.isFinite(Number(lon)) && apart > 1.5;
+  let zone = ''; if (far) try { zone = (new Intl.DateTimeFormat([], { timeZoneName: 'short' }).formatToParts(date).find(p => p.type === 'timeZoneName') || {}).value || ''; } catch { /* no zone name: the times stay as they are */ }
+  return { far: far && !!zone, zone, fmt: d => (d instanceof Date && !isNaN(d) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + (zone ? ' ' + zone : '') : '—') };
+}
 export const compassPoint = az => ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'][Math.round(az / 22.5) % 16];

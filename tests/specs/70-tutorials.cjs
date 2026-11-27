@@ -141,20 +141,60 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('Remove the practice job on the last card takes it away, and the course ends on the month view', !(await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.some(x => x.practice)))) && /removed/.test(await page.locator('.tour-form').innerText()));
   await page.locator('.tour-card .btn.primary').click(); await sleep(300);
   ok('…with the real quotes untouched', (await page.locator('.tour').count()) === 0 && (await page.locator('.bk-month').count()) === 1);
+  // The chooser's two timecode entries reach their page from where the Timecode page happens to be.
+  const choose = async name => { await menuClick(page, '#helpBtn'); await page.waitForSelector('.tour-card'); await page.getByRole('button', { name: 'Other pages…' }).click(); await page.waitForSelector('.sheet[aria-label="Tutorials"]'); await page.locator('.sheet .card.tap', { hasText: name }).click(); };
+  await page.evaluate(() => window.logiGo('tcnotes')); await sleep(450);
+  await page.evaluate(() => import('./js/pages/tcnotes.js').then(m => m.openPracticeLog())); await page.waitForSelector('.tc-log-head'); await sleep(300);
+  await choose('Timecode notes: your logs');
+  const toLogs = await page.waitForSelector('.tour-card h2', { timeout: 6000 }).then(el => el.innerText(), () => '');
+  ok('“Timecode notes: your logs”, chosen while a log is open, goes back to the list of logs and starts its tutorial', toLogs === 'One log per camera or day' && (await page.locator('.tc-log-head').count()) === 0, toLogs + ' ' + errors.slice(0, 1).join(''));
+  await page.keyboard.press('Escape'); await sleep(250);
+  await page.evaluate(() => window.logiGo('tcnotes')); await sleep(450);
+  await page.evaluate(() => { document.querySelector('.tc-log-head .btn.ghost.small')?.click(); }); await sleep(300); // the list of logs, whatever the case before left open
+  await page.evaluate(() => window.logiGo('crew')); await sleep(450);
+  await choose('Timecode notes: a log');
+  const toLog = await page.waitForSelector('.tour-card h2', { timeout: 6000 }).then(el => el.innerText(), () => '');
+  ok('“Timecode notes: a log”, chosen with no log open, opens the first log and starts its tutorial', !!toLog && (await page.locator('.tc-log-head').count()) === 1, toLog + ' ' + errors.slice(0, 1).join(''));
+  await page.keyboard.press('Escape'); await sleep(250);
+  // The ? of a sheet with no tutorial of its own: never the page's walkthrough over the sheet.
+  await page.evaluate(() => window.logiGo('crew')); await sleep(450);
+  await page.locator('#page .page-head button', { hasText: '+ Add' }).first().click(); await page.waitForSelector('.sheet form');
+  await page.locator('.sheet form input[data-key="name"]').fill('Half Typed');
+  await page.locator('.sheet .sheet-help').last().click(); await sleep(500);
+  ok('the ? of a form opens the list of tutorials, not the page’s walkthrough over the form', (await page.locator('.tour').count()) === 0 && (await page.locator('.sheet[aria-label="Tutorials"]').count()) === 1 && (await page.locator('.sheet form').count()) === 1);
+  if (await page.locator('.sheet[aria-label="Tutorials"]').count()) await page.locator('.sheet[aria-label="Tutorials"] .card.tap', { hasText: /^Crew$/ }).click(); await sleep(300);
+  const asked = await page.locator('.sheet').last().getAttribute('aria-label');
+  ok('…and a walkthrough picked there asks before it closes the form with what was typed', asked === 'A form is still open' && (await page.locator('.tour').count()) === 0, String(asked));
+  if (asked === 'A form is still open') await page.getByRole('button', { name: 'Close it and carry on' }).click();
+  const overPage = await page.waitForSelector('.tour-card h2', { timeout: 8000 }).then(() => true, () => false);
+  ok('…then runs on the page itself, with no sheet under it', overPage && (await page.locator('.sheet').count()) === 0);
+  await page.keyboard.press('Escape'); await sleep(250);
+  for (let i = 0; i < 3 && (await page.locator('.sheet').count()); i++) { page.once('dialog', d => d.accept().catch(() => {})); await page.keyboard.press('Escape'); await sleep(250); }
+  await menuClick(page, '#displayBtn'); await page.waitForSelector('.sheet');
+  await page.locator('.sheet .sheet-help').last().click(); await page.waitForSelector('.sheet[aria-label="Tutorials"]', { timeout: 4000 }).catch(() => {});
+  if (await page.locator('.sheet[aria-label="Tutorials"]').count()) await page.locator('.sheet[aria-label="Tutorials"] .card.tap', { hasText: 'Getting around' }).click();
+  const around = await page.waitForSelector('.tour-card h2', { timeout: 8000 }).then(() => true, () => false);
+  ok('from a sheet with nothing to lose (text size and theme) the chosen walkthrough closes it and runs on the page', around && (await page.locator('.sheet').count()) === 0);
+  await page.keyboard.press('Escape'); await sleep(250);
+  for (let i = 0; i < 3 && (await page.locator('.sheet').count()); i++) { await page.keyboard.press('Escape'); await sleep(250); }
   // The set-up walkthrough (the first-run tour, and Take the tour later): it saves what is typed and adds the samples
   await page.evaluate(() => import('./js/tour.js').then(m => m.startTour())); await page.waitForSelector('.tour-card', { timeout: 10000 }); await sleep(300);
   const seen = []; let calCard = false, samplesSeen = false, removed = false, arrowStayed = false, closedOk = false;
+  const centred = {}; // cards with nothing to point at, shown after a pointed card: where the card and the spotlight ended up
+  const middle = () => page.evaluate(() => { const c = document.querySelector('.tour-card').getBoundingClientRect(), s = document.querySelector('.tour-spot').getBoundingClientRect(); return { off: Math.round(Math.abs((c.top + c.bottom) / 2 - innerHeight / 2)), top: Math.round(c.top), spot: Math.round(s.width) + 'x' + Math.round(s.height) }; });
   for (let i = 0; i < 20; i++) {
     const h2 = await page.locator('.tour-card h2').innerText(); seen.push(h2);
     const step = await page.locator('.tour-step').innerText();
     if (h2 === 'You') { await page.locator('.tour-form input[data-key="name"]').fill('Sam Operator'); await page.keyboard.press('ArrowRight'); await sleep(250); arrowStayed = (await page.locator('.tour-card h2').innerText()) === 'You'; await page.locator('.tour-form input[data-key="business"]').fill('Operator Films'); }
-    if (h2 === 'How clients reach you') { await page.locator('.tour-form input[data-key="phone"]').fill('+1 555 0199'); await page.locator('.tour-form input[data-key="email"]').fill('sam@example.com'); }
+    let byArrow = false; // this card is left with the → key, from its Next button: it saves what was typed as a tap on Next does
+    if (h2 === 'How clients reach you') { await page.locator('.tour-form input[data-key="phone"]').fill('+1 555 0199'); await page.locator('.tour-form input[data-key="email"]').fill('sam@example.com'); byArrow = true; }
+    if (h2 === 'What is in the deck' || h2 === 'Keep the samples?') { await sleep(600); centred[h2] = await middle(); }
     if (h2 === 'Your website') { await page.locator('.tour-form input[data-key="website"]').fill('https://operator.example'); }
     if (h2 === 'Your calendar') calCard = (await page.locator('.tour-form button[aria-label^="Connect"]').count()) === 2 && /Not ready yet/.test(await page.locator('.tour-form').innerText()) && (await page.locator('.tour-form button[aria-label^="Connect"]').first().isDisabled());
     if (h2 === 'Two sample people') samplesSeen = await page.evaluate(() => import('./js/store.js').then(s => { const t = s.db.crew.find(c => c.id === 'sample-talent'), c = s.db.crew.find(x => x.id === 'sample-crew'); return !!(t && t.role === 'Talent' && t.name === 'Sample talent' && c && c.name === 'Sample crew member'); })) && !(await page.locator('.tour-spot').evaluate(el => el.classList.contains('center')));
     if (h2 === 'Keep the samples?') { await page.locator('.tour-form button', { hasText: 'Remove the samples' }).click(); await sleep(400); removed = await page.evaluate(() => import('./js/store.js').then(s => !s.db.crew.some(c => c.sample))) && /removed/.test(await page.locator('.tour-form').innerText()); }
     const label = await page.locator('.tour-actions .btn.primary').innerText();
-    await page.locator('.tour-actions .btn.primary').click();
+    if (byArrow) { await page.locator('.tour-actions .btn.primary').focus(); await page.keyboard.press('ArrowRight'); } else await page.locator('.tour-actions .btn.primary').click();
     if (label === 'Done') { closedOk = (await page.locator('.tour').count()) === 0; break; }
     await page.waitForFunction(prev => !document.querySelector('.tour-card') || (document.querySelector('.tour-step') || {}).textContent !== prev, step, { timeout: 8000 }).catch(() => {}); await sleep(150);
   }
@@ -162,6 +202,8 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   const prof = await page.evaluate(() => import('./js/store.js').then(s => s.db.profile));
   ok('what was typed on the cards is saved to the profile', prof.name === 'Sam Operator' && prof.business === 'Operator Films' && prof.phone === '+1 555 0199' && prof.email === 'sam@example.com' && prof.website === 'https://operator.example', JSON.stringify(prof));
   ok('arrow keys do not move the walkthrough while typing in its fields', arrowStayed);
+  ok('the → key pressed on Next leaves a card with a form as Next does: the phone and email typed on it were saved', seen.includes('Your website') && prof.phone === '+1 555 0199' && prof.email === 'sam@example.com', JSON.stringify(prof));
+  ok('a card with nothing to point at, after one that pointed, sits in the middle of the screen with no spotlight left behind', ['What is in the deck', 'Keep the samples?'].every(t => centred[t] && centred[t].off <= 2 && centred[t].top >= 0 && centred[t].spot === '0x0'), JSON.stringify(centred));
   ok('the calendar card offers Google and Microsoft from the card itself (greyed until sign-in is switched on), and Next skips it', calCard);
   ok('the samples were added as crew (Sample talent with the Talent role) and removed again from the last card', samplesSeen && removed);
   ok('no page errors or CSP violations', errors.length === 0, errors.slice(0, 3).join(' | '));

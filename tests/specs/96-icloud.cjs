@@ -26,7 +26,7 @@ const utf8 = s => Buffer.byteLength(s, 'utf8');
       const session = u.searchParams.get('ckWebAuthToken');
       const reply = (status, body, extra = {}) => route.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json', ...extra }, body: JSON.stringify(body) });
       if (!path.startsWith('/database/1/iCloud.test.vdex/production/')) return reply(400, { serverErrorCode: 'BAD_REQUEST', reason: 'wrong container ' + path });
-      if (!session || !ck.valid.has(session)) { if (session) ck.stale++; return reply(421, { serverErrorCode: 'AUTHENTICATION_REQUIRED', redirectURL: 'https://idmsa.apple.com/IDMSWebAuth/signin?appIdKey=test' }); }
+      if (!session || !ck.valid.has(session)) { if (session) ck.stale++; else ck.bare = (ck.bare || 0) + 1; return reply(421, { serverErrorCode: 'AUTHENTICATION_REQUIRED', redirectURL: 'https://idmsa.apple.com/IDMSWebAuth/signin?appIdKey=test' }); }
       ck.valid.delete(session); ck.used.push(session); const next = issue(); // a session is good for one round trip
       const head = { 'x-apple-cloudkit-web-auth-token': next };
       if (ck.delay) await sleep(ck.delay);
@@ -156,6 +156,15 @@ const utf8 = s => Buffer.byteLength(s, 'utf8');
   await page.evaluate(async () => (await import('./js/store.js')).sync());
   const afterMid = await status(page);
   ok('…even when hidden in the middle of a request', afterMid === 'synced' && ck.stale === 0, JSON.stringify({ afterMid, stale: ck.stale }));
+  // A save is several requests, one after another. One that is under way when Vdex is put away goes on with the newest
+  // session this page holds, though the lock has taken the plain copy away: a request sent without one would sign iCloud out.
+  ck.delay = 500; const bare = ck.bare || 0;
+  const several = page.evaluate(async () => { const a = (await import('./js/store.js')).cloud.adapter; await a.read(); await a.read(); await a.read(); }).then(() => 'read', e => e.message);
+  await sleep(150); await setVis(page, true); await sleep(1900); await setVis(page, false); await sleep(900);
+  ck.delay = 0; const went = await several;
+  await page.evaluate(async () => (await import('./js/store.js')).sync());
+  const afterSeveral = await status(page);
+  ok('…and when a run of requests goes on while Vdex is hidden: each carries the newest session, none goes without one', went === 'read' && afterSeveral === 'synced' && ck.stale === 0 && (ck.bare || 0) === bare, JSON.stringify({ went, afterSeveral, stale: ck.stale, bare: [bare, ck.bare || 0] }));
   await page.evaluate(async () => { await (await import('./js/lock.js')).removePin(); });
 
   // Two weeks later: the session has run out; Sign in again goes to Apple and back

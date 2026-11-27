@@ -10,4 +10,5 @@ export const CLOUD_APPS = {
   google: '943564062295-f5ut36hads3mdv7sjhnah971msh7btq6.apps.googleusercontent.com', // Google OAuth client ID (Google Cloud project Vdex)
   microsoft: '', // Microsoft Application (client) ID, looks like 00000000-0000-0000-0000-000000000000
   googleCalendar: true, // false while Google treats the calendar permission as "sensitive" (docs/turn-on-sign-in.md, Google step 6)
+  googlePickerKey: '', // Google Picker API key, for choosing a Google Doc as a script (docs/turn-on-sign-in.md, Google Docs); empty: not offered
 };

@@ -24,6 +24,9 @@ export async function unpack(str, { max = 0 } = {}) {
   const [v, data] = String(str || '').replace(/^#/, '').split('.', 2);
   if (!data) throw new Error('This link does not contain a document.');
   let bytes = fromB64(data);
+  // A browser from before DecompressionStream (Safari before 16.4) cannot unpack a packed link: the link is whole, and
+  // a fresh one would fail the same way, so the error says what is the matter (code 'old').
+  if (v === '1' && typeof DecompressionStream !== 'function') throw Object.assign(new Error('This browser is too old to open this link. Update it, or open the link in another browser or on another device.'), { code: 'old' });
   if (v === '1') bytes = await inflate(bytes, max);
   else if (max && bytes.length > max) throw Object.assign(new Error('This link holds too much to open.'), { code: 'big' });
   return JSON.parse(new TextDecoder().decode(bytes));

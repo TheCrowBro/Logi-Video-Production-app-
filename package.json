@@ -1,7 +1,7 @@
 {
   "name": "vdex",
   "productName": "Vdex",
-  "version": "1.4.0",
+  "version": "1.5.1",
   "description": "Production deck for freelance videographers: bookings, crew, kit, venues, insurance, a shoot-day clock, timecode notes and field tools.",
   "private": true,
   "main": "desktop/main.js",
@@ -34,6 +34,7 @@
       "delete-account.html",
       "invoice.html",
       "crew.html",
+      "prompter.html",
       "styles.css",
       "sw.js",
       "manifest.webmanifest",

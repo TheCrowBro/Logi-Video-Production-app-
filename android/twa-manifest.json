@@ -20,7 +20,7 @@
     "path": "./upload-key.keystore",
     "alias": "vdex"
   },
-  "appVersionName": "1.4.0",
+  "appVersionName": "1.5.1",
   "appVersionCode": 1,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
@@ -48,7 +48,8 @@
             "text/plain",
             "text/markdown",
             "text/x-markdown",
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/pdf"
           ]
         }
       ]
@@ -64,5 +65,5 @@
   "additionalTrustedOrigins": [],
   "retainedBundles": [],
   "displayOverride": [],
-  "appVersion": "1.4.0"
+  "appVersion": "1.5.1"
 }

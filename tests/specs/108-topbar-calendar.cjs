@@ -4,6 +4,7 @@
 // box with a strip under the Rolodex only while it runs.
 const { chromium } = require('playwright');
 const { acceptTerms, openMenu } = require('../helpers.cjs');
+const fs = require('fs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -95,6 +96,57 @@ const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + 
   ok('Stop work from the strip ends the day and the strip goes', await page.locator('#clockbar').evaluate(e => e.hidden) && (await page.evaluate(() => import('./js/hours.js').then(hh => !hh.running()))));
   await page.evaluate(() => window.logiGo('bookings')); await sleep(400);
   ok('back on the booking the card shows the time logged today and Start work again', /logged today/.test(await page.locator('#bk-hours .card-clock').innerText()) && (await page.locator('#bk-hours .card-clock').getByRole('button', { name: 'Start work' }).count()) === 1, await page.locator('#bk-hours .card-clock').innerText());
+
+  // ---- repairs after 1.4.0: hours ----
+  const hform = page.locator('.sheet form');
+  // Hours left by a deleted booking stay with no project when they are corrected
+  await page.evaluate(() => Promise.all([import('./js/store.js'), import('./js/hours.js')]).then(([s, hh]) => {
+    const t = new Date(), day = `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`, at = h => new Date(t.getFullYear(), t.getMonth(), t.getDate(), h).getTime();
+    const shift = (id, bookingId, kind, from, to) => ({ id, bookingId, kind, date: day, start: at(from), end: at(to), breaks: [], note: '', updatedAt: 1 });
+    s.update(d => { d.bookings.push({ id: 'hr-old', title: 'Old job', date: day, status: 'Shot', crew: [], gear: [] }, { id: 'hr-new', title: 'Café Zoë promo', client: 'Müller & Søn', date: day, status: 'Shot', crew: [], gear: [] });
+      d.shifts.push(shift('hr-s1', 'hr-old', 'shoot', 1, 2), shift('hr-s2', 'hr-new', 'shoot', 0, 8), shift('hr-s3', 'hr-new', 'shoot', 8, 16), shift('hr-s4', 'hr-new', 'edit', 16, 20)); });
+    s.remove('bookings', 'hr-old'); hh.editShift(s.byId('shifts', 'hr-s1')); }));
+  await hform.waitFor();
+  const shown = await hform.locator('select').first().evaluate(el => [el.value, el.selectedOptions[0].textContent]);
+  await hform.locator('input[data-key="note"]').fill('corrected'); await hform.locator('button[type=submit]').click(); await sleep(300);
+  const kept = await page.evaluate(() => import('./js/store.js').then(s => { const x = s.byId('shifts', 'hr-s1'); return { bookingId: x.bookingId, note: x.note }; }));
+  ok('hours left by a deleted booking show “No project” in their form and stay unassigned when they are corrected', shown[0] === '' && shown[1] === 'No project' && kept.bookingId == null && kept.note === 'corrected', JSON.stringify([shown, kept]));
+  await page.evaluate(() => import('./js/hours.js').then(hh => hh.editShift(null, null))); await hform.waitFor();
+  ok('hours added with no booking in hand start on “No project”, not on the first booking in the list', (await hform.locator('select').first().inputValue()) === '');
+  await page.keyboard.press('Escape'); await sleep(200);
+  // The chart: this week's figure is whole when the week reaches the top line, and the chart follows the Shoot days / Edit chips
+  await page.evaluate(() => import('./js/hours.js').then(hh => hh.openHoursSheet('hr-new'))); await page.waitForSelector('.sheet .hrs-chart');
+  const chart = () => page.evaluate(() => { const svg = document.querySelector('.sheet .hrs-chart'), val = svg.querySelector('text.val'), bars = svg.querySelectorAll('.bar'); return { top: val ? Math.round(val.getBBox().y * 10) / 10 : null, text: val && val.textContent, week: bars[bars.length - 1].getAttribute('aria-label').replace(/^[^:]*: /, '') }; });
+  const whole = await chart();
+  ok('a week of exactly 20 hours shows its “20” whole above the bar', whole.text === '20' && whole.top >= 0 && whole.week === '20h 00m over 1 day', JSON.stringify(whole));
+  await page.locator('.sheet .chip', { hasText: 'Edit / post' }).click(); await sleep(200);
+  const edits = await chart();
+  ok('the Hours per week chart shows the kind of work chosen with the chips', edits.week === '4h 00m over 1 day' && edits.text === '4', JSON.stringify(edits));
+  await page.locator('.sheet .chip', { hasText: 'Shoot + edit' }).click(); await sleep(200);
+  const [hcsv] = await Promise.all([page.waitForEvent('download', { timeout: 15000 }), page.locator('.sheet button', { hasText: 'CSV' }).click()]);
+  const bytes = fs.readFileSync(await hcsv.path());
+  ok('the hours CSV starts with the byte-order mark the other spreadsheets have, so Excel reads accented names', bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf && bytes.toString('utf8').includes('Café Zoë promo') && bytes.toString('utf8').includes('Müller & Søn'), [...bytes.slice(0, 4)].map(x => x.toString(16)).join(' '));
+  await page.keyboard.press('Escape'); await sleep(200);
+  // A correction saved to the running entry while on a break leaves the break running
+  await page.evaluate(() => import('./js/hours.js').then(hh => { hh.startShift('hr-new'); hh.startBreak(30); hh.editShift(hh.running()); })); await hform.waitFor();
+  const brk = await hform.locator('input[data-key="breakMin"]').inputValue();
+  await hform.locator('input[data-key="note"]').fill('second camera day'); await hform.locator('button[type=submit]').click(); await sleep(300);
+  const onBrk = await page.evaluate(() => import('./js/hours.js').then(hh => { const r = hh.running(); const out = { running: !!r, on: hh.onBreak(r), planned: (hh.currentBreak(r) || {}).planned, note: r && r.note }; hh.stopShift(); return out; }));
+  ok('saving a note on the running entry while on a break keeps the break and its countdown', brk === '0' && onBrk.running && onBrk.on && onBrk.planned === 30 && onBrk.note === 'second camera day', JSON.stringify({ brk, ...onBrk }));
+  // Between a phone and a wide window, with the lock button there (every device has a PIN): the tagline is whole or
+  // absent, never sliced. And on the narrowest phone at the largest text, the weekday names keep to their columns.
+  await page.evaluate(() => { document.getElementById('lockBtn').hidden = false; });
+  const cuts = {};
+  for (const w of [470, 561, 580, 640, 700, 760]) {
+    await page.setViewportSize({ width: w, height: 900 }); await sleep(200);
+    cuts[w] = await page.evaluate(() => { const b = document.querySelector('.top .brand'), sm = b.querySelector('small'), shown = getComputedStyle(sm).display !== 'none'; return { cut: b.scrollWidth - b.clientWidth, tag: shown, sliced: shown && sm.scrollWidth > sm.clientWidth }; });
+  }
+  ok('from 470 to 760 px wide, with the lock button showing, the brand is never cut off: the tagline is there whole or not at all', Object.values(cuts).every(c => c.cut <= 0 && !c.sliced) && cuts[470].tag && cuts[760].tag && !cuts[580].tag, JSON.stringify(cuts));
+  await page.evaluate(() => { document.getElementById('lockBtn').hidden = true; document.documentElement.dataset.text = 'xlarge'; });
+  await page.setViewportSize({ width: 320, height: 800 }); await page.evaluate(() => window.logiGo('bookings')); await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.showMonth())); await page.waitForSelector('.bk-month .wd'); await sleep(300);
+  const days = await page.evaluate(() => [...document.querySelectorAll('.wd')].map(w => { const r = document.createRange(); r.selectNodeContents(w); return Math.round(r.getBoundingClientRect().width - w.getBoundingClientRect().width); }));
+  ok('at 320 px with Extra large text the weekday names fit their columns, none running into the next', days.length === 7 && days.every(n => n <= 0), JSON.stringify(days));
+  await page.evaluate(() => { document.documentElement.dataset.text = 'normal'; });
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + e.message); process.exit(1); });

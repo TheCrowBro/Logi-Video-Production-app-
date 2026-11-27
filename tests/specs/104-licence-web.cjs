@@ -250,7 +250,7 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
     ok('signing out goes back to read-only (the trial is over)', !(await lic(page)).token && /trial has ended/.test(await page.locator('.licence-bar').innerText()));
     await ctx.close();
 
-    // At phone width the update bar (made here as js/update.js makes it) wraps to three rows: the read-only bar sits
+    // At phone width the update bar (made here as js/update.js makes it) wraps to two rows: the read-only bar sits
     // above it, so its Buy and Sign in buttons can still be tapped.
     ({ ctx, page } = await open({ width: 390, storage: { on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY } }));
     await page.waitForSelector('.licence-bar', { timeout: 5000 });
@@ -466,6 +466,92 @@ const STATUS_KEY = process.env.VDEX_STATUS_KEY;
     await page.locator('.sheet').getByRole('button', { name: 'Sign out' }).click(); await sleep(500);
     const look2 = await (await mf.dispatchFetch('https://vdex.crowmade.app/licence/admin', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(await codes.signNote('admin', ownerKey, 1, { op: 'look', ref, at: Date.now() })) })).json();
     ok('signing out in the Play app gives its place back', look2.computers.length === 2 && !look2.computers.some(c => c.os === 'Android'));
+    await ctx.close();
+
+    // Signing in: a code that is not 6 digits is never sent, a pasted code keeps its digits, and an empty licence-code
+    // box is asked for the code, not told about an email address.
+    const over = () => ({ on: true, statusAt: Date.now(), first: Date.now() - 31 * DAY, seen: Date.now() - DAY });
+    ({ ctx, page } = await open({ width: 390, storage: over() }));
+    await page.waitForSelector('.licence-bar', { timeout: 5000 });
+    await page.locator('.licence-bar').getByRole('button', { name: 'Sign in' }).click();
+    { const sh = page.locator('.sheet'), said = () => sh.locator('p[role=status]').last().innerText();
+      await sh.getByRole('button', { name: 'Have a licence code? Use it instead' }).click();
+      const startsBefore = asked.filter(p => p === '/licence/web/start').length;
+      await sh.getByRole('button', { name: 'Email me a code' }).click(); await sleep(400);
+      ok('an empty licence-code box is asked for the code, with no word of an email address, and nothing is sent', /Paste your licence code/.test(await said()) && !/email address/.test(await said()) && asked.filter(p => p === '/licence/web/start').length === startsBefore, await said());
+      await sh.getByRole('button', { name: 'Use your email address instead' }).click();
+      await sh.locator('input[type="email"]').fill('jo@example.com'); await sh.getByRole('button', { name: 'Email me a code' }).click();
+      await page.waitForFunction(() => document.querySelector('.licence-digits')?.offsetParent != null, null, { timeout: 8000 });
+      const sent = codeFor('jo@example.com'), verifies = () => asked.filter(p => p === '/licence/web/verify').length, before = verifies();
+      await sh.getByRole('button', { name: 'Sign in' }).click(); await sleep(400);
+      const none = await said();
+      await sh.locator('.licence-digits').fill('12345'); await sh.getByRole('button', { name: 'Sign in' }).click(); await sleep(400);
+      const short = await said();
+      ok('an empty or short 6-digit code is answered “Type the 6 digits from the email”, and is not sent', /Type the 6 digits from the email/.test(none) && /Type the 6 digits from the email/.test(short) && verifies() === before, JSON.stringify([none, short, verifies() - before]));
+      await sh.locator('.licence-digits').fill(`  ${sent.slice(0, 3)} ${sent.slice(3)} `);
+      const held = await sh.locator('.licence-digits').inputValue();
+      await sh.getByRole('button', { name: 'Sign in' }).click();
+      const signedIn = await page.waitForFunction(() => !document.querySelector('.sheet'), null, { timeout: 8000 }).then(() => true, () => false);
+      ok('the right code pasted with spaces around and inside it keeps its 6 digits and signs in', held.replace(/\D/g, '') === sent && signedIn && (await lic(page)).licence?.email === 'jo@example.com', JSON.stringify([held, signedIn])); }
+    await ctx.close();
+
+    // “Comes with a licence”, during the trial: the sentence names all three things that need the licence.
+    ({ ctx, page } = await open({ width: 390, storage: { on: true, statusAt: Date.now(), first: Date.now() - 2 * DAY, seen: Date.now() - DAY } }));
+    await page.evaluate(() => import('./js/licence.js').then(m => m.initLicence())); await sleep(300);
+    for (const what of ['cloud', 'backup']) {
+      await page.evaluate(w => { import('./js/store.js').then(s => s.requireLicence(w)); }, what);
+      await page.waitForSelector('.sheet.licence-needed', { timeout: 5000 });
+      const text = await page.locator('.sheet.licence-needed').innerText();
+      ok(`during the trial the “Comes with a licence” sheet for ${what === 'cloud' ? 'cloud storage' : 'a backup file'} says that cloud storage, backup files and spreadsheets all need the licence`, /Cloud storage, backup files and spreadsheets need the licence; everything else works during your free trial\./.test(text) && !/\. Everything else works during your free trial/.test(text), text.replace(/\s+/g, ' ').slice(0, 260));
+      await page.keyboard.press('Escape'); await sleep(250);
+    }
+    await ctx.close();
+
+    // Locked: the licence bar, drawn again when Vdex comes back to the front, stays out of reach behind the lock screen.
+    ({ ctx, page } = await open({ width: 1100, storage: over() }));
+    await page.waitForSelector('.licence-bar', { timeout: 5000 });
+    await page.evaluate(() => import('./js/lock.js').then(async l => { await l.setPin('246810'); l.setOption({ autoLock: 0 }); })); await page.waitForFunction(() => !!localStorage.getItem('logi-vault'), null, { timeout: 60000 });
+    const vis = h => page.evaluate(h => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => h }); Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => (h ? 'hidden' : 'visible') }); document.dispatchEvent(new Event('visibilitychange')); }, h);
+    await vis(true); await sleep(500); await vis(false); await page.waitForSelector('.lock'); await sleep(1500); // the licence is looked at again as Vdex comes back, and its bar drawn again
+    const behind = await page.evaluate(() => ({ bars: document.querySelectorAll('.licence-bar').length, inert: [...document.body.children].filter(el => !el.classList.contains('lock')).every(el => el.inert), bar: document.querySelector('.licence-bar')?.inert }));
+    const reached = [];
+    for (let i = 0; i < 22; i++) { await page.keyboard.press('Tab'); reached.push(await page.evaluate(() => !!document.activeElement.closest('.licence-bar'))); }
+    ok('while locked, the licence bar drawn again behind the lock screen is out of reach: Tab never lands on Buy or Sign in', behind.bars === 1 && behind.bar === true && behind.inert && !reached.some(Boolean), JSON.stringify(behind) + ' ' + reached.filter(Boolean).length + ' stops in the bar');
+    await page.keyboard.type('246810'); await page.waitForFunction(() => !document.querySelector('.lock'), null, { timeout: 60000 }); await sleep(300);
+    ok('…and it is in reach again once the PIN is in', (await page.evaluate(() => document.querySelector('.licence-bar')?.inert)) === false);
+    await ctx.close();
+
+    // A walkthrough on a phone while the licence bar shows: the bar is out of the way of the card's Skip, Back and Next.
+    ({ ctx, page } = await open({ width: 390, storage: over() }));
+    await page.waitForSelector('.licence-bar', { timeout: 5000 });
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.evaluate(() => window.logiGo('settings')); await sleep(500);
+    await page.evaluate(() => import('./js/tutorials.js').then(t => t.openTutorial('settings'))); await page.waitForSelector('.tour-card h2');
+    let covered = 0, walked = 0;
+    for (let i = 0; i < 18 && (await page.locator('.tour-card').count()); i++) {
+      await sleep(500); walked++;
+      covered += await page.evaluate(() => [...document.querySelectorAll('.tour-actions button')].filter(b => { const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !hit || !b.contains(hit); }).length);
+      await page.evaluate(() => document.querySelector('.tour-actions .btn.primary').click());
+    }
+    ok('on a phone, with the read-only bar showing, every button of every walkthrough card can be tapped', walked >= 10 && covered === 0, `${walked} cards, ${covered} buttons under something`);
+    await sleep(300);
+    ok('…and the bar is back when the walkthrough ends', (await page.locator('.tour').count()) === 0 && (await page.locator('.licence-bar').isVisible()));
+    // Read-only: a course that works on a practice job says it cannot run, instead of passing over its own middle.
+    await page.evaluate(() => { window.__toasts = []; new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true }); });
+    await page.evaluate(() => import('./js/tutorials.js').then(t => t.openChooser())); await page.waitForSelector('.sheet[aria-label="Tutorials"]');
+    await page.locator('.sheet .card.tap', { hasText: 'Quotes & invoices, start to finish' }).click(); await sleep(1500);
+    const course = { toasts: await page.evaluate(() => window.__toasts.join(' | ')), tour: await page.locator('.tour').count(), practice: await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.filter(b => b.practice).length)) };
+    ok('read-only, the quotes and invoices course says it needs a practice job that Vdex cannot make, and does not start', /practice job or log, which Vdex cannot make while it is read-only/.test(course.toasts) && course.tour === 0 && course.practice === 0, JSON.stringify(course));
+    await page.keyboard.press('Escape'); await sleep(200);
+    // Read-only: a backup file handed to Vdex with no tap in Vdex just before (from the Files app) still gets an answer:
+    // the sheet that asks about the file, and from its button the explanation that Vdex is read-only.
+    await sleep(3200); // past the moment in which the gate would take a refusal for the answer to a tap
+    await page.evaluate(() => { import('./js/share-in.js').then(m => m.arrived(new File(['{"bookings":[]}'], 'vdex-backup-2026-11-01.json', { type: 'application/json' }))); });
+    const handed = await page.waitForSelector('.sheet[aria-label="A file for Vdex"]', { timeout: 5000 }).then(() => true, () => false);
+    if (handed) await page.locator('.sheet button', { hasText: 'Restore this backup' }).click();
+    const told = await page.waitForSelector('.sheet.licence-readonly', { timeout: 5000 }).then(() => true, () => false);
+    ok('read-only, a backup file handed to Vdex is asked about on a sheet, and Restore this backup says that Vdex is read-only instead of doing nothing', handed && told && (await page.locator('.sheet[aria-label="A file for Vdex"]').count()) === 0, JSON.stringify([handed, told]));
+    await page.keyboard.press('Escape'); await sleep(200);
     await ctx.close();
 
     // The desktop app keeps its own licence: the website's never runs there.

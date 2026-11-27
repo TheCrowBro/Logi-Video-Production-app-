@@ -1,4 +1,4 @@
-import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid, toast, backBtn, sheet, hold, wasHeld } from '../util.js';
+import { h, pad, ymd, todayISO, parseISO, fmtLong, fmtShort, fmtTime, groupBy, mapsUrl, telUrl, empty, uid, toast, backBtn, sheet, hold, wasHeld, redrawKeeping } from '../util.js';
 import { haptic } from '../a11y.js';
 import { db, byId, bookingsOn, gearClash, upsert, remove, update, endOf, covers, onDay, isEditDay, editDaysOf, qtyOf, usedQty } from '../store.js';
 import { openForm } from '../form.js';
@@ -12,7 +12,7 @@ import { STATUSES as WF_STATUSES, STAGES, typeOptions, templateById, applyTempla
 import { callSheetPage, openCallSheets, sheetState, commitDraft } from '../callsheet.js';
 import { moneyPage, openMoney, moneyBlock, budgetBlock, budgetTotals, docOf, totals, isOverdue, fmtMoney } from '../money.js';
 import { forecastCard, forecastLine, locationFor } from '../weather.js';
-import { getTimes } from '../suncalc.js';
+import { getTimes, sunClock } from '../suncalc.js';
 import { boardPlan, fmtEighths } from '../board.js';
 
 const STATUSES = WF_STATUSES;
@@ -44,7 +44,11 @@ const editDayText = d => fmtShort(d.date) + (d.start ? ` ${d.start}${d.end ? '�
 export const bookings = {
   id: 'bookings', label: 'Bookings', icon: '📅',
   render(root) {
-    const go = patch => { if (patch.view && patch.view !== 'callsheet') commitDraft(); Object.assign(S, patch); draw(); window.scrollTo({ top: 0 }); };
+    // A page drawn again in place (after a form was saved, a line added) gives the focus back to the control that had
+    // it, as the redraw after every change does: a keyboard or a screen reader is not sent back to the top of the page.
+    // What was being typed stays only when the same booking and view are drawn again: opened from the search with a
+    // half-typed shot in the box, another booking would otherwise show that text in its own box.
+    const go = patch => { if (patch.view && patch.view !== 'callsheet') commitDraft(); const same = (patch.id == null || patch.id === S.id) && (patch.view == null || patch.view === S.view); Object.assign(S, patch); redrawKeeping(root, draw, { typed: same }); window.scrollTo({ top: 0 }); };
     GO = go;
     const draw = () => {
       if ((S.view === 'booking' || S.view === 'callsheet' || S.view === 'money' || S.view === 'strips') && !byId('bookings', S.id)) S.view = 'day';
@@ -68,7 +72,7 @@ function editBooking(b, go) {
     fields: [
       { key: 'title', label: 'Project', required: true, placeholder: 'e.g. Brand film for…' },
       { key: 'client', label: 'Client' },
-      { key: 'type', label: 'Job type', type: 'select', options: typeOptions(), hint: 'Picks the pre- and post-production checklists. Your own templates (Settings → Work & billing → Project templates) are listed first.' },
+      { key: 'type', label: 'Job type', type: 'select', options: typeOptions(), missing: 'Other (its template was deleted)', hint: 'Picks the pre- and post-production checklists. Your own templates (Settings → Work & billing → Project templates) are listed first.' },
       { key: 'date', label: 'Start date', type: 'date', required: true },
       { key: 'endDate', label: 'End date (multi-day)', type: 'date', hint: 'Leave blank for a single day.' },
       { key: 'editDays', label: 'Edit days', type: 'rows', columns: [{ key: 'date', label: 'Date', type: 'date' }, { key: 'start', label: 'Start', type: 'time' }, { key: 'end', label: 'Finish', type: 'time' }], hint: 'Post-production days for this project. They show on the calendar in their own colour, go to your calendar feed, and hours clocked on them count as editing. Times are optional.' },
@@ -85,17 +89,27 @@ function editBooking(b, go) {
       { key: 'breakNote', label: 'Break terms', placeholder: 'e.g. 30 min lunch + 2 × 15 min' },
       { key: 'notes', label: 'Notes', type: 'textarea' },
     ],
+    // An end date before the start date is a slip of the finger, and is said so on the box instead of being thrown away.
+    validate: v => (v.endDate && v.date && v.endDate < v.date ? { key: 'endDate', message: 'The end date is before the start date' } : null),
     onSave: v => {
       const item = { ...v, id: v.id || uid() };
       if (item.breakMinutes === '' || item.breakMinutes == null) delete item.breakMinutes;
       if (!item.endDate || item.endDate <= item.date) delete item.endDate;
+      // The call sheet's schedule follows the shoot: its lines move by as many days as the start date did, and lose
+      // their dates when the shoot becomes one day (a one-day sheet has no date box to put them right with).
+      const lines = !isNew && item.callSheet && Array.isArray(item.callSheet.schedule) ? item.callSheet.schedule : [];
+      const moved = isNew || !b.date ? 0 : Math.round((parseISO(item.date) - parseISO(b.date)) / 864e5), shiftDay = iso => { const d = parseISO(iso); return ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() + moved)); };
+      if (lines.some(r => r && r.date) && (moved || !item.endDate)) item.callSheet = { ...item.callSheet, schedule: lines.map(r => (r && r.date ? { ...r, date: item.endDate && /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? shiftDay(r.date) : '' } : r)) };
       // Edit days: a date each, in order, with the times only when given; none at all leaves the booking as it was.
       const rows = (item.editDays || []).filter(r => r && /^\d{4}-\d{2}-\d{2}$/.test(r.date || '')).map(r => ({ date: r.date, ...(r.start ? { start: r.start } : {}), ...(r.end ? { end: r.end } : {}) })).sort((a, b) => a.date.localeCompare(b.date));
       const byDate = new Map(); for (const r of rows) { const have = byDate.get(r.date); if (!have || (!have.start && r.start)) byDate.set(r.date, r); } // one row per date: the calendar keys its events by the date
       item.editDays = [...byDate.values()];
       if (!item.editDays.length) delete item.editDays;
+      // The address follows the venue unless it was typed by hand: an empty box takes the venue's, and so does one that
+      // still holds the address of the venue the booking had before.
+      const was = !isNew && b.venueId && b.venueId !== item.venueId ? byId('venues', b.venueId) : null, typed = (item.address || '').trim();
       if (!item.venueId) delete item.venueId;
-      else if (!(item.address || '').trim()) item.address = byId('venues', item.venueId)?.address || '';
+      else if (!typed || (was && typed === (was.address || '').trim())) item.address = byId('venues', item.venueId)?.address || '';
       item.gearQty = Object.fromEntries(Object.entries(item.gearQty || {}).filter(([id]) => (item.gear || []).includes(id)));
       upsert('bookings', item);
       if (isNew) { const t = templateById(item.type); if (t) { const n = applyTemplateExtras(item.id, t); if (n) toast(`Template applied: ${n} item${n === 1 ? '' : 's'} added`); } }
@@ -188,12 +202,12 @@ function bookingCard(b, onclick, showDate, day = null) {
         h('div', { class: 'muted' }, [ed ? `✂ Edit day${ed.start ? ' · ' + ed.start + (ed.end ? '–' + ed.end : '') : ''}` : [(showDate || endOf(b) > b.date) && dateRange(b, fmtShort), b.start && `${b.start}${b.end ? '–' + b.end : ''}`].filter(Boolean).join(' · '), b.client].filter(Boolean).join(' · '))),
       h('span', { class: 'pills' }, ed && h('span', { class: 'pill edit' }, 'Edit day'), pill(b.status))),
     b.address && h('div', { class: 'muted small' }, '📍 ' + b.address.split('\n')[0]),
-    h('div', { class: 'muted small' }, `🎥 ${(b.gear || []).length} items · 👥 ${(b.crew || []).length + hiredPeople(b).length} crew`));
+    h('div', { class: 'muted small' }, `🎥 ${(b.gear || []).filter(id => byId('gear', id)).length} items · 👥 ${(b.crew || []).filter(id => byId('crew', id)).length + hiredPeople(b).length} crew`)); // what exists, as the booking's own page counts
   return holdToDelete(card, b);
 }
 
 /* -------------------------------- day -------------------------------- */
-const sunText = (iso, b) => { const loc = locationFor(b || null); if (!loc) return ''; const t = getTimes(new Date(parseISO(iso).getTime() + 12 * 36e5), loc.lat, loc.lon); return `☀ Rise ${fmtTime(t.sunrise)} · Set ${fmtTime(t.sunset)} · Golden hour ${fmtTime(t.goldenHour)}`; };
+const sunText = (iso, b) => { const loc = locationFor(b || null); if (!loc) return ''; const noon = new Date(parseISO(iso).getTime() + 12 * 36e5), t = getTimes(noon, loc.lat, loc.lon), f = loc.venue ? sunClock(noon, loc.lon).fmt : fmtTime; return `☀ Rise ${f(t.sunrise)} · Set ${f(t.sunset)} · Golden hour ${f(t.goldenHour)}`; }; // a venue on another clock: the times name their zone
 function sunLine(iso, b) {
   const loc = locationFor(b || null);
   if (!loc) return null;
@@ -364,7 +378,7 @@ function venueBlock(b, gear) {
       warns.map(w => h('div', { class: 'warn' }, '⚠ ' + w.text)),
       venueChips(v),
       (v.rules || '').trim() && h('div', { class: 'muted small prewrap' }, v.rules.split('\n').slice(0, 3).join('\n')),
-      v.access && h('div', { class: 'small' }, h('span', { class: 'muted' }, 'Access: '), v.access),
+      v.access && h('div', { class: 'small prewrap' }, h('span', { class: 'muted' }, 'Access: '), v.access), // prewrap: a map link typed there wraps inside the card
       mapButtons(v)));
 }
 

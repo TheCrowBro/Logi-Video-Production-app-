@@ -28,16 +28,21 @@ const qty = v => Math.max(1, Math.floor(Number(v)) || 1);
 //   'name'    only with matchNames: the same name and category, neither with a serial number: action onName
 // A row with no match is 'add'. A row's action may be changed to 'add', 'update' or 'skip' before applying.
 export function planGearImport(items, { existing = db.gear, onSerial = 'skip', onName = 'skip', matchNames = false } = {}) {
-  const byRef = new Map(), bySerial = new Map(), byName = new Map();
+  // By name an owned item is matched by one row only: two owned items of one name (four lights in the van, two on a
+  // shelf) are two rows in a list, and each row goes to its own, the one in the same place first. A row beyond the
+  // items owned under that name matches nothing and is an add.
+  const byRef = new Map(), bySerial = new Map(), byName = new Map(), taken = new Set(), place = x => String((x && x.location) || '').trim().toLowerCase();
   for (const g of existing) {
     const k = serialKey(g.serial);
     if (g.shared && g.shared.ref && !byRef.has(g.shared.ref)) byRef.set(g.shared.ref, g);
     if (k && !bySerial.has(k)) bySerial.set(k, g);
-    if (!k && !byName.has(nameKey(g))) byName.set(nameKey(g), g);
+    if (!k) { const n = nameKey(g); if (byName.has(n)) byName.get(n).push(g); else byName.set(n, [g]); }
   }
+  const named = item => { const free = (byName.get(nameKey(item)) || []).filter(g => !taken.has(g)); return free.find(g => place(g) === place(item)) || free[0] || null; };
   for (const g of existing) byRef.set(g.id, g); // an item's own id comes before a copy made from it
   const rows = (items || []).filter(x => x && String(x.name || '').trim()).map(item => {
-    const k = serialKey(item.serial), ref = item.ref && byRef.get(item.ref), ser = k && bySerial.get(k), nam = matchNames && !k && byName.get(nameKey(item));
+    const k = serialKey(item.serial), ref = item.ref && byRef.get(item.ref), ser = k && bySerial.get(k), nam = !ref && matchNames && !k && named(item);
+    if (ref || ser || nam) taken.add(ref || ser || nam);
     return ref ? { item, match: ref, why: 'ref', action: ref.id === item.ref ? 'skip' : 'update' } : ser ? { item, match: ser, why: 'serial', action: onSerial } : nam ? { item, match: nam, why: 'name', action: onName } : { item, match: null, why: '', action: 'add' };
   });
   return { rows };
@@ -106,7 +111,16 @@ function carry(d, plan, { kits = [], from = '' } = {}, out) {
 // (before, kitsBefore) and the kits it made (kitsAdded).
 export function applyGearImport(plan, { kits = [], from = '' } = {}) {
   const out = outcome();
-  return update(d => { carry(d, plan, { kits, from }, out); }) === false ? false : out;
+  if (update(d => { carry(d, plan, { kits, from }, out); }) === false) return false;
+  // "When it happened" is the time each record now carries, which is what Undo knows it by: the store counts a change
+  // to a record as later than that record's time before, and moves it where another device's clock ran ahead
+  // (update()), so the records of one import need not all carry the same time.
+  const gear = new Map(db.gear.map(g => [g.id, g])), kitsNow = new Map(db.kits.map(k => [k.id, k]));
+  out.times = {};
+  for (const id of [...out.added, ...out.updated]) { const g = gear.get(id); if (g && Number(g.updatedAt)) out.times[id] = g.updatedAt; }
+  for (const id of out.kits) { const k = kitsNow.get(id); if (k && Number(k.updatedAt)) out.times[id] = k.updatedAt; }
+  out.at = Object.values(out.times).reduce((t, v) => Math.max(t, v), out.at);
+  return out;
 }
 
 /* --------------------------------- room to keep it --------------------------------- */
@@ -149,7 +163,7 @@ export const roomForGear = (plan, { kits = [], from = '' } = {}) => roomFor(d =>
 export function undoGearImport(done) {
   const out = { removed: 0, restored: 0, kept: 0 };
   const ok = update(d => {
-    const now = Math.max(Date.now(), done.at + 1), fresh = x => x && x.updatedAt === done.at; // later than the import, so a merge with an older copy cannot bring the items back
+    const now = Math.max(Date.now(), done.at + 1), fresh = x => !!x && x.updatedAt === (done.times && x.id in done.times ? done.times[x.id] : done.at); // later than the import, so a merge with an older copy cannot bring the items back
     const goneKits = new Set((done.kitsAdded || []).filter(id => fresh(d.kits.find(k => k.id === id)) && !d.bookings.some(b => (b.kits || []).includes(id))));
     if (goneKits.size) { d.kits = d.kits.filter(k => !goneKits.has(k.id)); goneKits.forEach(id => { d.deleted[id] = now; }); }
     for (const was of done.kitsBefore || []) { const i = d.kits.findIndex(k => k.id === was.id); if (i >= 0 && fresh(d.kits[i])) d.kits[i] = { ...was, updatedAt: now }; }

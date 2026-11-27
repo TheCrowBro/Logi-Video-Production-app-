@@ -63,7 +63,8 @@ function finder(getTarget, label) {
   const handler = e => {
     if (e.webkitCompassHeading != null) heading = e.webkitCompassHeading;
     else if (e.absolute && e.alpha != null) heading = (360 - e.alpha) % 360;
-    else if (e.alpha != null && heading == null) heading = (360 - e.alpha) % 360;
+    // A reading that is not absolute (a device with no compass) says how far the phone has turned, not where it points:
+    // it is no heading, and after two seconds the person is told there is no compass.
     if (e.beta != null) pitch = e.beta - 90;
     paint();
   };
@@ -88,14 +89,14 @@ function finder(getTarget, label) {
       window.addEventListener('deviceorientation', handler);
       on = true; btn.textContent = 'Stop aiming';
       off = [() => window.removeEventListener('deviceorientationabsolute', handler), () => window.removeEventListener('deviceorientation', handler)];
-      setTimeout(() => { if (heading == null) out.textContent = denied ? 'Motion access was refused. Allow “motion & orientation” for this site in the browser settings, then try again.' : 'No compass sensor found on this device.'; }, 2000);
+      setTimeout(() => { if (on && heading == null) out.textContent = denied ? 'Motion access was refused. Allow “motion & orientation” for this site in the browser settings, then try again.' : 'No compass sensor found on this device.'; }, 2000);
     } catch { toast('Compass not available'); }
   };
   const stop = () => { off.forEach(f => f()); off = []; on = false; heading = null; btn.textContent = 'Aim with phone'; out.className = 'finder muted'; out.textContent = 'Tap “Aim with phone” and hold the phone upright, back camera facing out.'; };
   const btn = h('button', { class: 'btn primary', onclick: () => (on ? stop() : start()) }, 'Aim with phone');
   try { S.declination = Number(localStorage.getItem('logi-decl')) || 0; } catch { /* keep */ }
   const decl = h('input', { type: 'number', step: 'any', value: S.declination, 'aria-label': 'Magnetic declination in degrees', oninput: e => { S.declination = Number(e.target.value) || 0; try { localStorage.setItem('logi-decl', S.declination); } catch { /* ignore */ } } });
-  return { el: h('div', { class: 'card' }, h('div', { class: 'card-row' }, btn, h('label', { class: 'decl small muted' }, 'Declination° (E+) ', decl)), out), stop, repaint: paint };
+  return { el: h('div', { class: 'card' }, h('div', { class: 'card-row' }, btn, h('label', { class: 'decl small muted' }, 'Declination° (E+) ', decl)), out), stop, repaint: paint, on: () => on };
 }
 
 /* --------------------------------- sun --------------------------------- */
@@ -105,7 +106,7 @@ function sun(root) {
   const view = h('div');
   const noon = () => new Date(parseISO(S.date).getTime() + 12 * 36e5);
   let minute = null; // scrubber (minutes since local midnight); null = live
-  let fin;
+  let fin, readNow = null; // readNow: the live readout and the chart alone, without rebuilding the page
 
   const dateIn = h('input', { type: 'date', value: S.date, 'aria-label': 'Date', onchange: e => { S.date = e.target.value || todayISO(); minute = null; draw(); } });
   const bar = locBar(() => draw());
@@ -146,20 +147,20 @@ function sun(root) {
           readout('Light', p.altitude > 6 ? 'Daylight' : p.altitude > -0.8 ? 'Golden hour' : p.altitude > -6 ? 'Civil twilight' : p.altitude > -12 ? 'Blue/nautical' : 'Night')));
       chart.replaceChildren(arc(loc, noon(), when, t));
     };
-    draw2();
+    draw2(); readNow = draw2;
     fin = finder(() => getPosition(new Date(), loc.lat, loc.lon), 'the sun');
 
     view.replaceChildren(
       h('div', { class: 'card' }, live, chart, range, h('div', { class: 'row-edit' }, dateIn, h('button', { class: 'btn ghost small', onclick: () => { minute = null; S.date = todayISO(); dateIn.value = S.date; draw(); } }, 'Now'))),
       h('div', { class: 'card times' }, rows.map(([l, d, , az]) => h('div', { class: 'time-row' }, h('span', null, l), h('b', null, fmtTime(d)), az != null ? h('span', { class: 'muted' }, `${az.toFixed(0)}° ${compassPoint(az)}`) : h('span'))),
-        len != null && h('div', { class: 'muted small' }, `Day length ${Math.floor(len)}h ${pad(Math.round((len % 1) * 60))}m`),
+        len != null && h('div', { class: 'muted small' }, `Day length ${Math.floor(Math.round(len * 60) / 60)}h ${pad(Math.round(len * 60) % 60)}m`),
         isNaN(t.sunrise) && h('div', { class: 'muted small' }, 'Sun does not rise or set on this date at this latitude.')),
       fin.el, h('p', { class: 'muted small' }, 'Times are shown in this device’s time zone. Compass direction is magnetic unless you set the local declination.'));
     return fin;
   }
   root.append(bar, view);
   draw();
-  timer = setInterval(() => { if (minute == null && S.date === todayISO() && getLoc() && !document.hidden && !view.querySelector('.finder.lock')) { const sel = document.activeElement; if (!(sel && sel.tagName === 'INPUT')) draw(); } }, 60000);
+  timer = setInterval(() => { if (minute == null && S.date === todayISO() && getLoc() && !document.hidden && !view.querySelector('.finder.lock')) { const sel = document.activeElement; if (sel && sel.tagName === 'INPUT') return; if (fin && fin.on() && readNow) { readNow(); fin.repaint(); } else draw(); } }, 60000); // a finder that is aiming is not rebuilt (that would switch it off): only the readout moves on
   return () => { clearInterval(timer); fin && fin.stop(); };
 }
 
@@ -233,16 +234,21 @@ function wb(root) {
   const read = h('div', { class: 'wb-read' }, 'Point the camera at a neutral grey or white card in the light you want to measure.');
   const note = h('p', { class: 'muted small' });
   const swatch = h('div', { class: 'swatch' });
-  let stream, raf, held = null, camK = null, last = 0;
+  let stream, raf, held = null, camK = null, last = 0, gone = false, starting = false; // gone: the tool was left
 
   const holdBtn = h('button', { class: 'btn ghost', disabled: true, onclick: () => { held = held ? null : last; holdBtn.textContent = held ? 'Release' : 'Hold reading'; } }, 'Hold reading');
   const startBtn = h('button', { class: 'btn primary', onclick: start }, 'Start camera');
 
+  // One camera at a time, and none once the tool has been left: an answer to the permission question that comes
+  // late (or a second tap on Start) would otherwise leave a camera on that nothing switches off.
   async function start() {
+    if (starting) return; starting = true; startBtn.disabled = true;
+    let s;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
-    } catch (e) { read.textContent = 'Camera unavailable: ' + (e.message || e.name) + ' (needs HTTPS and permission).'; return; }
-    video.srcObject = stream;
+      s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
+    } catch (e) { starting = false; startBtn.disabled = false; read.textContent = 'Camera unavailable: ' + (e.message || e.name) + ' (needs HTTPS and permission).'; return; }
+    if (gone) { s.getTracks().forEach(t => t.stop()); return; }
+    stream = s; video.srcObject = stream;
     startBtn.hidden = true; holdBtn.disabled = false;
     const track = stream.getVideoTracks()[0];
     try {
@@ -255,7 +261,7 @@ function wb(root) {
     note.textContent = camK
       ? `Camera white balance locked at ${camK}K, so the reading reflects the light on your card.`
       : 'This camera keeps auto white balance on, so readings drift toward neutral. Treat them as a rough indication and trust a grey card + your camera’s own WB for exact work.';
-    loop();
+    if (!gone) loop();
   }
 
   function loop() {
@@ -284,12 +290,12 @@ function wb(root) {
 
   root.append(h('div', { class: 'card' }, h('div', { class: 'cam-wrap' }, video, h('div', { class: 'reticle', 'aria-hidden': 'true' })),
     h('div', { class: 'wb-panel' }, swatch, read), h('div', { class: 'actions' }, startBtn, holdBtn), note));
-  return () => { cancelAnimationFrame(raf); stream && stream.getTracks().forEach(t => t.stop()); };
+  return () => { gone = true; cancelAnimationFrame(raf); stream && stream.getTracks().forEach(t => t.stop()); };
 }
 
 /* -------------------------------- noise -------------------------------- */
 function noise(root) {
-  let ctxA, stream, raf, analyser, buf, cal = 94;
+  let ctxA, stream, raf, analyser, buf, cal = 94, gone = false, starting = false; // as in the white balance tool
   try { cal = Number(localStorage.getItem('logi-cal')) || 94; } catch { /* ignore */ }
   const big = h('div', { class: 'db' }, '— dB');
   const label = h('div', { class: 'muted db-label' }, 'Tap start and keep the phone still, mic uncovered.');
@@ -304,11 +310,16 @@ function noise(root) {
   const calIn = h('input', { type: 'number', value: cal, step: 1, 'aria-label': 'Calibration offset', oninput: e => { cal = Number(e.target.value) || 0; try { localStorage.setItem('logi-cal', cal); } catch { /* ignore */ } } });
 
   async function start() {
+    if (starting) return; starting = true; startBtn.disabled = true;
+    let s;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-    } catch (e) { label.textContent = 'Microphone unavailable: ' + (e.message || e.name) + ' (needs HTTPS and permission).'; return; }
+      s = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    } catch (e) { starting = false; startBtn.disabled = false; label.textContent = 'Microphone unavailable: ' + (e.message || e.name) + ' (needs HTTPS and permission).'; return; }
+    if (gone) { s.getTracks().forEach(t => t.stop()); return; }
+    stream = s;
     ctxA = new (window.AudioContext || window.webkitAudioContext)();
     await ctxA.resume();
+    if (gone) return; // left meanwhile: the clean-up has closed both
     analyser = ctxA.createAnalyser(); analyser.fftSize = 2048;
     ctxA.createMediaStreamSource(stream).connect(analyser);
     buf = new Float32Array(analyser.fftSize);
@@ -341,5 +352,5 @@ function noise(root) {
     h('div', { class: 'actions center' }, startBtn, resetBtn),
     h('label', { class: 'decl small muted' }, 'Calibration offset (dB) ', calIn),
     h('p', { class: 'muted small' }, 'Phone microphones aren’t calibrated, so this is an estimate. Compare against a reference meter once and adjust the offset to match.')));
-  return () => { cancelAnimationFrame(raf); stream && stream.getTracks().forEach(t => t.stop()); ctxA && ctxA.close(); };
+  return () => { gone = true; cancelAnimationFrame(raf); stream && stream.getTracks().forEach(t => t.stop()); ctxA && ctxA.close().catch(() => {}); };
 }

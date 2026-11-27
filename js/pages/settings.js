@@ -30,9 +30,7 @@ export function reveal(title) {
   const d = [...document.querySelectorAll('#page details.settings-section, #page details.settings-group')].find(x => x.querySelector(':scope > summary .ss-title')?.textContent === title);
   if (!d) return false;
   for (let p = d; p; p = p.parentElement && p.parentElement.closest('details')) p.open = true;
-  const nav = document.getElementById('rolodex'); // sticky at the top: the section lands under it, not behind it
-  d.style.scrollMarginTop = `${(nav ? nav.getBoundingClientRect().height : 0) + 8}px`;
-  d.scrollIntoView({ block: 'start' });
+  d.scrollIntoView({ block: 'start' }); // under the sticky Rolodex bar, not behind it (the page's scroll-padding-top, set in js/app.js)
   d.querySelector(':scope > summary')?.focus({ preventScroll: true });
   return true;
 }
@@ -103,6 +101,10 @@ export const settings = {
     const rate = billing().dayRate, nTemplates = projectTemplates().length;
     root.append(
       h('div', { class: 'page-head' }, h('h1', null, 'Settings')),
+      // Its own button above the fold-downs, so that nobody has to look for it (js/feedback.js, fetched on the first tap).
+      h('div', { class: 'card feedback-card' },
+        h('button', { class: 'btn primary feedback-btn', type: 'button', 'data-fk': 'feedback', onclick: () => import('../feedback.js').then(m => m.openFeedback(), e => { console.error(e); toast('Could not open it. Check the connection and try again, or write to support@crowmade.app'); }) }, '💬 Report a problem or send feedback'),
+        h('p', { class: 'small muted' }, 'Something not working, or an idea? It opens an email to us with your Vdex version and device already in it.')),
       group(GENERAL, db.profile.name || 'profile not set', [
         section('Display & accessibility', prefsSummary(), display.el),
         section('Profile', db.profile.name || 'not set', profilePanel()),
@@ -170,10 +172,12 @@ function fieldDefaults() {
   const saveLoc = () => { const a = parseFloat(lat.value), o = parseFloat(lon.value); if (a >= -90 && a <= 90 && o >= -180 && o <= 180) { LS.set('logi-loc', JSON.stringify({ lat: a, lon: o })); toast('Location saved'); } else if (!lat.value && !lon.value) { LS.set('logi-loc', null); } else toast('Enter a valid latitude and longitude'); };
   const gps = () => { if (!navigator.geolocation) return toast('Location is not available here'); navigator.geolocation.getCurrentPosition(p => { lat.value = +p.coords.latitude.toFixed(4); lon.value = +p.coords.longitude.toFixed(4); saveLoc(); }, () => toast('Could not get your location'), { timeout: 10000 }); };
   const num = (key, label, hint, attrs = {}) => h('div', { class: 'field' }, h('label', null, label), h('input', { type: 'number', step: 'any', value: LS.get(key) ?? '', 'aria-label': label, ...attrs, onchange: e => { LS.set(key, e.target.value); toast('Saved'); } }), h('small', { class: 'muted' }, hint));
-  const units = LS.get('logi-units') || 'm';
+  const units = LS.get('logi-units') || 'm', wx = ['c', 'f'].includes(LS.get('logi-wx-units')) ? LS.get('logi-wx-units') : '';
   return h('div', { class: 'stack' },
     h('div', { class: 'field' }, h('label', null, 'Location for the sun and Polaris tools'), h('div', { class: 'row-edit' }, lat, lon), h('div', { class: 'actions' }, h('button', { class: 'btn ghost small', onclick: saveLoc }, 'Save'), h('button', { class: 'btn ghost small', onclick: gps }, 'Use GPS'))),
     h('div', { class: 'field' }, h('label', null, 'Distance units'), h('div', { class: 'seg' }, [['m', 'Metres'], ['ft', 'Feet']].map(([v, t]) => h('button', { type: 'button', class: units === v ? 'on' : '', 'aria-pressed': units === v, onclick: e => { LS.set('logi-units', v); e.target.parentNode.querySelectorAll('button').forEach(b => { b.classList.toggle('on', b === e.target); b.setAttribute('aria-pressed', b === e.target); }); } }, t)))),
+    // The forecast on a booking follows the distance units (feet: °F and mph) unless it is given units of its own here.
+    h('div', { class: 'field wx-units' }, h('label', null, 'Weather forecast units'), h('div', { class: 'seg', role: 'group', 'aria-label': 'Weather forecast units' }, [['', 'As distances'], ['c', '°C, km/h'], ['f', '°F, mph']].map(([v, t]) => h('button', { type: 'button', class: wx === v ? 'on' : '', 'aria-pressed': wx === v, onclick: e => { LS.set('logi-wx-units', v); e.target.parentNode.querySelectorAll('button').forEach(b => { b.classList.toggle('on', b === e.target); b.setAttribute('aria-pressed', b === e.target); }); } }, t))), h('small', { class: 'muted' }, 'As distances: metres give °C and km/h, feet give °F and mph.')),
     num('logi-decl', 'Magnetic declination (°, east positive)', 'Lets the compass pointer show true north. Look yours up for your area.'),
     num('logi-eyeh', 'Camera height for the range finder (m)', 'Height of the phone above the ground when you measure.', { min: 0.1 }),
     num('logi-cal', 'Noise meter calibration offset (dB)', 'Adjust once against a reference meter. Default 94.'));
@@ -183,7 +187,7 @@ function fieldDefaults() {
 function profilePanel() {
   const p = db.profile;
   const line = (label, value) => value && h('div', null, h('span', { class: 'muted' }, label), h('span', null, value));
-  const cur = h('input', { type: 'text', value: p.currency || '$', 'aria-label': 'Currency symbol', maxLength: 4, onchange: e => { update(d => { d.profile = { ...d.profile, currency: e.target.value.trim() || '$', updatedAt: Date.now() }; }); toast('Saved'); } });
+  const cur = h('input', { type: 'text', value: p.currency || '$', 'aria-label': 'Currency symbol', maxLength: 4, onchange: e => { const v = e.target.value.trim() || '$'; e.target.value = v; setTimeout(() => { update(d => { d.profile = { ...d.profile, currency: v, updatedAt: Date.now() }; }); toast('Saved'); }, 0); } }); // the box shows what is stored (the page drawn again keeps what the box holds); saved a moment later, once the focus has moved on
   return h('div', { class: 'stack' },
     h('p', { class: 'small muted' }, 'Your details go on call sheets, quotes and invoices, and make the contact card and QR code on the Me page.'),
     p.name || p.business || p.phone || p.email

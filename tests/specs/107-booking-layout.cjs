@@ -5,6 +5,7 @@
 // stripboard; the back button; the share button named for the calendar.
 const { chromium } = require('playwright');
 const { acceptTerms, chooseRole } = require('../helpers.cjs');
+const fs = require('fs');
 const S = process.env.S;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const ok = (name, cond, extra = '') => console.log((cond ? 'PASS ' : 'FAIL ') + name + (extra ? ' — ' + extra : ''));
@@ -181,7 +182,306 @@ const iso = n => { const d = new Date(); d.setDate(d.getDate() + n); return `${d
   ok('the stripboard page shows the new strips, the warning and the shot list under the board', (await page.locator('.sb-strip').count()) === 2 && (await page.locator('.sb-page .review-note').count()) === 1 && (await page.locator('#sb-shots .check-item').count()) === 8 && (await page.locator('.sb-page h1').innerText()) === 'Stripboard & shot list'); // 7 shots plus the one the second import added
   await page.locator('.sb-page .review-note button', { hasText: 'Checked' }).click(); await sleep(300);
   ok('Checked clears the warning', (await page.locator('.sb-page .review-note').count()) === 0 && !(await page.evaluate(id => import('./js/store.js').then(s => !!s.byId('bookings', id).shotImportReview), seed.id)));
+
+  // ---- repairs after 1.4.0: the calendar ----
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.showMonth())); await sleep(300);
+  // The calendar file: an overnight shoot ends the next morning; semicolons are escaped; lines are folded by bytes, on whole characters
+  const icsFix = await page.evaluate(() => import('./js/calendar.js').then(c => {
+    const night = { id: 'n1', title: 'Night shoot', date: '2026-12-10', start: '22:00', end: '04:00', status: 'Confirmed' };
+    const ev = c.eventOf(night), bare = c.eventOf({ ...night, end: '' }), ed = c.editEvents([{ id: 'n2', title: 'Edit', date: '2026-12-10', status: 'Confirmed', editDays: [{ date: '2026-12-20', start: '22:00', end: '02:00' }] }])[0];
+    const semi = c.icsFor([{ id: 'n3', title: 'Launch; teaser, and film', address: 'Unit 4; Dock Road, Portside', date: '2026-12-10', status: 'Confirmed' }]);
+    const long = c.icsFor([{ id: 'n4', title: 'A'.repeat(65) + '🎬 shoot', address: 'Улица Большая Дмитровка, дом 7, строение 2, вход со двора, домофон 14, третий этаж, студия', date: '2026-12-10', status: 'Confirmed' }]);
+    const te = new TextEncoder(), asRead = new TextDecoder().decode(te.encode(long)); // as a calendar reads the saved file
+    return { end: ev.end.getTime() === new Date(2026, 11, 11, 4, 0).getTime(), hour: bare.end - bare.start === 36e5, edit: ed.end.getTime() === new Date(2026, 11, 21, 2, 0).getTime(),
+      semi: semi.includes('SUMMARY:Launch\\; teaser\\, and film') && semi.includes('LOCATION:Unit 4\\; Dock Road\\, Portside'),
+      bytes: Math.max(...long.split('\r\n').map(l => te.encode(l).length)), emoji: asRead.replace(/\r\n /g, '').includes('🎬 shoot') && !asRead.includes('�') };
+  }));
+  ok('an overnight shoot (22:00 to 04:00) goes to the calendar ending 04:00 the next day, an overnight edit day too, and a shoot with no finish still gets an hour', icsFix.end && icsFix.edit && icsFix.hour, JSON.stringify(icsFix));
+  ok('the calendar file escapes semicolons as it does commas', icsFix.semi);
+  ok('its lines are folded at 75 bytes and never in the middle of an emoji or a letter', icsFix.bytes <= 75 && icsFix.emoji, JSON.stringify({ bytes: icsFix.bytes, emoji: icsFix.emoji }));
+
+  // Two-way sync against a stand-in calendar: only the requests are stood in for, the sync itself is the real one
+  await page.evaluate(async () => {
+    const [c, s] = await Promise.all([import('./js/calendar.js'), import('./js/store.js')]);
+    const G = c.ADAPTERS.google, fake = { events: new Map(), n: 0, skew: 0, delay: 0, calendars: [], updates: [] };
+    const shape = e => ({ title: fake.tidy ? fake.tidy(e.title) : e.title, allDay: e.allDay, start: e.allDay ? e.start : e.start.toISOString(), end: e.allDay ? e.end : e.end.toISOString(), location: fake.tidy ? fake.tidy(e.location) : e.location }); // tidy: what this calendar does to a title or a place it is given
+    const wait = () => (fake.delay ? new Promise(r => setTimeout(r, fake.delay)) : null);
+    window.__cal = { fake, real: { ...G }, c, s, of: id => [...fake.events.values()].find(e => e.logiId === id),
+      sync: async () => { await c.syncCalendar({ interactive: true, which: 'account' }); while (c.calState.status === 'syncing') await new Promise(r => setTimeout(r, 20)); },
+      edit: (id, patch) => Object.assign(window.__cal.of(id), patch, { updated: Date.now() + fake.skew + 60000 }), // an edit made in the calendar, a minute from now
+      at: (y, m, d, hh, mm) => new Date(y, m - 1, d, hh, mm).toISOString() };
+    Object.assign(G, { signIn: async () => {}, signOut() {},
+      call: async (path, init = {}) => { if (init.method === 'POST' && path === '/calendars') { const id = 'cal' + (fake.calendars.length + 1); fake.calendars.push(id); return { ok: true, json: async () => ({ id }) }; } const m = /^\/calendars\/([^/]+)$/.exec(path); return { ok: !!m && fake.calendars.includes(decodeURIComponent(m[1])), json: async () => ({}) }; },
+      list: async () => [...fake.events.values()].map(e => ({ ...e })),
+      create: async (id, e) => { await wait(); const eid = 'ev' + (++fake.n); fake.events.set(eid, { id: eid, logiId: e.id, ...shape(e), updated: Date.now() + fake.skew }); return eid; },
+      update: async (id, eid, e) => { await wait(); Object.assign(fake.events.get(eid), shape(e), { updated: Date.now() + fake.skew }); fake.updates.push(e.id); },
+      remove: async (id, eid) => { fake.events.delete(eid); } });
+    const old = Date.now() - 3600000, bk = (id, title, more) => ({ id, title, client: '', type: 'brand', status: 'Confirmed', address: 'Old Road 1', stakeholders: [], crew: [], gear: [], notes: '', updatedAt: old, ...more });
+    s.update(d => { d.bookings.push(bk('cs-night', 'Overnight', { date: '2026-12-10', start: '22:00', end: '04:00' }), bk('cs-start', 'Start only', { date: '2026-12-11', start: '09:00' }), bk('cs-multi', 'Three days', { date: '2026-12-14', endDate: '2026-12-16', start: '09:00' }), bk('cs-norm', 'Normal', { date: '2026-12-12', start: '09:00', end: '17:00' })); });
+    await c.connectCalendar('google'); while (c.calState.status === 'syncing') await new Promise(r => setTimeout(r, 20));
+  });
+  const pick = () => page.evaluate(() => Object.fromEntries(['cs-night', 'cs-start', 'cs-multi', 'cs-norm'].map(id => { const b = window.__cal.s.byId('bookings', id); return [id, [b.title, b.date, b.endDate || '', b.start || '', b.end || '', b.address].join('|')]; })));
+  const connected = await page.evaluate(() => ({ n: ['cs-night', 'cs-start', 'cs-multi', 'cs-norm'].filter(id => window.__cal.of(id)).length, nightEnd: window.__cal.of('cs-night').end === window.__cal.at(2026, 12, 11, 4, 0), cals: window.__cal.fake.calendars.length }));
+  ok('connecting puts the bookings in one “Vdex bookings” calendar, the overnight one ending the next morning', connected.n === 4 && connected.nightEnd && connected.cals === 1, JSON.stringify(connected));
+  await page.evaluate(async () => { for (const id of ['cs-night', 'cs-start', 'cs-multi', 'cs-norm']) window.__cal.edit(id, { location: 'New Place 5' }); await window.__cal.sync(); });
+  const moved = await pick();
+  ok('a new address typed on the calendar events comes back as the address and nothing else: no finish is made up or overwritten', moved['cs-night'] === 'Overnight|2026-12-10||22:00|04:00|New Place 5' && moved['cs-start'] === 'Start only|2026-12-11||09:00||New Place 5' && moved['cs-multi'] === 'Three days|2026-12-14|2026-12-16|09:00||New Place 5' && moved['cs-norm'] === 'Normal|2026-12-12||09:00|17:00|New Place 5', JSON.stringify(moved));
+  await page.evaluate(async () => { const C = window.__cal; C.edit('cs-night', { start: C.at(2026, 12, 10, 21, 0), end: C.at(2026, 12, 11, 5, 0) }); C.edit('cs-start', { start: C.at(2026, 12, 12, 10, 0), end: C.at(2026, 12, 12, 11, 0) }); C.edit('cs-norm', { end: C.at(2026, 12, 12, 18, 30) }); await C.sync(); });
+  const timed = await pick();
+  ok('times changed in the calendar come back: a finish the next morning stays an overnight finish, a moved shoot with no finish gets none, a later finish is taken', timed['cs-night'] === 'Overnight|2026-12-10||21:00|05:00|New Place 5' && timed['cs-start'] === 'Start only|2026-12-12||10:00||New Place 5' && timed['cs-norm'] === 'Normal|2026-12-12||09:00|18:30|New Place 5', JSON.stringify(timed));
+  // The calendar's clock 20 seconds ahead of this device's: Vdex's own push must not pass for a calendar edit
+  await page.evaluate(async () => { const C = window.__cal; C.fake.skew = 20000; C.s.upsert('bookings', { ...C.s.byId('bookings', 'cs-norm'), notes: 'Bring the long lens' }); await C.sync(); await C.sync();
+    C.s.upsert('bookings', { ...C.s.byId('bookings', 'cs-norm'), title: 'Normal renamed', date: '2026-12-19' }); await C.sync(); });
+  const skew = await pick(), skewEv = await page.evaluate(() => window.__cal.of('cs-norm').title);
+  ok('with the device’s clock behind the calendar’s, an edit made in Vdex is kept and sent, and nothing else changes', skew['cs-norm'] === 'Normal renamed|2026-12-19||09:00|18:30|New Place 5' && skewEv === 'Normal renamed' && skew['cs-night'] === timed['cs-night'], JSON.stringify(skew) + ' / ' + skewEv);
+  // A booking changed while a sync is still running goes out when that sync ends
+  await sleep(1700); // let the automatic syncs of the changes above finish first
+  const queued = await page.evaluate(async () => { const C = window.__cal, nap = ms => new Promise(r => setTimeout(r, ms)); while (C.c.calState.status === 'syncing') await nap(20);
+    C.fake.skew = 0; C.fake.delay = 300;
+    C.s.upsert('bookings', { ...C.s.byId('bookings', 'cs-norm'), title: 'Renamed again' }); const first = C.c.syncCalendar();
+    await nap(80); C.s.upsert('bookings', { ...C.s.byId('bookings', 'cs-norm'), start: '06:00' }); C.c.syncCalendar(); // asked for while the first is still sending
+    await first; C.fake.delay = 0; const ev = C.of('cs-norm'); return { title: ev.title, hour: new Date(ev.start).getHours(), state: C.c.calState.status }; });
+  ok('a change made while a sync is running reaches the calendar when that sync ends', queued.title === 'Renamed again' && queued.hour === 6 && queued.state === 'ok', JSON.stringify(queued));
+  // A calendar that hands back a title and a place with the spaces tidied has not been edited
+  const tidy = await page.evaluate(async () => { const C = window.__cal, nap = ms => new Promise(r => setTimeout(r, ms)), settle = async () => { await nap(1700); while (C.c.calState.status === 'syncing') await nap(20); };
+    C.fake.tidy = t => String(t || '').replace(/\s+/g, ' ').trim();
+    const was = { title: 'Title  with   odd spacing ', client: 'ACME  Ltd ', address: ' 12 High St \n London ' };
+    C.s.upsert('bookings', { id: 'cs-space', ...was, type: 'brand', status: 'Confirmed', date: '2026-12-19', start: '10:00', end: '12:00', stakeholders: [], crew: [], gear: [], notes: '' });
+    await settle(); C.fake.updates.length = 0;
+    for (let i = 0; i < 3; i++) { await C.sync(); await settle(); }
+    const b = () => C.s.byId('bookings', 'cs-space'), out = { kept: b().title === was.title && b().address === was.address, sent: C.fake.updates.filter(id => id === 'cs-space').length, event: C.of('cs-space').title };
+    C.edit('cs-space', { title: 'Renamed in the calendar — ACME Ltd', location: 'Unit 4, The Yard' }); await C.sync(); await settle();
+    out.renamed = b().title + ' | ' + b().address; out.eventAfter = C.of('cs-space').title;
+    // the calendar's stamp of an event moves though nothing Vdex reads has changed: the entry that says so is a newer entry
+    const entry = () => ({ ...C.s.db.calSync.events['cs-norm'] }), e0 = entry(); C.edit('cs-norm', {}); await C.sync(); const e1 = entry();
+    out.newer = e1.seen > e0.seen && e1.at > e0.at;
+    const copy = seen => ({ ...JSON.parse(C.s.serialize()), calSync: { ...C.s.db.calSync, events: { x: { id: 'ev', hash: 'h', at: 5, seen } } } }), pickSeen = (a, b) => C.s.mergeDb(a, b).calSync.events.x.seen;
+    out.tie = [pickSeen(copy(402), copy(710)), pickSeen(copy(710), copy(402))].join();
+    C.fake.tidy = null; C.s.remove('bookings', 'cs-space'); await settle(); return out; });
+  ok('a calendar that returns the title and the address with the spaces tidied changes nothing in the booking, and nothing more is sent', tidy.kept && tidy.sent === 0 && tidy.event === 'Title with odd spacing — ACME Ltd', JSON.stringify(tidy));
+  ok('a title changed in such a calendar comes back without the client’s name at its end, once', tidy.renamed === 'Renamed in the calendar | Unit 4, The Yard' && tidy.eventAfter === 'Renamed in the calendar — ACME Ltd', JSON.stringify(tidy));
+  ok('a look at the calendar that only moves the stamp makes a newer entry in the map, and of two entries of the same time every device keeps the same one', tidy.newer && tidy.tie === '710,710', JSON.stringify(tidy));
+  // Disconnect and Connect again use the calendar Vdex made before
+  const reconnect = await page.evaluate(async () => { const C = window.__cal; C.c.disconnectCalendar('account'); await C.c.connectCalendar('google'); while (C.c.calState.status === 'syncing') await new Promise(r => setTimeout(r, 20));
+    const out = { cals: C.fake.calendars.length, id: C.s.db.calSync.calendarId, events: [...C.fake.events.values()].filter(e => e.logiId === 'cs-norm').length };
+    C.c.disconnectCalendar('account'); Object.assign(C.c.ADAPTERS.google, C.real); C.s.update(d => { d.bookings = d.bookings.filter(b => !b.id.startsWith('cs-')); }); return out; });
+  ok('Disconnect and Connect again go back to the same calendar: no second “Vdex bookings”, no booking twice', reconnect.cals === 1 && reconnect.id === "cal1" && reconnect.events === 1, JSON.stringify(reconnect));
+
+  // ---- repairs after 1.4.0: the booking form and page ----
+  const form = page.locator('.sheet form');
+  await page.getByRole('button', { name: '+ New' }).click(); await form.waitFor();
+  await form.locator('input[data-key="title"]').fill('   '); await form.locator('button[type=submit]').click(); await sleep(300);
+  ok('a project name of spaces alone is refused like an empty one: the form stays open and nothing is stored', (await form.count()) === 1 && !(await page.evaluate(() => import('./js/store.js').then(s => s.db.bookings.some(b => !String(b.title || '').trim())))), await form.locator('input[data-key="title"]').evaluate(e => e.validationMessage).catch(() => 'form closed'));
+  if (!(await form.count())) { await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.bookings = d.bookings.filter(b => String(b.title || '').trim()); }))); await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.showMonth())); await page.getByRole('button', { name: '+ New' }).click(); await form.waitFor(); }
+  await form.locator('input[data-key="title"]').fill('Backwards'); await form.locator('input[data-key="date"]').fill('2026-12-20'); await form.locator('input[data-key="endDate"]').fill('2026-12-18');
+  await form.locator('button[type=submit]').click(); await sleep(300);
+  const backMsg = (await form.count()) ? await form.locator('input[data-key="endDate"]').evaluate(e => e.validationMessage) : 'form closed';
+  ok('an end date before the start date is said so on the End date box, and the form stays open', backMsg === 'The end date is before the start date', backMsg);
+  const venueSel = form.locator('select').filter({ has: page.locator('option', { hasText: 'No saved venue' }) });
+  if (await form.count()) { await form.locator('input[data-key="endDate"]').fill('2026-12-22'); await form.locator('button[type=submit]').click(); await sleep(400); }
+  const back1 = await page.evaluate(() => import('./js/store.js').then(s => { const b = s.db.bookings.find(x => x.title === 'Backwards') || {}; return { id: b.id, end: b.endDate }; }));
+  ok('with the end date put right the booking is saved over its days', back1.end === '2026-12-22', JSON.stringify(back1));
+  // The address follows the venue unless it was typed by hand
+  const editBk = async () => { await page.locator('.bk-detail .page-head').getByRole('button', { name: 'Edit', exact: true }).click(); await form.waitFor(); };
+  const saveBk = async () => { await form.locator('button[type=submit]').click(); await sleep(400); };
+  const addr = () => page.evaluate(id => import('./js/store.js').then(s => { const b = s.byId('bookings', id); return { address: b.address, venue: (s.byId('venues', b.venueId) || {}).address }; }), back1.id);
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), back1.id); await sleep(300);
+  await editBk(); await venueSel.selectOption({ label: 'Harbour Brewing Co. taproom' }); await saveBk(); const at1 = await addr();
+  await editBk(); await venueSel.selectOption({ label: 'Northline Legal, level 9' }); await saveBk(); const at2 = await addr();
+  ok('changing the saved venue changes the address that came from the venue before', !!at1.address && at1.address === at1.venue && at2.address === at2.venue && at2.address !== at1.address, JSON.stringify([at1, at2]));
+  await page.evaluate(id => Promise.all([import('./js/store.js'), import('./js/pages/venues.js')]).then(([s, v]) => v.editVenue(s.byId('venues', s.byId('bookings', id).venueId))), back1.id); await form.waitFor();
+  await form.locator('textarea[data-key="address"]').fill('21 Corrected Street, Portside'); await saveBk();
+  ok('correcting the venue’s address corrects it on the bookings that held the old one', (await addr()).address === '21 Corrected Street, Portside', JSON.stringify(await addr()));
+  await editBk(); await form.locator('textarea[data-key="address"]').fill('Loading bay B, behind the building'); await saveBk();
+  await editBk(); await venueSel.selectOption({ label: 'Harbour Brewing Co. taproom' }); await saveBk();
+  ok('an address typed by hand stays when the venue changes', (await addr()).address === 'Loading bay B, behind the building', JSON.stringify(await addr()));
+
+  // What is being typed on the page survives the redraw a change elsewhere causes (a calendar or cloud sync)
+  const shot = page.locator('#bk-shots input[aria-label="New shot"]');
+  await shot.click(); await page.keyboard.type('Wide of the brewhouse');
+  await page.evaluate(() => import('./js/store.js').then(s => s.update(d => { d.profile.bio = 'changed elsewhere ' + Date.now(); }))); await sleep(150);
+  await page.keyboard.type(' from the mezzanine'); await page.keyboard.press('Enter'); await sleep(300);
+  const shots = await page.evaluate(id => import('./js/store.js').then(s => (s.byId('bookings', id).shots || []).map(x => x.text)), back1.id);
+  ok('a shot being typed while the page is drawn again is stored whole', shots.length === 1 && shots[0] === 'Wide of the brewhouse from the mezzanine', JSON.stringify(shots));
+
+  // A call time typed over another with the keyboard is taken whole, and the focus stays in the box
+  await page.evaluate(id => import('./js/store.js').then(s => { const c = s.db.crew[0]; s.upsert('bookings', { ...s.byId('bookings', id), crew: [c.id], crewCall: { [c.id]: '07:30' } }); }), back1.id); await sleep(300);
+  const callBox = page.locator('#bk-crew .crew-line input[type=time]').first();
+  await callBox.focus(); await page.keyboard.type('0845'); await sleep(200);
+  const midFocus = await page.evaluate(() => document.activeElement && document.activeElement.type);
+  await callBox.blur(); await sleep(300); // leaving the box (Tab goes through its hours, minutes and AM/PM first)
+  const call = await page.evaluate(id => import('./js/store.js').then(s => Object.values(s.byId('bookings', id).crewCall)[0]), back1.id);
+  ok('typing 0 8 4 5 over a call time of 07:30 gives 08:45, with the focus still in the box while typing', call === '08:45' && midFocus === 'time', call + ' / focus on ' + midFocus);
+
+  // …and the control pressed next still gets its click: leaving the box saves, the save draws the page again, and a
+  // page drawn between the press and its release took the pressed tick box away
+  const bookingNow = () => page.evaluate(id => import('./js/store.js').then(s => { const b = s.byId('bookings', id), a = document.activeElement; return { call: Object.values(b.crewCall)[0], shots: (b.shots || []).map(x => x.text + (x.done ? ' ✓' : '')).join('|'), focus: a && a !== document.body ? a.tagName + ' ' + (a.getAttribute('aria-label') || a.type || a.textContent.trim().slice(0, 20)) : 'nothing' }; }), back1.id);
+  const press = async loc => { await loc.scrollIntoViewIfNeeded(); await sleep(100); const box = await loc.boundingBox(); await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2); await sleep(500); };
+  await callBox.focus(); await page.keyboard.type('0915'); await sleep(200);
+  await press(page.locator('#bk-shots .check-item input[type=checkbox]').first());
+  const ticked = await bookingNow();
+  ok('a call time typed and then one click on a shot’s tick box: the time is saved and the shot is ticked', ticked.call === '09:15' && ticked.shots === 'Wide of the brewhouse from the mezzanine ✓', JSON.stringify(ticked));
+  await page.locator('#bk-shots input[aria-label="New shot"]').fill('Typed and not yet added');
+  await callBox.focus(); await page.keyboard.type('1005'); await sleep(200);
+  await press(page.locator('#bk-shots .row-edit button', { hasText: 'Add' }));
+  const added = await bookingNow();
+  ok('…and one click on Add after a call time adds the shot that was typed', added.call === '10:05' && /\|Typed and not yet added$/.test(added.shots), JSON.stringify(added));
+  await callBox.focus(); await page.keyboard.type('1120'); await sleep(100);
+  let tabbed = null; for (let i = 0; i < 6; i++) { await page.keyboard.press('Tab'); await sleep(200); tabbed = await bookingNow(); if (!/call time/.test(tabbed.focus)) break; }
+  ok('Tab out of the call time saves it and lands on the next control, not at the top of the page', tabbed.call === '11:20' && tabbed.focus !== 'nothing' && !/call time/.test(tabbed.focus), JSON.stringify(tabbed));
+  // Text typed in one booking's box and not entered does not turn up in the same box of another booking
+  const other = await page.evaluate(() => import('./js/store.js').then(s => { s.upsert('bookings', { id: 'carry-2', title: 'Another job', date: new Date().toISOString().slice(0, 10), status: 'Confirmed', crew: [], gear: [], stakeholders: [] }); return 'carry-2'; })); await sleep(300);
+  await page.locator('#bk-shots input[aria-label="New shot"]').click(); await page.keyboard.type('Draft for the first job'); await sleep(100);
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), other); await sleep(400);
+  const carried = await page.evaluate(() => ({ title: document.querySelector('.bk-detail h2, .card.hero h2')?.textContent || '', boxes: [...document.querySelectorAll('#page input[type=text], #page input:not([type])')].map(i => i.value).filter(Boolean) }));
+  ok('a shot half typed on one booking is not in the box of the booking opened next', /Another job/.test(carried.title) && carried.boxes.length === 0, JSON.stringify(carried));
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), back1.id); await sleep(400);
+  await page.evaluate(() => import('./js/store.js').then(s => s.remove('bookings', 'carry-2'))); await sleep(300);
+
+  // Long unbroken names and a pasted map link wrap inside a 360-pixel phone
+  await page.evaluate(id => import('./js/store.js').then(s => s.upsert('bookings', { ...s.byId('bookings', id), title: 'ACME_BrandFilm_Q4_2026_SocialCutdowns_v2', client: 'Bundesverband_der_Filmschaffenden_Deutschland_eV', address: 'https://www.google.com/maps/place/Harbour+Brewing+Co/@51.5072178,-0.1275862,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d51.5072178!4d-0.1275862', date: new Date().toISOString().slice(0, 10), endDate: '' })), back1.id);
+  await page.setViewportSize({ width: 360, height: 800 }); await sleep(300);
+  const widths = {};
+  const wide = () => page.evaluate(() => document.documentElement.scrollWidth);
+  widths.booking = await wide();
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id, { view: 'callsheet' })), back1.id); await sleep(300); widths.callsheet = await wide();
+  await page.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id, { view: 'strips' })), back1.id); await sleep(400); widths.strips = await wide();
+  await page.evaluate(() => import('./js/pages/bookings.js').then(m => m.showMonth())); await sleep(300); widths.month = await wide();
+  ok('a long unbroken project name, client and map link stay inside a 360-pixel phone: the booking, its call sheet and stripboard, and the list', Object.values(widths).every(w => w <= 360), JSON.stringify(widths));
+  await page.setViewportSize({ width: 420, height: 900 }); await sleep(200);
+
+  // A crew member or an item deleted on another device: its id leaves the bookings and kits here too
+  const gone = await page.evaluate(() => import('./js/store.js').then(s => { const local = JSON.parse(s.serialize()), [c1, c2] = local.crew.map(x => x.id), [g1, g2] = local.gear.map(x => x.id);
+    local.bookings.push({ id: 'mg1', title: 'Merge', date: '2026-12-01', status: 'Confirmed', crew: [c1, c2], gear: [g1, g2], gearQty: { [g1]: 2 }, updatedAt: 5 }); local.kits.push({ id: 'mk1', name: 'Merge kit', gear: [g1, g2], updatedAt: 5 });
+    const remote = JSON.parse(JSON.stringify(local)), off = x => x.id !== c1 && x.id !== g1;
+    remote.crew = remote.crew.filter(off); remote.gear = remote.gear.filter(off); remote.deleted = { ...remote.deleted, [c1]: Date.now(), [g1]: Date.now() };
+    for (const o of [remote.bookings.find(x => x.id === 'mg1'), remote.kits.find(x => x.id === 'mk1')]) { o.gear = o.gear.filter(x => x !== g1); if (o.crew) o.crew = o.crew.filter(x => x !== c1); } // as the device that deleted them left it: no new stamp
+    const m = s.mergeDb(local, remote), b = m.bookings.find(x => x.id === 'mg1'), k = m.kits.find(x => x.id === 'mk1'); return { crew: b.crew.join() === c2, gear: b.gear.join() === g2, qty: !(g1 in (b.gearQty || {})), kit: k.gear.join() === g2 }; }));
+  ok('after a sync, a booking and a kit no longer hold the crew member and the item that were deleted on the other device', gone.crew && gone.gear && gone.qty && gone.kit, JSON.stringify(gone));
+
+  // ---- the night the clocks change (a browser in New York): the crew page's calendar file and hours added by hand ----
+  const ny = await browser.newContext({ viewport: { width: 420, height: 900 }, timezoneId: 'America/New_York', acceptDownloads: true });
+  await ny.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+  await ny.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await ny.addInitScript(acceptTerms());
+  const np = await ny.newPage(); np.on('pageerror', e => errors.push(e.message));
+  await np.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await np.waitForSelector('#rolodex .drum-btn');
+  const links = await np.evaluate(async () => { const s = await import('./js/store.js'), l = await import('./js/crew-link.js'); const bk = (id, date) => ({ id, title: 'Night ' + id, date, start: '22:00', end: '04:00', status: 'Confirmed', crew: [], gear: [], stakeholders: [] });
+    s.update(d => { d.bookings.push(bk('dst1', '2026-10-31'), bk('dst2', '2027-03-13'), bk('dst3', '2026-12-10')); }); return Promise.all(['dst1', 'dst2', 'dst3'].map(id => l.crewLink(s.byId('bookings', id)))); });
+  const ends = [];
+  for (const link of links) { const cp = await ny.newPage(); await cp.goto(link); await cp.waitForSelector('.paper');
+    const [dl] = await Promise.all([cp.waitForEvent('download', { timeout: 15000 }), cp.getByRole('button', { name: /Add to calendar/ }).click()]);
+    ends.push((/DTEND:(\S+)/.exec(fs.readFileSync(await dl.path(), 'utf8')) || [])[1]); await cp.close(); }
+  ok('the crew page’s calendar file ends an overnight shoot at 04:00 the next day, also on the nights the clocks go back and forward', ends.join() === '20261101T040000,20270314T040000,20261211T040000', ends.join());
+  const nform = np.locator('.sheet form'), worked = [];
+  for (const [date, id] of [['2026-10-31', 'dst1'], ['2027-03-13', 'dst2'], ['2026-12-10', 'dst3']]) {
+    await np.evaluate(id => import('./js/hours.js').then(hh => hh.editShift(null, id)), id); await nform.waitFor();
+    await nform.locator('input[data-key="date"]').fill(date); await nform.locator('input[data-key="start"]').fill('22:00'); await nform.locator('input[data-key="end"]').fill('04:00'); await nform.locator('input[data-key="breakMin"]').fill('0');
+    await nform.locator('button[type=submit]').click(); await sleep(300);
+    worked.push(await np.evaluate(id => import('./js/store.js').then(s => { const x = s.db.shifts.find(y => y.bookingId === id); return x ? [(x.end - x.start) / 36e5, new Date(x.end).getHours()].join('h to ') : 'none'; }), id)); }
+  ok('hours added by hand from 22:00 to 04:00 end at 04:00: seven hours when the clocks go back, five when they go forward, six on any other night', worked.join() === '7h to 4,5h to 4,6h to 4', worked.join());
+  await ny.close();
+
+  // ---- venues: repairs after 1.4.0 ----
+  { // Today is the day here, not in Greenwich: at 6 pm in Los Angeles (2 am the next day in UTC) today's shoot is still listed.
+    const at = new Date(); at.setUTCHours(2, 0, 0, 0);
+    const local = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit' }).format(at);
+    const la = await browser.newContext({ viewport: { width: 420, height: 900 }, timezoneId: 'America/Los_Angeles' });
+    await la.route('https://api.open-meteo.com/**', r => r.fulfill({ status: 200, contentType: 'application/json', body: '{"daily":{"time":[]}}' }));
+    let lookups = 0; await la.route('https://nominatim.openstreetmap.org/**', r => { lookups++; return r.abort('internetdisconnected'); });
+    await la.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); window.__toasts = []; addEventListener('DOMContentLoaded', () => new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.classList && n.classList.contains('toast')) window.__toasts.push(n.textContent); }))).observe(document.body, { childList: true, subtree: true })); });
+    await la.addInitScript(acceptTerms());
+    const vp = await la.newPage(); vp.on('pageerror', e => errors.push(e.message)); vp.on('dialog', d => d.accept());
+    await vp.clock.install({ time: at });
+    await vp.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await vp.waitForSelector('#rolodex .drum-btn');
+    await vp.evaluate(date => import('./js/store.js').then(s => s.update(d => {
+      d.venues.push({ id: 'v-today', name: 'Probe Studio', address: '1 Example Road', hospital: 'Example General, 2 miles', perms: { drones: 'ask', lighting: 'no' } }, ...['Alpha Studio', 'Beta Hall', 'Delta Loft', 'Zeta Yard'].map((name, i) => ({ id: 'v' + i, name, address: '' })));
+      d.bookings.push({ id: 'b-today', title: 'Evening shoot', date, start: '17:00', end: '22:00', status: 'Confirmed', venueId: 'v-today', crew: [], gear: [] }); })), local);
+    const openVenue = async id => { await vp.evaluate(id => import('./js/pages/venues.js').then(v => v.openVenue(id)), id); await sleep(400); };
+    await openVenue('v-today');
+    const pageText = (await vp.locator('main, #app').first().innerText()).replace(/\s+/g, ' ');
+    ok('at 6 pm in Los Angeles a venue still lists today’s shoot under Upcoming shoots here', /Upcoming shoots here Evening shoot/i.test(pageText) && !/None booked/.test(pageText), pageText.slice(-140));
+    ok('a venue with only its hospital recorded does not also say “Nothing recorded yet.”', /Example General, 2 miles/.test(pageText) && !/Nothing recorded yet/.test(pageText));
+    // a search left in the box when the list becomes too short for the box
+    await vp.locator('.page-head button', { hasText: 'Venues' }).click(); await sleep(250);
+    await vp.locator('.search').fill('zeta'); await sleep(250);
+    await vp.locator('.venue-card .card-main').click(); await sleep(250);
+    await vp.locator('.page-head button', { hasText: 'Edit' }).click(); await vp.waitForSelector('.sheet form');
+    await vp.locator('.sheet form .btn.danger').click(); await sleep(400);
+    ok('deleting the one venue a search found, in a list then too short for the search box, shows the venues that are left', (await vp.locator('.venue-card').count()) === 4 && (await vp.locator('.empty', { hasText: 'No matches.' }).count()) === 0 && (await vp.locator('.search').count()) === 0, (await vp.locator('.venue-card').count()) + ' cards');
+    // the venue form's map location
+    await vp.locator('.page-head button.primary').click(); await vp.waitForSelector('.sheet form');
+    const lat = vp.locator('.sheet form input[aria-label="Latitude"]'), lon = vp.locator('.sheet form input[aria-label="Longitude"]'), link = vp.locator('.sheet form input[aria-label="Map link to read coordinates from"]');
+    await vp.locator('.sheet form input[data-key="name"]').fill('Map Hall'); await vp.locator('.sheet form textarea[data-key="address"]').fill('1 Example Road, Portside');
+    await vp.evaluate(() => window.__toasts.splice(0));
+    await vp.getByRole('button', { name: /Find from address/ }).click(); await sleep(500);
+    const offline = await vp.evaluate(() => window.__toasts.splice(0));
+    ok('Find from address with no connection says “Lookup failed. Are you online?”, not the browser’s own words', lookups === 1 && offline.join('|') === 'Lookup failed. Are you online?', offline.join('|'));
+    await link.fill('https://www.google.com/maps/search/100%+coffee/@51.5007,-0.1246,17z'); await link.press('Tab'); await sleep(250);
+    ok('a map link with a stray % sign is still read', (await lat.inputValue()) === '51.5007' && (await lon.inputValue()) === '-0.1246' && /Location read from link/.test((await vp.evaluate(() => window.__toasts.splice(0))).join('|')), await lat.inputValue());
+    await lon.fill(''); await vp.locator('.sheet form button[type=submit]').click(); await sleep(300);
+    const half = [await vp.locator('.sheet form').count(), await lon.evaluate(e => e.validationMessage), await vp.evaluate(() => import('./js/store.js').then(s => s.db.venues.filter(v => v.name === 'Map Hall').length))];
+    await lon.evaluate(e => { e.value = '-0.1246'; }); // filled in as “I’m here now” and “Find from address” fill it: by the form, with no typing
+    await vp.locator('.sheet form button[type=submit]').click(); await sleep(350);
+    const whole = await vp.evaluate(() => import('./js/store.js').then(s => s.db.venues.find(v => v.name === 'Map Hall')));
+    ok('a latitude without a longitude is refused with a word on the empty box, and saved once both are there, also when the form’s own buttons filled the other in', half[0] === 1 && /both/.test(half[1]) && half[2] === 0 && (await vp.locator('.sheet form').count()) === 0 && !!whole && whole.geo && whole.geo.lat === 51.5007 && whole.geo.lon === -0.1246, JSON.stringify([half, whole && whole.geo]));
+    // a venue's rules go by what kind of thing an item is, however its category was typed
+    const warned = await vp.evaluate(() => Promise.all([import('./js/pages/venues.js'), import('./js/store.js')]).then(([v, s]) => ['Drone', 'Drones', 'drone', ' DRONES ', 'Lighting', 'lighting', 'Camera'].map(category => v.venueWarnings(s.byId('venues', 'v-today'), [{ category }]).length)));
+    ok('“drone”, “Drones” and “Drone” all bring the venue’s drone rule to a booking', warned.join() === '1,1,1,1,1,1,0', warned.join());
+    await la.close();
+  }
   await page.screenshot({ path: S + '/booking-layout.png', fullPage: true });
+  // A web address typed into a shot, or into the venue's Access box, wraps: the shot's ✕ stays on screen and the page
+  // does not scroll sideways on a phone.
+  { const ph = await browser.newContext({ viewport: { width: 320, height: 800 } });
+    await ph.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await ph.addInitScript(acceptTerms());
+    const pp = await ph.newPage(); pp.on('pageerror', e => errors.push(e.message));
+    await pp.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await pp.waitForSelector('#rolodex .drum-btn');
+    const bid = await pp.evaluate(() => import('./js/store.js').then(s => { s.loadSample(); const b = s.db.bookings.find(x => x.venueId) || s.db.bookings[0]; s.update(d => { const x = d.bookings.find(y => y.id === b.id); x.shots = [...(x.shots || []), { id: 'long-shot', text: 'Reference https://www.youtube.com/watch?v=AbCdEfGhIjK&list=PL1234567890abcdef', done: false }]; x.updatedAt = Date.now(); const v = d.venues.find(y => y.id === x.venueId); if (v) { v.access = 'Park here https://maps.app.goo.gl/AbCdEfGhIjKlMnOpQ?g_st=ic'; v.updatedAt = Date.now(); } }); return b.id; }));
+    await pp.evaluate(id => import('./js/pages/bookings.js').then(m => m.openBooking(id)), bid); await pp.waitForSelector('.bk-detail'); await sleep(400);
+    await pp.evaluate(() => { document.querySelectorAll('#page details').forEach(d => { d.open = true; }); }); await sleep(300);
+    const long = await pp.evaluate(() => { const row = [...document.querySelectorAll('.check-item')].find(x => /youtube/.test(x.textContent)); const ink = el => { const r = document.createRange(); r.selectNodeContents(el); return Math.round(r.getBoundingClientRect().right); }; const acc = [...document.querySelectorAll('#page .small')].find(x => /^Access: /.test(x.textContent)); return { shot: !!row, x: row ? Math.round(row.querySelector('.icon-btn').getBoundingClientRect().right) : 0, access: acc ? ink(acc) : -1, wide: document.documentElement.scrollWidth }; });
+    ok('a web address in a shot and in the venue’s access line wraps at 320 px: the shot’s ✕ stays on screen and the page does not scroll sideways', long.shot && long.x <= 320 && long.access > 0 && long.access <= 320 && long.wide <= 320, JSON.stringify(long));
+    // Extra large text on that phone: a name and its pill, an item and its quantity, no longer fit one row
+    await pp.evaluate(() => { document.documentElement.dataset.text = 'xlarge'; window.logiGo('insurance'); }); await pp.waitForSelector('#page .card .pill'); await sleep(400);
+    const xl = await pp.evaluate(() => { const broken = []; for (const el of document.querySelectorAll('#page .card .card-row > div:first-child')) { const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT); for (let n; (n = w.nextNode());) { const re = /[A-Za-z]+/g; let m; while ((m = re.exec(n.data))) { const r = document.createRange(); r.setStart(n, m.index); r.setEnd(n, m.index + m[0].length); if (new Set([...r.getClientRects()].map(q => Math.round(q.top))).size > 1) broken.push(m[0]); } } }
+      return { broken, cards: document.querySelectorAll('#page .card .card-row').length, wide: document.documentElement.scrollWidth }; });
+    ok('at Extra large text on a 320 px phone no word on an Insurance card is broken in two: the pill goes under the name', xl.cards > 0 && xl.broken.length === 0 && xl.wide <= 320, JSON.stringify(xl));
+    await pp.evaluate(() => import('./js/pages/gear.js').then(m => m.editKit())); await pp.waitForSelector('.sheet form .checks .check-row'); await sleep(300);
+    const list = await pp.evaluate(() => { const box = [...document.querySelectorAll('.sheet form .checks')].find(c => c.querySelector('.check-row')), plus = [...box.querySelectorAll('.stepper .icon-btn')].map(b => Math.round(b.getBoundingClientRect().right)); return { wide: box.scrollWidth, room: box.clientWidth, plus: Math.max(...plus), edge: Math.round(box.getBoundingClientRect().right) }; });
+    ok('…and the Equipment list of a form is no wider than the form: every quantity’s + is inside it', list.wide <= list.room + 1 && list.plus <= list.edge, JSON.stringify(list));
+    await pp.keyboard.press('Escape'); await sleep(200);
+    await ph.close(); }
+  // Vdex open in two windows with a calendar connected (the calendar stood in for at the network, a quarter of a second
+  // an answer): a booking saved in one window reaches the other at once, and both keep the calendar in step.
+  { const SCOPE = 'https://www.googleapis.com/auth/calendar.app.created', CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*' };
+    const cal = { events: new Map(), n: 0 }, mine = () => [...cal.events.values()].filter(e => e.extendedProperties && e.extendedProperties.private && e.extendedProperties.private.logiId === 'two-win');
+    const two = await browser.newContext({ viewport: { width: 420, height: 900 } });
+    await two.addInitScript(() => { localStorage.setItem('logi-tour', 'done'); }); await two.addInitScript(acceptTerms());
+    await two.addInitScript(([scope]) => { if (localStorage.getItem('two-seeded')) return; localStorage.setItem('two-seeded', '1');
+      localStorage.setItem('logi-db-v1', JSON.stringify({ version: 1, updatedAt: 1, bookings: [], crew: [], gear: [], kits: [], venues: [], insurance: [], shifts: [], logs: [], deleted: {}, calSync: { provider: 'google', calendarId: 'cal1', calendarFor: 'google', events: {}, feed: false, updatedAt: 5 } }));
+      localStorage.setItem('logi-google-tokens', JSON.stringify({ [scope]: { value: 'tok', exp: Date.now() + 3600e3 } })); localStorage.setItem('logi-google-scopes', scope); }, [SCOPE]);
+    await two.route('https://www.googleapis.com/calendar/v3/**', async route => {
+      const r = route.request(), m = r.method(), path = new URL(r.url()).pathname.replace('/calendar/v3', '');
+      if (m === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
+      const json = (status, body) => route.fulfill({ status, headers: { ...CORS, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+      await sleep(250);
+      if (m === 'GET' && path === '/calendars/cal1') return json(200, { id: 'cal1' });
+      if (m === 'GET' && path === '/calendars/cal1/events') return json(200, { items: [...cal.events.values()] });
+      if (m === 'POST' && path === '/calendars/cal1/events') { const id = 'ev' + (++cal.n); cal.events.set(id, { id, ...JSON.parse(r.postData()), updated: new Date().toISOString() }); return json(200, { id }); }
+      const one = /^\/calendars\/cal1\/events\/(.+)$/.exec(path);
+      if (one && m === 'PATCH') { const id = decodeURIComponent(one[1]); if (cal.events.has(id)) Object.assign(cal.events.get(id), JSON.parse(r.postData()), { updated: new Date().toISOString() }); return json(200, {}); }
+      if (one && m === 'DELETE') { cal.events.delete(decodeURIComponent(one[1])); return route.fulfill({ status: 204, headers: CORS }); }
+      return json(404, {}); });
+    const w1 = await two.newPage(), w2 = await two.newPage(); for (const w of [w1, w2]) { w.on('pageerror', e => errors.push(e.message)); await w.goto(process.env.VDEX_URL || 'http://localhost:8123/'); await w.waitForSelector('#rolodex .drum-btn'); }
+    await sleep(2500);
+    const quiet = async () => { let n = -1, at = Date.now(); const count = () => cal.n * 1000 + JSON.stringify([...cal.events.values()]).length; while (Date.now() - at < 12000) { await sleep(2600); const now = count(); if (now === n) return; n = now; } };
+    await w1.evaluate(() => import('./js/store.js').then(s => { s.upsert('bookings', { id: 'two-win', title: 'Harbour shoot', date: '2026-12-01', start: '09:00', end: '17:00', status: 'Confirmed', crew: [], gear: [] }); })); await quiet();
+    const made = mine().length;
+    await w1.evaluate(() => import('./js/store.js').then(s => { s.upsert('bookings', { ...s.byId('bookings', 'two-win'), date: '2026-12-20' }); })); await quiet();
+    const moved = mine().map(e => (e.start.dateTime || e.start.date).slice(0, 10)).join();
+    await w1.evaluate(() => import('./js/store.js').then(s => { s.remove('bookings', 'two-win'); })); await quiet();
+    ok('with Vdex open in two windows a new booking gets one event in the calendar, which moves with the booking and goes when it is deleted', made === 1 && moved === '2026-12-20' && mine().length === 0, JSON.stringify({ made, moved, left: mine().length }));
+    await two.close(); }
   ok('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
 })().catch(e => { console.log('FAIL spec crashed — ' + e.message); process.exit(1); });

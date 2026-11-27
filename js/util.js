@@ -22,6 +22,9 @@ export function h(tag, attrs, ...kids) {
 // Children for replaceChildren/append with h()'s rules: skip null/false, flatten arrays, strings become text.
 export const nodes = (...kids) => kids.flat(Infinity).filter(k => k != null && k !== false && k !== '').map(k => (k.nodeType ? k : document.createTextNode(String(k))));
 
+// A short mark of a text that is the same on every device and in every version (FNV-1a over its characters): for
+// telling whether something changed, and for an id of a line that has no letters to make one from.
+export const shortHash = t => { let n = 2166136261; for (const ch of String(t)) { n ^= ch.codePointAt(0); n = Math.imul(n, 16777619); } return (n >>> 0).toString(36); };
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 export const pad = n => String(n).padStart(2, '0');
@@ -31,6 +34,10 @@ export const parseISO = s => { const [y, m, d] = s.split('-').map(Number); retur
 export const fmtLong = s => parseISO(s).toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 export const fmtShort = s => parseISO(s).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
 export const fmtTime = d => d instanceof Date && !isNaN(d) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—';
+// Text in a calendar file (RFC 5545): a backslash before a backslash, a semicolon and a comma, and \n for a new line;
+// and a line folded at 75 bytes, counted over whole characters, so no letter or emoji is ever cut in half.
+export const icsText = s => String(s || '').replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+export const icsFold = line => { const out = [], te = new TextEncoder(); let cur = '', bytes = 0; for (const ch of line) { const n = te.encode(ch).length; if (bytes + n > 74) { out.push(cur); cur = ' '; bytes = 1; } cur += ch; bytes += n; } out.push(cur); return out.join('\r\n'); };
 export const daysUntil = s => Math.round((parseISO(s) - parseISO(todayISO())) / 864e5);
 
 export function money(n, sym = '$') {
@@ -68,18 +75,46 @@ export function announce(msg) {
   setTimeout(() => { r.textContent = msg; }, 50);
 }
 
-// The page (#app) is out of reach while anything is open over it: a sheet, a walkthrough, the menu, the search, or a
-// full screen (the lock, the PIN set-up, the offer of a longer PIN, the terms). Whatever closes one of those calls this,
+// The page (#app) is out of reach while anything is open over it: a sheet, a walkthrough, the menu, the search, the
+// teleprompter, or a full screen (the lock, the PIN set-up, the offer of a longer PIN, the terms). Whatever closes one of those calls this,
 // which looks at what is on the page now. A flag remembered from when the thing opened can be out of date by then:
 // what was underneath may have closed meanwhile, and writing the flag back would leave the page dead with nothing open.
 export function settleApp() {
   const app = document.getElementById('app'); if (!app) return;
-  app.inert = !!document.querySelector('.sheet-back, .tour, body > .lock, body > .terms-gate') || document.body.classList.contains('menu-open') || document.body.classList.contains('search-open');
+  app.inert = !!document.querySelector('.sheet-back, .tour, .prompter, body > .lock, body > .terms-gate') || document.body.classList.contains('menu-open') || document.body.classList.contains('search-open');
+  // "Skip to content" leads into the page, so it is out of reach whenever the page is: Shift+Tab from a dialog must not
+  // land on a link that then does nothing.
+  const skip = document.querySelector('a.skip'); if (skip) skip.inert = app.inert;
 }
 
 // A full screen that covers everything else is up: the lock screen, the PIN set-up or the offer of a longer PIN
 // (coverAll in js/lock.js makes what is on the page at that moment inert and hides the sheets).
 export const covered = () => !!document.querySelector('body > .lock');
+// Something code adds to the page while such a screen is up (the update bar, the licence bar) was not there to be
+// covered: it starts out of reach like the rest, marked data-covered, and the screen's way out gives it back.
+export const underCover = el => { if (covered()) { el.inert = true; el.dataset.covered = ''; } return el; };
+
+// A page drawn again from the store replaces every control on it, and the page is drawn again after every change
+// (also one that arrives by itself: a calendar or a cloud sync). What identifies a control across that is its kind,
+// its id or label and the text around it (a checklist box is known by its line), and, where several share all of that
+// (the "add an item" box of each stage), its place among them. The same control in the new page gets the focus back,
+// so ticking by keyboard stays in place, and a box that was being typed in keeps what was typed and where the cursor was.
+const CONTROLS = 'button, input, select, textarea, a[href], summary, [tabindex]';
+const controlKey = el => [el.tagName, el.type || '', el.id || el.getAttribute('aria-label') || el.name || '', ((el.closest('label') || el).textContent || '').trim().slice(0, 80)].join('|');
+// typed: false leaves the redrawn box with what the page drew in it (after a change that was refused).
+export function redrawKeeping(root, draw, { typed: keep = true } = {}) {
+  const el = document.activeElement, mine = el && el !== document.body && root.contains(el), key = mine ? controlKey(el) : null;
+  const twins = key ? [...root.querySelectorAll(CONTROLS)].filter(x => controlKey(x) === key) : [], at = twins.indexOf(el);
+  const typing = mine && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['checkbox', 'radio', 'file', 'button', 'submit', 'range', 'color'].includes(el.type)));
+  const typed = typing && keep ? { value: el.value, start: null, end: null } : null;
+  if (typed) try { typed.start = el.selectionStart; typed.end = el.selectionEnd; } catch { /* a date or time box has no cursor to keep */ }
+  draw();
+  if (!key) return;
+  const now = [...root.querySelectorAll(CONTROLS)].filter(x => controlKey(x) === key), sure = now.length === twins.length && at >= 0, again = sure ? now[at] : now[0];
+  if (!again) return;
+  again.focus({ preventScroll: true });
+  if (typed && sure && again.value !== typed.value) { again.value = typed.value; if (typed.start != null) try { again.setSelectionRange(typed.start, typed.end); } catch { /* no cursor in this kind of box */ } }
+}
 
 const sheetStack = []; // open sheets, newest last: only the top one answers Escape and keeps Tab inside it
 const FOCUSABLE = 'a[href],button:not([disabled]),input:not([disabled]):not([type=hidden]),select,textarea,[tabindex]:not([tabindex="-1"])';
@@ -113,9 +148,11 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
     if (e.key !== 'Tab') return;
     const items = [...box.querySelectorAll(FOCUSABLE)].filter(el => el.offsetParent !== null);
     if (!items.length) return;
-    const first = items[0], last = items[items.length - 1];
-    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    const first = items[0], last = items[items.length - 1], at = document.activeElement;
+    // From the sheet itself (where the focus is put as it opens) or from anywhere outside it, Tab goes into the sheet.
+    if (!box.contains(at) || at === box) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+    else if (e.shiftKey && at === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && at === last) { e.preventDefault(); first.focus(); }
   };
   const box = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
     h('div', { class: 'sheet-head' }, h('h2', null, title), h('div', { class: 'sheet-tools' }, window.logiHelp && h('button', { class: 'icon-btn sheet-help', 'aria-label': 'Tutorial for this', title: 'Tutorial', onclick: () => window.logiHelp() }, '?'), h('button', { class: 'icon-btn', 'aria-label': 'Close', onclick: close }, '✕'))),
@@ -133,6 +170,10 @@ export function sheet(title, body, { onClose, dismissOnBackdrop = true } = {}) {
   document.body.append(back);
   sheetStack.push(back);
   settleApp();
+  // The keyboard focus moves into the dialog as it opens, so a screen reader announces it and Tab starts inside it: on
+  // the sheet itself, not on a button (someone still typing must not press one by accident). A caller that wants a
+  // field focused does so right after.
+  if (!back.inert && !box.contains(document.activeElement)) { box.tabIndex = -1; box.focus({ preventScroll: true }); }
   return { el: box, close };
 }
 

@@ -46,7 +46,9 @@ export function createRolodex(root, tabs, { onSelect, start = 0 }) {
     rot += delta;
     const dir = delta >= 0 ? 1 : -1;
     index = to;
+    const held = items.includes(document.activeElement); // the keyboard focus is on a tab of the drum
     paint();
+    if (held) items[index].focus({ preventScroll: true }); // …and follows the tab now in front: the one left behind fades out of sight, and Enter on it would jump back
     if (!silent) { haptic(); announce(tabs[index].label); onSelect(index, dir); }
   }
 
@@ -66,7 +68,17 @@ export function createRolodex(root, tabs, { onSelect, start = 0 }) {
 
   document.addEventListener('keydown', e => {
     if (/input|textarea|select/i.test(e.target.tagName) || e.target.isContentEditable) return;
-    if (e.defaultPrevented || document.querySelector('.sheet-back')) return; // a control that used the key (a stripboard handle) keeps it
+    if (e.defaultPrevented) return; // a control that used the key (a stripboard handle) keeps it
+    // A tab or a radio button elsewhere (the Me page's three choices, Items / Kits, a booking's stages, the colour
+    // themes) owns the arrow keys, as a screen reader says it does: they move the focus to the next one of its list
+    // (Enter or Space chooses it), and the drum stays where it is.
+    const own = e.target.closest && e.target.closest('[role=tab], [role=radio], [role=option], [role=slider]');
+    if (own && !root.contains(own)) {
+      const fwd = e.key === 'ArrowRight' || e.key === 'ArrowDown', back = e.key === 'ArrowLeft' || e.key === 'ArrowUp', list = own.closest('[role=tablist], [role=radiogroup]');
+      if (list && (fwd || back)) { const all = [...list.querySelectorAll(`[role=${own.getAttribute('role')}]`)].filter(x => !x.disabled && x.offsetParent !== null), next = all[(all.indexOf(own) + (fwd ? 1 : -1) + all.length) % all.length]; if (next) { e.preventDefault(); next.focus(); } }
+      return;
+    }
+    if (document.querySelector('.sheet-back')) return;
     // Out of reach, the drum does not turn: under the lock screen or the offer of a longer PIN, a walkthrough, the menu
     // or the search, an arrow key belongs to what is on top, and the section underneath stays the one that was open.
     if (root.closest('[inert]')) return;

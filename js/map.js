@@ -12,7 +12,8 @@ export const appleUrl = v => `https://maps.apple.com/?q=${encodeURIComponent(v.n
 
 // Pull coordinates out of a pasted Google/Apple/OSM map link ("@51.5,-0.12", "q=51.5,-0.12", "!3d51.5!4d-0.12").
 export function parseMapLink(url) {
-  const s = decodeURIComponent(String(url || ''));
+  let s = String(url || '');
+  try { s = decodeURIComponent(s); } catch { /* a stray % sign: read the link as it is */ }
   const pats = [/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, /@(-?\d+\.\d+),(-?\d+\.\d+)/, /[?&](?:q|ll|query|destination|sll)=(-?\d+\.\d+)[, ](-?\d+\.\d+)/, /#map=\d+\/(-?\d+\.\d+)\/(-?\d+\.\d+)/, /mlat=(-?\d+\.\d+)&mlon=(-?\d+\.\d+)/];
   for (const p of pats) {
     const m = s.match(p);
@@ -23,7 +24,7 @@ export function parseMapLink(url) {
 
 // Address -> coordinates via OpenStreetMap Nominatim (needs a connection).
 export async function geocode(address) {
-  const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address), { headers: { Accept: 'application/json' } });
+  const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(address), { headers: { Accept: 'application/json' } }).catch(() => { throw new Error('Lookup failed. Are you online?'); }); // the browser's own words ("Failed to fetch") tell nobody anything
   if (!r.ok) throw new Error('Address lookup failed');
   const [hit] = await r.json();
   if (!hit) throw new Error('No match for that address — try adding the town or postcode');

@@ -20,15 +20,17 @@ export async function arSupported() {
   try { return !!(navigator.xr && await navigator.xr.isSessionSupported('immersive-ar')); } catch { return false; }
 }
 
-export function range(root) {
+// The tool is drawn again when the units change. Its clean-up list is the one the Field page was handed at the start,
+// so the camera and the motion sensor of whichever drawing is on screen are let go when the tool is left.
+export function range(root, stops = []) {
   units = LS.get('logi-units') || 'm';
-  const stops = [];
-  const unitSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Units' }, [['m', 'Metres'], ['ft', 'Feet']].map(([u, l]) => h('button', { type: 'button', class: units === u ? 'on' : '', 'aria-pressed': units === u, onclick: () => { units = u; LS.set('logi-units', u); root.replaceChildren(); stops.forEach(f => f()); range(root); } }, l)));
+  stops.splice(0).forEach(f => f());
+  const unitSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Units' }, [['m', 'Metres'], ['ft', 'Feet']].map(([u, l]) => h('button', { type: 'button', class: units === u ? 'on' : '', 'aria-pressed': units === u, onclick: () => { units = u; LS.set('logi-units', u); root.replaceChildren(); range(root, stops); } }, l)));
   root.append(
     h('div', { class: 'warn small' }, native.isApp ? '⚠ Measuring by camera (AR) is not available here yet. The tilt method works on most phones but is an estimate, about ±10%, and needs level ground.' : '⚠ Not every phone can measure distance. AR measuring needs an Android phone with ARCore, in Chrome. iPhones can’t do it in a browser yet. The tilt method works on most phones but is an estimate, about ±10%, and needs level ground.'),
     h('div', { class: 'card-row' }, h('strong', null, 'Range finder'), unitSeg),
     arCard(stops), tiltCard(stops));
-  return () => stops.forEach(f => f());
+  return () => stops.splice(0).forEach(f => f());
 }
 
 /* ---------------------------------- AR ---------------------------------- */
@@ -134,7 +136,7 @@ function tiltCard(stops) {
   const heightOut = h('div', { class: 'small' });
   const video = h('video', { autoplay: true, playsInline: true, muted: true, class: 'cam' });
   const wrap = h('div', { class: 'cam-wrap range-cam', hidden: true }, video, h('div', { class: 'xr-crosshair in-card', 'aria-hidden': 'true' }));
-  let stream = null, frozen = null, baseDist = null, pitch = null, live = false;
+  let stream = null, frozen = null, baseDist = null, pitch = null, live = false, gone = false, starting = false;
   const handler = e => { if (e.beta == null) return; pitch = 90 - e.beta; paint(); };
   const paint = () => {
     if (pitch == null) return;
@@ -152,16 +154,18 @@ function tiltCard(stops) {
   const startBtn = h('button', { class: 'btn primary', onclick: start }, 'Start');
   const freezeBtn = h('button', { class: 'btn ghost', disabled: true, onclick: () => { if (frozen == null) { frozen = pitch; const d = tiltDistance(eye, frozen); baseDist = d; freezeBtn.textContent = 'Unfreeze'; angle.textContent = d == null ? 'No reading to freeze' : `Frozen at ${frozen.toFixed(1)}° · now aim at the top of the subject for its height`; haptic(); } else { frozen = null; baseDist = null; heightOut.textContent = ''; freezeBtn.textContent = 'Freeze'; paint(); } } }, 'Freeze');
   async function start() {
+    if (starting) return; starting = true;
     try {
       // Some browsers answer "denied" without asking; listen anyway and only complain if nothing arrives.
       let denied = false;
       if (typeof DeviceOrientationEvent !== 'undefined' && DeviceOrientationEvent.requestPermission) { try { denied = (await DeviceOrientationEvent.requestPermission()) !== 'granted'; } catch { denied = true; } }
+      if (gone) return; // the tool was left while the question was open
       window.addEventListener('deviceorientation', handler); live = true; freezeBtn.disabled = false; startBtn.hidden = true;
       setTimeout(() => { if (pitch == null) angle.textContent = denied ? 'Motion access was refused. Allow “motion & orientation” for this site in the browser settings, then try again.' : 'No motion sensor found on this device.'; }, 2000);
-      try { stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); video.srcObject = stream; wrap.hidden = false; } catch { /* camera is optional */ }
+      try { const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false }); if (gone) s.getTracks().forEach(t => t.stop()); else { stream = s; video.srcObject = stream; wrap.hidden = false; } } catch { /* camera is optional */ } // an answer that comes after the tool was left switches the camera off again
     } catch (e) { toast('Could not start: ' + (e.message || e)); }
   }
-  stops.push(() => { window.removeEventListener('deviceorientation', handler); stream && stream.getTracks().forEach(t => t.stop()); });
+  stops.push(() => { gone = true; window.removeEventListener('deviceorientation', handler); stream && stream.getTracks().forEach(t => t.stop()); });
   return h('div', { class: 'card' }, h('strong', null, 'Tilt method (any phone)'),
     h('div', { class: 'row-edit' }, h('label', { class: 'small muted' }, `Camera height (${units})`), eyeIn),
     wrap, big, angle, heightOut,
