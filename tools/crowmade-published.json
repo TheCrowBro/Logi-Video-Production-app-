@@ -1,6 +1,6 @@
 {
-  "commit": "b5753d33fd4ae2d5a1028e90ba2a45c3f478c16f",
-  "at": "2026-11-16T17:56:35.433Z",
+  "commit": "be0894a5c752c2a57f025d02500c15b8507eb3f8",
+  "at": "2026-11-27T23:12:13.297Z",
   "files": {
     "_redirects": "7fd4912648bf10b2e32d8926c10d7d733a2ce4f58e99adb02c77a5282aba28b5",
     "index.html": "7eb0a7141b309454212ad899cdf3f1c5d9855229d52cb0b7e9b36c967886a16c",
@@ -19,14 +19,15 @@
     "valheim/shot-worlds.jpg": "60ca450aae967e7e2280ad37e5fd717e0f89a8b17ba36e4d241305579556c154",
     "vdex/icon.png": "b54a3db338c54db2222fe7392297427cfef3cba10f273fd3ead6eecbc48fe8f8",
     "vdex/icon.svg": "39513b11e0cf166e24a3e3e08382390f659c8f1d89306fe20cf81b79b1c41149",
-    "vdex/index.html": "239781811b2bf1ee3d92ade8d0f25cc55fffaa98f8bab270c5bc6c681b1e6183",
+    "vdex/index.html": "f9a89b38a3f2d22ff8adb53de52d89b643dcdd5dbe4c1ec3d9a87885c45fed09",
     "vdex/shot-01-bookings.jpg": "757eb2313f9c75b21d761711acebc5b3bfcb1154d75a3a6d2df58d57fdd149a2",
     "vdex/shot-03-call-sheet.jpg": "25127256aef86e6a471f2d62c6c2265376e8ebdd6bca33b5df055370f4664db0",
     "vdex/shot-06-field.jpg": "6e12a0a85a4a74a97b6d921852f3e3d1701a47cf19d924057dbb7c10abd1de2e",
     "vdex/shot-08-money.jpg": "4ca97a76bbc9d4d28fcdfb8098b6946523652ac4ed2c296b43429e3d1389e7b4",
-    "vdex/shot-booking.jpg": "d88e183291ae3a50e3e74eb7f3520fdd94981f67728b218cb3eb6601e6a1d78d",
-    "vdex/shot-call-sheet.jpg": "a3a009aa3b9c2ffe8834913d4975ac651f8962406f5b758857cc254d4b0385ea",
-    "vdex/shot-money.jpg": "04b74f86b9ae0b43f54e87916901086e179e40a3f722f5d4818798908ffabaca",
+    "vdex/shot-booking.jpg": "972f95b6f597d0ceeb8a4b30ab007291649beae8c878703795bb5a24c84bf8cd",
+    "vdex/shot-call-sheet.jpg": "00e9e34975dad0ddd8c0db46a8f7a1f0665431c308f09717f72a92f60029596a",
+    "vdex/shot-equipment.jpg": "c812bc9a81add831091d8b590441be2cd107b0bdf15b27e354e79824c6249482",
+    "vdex/shot-money.jpg": "4aefa055f2ca6066e23c1da1996b5ae6496a80a871b081f77f33fe5b79b96ea6",
     "vdex/shot-timecode.jpg": "f3ae9d4077c796392a31b11a8a2fd581d270571dc831c49e87ab21f57bf41c4b"
   }
 }
