@@ -136,7 +136,7 @@ ${feature('Call sheets and a crew link', 'The call sheet is already filled in fr
 ${feature('Stripboard', 'Pick the script and every scene becomes a colour-coded strip with its cast and page count. Drag the strips into shooting days.')}
 ${feature('Budget, quotes and invoices', 'A private budget for each shoot, a price list that starts from typical freelance rates where you work, and quotes and invoices with Pay buttons for the client.')}
 ${feature('Field tools', 'Sunrise and sunset, a white balance reader, a noise meter and a range finder.')}
-${feature('Timecode notes', 'Shoot notes stamped with the camera\'s timecode, with a start-to-finish guide on a practice log.')}
+${feature('Timecode notes and a teleprompter', 'Shoot notes stamped with the camera\'s timecode, with a start-to-finish guide on a practice log. Bring in the script from Word, PDF or Final Draft to mark lines on, and run it on the teleprompter, which reads it to the talent and logs each take.')}
 ${feature('Safe and in sync', 'Lock it with a PIN, fingerprint or face. With a licence, connect your own Google Drive to share your information between your phone and computer, with a daily backup. iCloud, Dropbox and OneDrive are on the way.')}
 </div>
 <h2>Get started</h2>
@@ -145,6 +145,7 @@ ${feature('Safe and in sync', 'Lock it with a PIN, fingerprint or face. With a l
 <li><b>Put it on your home screen</b> so it works like a normal app, even with no signal. iPhone: Safari's Share button, then <i>Add to Home Screen</i>. Android and computers: open the menu <b>☰</b> at the top right and tap <i>Install Vdex</i>.</li>
 <li><b>Open the menu ☰</b> and tap <i>Tutorial for this page</i> for a walkthrough of that page, box by box.</li>
 </ol>
+<p class="note">Something not right, or an idea? In Vdex, open <b>Settings</b> and tap <i>Report a problem or send feedback</i>.</p>
 <p class="note"><a href="${VDEX}privacy.html">Privacy policy</a> · <a href="${VDEX}terms.html">Terms of service</a></p>`,
 { desc: 'Vdex: bookings, crew, kit, venues, insurance, call sheets, stripboards, budgets, quotes and invoices for freelance videographers.', icon: '/vdex/icon.svg', here: '/vdex/', image: '/vdex/icon.png' });
 
